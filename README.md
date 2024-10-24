@@ -1,7 +1,7 @@
 # CKGFuzzer
 
 
-CKGFuzzer is an automated fuzzing framework that leverages large language models (LLMs) and a code knowledge graph to generate fuzz drivers and input seeds. By automating the fuzz driver creation process and analyzing API usage, CKGFuzzer improves fuzzing efficiency, code coverage, and bug detection in complex software systems.
+CKGFuzzer is an automated fuzzing framework that leverages large language models (LLMs) and a code knowledge graph to generate fuzz drivers. By automating the fuzz driver creation process and analyzing API usage, CKGFuzzer improves fuzzing efficiency, code coverage, and bug detection in complex software systems.
 
 ---
 
