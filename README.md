@@ -47,17 +47,14 @@ Prepare proper usage cases for the library to fix generated fuzz drivers and sto
 
 ### 2. Extract Information from the Target Library
 
-To extract the necessary information from the target library, such as source APIs and the call graph, follow these steps:
+To extract the necessary information from the target library, such as source APIs and the call graph.
 
-1. Navigate to the `fuzzing_llm_engine/repo` directory:
-    ```bash
-    cd fuzzing_llm_engine/repo
-    ```
-2. Run the `repo.py` script with the appropriate parameters:
-    ```bash
-   python repo.py --project_name {project} --shared_llm_dir /CKGFuzzer/docker_shared --saved_dir /CKGFuzzer/fuzzing_llm_engine/external_database/{project}/codebase --src_api --call_graph
-    ```
-    Replace `{project}` with the name of the project you are testing.
+Navigate to the `fuzzing_llm_engine/repo` directory and run the `repo.py` script with the appropriate parameter:
+```bash
+cd fuzzing_llm_engine/repo
+python repo.py --project_name {project} --shared_llm_dir /CKGFuzzer/docker_shared --saved_dir /CKGFuzzer/fuzzing_llm_engine/external_database/{project}/codebase --src_api --call_graph
+```
+Replace `{project}` with the name of the project you are testing.
 
 ### 3. Build External Knowledge Base 
 
