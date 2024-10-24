@@ -28,7 +28,7 @@ popd
 
 fuzzer_decoders=( 'vp9' 'vp8' )
 for decoder in "${fuzzer_decoders[@]}"; do
-  Fuzzer_name=FUZZ_DRIVER_FILE"_"${decoder}
+Fuzzer_name=FUZZ_DRIVER_FILE"_"${decoder}
   $CXX $CXXFLAGS -std=c++11 \
       -DDECODER=${decoder} \
       -I$SRC/libvpx \
@@ -38,5 +38,7 @@ for decoder in "${fuzzer_decoders[@]}"; do
       $SRC/libvpx/test/FUZZ_DRIVER_FILE -o $OUT/${Fuzzer_name} \
       ${build_dir}/libvpx.a \
       -Wl,--end-group
+done
+    
 
 
