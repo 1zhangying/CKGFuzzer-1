@@ -1,5 +1,5 @@
 from llama_index.llms.openai_like import OpenAILike
-from models.openai_new import OpenAI
+from models.openai import OpenAI
 from llama_index.llms.ollama import Ollama
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.embeddings.ollama import OllamaEmbedding

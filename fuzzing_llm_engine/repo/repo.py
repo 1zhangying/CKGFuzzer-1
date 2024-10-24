@@ -60,7 +60,10 @@ class RepositoryAgent:
         self.database_db = f'{args.shared_llm_dir}/codeqldb/{args.project_name}'
         self.output_results_folder = f'{args.saved_dir}'
         check_create_folder(self.output_results_folder)
+
+        
         self.init_repo()
+        
 
     def init_repo(self) -> List[str]:
         """
@@ -81,7 +84,7 @@ class RepositoryAgent:
 
     def _add_local_repo_to_database(self, args: Dict) -> None:
         USER_NAME = getpass.getuser()
-        project_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'projects', args.project_name)
+        project_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'projects', args.project_name)
         dockerfile_path = os.path.join(project_dir, 'Dockerfile')
 
         if not os.path.exists(dockerfile_path):
@@ -99,7 +102,7 @@ class RepositoryAgent:
         # Prepare the CodeQL command
         codeql_command = f'/src/fuzzing_os/codeql/codeql database create /src/fuzzing_os/codeqldb/{args.project_name} --language={args.language}'
         
-        if args.language in ['c', 'cpp', 'java', 'csharp', 'go', 'java-kotlin']:
+        if args.language in ['c', 'cpp', 'c++', 'java', 'csharp', 'go', 'java-kotlin']:
             codeql_command += f' --command="/src/fuzzing_os/wrapper.sh {args.project_name}"'
 
         # Run the Docker container with the CodeQL command
@@ -214,9 +217,24 @@ class RepositoryAgent:
         Extracts the source code from the repository.
         """
         logger.info("Extracting source code from the repository.")
-        command = ['-v', f'{os.path.abspath(args.shared_llm_dir)}:/src/fuzzing_os', '-t', f'{args.project_name}_base_image', '/bin/bash', '-c', f'cp -rf /src/{args.project_name} /src/fuzzing_os/source_code && chown -R 1000:1000 /src/fuzzing_os/source_code' ] 
-        docker_run( command )
-    
+        
+        # First, create the necessary directories
+        mkdir_command = ['-v', f'{os.path.abspath(args.shared_llm_dir)}:/src/fuzzing_os', 
+                        '-t', f'{args.project_name}_base_image', 
+                        '/bin/bash', '-c', 
+                        f'mkdir -p /src/fuzzing_os/source_code/{args.project_name}']
+        docker_run(mkdir_command)
+        
+        # Then, copy the source code
+        copy_command = ['-v', f'{os.path.abspath(args.shared_llm_dir)}:/src/fuzzing_os', 
+                        '-t', f'{args.project_name}_base_image', 
+                        '/bin/bash', '-c', 
+                        f'cp -rf /src/{args.project_name}/* /src/fuzzing_os/source_code/{args.project_name} && '
+                        f'chown -R 1000:1000 /src/fuzzing_os/source_code/{args.project_name}']
+        docker_run(copy_command)
+
+
+
     def scan_vulnerability_qlCWE(self):
         """
         Scan the repository for vulnerabilities.
@@ -332,7 +350,7 @@ def setup_parser() -> argparse.ArgumentParser:
     parser.add_argument('--project_name', type=str, default="c-ares", help='Project Name')
     parser.add_argument('--shared_llm_dir', type=str, default="../docker_shared", help='Shared LLM Directory')
     parser.add_argument('--saved_dir', type=str, default="./external_database/c-ares/codebase", help='Saved Directory')
-    parser.add_argument('--language', type=str, default="cpp", help='Language')
+    parser.add_argument('--language', type=str, default="c++", help='Language')
     parser.add_argument('--build_command', type=str, default="/src/fuzzing_os/build_c_ares.sh", help='Build command')
     parser.add_argument('--project_build_info', type=str, default=None, help='Build information of the project')
     parser.add_argument('--environment_vars', dest='environment_vars', action='append', help="Set environment variable e.g., VAR=value")

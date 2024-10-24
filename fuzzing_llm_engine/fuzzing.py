@@ -23,7 +23,7 @@ from roles import compilation_fix_agent
 from models.get_model import get_model
 from models.get_model import get_embedding_model
 import json
-from rag.query_engine_factory import build_combine_query, build_test_query, build_cwe_query,build_kg_query,build_vul_query
+from rag.query_engine_factory import build_test_query, build_cwe_query,build_kg_query
 from rag.hybrid_retriever import CodeGraphRetriever
 
 
@@ -61,7 +61,7 @@ def initialize_api_usage_count(api_list):
 import argparse
 def args_parser():
     parser = argparse.ArgumentParser(description='Description of fuzzing settings')
-    parser.add_argument('--yaml', type=str, default="/home/xuhanxiang/project/Fuzzing/oss-fuzz-modified/fuzzing_llm_engine_refactor/external_database/libtiff/config.yaml")
+    parser.add_argument('--yaml', type=str, default="")
     parser.add_argument("--gen_driver", action='store_true', default=True, help="Fuzz Driver Generation")
     parser.add_argument("--skip_gen_driver", dest='gen_driver', action='store_false', help="Skip Fuzz Driver Generation")
     parser.add_argument("--summary_api", action='store_true', default=True, help="Summary API")
@@ -70,8 +70,6 @@ def args_parser():
     parser.add_argument("--skip_check_compilation", dest='check_compilation',action='store_false', help='Skip Check Compilation')
     parser.add_argument("--gen_input", action='store_true', default=True, help="Generate Input")
     parser.add_argument("--skip_gen_input", dest='gen_input',action='store_false', help='Skip Generate Input')
-    parser.add_argument("--use_graph_retriever", type=str, choices=['true', 'false'], default='true', 
-                        help="Use Graph Retriever (true/false)")
     args = parser.parse_args()
     return args
         
@@ -83,7 +81,7 @@ def start_docker_for_check_compilation(project_dir, project_name):
     else:
         logger.info(f"Docker container '{project_name}_check' is not running. Starting...")
         try:
-            docker_start_command = f"python  {project_dir}fuzzing_llm_engine_refactor/utils/check_gen_fuzzer.py start_docker_check_compilation {project_name} --fuzzing_llm_dir {project_dir}docker_shared/"
+            docker_start_command = f"python  {project_dir}fuzzing_llm_engine/utils/check_gen_fuzzer.py start_docker_check_compilation {project_name} --fuzzing_llm_dir {project_dir}docker_shared/"
             subprocess.run(shlex.split(docker_start_command), check=True)
             logger.info("Docker for check compilation started successfully.")
             return True
@@ -95,8 +93,6 @@ def start_docker_for_check_compilation(project_dir, project_name):
 if __name__ == '__main__':
 
     args = args_parser()
-
-    args.use_graph_retriever = args.use_graph_retriever.lower() == 'true'
 
     if args.yaml is not None and os.path.isfile(args.yaml):
         with open(os.path.join(args.yaml), 'r') as file:
@@ -115,7 +111,7 @@ if __name__ == '__main__':
     api_code_file = os.path.join(fuzz_projects_dir, "src/src_api_code.json")
     api_call_graph_file = os.path.join(fuzz_projects_dir, "api_combine/combined_call_graph.csv")
     agents_result_dir = os.path.join(fuzz_projects_dir, "agents_results")
-    fuzz_dir=os.path.join(work_dir,"fuzzing_llm_engine_refactor/")
+    fuzz_dir=os.path.join(work_dir,"fuzzing_llm_engine/")
 
     # parameters for construting graph knowledge
     chromadb_dir = os.path.join(fuzz_projects_dir, "chromadb/")
@@ -127,10 +123,6 @@ if __name__ == '__main__':
 
     headers= project_config['headers'] 
     
-    # if "log_file" in project_config:
-    #     logger = setup_logger( filename=project_config["log_file"] )
-    # else:
-    #     logger = setup_logger( )
 
     logger.info(f"Init LLM Models, config {config}")
     # code model for generation and fix
@@ -234,7 +226,7 @@ if __name__ == '__main__':
 
     logger.info(f"Init InputGenerationAgent")
     input_dir = os.path.join(work_dir, f"docker_shared/fuzz_driver/{project_name}/syntax_pass_rag/" )
-    output_dir = os.path.join(work_dir, f"fuzzing_llm_engine_refactor/build/work/{project_name}/" ) 
+    output_dir = os.path.join(work_dir, f"fuzzing_llm_engine/build/work/{project_name}/" ) 
     input_agent = input_gen_agent.InputGenerationAgent(
         input_dir = input_dir,
         output_dir = output_dir,
@@ -311,9 +303,9 @@ if __name__ == '__main__':
         logger.info("Skip Generate Input")  
 
 
-    corpus_dir=os.path.join(work_dir, f"fuzzing_llm_engine_refactor/build/work/{project_name}/" )    
-    coverage_dir = os.path.join(work_dir, f"fuzzing_llm_engine_refactor/build/out/{project_name}/report_target/")
-    report_dir = fuzz_projects_dir+"coverage_report_unloop/"
+    corpus_dir=os.path.join(work_dir, f"fuzzing_llm_engine/build/work/{project_name}/" )    
+    coverage_dir = os.path.join(work_dir, f"fuzzing_llm_engine/build/out/{project_name}/report_target/")
+    report_dir = os.path.join(fuzz_projects_dir, "coverage_report/")
 
     fuzzer= run_fuzzer.Fuzzer(
         directory=shared_dir, 
@@ -335,7 +327,7 @@ if __name__ == '__main__':
     fuzzer.set_api_combination(api_combine)
     fuzzer.set_api_code(src_api_code)
     fuzzer.set_api_summary(api_summary)
-    fuzzer.set_fuzz_gen_code_output_dir(work_dir+f"docker_shared/fuzz_driver/{project_name}/")
+    fuzzer.set_fuzz_gen_code_output_dir(os.path.join(work_dir, f"docker_shared/fuzz_driver/{project_name}/"))
 
 
     fuzzer.build_and_fuzz()

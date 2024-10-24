@@ -189,7 +189,7 @@ class Fuzzer():
         run_args = ["build_fuzzer_file",self.project, "--fuzz_driver_file", fuzz_driver_file]    
         build_fuzzer_result =  run(run_args) 
         logger.info(f"compile {fuzz_driver_file}, result {build_fuzzer_result}")
-        self.save_coverage() 
+          
         # Check if the build was successful
         if "ERROR" in build_fuzzer_result or "error" in build_fuzzer_result.lower():
             logger.error(f"Failed to build fuzzer {fuzz_driver_file}. Skipping this file.")
@@ -239,7 +239,7 @@ class Fuzzer():
                 self.covered_branches = covered_branches
                 logger.info(f"Current covered lines: {self.covered_lines}, Total lines: {total_lines}")
                 logger.info(f"Current covered branches: {self.covered_branches}, Total branches: {total_branches}")
-                self.save_coverage() 
+                  
                 self.update_api_usage_count(api_combine)
 
             else:
@@ -248,7 +248,7 @@ class Fuzzer():
                     self.covered_branches = covered_branches
                     logger.info(f"Coverage updated. Current covered lines: {self.covered_lines}, Total lines: {total_lines}")
                     logger.info(f"Current covered branches: {self.covered_branches}, Total branches: {total_branches}")
-                    self.save_coverage() 
+                      
                     self.update_api_usage_count(api_combine)
                 else:   
                     i=0
@@ -287,7 +287,7 @@ class Fuzzer():
                         run_fuzzer_result =  run(run_args)  
                         logger.info(f"run_fuzzer {fuzz_driver_file}, result {run_fuzzer_result}")
 
-                        self.save_coverage() 
+                          
 
                         if "ERROR" in run_fuzzer_result:
                             logger.info("Crash detected. Analyzing...")
@@ -316,7 +316,7 @@ class Fuzzer():
                             self.covered_branches = covered_branches
                             logger.info(f"Coverage updated. Current covered lines: {self.covered_lines}, Total lines: {total_lines}")
                             logger.info(f"Current covered branches: {self.covered_branches}, Total branches: {total_branches}")
-                            self.save_coverage() 
+                              
                             self.planner.update_api_usage_count(new_api_combine)
                             
                             # Update api_combine with new_api_combine
@@ -344,7 +344,7 @@ class Fuzzer():
                     logger.info("Max iterations reached.")
                     logger.info(f"Coverage updated. Current covered lines: {self.covered_lines}, Total lines: {total_lines}")
                     logger.info(f"Current covered branches: {self.covered_branches}, Total branches: {total_branches}")
-                    self.save_coverage() 
+                      
 
     
     
@@ -363,7 +363,7 @@ class Fuzzer():
         for fuzz_driver_file in os.listdir(fix_fuzz_driver_dir):  
             logger.info(f"Fuzz Driver File {fuzz_driver_file}")
             self.build_and_fuzz_one_file(fuzz_driver_file, fix_fuzz_driver_dir=fix_fuzz_driver_dir)
-            self.save_coverage()
+             
         logger.info(f"Failed builds: {self.failed_builds}")
 
 

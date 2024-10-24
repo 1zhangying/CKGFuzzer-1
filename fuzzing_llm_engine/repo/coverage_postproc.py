@@ -63,12 +63,12 @@ def update_coverage_report(merge_dir, new_report_dir):
     
     if not os.path.exists(new_report_dir):
         logger.info(f"The new report directory {new_report_dir} does not exist.")
-        return False, 0, 0, 0, 0, 0, 0, 0, 0, 0, {}
+        return False, 0, 0, 0, 0, 0, 0, {}
 
     # Check if new_report_dir is empty
     if not os.listdir(new_report_dir):
         logger.info(f"The new report directory {new_report_dir} is empty.")
-        return False, 0, 0, 0, 0, 0, 0, 0, 0, 0, {}
+        return False, 0, 0, 0, 0, 0, 0, {}
 
     # Create merge_dir if it doesn't exist
     if not os.path.exists(merge_dir):
@@ -203,7 +203,6 @@ def calculate_branch_coverage(merge_dir):
                     if len(parts) >= 3:
                         count_str = parts[1].strip()
                         code = parts[2].strip()
-                        
                         branches = identify_branches(code, line_num)
                         for branch in branches:
                             total_branches += 1
@@ -220,7 +219,7 @@ def calculate_branch_coverage(merge_dir):
 def calculate_single_branch_coverage(file_path):
     total_branches = 0
     covered_branches = 0
-    branch_states = defaultdict(lambda: BranchState(None, 0xFFFFFFFF))
+
 
     def parse_count(count_str):
         if count_str.lower() == 'count':
@@ -244,13 +243,8 @@ def calculate_single_branch_coverage(file_path):
                 branches = identify_branches(code, line_num)
                 for branch in branches:
                     total_branches += 1
-                    count = parse_count(count_str)
-                    if count > 0:
-                        bucket = BranchState.calculate_bucket_count(count)
-                        state = branch_states[branch]
-                        if state.bucket & bucket:
-                            covered_branches += 1
-                        state.bucket &= ~bucket
+                    if count_str and count_str != '0':
+                        covered_branches += 1
 
     if total_branches > 0:
         coverage = covered_branches / total_branches

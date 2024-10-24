@@ -35,13 +35,6 @@ import os
 print(os.getcwd())
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import constants
-# import templates
-# import openai
-
-# project_root = os.path.abspath("/home/xuhanxiang/project/Really_Fuzzing_ForALL/oss-fuzz-modified")
-# sys.path.append(project_root)
-
-# from fuzzing_llm_engine.roles import compilation_fix_agent
 
 
 OSS_FUZZ_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -961,8 +954,7 @@ def _check_fuzzer_exists(project, fuzzer_name, architecture='x86_64'):
   try:
     subprocess.check_call(command)
   except subprocess.CalledProcessError:
-    logger.error('%s does not seem to exist. Please run build_fuzzers first.',
-                 fuzzer_name)
+    logger.error(f'{fuzzer_name} does not seem to exist. Please run build_fuzzers first.')
     return False
 
   return True
