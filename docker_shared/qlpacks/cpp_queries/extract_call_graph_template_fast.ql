@@ -50,12 +50,13 @@ predicate edges(Function caller, Function callee) {
 }
 
 // Reachability predicate (includes transitive calls)
-predicate reachable(Function src, Function dest) {
-  edges(src, dest)
+predicate reachableWithDepth(Function src, Function dest, int depth) {
+  depth = 1 and edges(src, dest)
   or
+  depth in [2..5] and 
   exists(Function mid |
     edges(src, mid) and
-    reachable(mid, dest)
+    reachableWithDepth(mid, dest, depth - 1)
   )
 }
 
@@ -79,7 +80,7 @@ predicate isEntryPoint(Function f) {
 from Function start, Function end, Location start_loc, Location end_loc
 where
   isEntryPoint(start) and
-  reachable(start, end) and
+  reachableWithDepth(start, end, 1) and
   start_loc = start.getLocation() and
   end_loc = end.getLocation()
 select
