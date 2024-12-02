@@ -86,17 +86,13 @@ class CppParser(LanguageParser):
     @staticmethod
     def get_function_declarator_list(node):
         res = get_node_by_kind(node, ['function_declarator'])
-        # 去掉函数定义
         res = [n  for n in res if CppParser.isFunctionDeclaration(n)]
-        # 把node设置为node.parent.parent，如果函数是模板函数
         res = [CppParser.isTemplateFnDec(n)[1]  for n in res]
         return res
     
     @staticmethod
     def isFunctionDeclaration(node):
-        """
-        Check if  a function declaration node 是否是函数声明
-        """
+
         assert node.type == 'function_declarator'
         if node.parent.type == 'function_definition':
             return False
@@ -104,9 +100,7 @@ class CppParser(LanguageParser):
 
     @staticmethod
     def isTemplateFnDec(node):
-        """
-        Check if  a function declaration node 是否是函数声明
-        """
+
         assert node.type == 'function_declarator'
         if node.parent is not None and node.parent.type == 'declaration':
             if node.parent.parent is not None and node.parent.parent.type == 'template_declaration':
@@ -115,10 +109,8 @@ class CppParser(LanguageParser):
 
     @staticmethod
     def get_class_list(root_node):
-        # _, cpp_parse = get_language('cpp')
-        # root_node = cpp_parse.parse(bytes(code, 'utf-8')).root_node
+
         res = get_node_by_kind(root_node, ['class_specifier'])
-        #检查 class_specifier的父节点是不是template_declaration， 模板类
         res = [ n if n.parent is not None and n.parent.type != 'template_declaration' else n.parent for n in res ]
         return res
     
@@ -129,11 +121,10 @@ class CppParser(LanguageParser):
                 if child.type == 'type_identifier':
                     return get_node_text(child)
         elif node.type == 'template_declaration':
-            # 对于模板类，我们需要在其子节点中查找 class_specifier
             for child in node.children:
                 if child.type == 'class_specifier':
                     return CppParser.get_class_name(child)
-        # 如果找不到类名，返回 None 或一个默认值
+
         return None
 
         
@@ -189,12 +180,6 @@ class CppParser(LanguageParser):
                                 continue
                             param_name = get_node_text(list_name[0])
                             metadata['parameters'][param_name] = param_type
-                            # for item in param.children:
-                                
-                            #     if item.type in ['type_identifier', 'primitive_type']:
-                            #         param_type = get_node_text(item)
-                            #     elif item.type == 'identifier':
-                            #         param_identifier = get_node_text(item)
 
         return metadata
 
@@ -225,8 +210,6 @@ class CppParser(LanguageParser):
                 for param in child.children:
                     if param.type == 'type_identifier':
                         metadata['parameters'][get_node_text(param)] = None
-                        # argument_list.append(get_node_text(param))
-                # metadata['parameters'] = argument_list
 
         return metadata
 
@@ -253,23 +236,19 @@ class CppParser(LanguageParser):
             
     @staticmethod
     def getTemplateFunction(node):
-        """
-        获取模板函数定义
-        """
+
         template_declaration_list = get_node_by_kind(node, ['template_declaration'])
         template_fn_list = []
         for n in template_declaration_list:
             for c in n.children:
                 if c.type == 'function_definition':
-                    template_fn_list.append(n)  # 修改这里：将 n 添加到列表中，而不是尝试索引
+                    template_fn_list.append(n) 
                     break
         return template_fn_list   
 
     @staticmethod
     def getTempateFunctionDeclaration(node):
-        """
-        获取模板函数声明
-        """
+
         template_declaration_list =  get_node_by_kind( node, ['template_declaration'] )
         template_dec_list = []
         for n in template_declaration_list:
@@ -278,25 +257,7 @@ class CppParser(LanguageParser):
                     template_dec_list[n]
                     break
         return template_dec_list 
-    
-    # @staticmethod
-    # def getFunctionNodes(node):
-    #     """
-    #     Get function declaration from function node
-    #     """
-    #     function_definition_list = CppParser.get_function_list(node)
-    #     template_function_list = [ ( n.parent, CppParser.get_function_body(n)) for n in function_definition_list if CppParser.isTemplate(n) ]
-    #     common_function_list = [ (n, CppParser.get_function_body(n))for n in function_definition_list if not CppParser.isTemplate(n) ]
-        
-    #     fn_declaration = [ n for n in get_node_by_kind( node, ['declaration'] ) if CppParser.isOnlyFunctionDeclaration(n) ]
-    #     tmeplate_fn_declaration = [ n for n in fn_declaration if CppParser.isTemplate(n) ]
-    #     common_fn_declaration = [ n for n in fn_declaration if not CppParser.isTemplate(n) ]
-    #     return {    
-    #             "template_function_list": template_function_list, \
-    #             "common_function_list": common_function_list, \
-    #             "template_function_declaration": tmeplate_fn_declaration, \
-    #             "common_function_declaration": common_fn_declaration \
-    #             }
+
     @staticmethod
     def extract_struct_names(c_code):
         # Regex to match typedef struct names
@@ -342,27 +303,22 @@ class CppParser(LanguageParser):
                    struct_def_list.append(n)
                    break
             struct_other_list.append(n)
-        #print(struct_def_list)
+
         struct_def_list = [ n if n.parent.type != 'type_definition' else n.parent for n in struct_def_list + struct_other_list ]
         res =[]
         for n in struct_def_list:
-            # print("=========11111")
-            # print(n)
+
             field_declaration_list = get_node_by_kind(n, ['field_declaration'])
             parameters = {}
             struct_list = get_node_by_kind(n, ['struct_specifier'])
             for c in field_declaration_list:
                 children = [ j for j in c.children if n.type != 'comment' ]
                 parameters[get_node_text(children[1])] = get_node_text(children[0])
-            # sname = ""
-            # if len(CppParser.extract_struct_names( get_node_text(n))) != 0:
-            #     sname= CppParser.extract_struct_names( get_node_text(n))[0]
-            # res.append( ( get_node_text(n), parameters, sname, n.start_point, n.end_point ) )  
+
             
             if n.type == "type_definition" and len(struct_list) != 0:
                 assert len(n.children) >= 2
                 for cn in n.children:
-                    # logger.info(f"========= {cn}")
                     if cn.type == "struct_specifier":
                         continue
                     type_identifier_lst = get_node_by_kind(cn, ['type_identifier'])
@@ -375,8 +331,7 @@ class CppParser(LanguageParser):
                     sname= CppParser.extract_struct_names( get_node_text(n))[0]
                 res.append( ( get_node_text(n), parameters, sname, n.start_point, n.end_point ) )  
                 
-            
-        #struct_def_list = [ ( get_node_text(n), n.start_point, n.end_point )for n in struct_def_list ]
+
         return res
     
     @staticmethod
@@ -393,12 +348,10 @@ class CppParser(LanguageParser):
                    struct_def_list.append(n)
                    break
             struct_other_list.append(n)
-        #print(struct_def_list)
+
         struct_def_list = [ n if n.parent.type != 'type_definition' else n.parent for n in struct_def_list + struct_other_list ]
         res =[]
         for n in struct_def_list:
-            # print("=========11111")
-            # print(n)
             field_declaration_list = get_node_by_kind(n, ['enumerator'])
             parameters = {}
             enum_list = get_node_by_kind(n, ['enum_specifier'])
@@ -414,7 +367,6 @@ class CppParser(LanguageParser):
             if n.type == "type_definition" and len(enum_list) != 0:
                 assert len(n.children) >= 2
                 for cn in n.children:
-                    # logger.info(f"========= {cn}")
                     if cn.type == "enum_specifier":
                         continue
                     type_identifier_lst = get_node_by_kind(cn, ['type_identifier'])
@@ -426,16 +378,14 @@ class CppParser(LanguageParser):
                 if len(CppParser.extract_enum_names( get_node_text(n))) != 0:
                     sname= CppParser.extract_enum_names( get_node_text(n))[0]
                 res.append( ( get_node_text(n), parameters, sname, n.start_point, n.end_point ) ) 
-        #struct_def_list = [ ( get_node_text(n), n.start_point, n.end_point )for n in struct_def_list ]
+
         return res
     
     @staticmethod
     def isTemplateFn(node):
-        """
-        函数定义的父节点是 template_declaration, 函数声明的父节点的父节点是template_declaration
-        """
+
         assert node.type in ['function_definition', 'function_declarator']
-        # 函数声明和定义的父节点是declaration， 如果这个declaration的父节点是template_declaration，那么这个函数是模板函数
+
         if node.type == 'function_declarator':
             if node.parent is not None and node.parent.type == 'declaration' and node.parent.parent.type == 'template_declaration':
                 return True
@@ -504,41 +454,27 @@ class CppParser(LanguageParser):
 
     @staticmethod
     def split_code(code, is_return_node=False):
-        """
-        对代码文件进行拆解，
-        1. 获取其中的函数声明和函数定义，
-        2. 类声明和类定义
-        3. 声明的数据结构:sruct
-        fn_def_list: 函数定义列表，每个元素是一个node，包含函数定义的所有信息, (函数定义node, 所在类的node, 函数元数据)
-        fn_declaraion: 函数声明列表，每个元素是一个node，包含函数定义的所有信息, (函数定义node, 所在类的node, 函数元数据)
-        class_node_list: 类定义列表
-        struct_node_list: struct定义列表
-        include_list: include列表
-        global_variables: global variables
-        """
+
         _, cpp_parse = get_language('cpp')
         root_node = cpp_parse.parse(bytes(code, 'utf-8')).root_node
 
-        # 获取模板函数和普通函数定义
-        # node type: template_declaration and node的一个子节点是function_definition
+
         template_declaration_list = CppParser.getTemplateFunction(root_node)
         
-        # Global Variables
+
         global_variables = CppParser.extract_global_variables(root_node)
 
-        # node type: function_definition
+
         implementation_fn = CppParser.get_function_list(root_node)
 
-        # 去掉模板函数定义，implementation_fn 包含重复的模板函数定义node. 但是这个node节点不包含template_declaration节点
         implementation_fn = [ n for n in implementation_fn if not CppParser.isTemplateFn(n)  ]
 
-        # 合并模板函数定义和普通函数定义
         fn_def_list = template_declaration_list + implementation_fn
 
-        # 获取函数声明, 这个函数声明包含模板函数声明
+  
         fn_declaraion = CppParser.get_function_declarator_list(root_node)
 
-        # 获取类声明
+
         class_node_list = CppParser.get_class_list(root_node)
         class_node_dict = {}
         for n in class_node_list:
@@ -553,15 +489,13 @@ class CppParser(LanguageParser):
             else:
                 logger.warning(f"Could not extract class name for node: {n}")
 
-        #获取函数对应的类名，如果存在的话
         fn_def_list = [ (n, CppParser.getClassFromFnNode(n), CppParser.get_function_metadata(n)) for n in fn_def_list ]
         fn_declaraion = [ (n, CppParser.getClassFromFnNode(n), CppParser.get_function_metadata(n.parent)) for n in fn_declaraion ]
         
-        #获取结构声明体
+        
         struct_node_list = CppParser.getStructRelatedNodes(root_node)
         enumerate_node_list = CppParser.getEnumerateNode(root_node)
         
-        #获取 include list
         include_list = CppParser.getIncludeList(root_node)
 
         if is_return_node:
