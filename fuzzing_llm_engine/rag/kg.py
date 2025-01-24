@@ -133,8 +133,10 @@ def getCodeCallKGGraph(method_call_csv_file:str, code_base:CodeRepository, api_s
         # check if file summary in api_summary
         file_name = os.path.basename(caller_src)
         if file_name in api_summary:
-           file_summary = api_summary[file_name]["file_summary"]
-           file_proerties = {"file summary":file_summary}
+            file_summary = api_summary[file_name]["file_summary"]
+            file_proerties = {"file summary":file_summary}
+        else:
+            file_proerties = {}
         caller_file_entity = EntityNode(
             name=f"{caller_src}",
             label="File",
