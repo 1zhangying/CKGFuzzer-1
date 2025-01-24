@@ -52,7 +52,7 @@ To extract the necessary information from the target library, such as source API
 Navigate to the `fuzzing_llm_engine/repo` directory and run the `repo.py` script with the appropriate parameter:
 ```bash
 cd fuzzing_llm_engine/repo
-python repo.py --project_name {project} --shared_llm_dir /CKGFuzzer/docker_shared --saved_dir /CKGFuzzer/fuzzing_llm_engine/external_database/{project}/codebase --src_api --call_graph
+python repo.py --project_name {project} --shared_llm_dir /docker_shared --saved_dir /fuzzing_llm_engine/external_database/{project}/codebase --src_api --call_graph
 ```
 Replace `{project}` with the name of the project you are testing.
 
@@ -60,7 +60,7 @@ Replace `{project}` with the name of the project you are testing.
 
 After extracting the necessary information, build the external knowledge base for the target library by running the following command:
 ```bash
-python preproc.py --project_name {project} --src_api_file_path fuzzing_llm_engine/external_database/{project}
+python preproc.py --project_name {project} --src_api_file_path /fuzzing_llm_engine/external_database/{project}
 ```
 Replace `{project}` with the name of the project you are testing.
 
