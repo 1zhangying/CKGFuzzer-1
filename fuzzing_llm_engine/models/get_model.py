@@ -1,5 +1,4 @@
 from llama_index.llms.openai_like import OpenAILike
-from models.openai import OpenAI
 from llama_index.llms.ollama import Ollama
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.embeddings.ollama import OllamaEmbedding
@@ -17,7 +16,7 @@ def get_model(llm_config=None):
         return OpenAILike(model=model_name, api_base=llm_config["base_url"], api_key=llm_config["api_key"], is_chat_model=True, temperature=llm_config["temperature"] )
     if model_name.startswith("openai"):
         model_name = model_name.replace("openai-", "").strip()
-        return OpenAI(model=model_name, api_key=llm_config.api_key)    
+        return OpenAILike(model=model_name, api_base=llm_config["base_url"], api_key=llm_config["api_key"], is_chat_model=True, temperature=llm_config["temperature"])
     if model_name.startswith("ollama"):
         model_name = model_name.replace("ollama-", "").strip()
         return Ollama(model=model_name,  base_url=llm_config["base_url"], request_timeout=llm_config["request_timeout"]) # http://csl-server14.dynip.ntu.edu.sg:51030"
