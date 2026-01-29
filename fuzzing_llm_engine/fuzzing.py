@@ -111,7 +111,7 @@ if __name__ == '__main__':
     api_code_file = os.path.join(fuzz_projects_dir, "src/src_api_code.json")
     api_call_graph_file = os.path.join(fuzz_projects_dir, "api_combine/combined_call_graph.csv")
     agents_result_dir = os.path.join(fuzz_projects_dir, "agents_results")
-    fuzz_dir=os.path.join(work_dir,"fuzzing_llm_engine/")
+    fuzz_dir=os.path.join(work_dir,"/home/cc/CKGFuzzer/fuzzing_llm_engine/")
 
     # parameters for construting graph knowledge
     chromadb_dir = os.path.join(fuzz_projects_dir, "chromadb/")
@@ -139,7 +139,7 @@ if __name__ == '__main__':
 
     # set default LLM settings
     Settings.llm = get_model(None)
-    Settings.embed_model = get_embedding_model(None, device='cuda:1')
+    Settings.embed_model = get_embedding_model(None, device='cpu')
     logger.info(f"Init Default LLM Model and Embedding Model, LLM config: { Settings.llm.metadata } \n Embed config: {Settings.embed_model}")
 
         

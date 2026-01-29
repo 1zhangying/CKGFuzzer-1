@@ -1,0 +1,40 @@
+配置环境:
+根据eurequirement.txt下载相应的依赖
+新建虚拟环境：conda create -n ckgfuzzer_v2 python=3.11.9 -y
+
+问题1：
+llama-index-embeddings-ollama
+llama-index-llms-ollama
+ai的建议：将以上两个依赖的版本号删除，让冲突的依赖自己选择合适的版本（原来是0.1.2   0.1.5）
+
+问题2：
+默认版本的wheel依赖对于当前的packaging有冲突，替换成0.41.2版本
+
+
+=======实验========
+目标库提取信息：
+cd fuzzing_llm_engine/repo
+python repo.py --project_name zlib --shared_llm_dir /home/cc/CKGFuzzer/docker_shared --saved_dir /home/cc/CKGFuzzer/fuzzing_llm_engine/external_database/zlib/codebase --src_api --call_graph
+
+
+构建外部知识库：
+cd fuzzing_llm_engine
+python preproc.py --project_name zlib --src_api_file_path /home/cc/CKGFuzzer/fuzzing_llm_engine/external_database/zlib
+
+
+运行模糊测试过程：
+python fuzzing.py \
+--yaml /home/cc/CKGFuzzer/fuzzing_llm_engine/external_database/zlib/config.yaml \
+--gen_driver \
+--summary_api \
+--check_compilation \
+--gen_input
+
+
+
+当前设备没有独立显卡，替换成cpu跑程序，将get_model.py and fuzzing.py中的cuda:1替换成cpu
+
+将/CKGFuzzer/fuzzing_llm_engine/external_database/zlib/里的config.yaml文件中的fuzz_projects_dir三条路径:写成绝对路径"/home/cc/CKGFuzzer/fuzzing_llm_engine/external_database/zlib/"
+将fuzzing.py里的路径也写成绝对路径
+使用deepseek的api和密钥要充钱。。。。先充钱g才能用api
+分析生成的token几乎60w,太长，deepseek顶多13w：方法1,将zlib的配置信息中的sstream删除（这是c++的标准模板库头文件，而zlib是纯c项目，将其删除）

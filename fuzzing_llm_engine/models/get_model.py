@@ -22,7 +22,7 @@ def get_model(llm_config=None):
         return Ollama(model=model_name,  base_url=llm_config["base_url"], request_timeout=llm_config["request_timeout"]) # http://csl-server14.dynip.ntu.edu.sg:51030"
     assert False, f"Non-support Model Name, The LLM config is {llm_config}. Please use the Ollama Model, OpenAI model and Deepseek Model"
 
-def get_embedding_model(llm_config=None, device='cuda:1'):
+def get_embedding_model(llm_config=None, device='cpu'):
     if llm_config is None:
         return HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5",device=device)
         #return OllamaEmbedding( model_name = "llama3:70b", base_url="http://csl-server14.dynip.ntu.edu.sg:51030", ollama_additional_kwargs={"mirostat": 0})
@@ -33,4 +33,3 @@ def get_embedding_model(llm_config=None, device='cuda:1'):
         model_name = model_name.replace("ollama-", "").strip()
         return OllamaEmbedding( model_name = model_name, base_url=llm_config["base_url"], ollama_additional_kwargs={"mirostat": 0})
     assert False, f"Non-support Emb Model Name, The LLM config is {llm_config}. Please use the Ollama Model, OpenAI model and Deepseek Model"
-
