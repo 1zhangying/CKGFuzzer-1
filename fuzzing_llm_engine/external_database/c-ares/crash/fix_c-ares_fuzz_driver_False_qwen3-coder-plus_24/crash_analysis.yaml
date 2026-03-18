@@ -1,0 +1,378 @@
+- crash_1:
+    is_api_bug: true
+    crash_category: Buffer Overflow
+    crash_analysis: "|\n      # Comprehensive Analysis of the Crash\n\n      ## 1.\
+      \ Is this an API bug?\n      **True** - This is an API bug in the c-ares library.\n\
+      \n      ## 2. Specific location of the crash\n      The crash occurs in the\
+      \ `query_callback` function in the fuzz driver at line 28, specifically when\
+      \ reading from the `abuf` parameter that was passed by the c-ares library:\n\
+      \      ```cpp\n      void query_callback(void *arg, int status, int timeouts,\
+      \ unsigned char *abuf, int alen) {\n          // The crash happens when accessing\
+      \ abuf or related memory\n          (void)status;\n          (void)timeouts;\n\
+      \          (void)abuf;\n          (void)alen;\n    \n          if (arg) {\n\
+      \              FuzzContext *ctx = static_cast<FuzzContext*>(arg);\n        \
+      \      ctx->call_count++;\n          }\n      }\n      ```\n\n      However,\
+      \ the actual bug is in the c-ares library's callback mechanism where it passes\
+      \ an invalid buffer to the callback.\n\n      ## 3. Description of variables\
+      \ involved in the crash\n      - **`abuf`**: A pointer to unsigned char representing\
+      \ the DNS response buffer passed from c-ares to the callback. This buffer contains\
+      \ invalid memory addresses that extend beyond allocated bounds.\n      - **`alen`**:\
+      \ Length of the `abuf` buffer that may not match the actual allocated size.\n\
+      \      - **Stack variable `options`**: Located at offset 32-144 in the main\
+      \ fuzzing function, which gets corrupted due to the out-of-bounds access triggered\
+      \ by the malformed buffer.\n      - **`FuzzContext *ctx`**: Context structure\
+      \ that holds call count, which gets corrupted during the callback execution.\n\
+      \n      ## 4. Relevant potential error patterns\n      From the API error patterns:\n\
+      \      - **Buffer overflow in ares_create_query**: The library may not properly\
+      \ validate the total packet size, leading to stack corruption when processing\
+      \ responses.\n      - **Invalid array access in ares_search**: The code may\
+      \ be accessing `channel->domains[0]` without proper validation, causing memory\
+      \ corruption.\n      - **Null pointer dereference in channel operations**: Accessing\
+      \ uninitialized or invalid channel structures could cause memory corruption.\n\
+      \      - **Buffer underflow in DNS parsing**: Malformed packets may cause reads\
+      \ beyond allocated buffer boundaries.\n\n      ## 5. Violations of expected\
+      \ behavior\n      The c-ares library is violating proper memory management by:\n\
+      \      - Passing buffers to callbacks that exceed their allocated bounds\n \
+      \     - Failing to properly validate DNS packet sizes before allocating or accessing\
+      \ memory\n      - Not ensuring that the `abuf` parameter in callbacks points\
+      \ to valid, properly sized memory regions\n      - The callback function is\
+      \ receiving a buffer that extends past the `options` variable boundary, indicating\
+      \ improper buffer management in the library\n\n      ## 6. Relevant CWE vulnerabilities\n\
+      \      - **CWE-121: Stack-based Buffer Overflow** - The primary vulnerability\
+      \ where memory on the stack overflows beyond allocated boundaries\n      - **CWE-125:\
+      \ Out-of-bounds Read** - The 4-byte read operation accessing memory beyond buffer\
+      \ limits\n      - **CWE-119: Improper Restriction of Operations within the Bounds\
+      \ of a Memory Buffer** - General buffer boundary issue\n      - **CWE-20: Improper\
+      \ Input Validation** - Library fails to properly validate DNS response buffer\
+      \ sizes\n\n      ## 7. Detailed reasoning\n      The crash traceback shows that\
+      \ the crash occurs when the `query_callback` function is called by the c-ares\
+      \ library (through `qcallback` -> `end_query` -> `next_server` -> `process_timeouts`\
+      \ -> `processfds`). The `query_callback` function is a simple function that\
+      \ just accepts parameters and updates a counter. The fact that there's a stack\
+      \ buffer overflow occurring when this function executes indicates that the c-ares\
+      \ library is providing invalid buffer parameters to the callback.\n\n      The\
+      \ AddressSanitizer output clearly shows that address `0x7ffe96459110` (which\
+      \ is offset 144 from the frame) overflows the `options` variable that should\
+      \ only extend to offset 144 (the range is [32, 144)). This means the c-ares\
+      \ library, when executing the callback, has somehow corrupted the stack or is\
+      \ passing parameters that cause stack corruption.\n\n      Since the fuzz driver's\
+      \ callback function is minimal and doesn't perform any unsafe operations on\
+      \ the parameters it receives, and the crash occurs directly upon entry to the\
+      \ callback function, this strongly indicates that the c-ares library has a bug\
+      \ in how it manages buffers before calling the user-provided callback function.\n\
+      \n      ## 8. Crash categorization\n      **Buffer Overflow** - Specifically\
+      \ a Stack-based Buffer Overflow. The crash involves reading 4 bytes beyond the\
+      \ bounds of a stack-allocated buffer, causing memory corruption in adjacent\
+      \ stack variables. The AddressSanitizer detected an out-of-bounds read that\
+      \ overflows a stack buffer, which fits perfectly within the Buffer Overflow\
+      \ category.\n\n      ## Supporting Evidence\n      The key evidence supporting\
+      \ this conclusion:\n      1. The crash occurs immediately when entering the\
+      \ callback function\n      2. The callback function performs no unsafe operations\n\
+      \      3. The memory error involves reading beyond allocated stack space\n \
+      \     4. The c-ares library is responsible for managing the buffer that's passed\
+      \ to the callback\n      5. The stack trace shows the error originates from\
+      \ library code (`qcallback` → `end_query` → etc.) before reaching the user callback\n\
+      \      6. The ASAN report shows the buffer overflow happens when accessing data\
+      \ that c-ares passed to the callback"
+    crash_info: "|\n      ERROR: AddressSanitizer: stack-buffer-overflow on address\
+      \ 0x7ffe96459110 at pc 0x55cddf2b1574 bp 0x7ffe96458de0 sp 0x7ffe96458dd8\r\n\
+      \      \e[1m\e[0m\e[1m\e[34mREAD of size 4 at 0x7ffe96459110 thread T0\e[1m\e\
+      [0m\r\n      SCARINESS: 42 (4-byte-read-stack-buffer-overflow-far-from-bounds)\r\
+      \n          #0 0x55cddf2b1573 in query_callback(void*, int, int, unsigned char*,\
+      \ int) /src/c-ares/test/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_24.cc:28:24\r\
+      \n          #1 0x55cddf2c7936 in qcallback /src/c-ares/src/lib/ares_query.c\r\
+      \n          #2 0x55cddf2c3a21 in end_query /src/c-ares/src/lib/ares_process.c:1486:3\r\
+      \n          #3 0x55cddf2c00a1 in next_server /src/c-ares/src/lib/ares_process.c:796:3\r\
+      \n          #4 0x55cddf2c00a1 in process_timeouts /src/c-ares/src/lib/ares_process.c:556:15\r\
+      \n          #5 0x55cddf2c00a1 in processfds /src/c-ares/src/lib/ares_process.c:127:3\r\
+      \n          #6 0x55cddf2b1e28 in LLVMFuzzerTestOneInput /src/c-ares/test/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_24.cc:139:5\r\
+      \n          #7 0x55cddf14ee7d in fuzzer::Fuzzer::ExecuteCallback(unsigned char\
+      \ const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:619:13\r\
+      \n          #8 0x55cddf14e4b5 in fuzzer::Fuzzer::RunOne(unsigned char const*,\
+      \ unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7\r\
+      \n          #9 0x55cddf150185 in fuzzer::Fuzzer::MutateAndTestOne() /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:765:19\r\
+      \n          #10 0x55cddf150de5 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector<fuzzer::SizedFile,\
+      \ std::__Fuzzer::allocator<fuzzer::SizedFile>>&) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:910:5\r\
+      \n          #11 0x55cddf13f985 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned\
+      \ char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:917:6\r\
+      \n          #12 0x55cddf16b5f2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10\r\
+      \n          #13 0x7f315592d082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082)\
+      \ (BuildId: 5792732f783158c66fb4f3756458ca24e46e827d)\r\n          #14 0x55cddf132cdd\
+      \ in _start (/out/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_24+0x48cdd)\r\
+      \n\r\n      DEDUP_TOKEN: query_callback(void*, int, int, unsigned char*, int)--qcallback--end_query\r\
+      \n      \e[1m\e[32mAddress 0x7ffe96459110 is located in stack of thread T0 at\
+      \ offset 144 in frame\e[1m\e[0m\r\n      \e[1m\e[0m    #0 0x55cddf2b175f in\
+      \ LLVMFuzzerTestOneInput /src/c-ares/test/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_24.cc:46\r\
+      \n\r\n      DEDUP_TOKEN: LLVMFuzzerTestOneInput\r\n        This frame has 4\
+      \ object(s):\r\n          [32, 144) 'options' (line 35)\e[1m\e[32m <== Memory\
+      \ access at offset 144 overflows this variable\e[1m\e[0m\r\n          [176,\
+      \ 184) 'ctx' (line 126)\r\n          [208, 336) 'readers' (line 142)\r\n   \
+      \       [368, 496) 'writers' (line 142)\r\n      HINT: this may be a false positive\
+      \ if your program uses some custom stack unwind mechanism, swapcontext or vfork\r\
+      \n            (longjmp and C++ exceptions *are* supported)\r\n      SUMMARY:\
+      \ AddressSanitizer: stack-buffer-overflow /src/c-ares/test/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_24.cc:28:24\
+      \ in query_callback(void*, int, int, unsigned char*, int)\r\n      Shadow bytes\
+      \ around the buggy address:\r\n        0x7ffe96458e80: \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\r\n        0x7ffe96458f00: \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\r\n        0x7ffe96458f80: \e\
+      [1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\r\n        0x7ffe96459000:\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\r\n        0x7ffe96459080:\
+      \ \e[1m\e[31mf1\e[1m\e[0m \e[1m\e[31mf1\e[1m\e[0m \e[1m\e[31mf1\e[1m\e[0m \e\
+      [1m\e[31mf1\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e\
+      [35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e\
+      [1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e\
+      [0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m\r\
+      \n      =>0x7ffe96459100: \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m[\e\
+      [1m\e[31mf2\e[1m\e[0m]\e[1m\e[31mf2\e[1m\e[0m \e[1m\e[31mf2\e[1m\e[0m \e[1m\e\
+      [31mf2\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[31mf2\e[1m\e[0m \e[1m\e[31mf2\e\
+      [1m\e[0m \e[1m\e[31mf2\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e\
+      [0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m\
+      \ \e[1m\e[35mf8\e[1m\e[0m\r\n        0x7ffe96459180: \e[1m\e[35mf8\e[1m\e[0m\
+      \ \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e\
+      [1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e\
+      [35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[31mf2\e\
+      [1m\e[0m \e[1m\e[31mf2\e[1m\e[0m \e[1m\e[31mf2\e[1m\e[0m \e[1m\e[31mf2\e[1m\e\
+      [0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m\r\n        0x7ffe96459200:\
+      \ \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e\
+      [1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e\
+      [35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e\
+      [1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e\
+      [0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[31mf3\e[1m\e[0m \e[1m\e[31mf3\e[1m\e[0m\r\
+      \n        0x7ffe96459280: \e[1m\e[31mf3\e[1m\e[0m \e[1m\e[31mf3\e[1m\e[0m \e\
+      [1m\e[31mf3\e[1m\e[0m \e[1m\e[31mf3\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m\r\n        0x7ffe96459300: \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m\r\n        0x7ffe96459380: \e[1m\e[0m00\e[1m\e[0m \e\
+      [1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m\r\n      Shadow byte legend (one shadow byte\
+      \ represents 8 application bytes):\r\n        Addressable:           \e[1m\e\
+      [0m00\e[1m\e[0m\r\n        Partially addressable: \e[1m\e[0m01\e[1m\e[0m \e\
+      [1m\e[0m02\e[1m\e[0m \e[1m\e[0m03\e[1m\e[0m \e[1m\e[0m04\e[1m\e[0m \e[1m\e[0m05\e\
+      [1m\e[0m \e[1m\e[0m06\e[1m\e[0m \e[1m\e[0m07\e[1m\e[0m \r\n        Heap left\
+      \ redzone:       \e[1m\e[31mfa\e[1m\e[0m\r\n        Freed heap region:     \
+      \  \e[1m\e[35mfd\e[1m\e[0m\r\n        Stack left redzone:      \e[1m\e[31mf1\e\
+      [1m\e[0m\r\n        Stack mid redzone:       \e[1m\e[31mf2\e[1m\e[0m\r\n   \
+      \     Stack right redzone:     \e[1m\e[31mf3\e[1m\e[0m\r\n        Stack after\
+      \ return:      \e[1m\e[35mf5\e[1m\e[0m\r\n        Stack use after scope:   \e\
+      [1m\e[35mf8\e[1m\e[0m\r\n        Global redzone:          \e[1m\e[31mf9\e[1m\e\
+      [0m\r\n        Global init order:       \e[1m\e[36mf6\e[1m\e[0m\r\n        Poisoned\
+      \ by user:        \e[1m\e[34mf7\e[1m\e[0m\r\n        Container overflow:   \
+      \   \e[1m\e[34mfc\e[1m\e[0m\r\n        Array cookie:            \e[1m\e[31mac\e\
+      [1m\e[0m\r\n        Intra object redzone:    \e[1m\e[33mbb\e[1m\e[0m\r\n   \
+      \     ASan internal:           \e[1m\e[33mfe\e[1m\e[0m\r\n        Left alloca\
+      \ redzone:     \e[1m\e[34mca\e[1m\e[0m\r\n        Right alloca redzone:    \e\
+      [1m\e[34mcb\e[1m\e[0m\r\n      ==12==ABORTING\r\n      MS: 4 ChangeBinInt-InsertRepeatedBytes-InsertRepeatedBytes-InsertByte-;\
+      \ base unit: 26418ced1696cd6c433bc9a2af3638ec1c3bb6b8\r\n      0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x2e,0x21,0xdd,0x8c,0xfe,0xff,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x29,0x0,0x0,0x0,0x1,0xf9,0xf9,0x6d,\r\
+      \n      ..........................!\\335\\214\\376\\377\\000\\000\\000\\000\\\
+      000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\\
+      000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\\
+      000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\\
+      000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\\
+      000\\000\\000\\000\\000\\000\\000\\000)\\000\\000\\000\\001\\371\\371m\r\n \
+      \     artifact_prefix='./'; Test unit written to ./crash-28e42cdbf8b8edf9447bf73fb8a2c16e559b1ef7\r\
+      \n      Base64: Li4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4h3Yz+/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACkAAAAB+flt"
+    fuzz_driver_file: fix_c-ares_fuzz_driver_False_qwen3-coder-plus_24_crash_1.cc
+    timestamp: '2026-02-24T15:12:40.358005'
+- crash_2:
+    is_api_bug: true
+    crash_category: Buffer Overflow
+    crash_analysis: |-
+      |
+            ```json
+            {
+              "is_api_bug": true,
+              "crash_location": "The crash occurs in the query_callback function at line 30 of the fuzz driver, but this is happening because c-ares library is calling the callback with invalid arguments due to an API bug in the library's processing code",
+              "variables_involved": [
+                {
+                  "name": "options",
+                  "location": "Stack variable in LLVMFuzzerTestOneInput at line 37",
+                  "description": "A local struct ares_options variable that occupies 112 bytes [32, 144) in the stack frame"
+                },
+                {
+                  "name": "arg",
+                  "location": "Parameter to query_callback function at line 30",
+                  "description": "Pointer passed from c-ares library to the callback, expected to point to FuzzContext but likely pointing to invalid memory beyond the 'options' buffer"
+                },
+                {
+                  "name": "ctx",
+                  "location": "Local variable in query_callback at line 32",
+                  "description": "Cast of 'arg' parameter to FuzzContext*, where the crash occurs when trying to access ctx->call_count"
+                }
+              ],
+              "relevant_error_patterns": [
+                "Null pointer dereference in `ares_query`: The `ares_create_query` function may set `qbuf` to NULL on failure, but the error handling path calls `ares_free(qbuf)` without checking if `qbuf` is NULL, though `ares_free` typically handles NULL safely.",
+                "Integer overflow in `ares_query`: The `generate_unique_id` function could potentially wrap around and cause ID collisions.",
+                "Uninitialized memory in `ares_query`: The `struct qquery` allocated by `ares_malloc` may contain uninitialized padding bytes that could affect program behavior.",
+                "Double free risk in `ares_query`: If `ares_send` fails internally after being called, there's no cleanup mechanism shown to prevent the allocated `qquery` from being leaked or double-freed later.",
+                "Null pointer dereference in `ares_search`: If `channel->domains[0]` is accessed when `channel->domains` array is empty or NULL, it could cause a crash.",
+                "Array bounds violation in `ares_search`: Accessing `channel->domains[0]` without verification that the domains array has at least one element.",
+                "Null pointer dereference in `ares_search`: The variable `p` iterates through `name`, but if `name` is NULL, the loop will crash.",
+                "Use-after-free in `ares_search`: If the callback function modifies the channel state, subsequent accesses within the same function could access freed memory.",
+                "Null channel pointer in all functions: No validation that `channel` parameter is not NULL before accessing its members.",
+                "Null name pointer in all functions: No validation that `name` parameter is not NULL before string operations.",
+                "Callback function crash potential: The callback function itself could crash, causing cascading failures since it's called directly by the library."
+              ],
+              "violations_of_expected_behavior": [
+                "The c-ares library should not pass invalid pointers to the user-provided callback function",
+                "The library should validate all parameters before using them in operations",
+                "The library should properly manage its internal state to prevent dangling pointers being passed to callbacks",
+                "When processing timeouts or other asynchronous operations, the library should maintain valid references to user-provided context data"
+              ],
+              "relevant_cwe_vulnerabilities": [
+                "CWE-121: Stack-based Buffer Overflow - Direct classification of the vulnerability",
+                "CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer - Broader category encompassing the issue",
+                "CWE-125: Out-of-bounds Read - Since the crash involves reading beyond buffer boundaries"
+              ],
+              "reasoning": "This is an API bug in the c-ares library. The crash occurs when the query_callback function tries to access ctx->call_count at line 30, but the 'arg' parameter is pointing to invalid memory that extends beyond the 'options' buffer on the stack. The stack trace shows that the call comes from qcallback -> end_query -> next_server -> process_timeouts -> processfds -> LLVMFuzzerTestOneInput. This indicates that c-ares library functions are invoking the callback with an invalid pointer argument. The crash happens because memory at offset 144 (which exceeds the 'options' buffer range [32, 144)) is being accessed. The 'arg' parameter should point to a valid FuzzContext structure, but instead it appears to be corrupted or pointing to freed/invalid memory managed by the c-ares library. The library is responsible for managing the lifetime of the query contexts and ensuring that callback functions receive valid pointers. This suggests a bug in how c-ares manages its internal query state, particularly during timeout processing or when cleaning up query structures.",
+              "category": "Buffer Overflow",
+              "code_snippets": {
+                "api_code": "// From ares_process.c or related files\nvoid end_query(ares_channel channel, struct query *query, int status, unsigned char *abuf, int alen)\n{\n  ... \n  // This is likely where the callback is invoked with invalid 'arg'\n  query->callback(query->arg, status, query->timeouts, abuf, alen);\n  ...\n}",
+                "fuzz_driver_code": "void query_callback(void *arg, int status, int timeouts, unsigned char *abuf, int alen) {\n    // Do nothing - just receive the response\n    (void)status;\n    (void)timeouts;\n    (void)abuf;\n    (void)alen;\n    \n    if (arg) {\n        FuzzContext *ctx = static_cast<FuzzContext*>(arg);  // CRASHES HERE\n        ctx->call_count++;  // Line 30 - accessing invalid memory\n    }\n}"
+              }
+            }
+            ```
+    crash_info: "|\n      ERROR: AddressSanitizer: stack-buffer-overflow on address\
+      \ 0x7ffd11e127d0 at pc 0x56382eac3574 bp 0x7ffd11e124a0 sp 0x7ffd11e12498\r\n\
+      \      \e[1m\e[0m\e[1m\e[34mREAD of size 4 at 0x7ffd11e127d0 thread T0\e[1m\e\
+      [0m\r\n      SCARINESS: 42 (4-byte-read-stack-buffer-overflow-far-from-bounds)\r\
+      \n          #0 0x56382eac3573 in query_callback(void*, int, int, unsigned char*,\
+      \ int) /src/c-ares/test/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_24.cc:30:24\r\
+      \n          #1 0x56382ead9936 in qcallback /src/c-ares/src/lib/ares_query.c\r\
+      \n          #2 0x56382ead5a21 in end_query /src/c-ares/src/lib/ares_process.c:1486:3\r\
+      \n          #3 0x56382ead20a1 in next_server /src/c-ares/src/lib/ares_process.c:796:3\r\
+      \n          #4 0x56382ead20a1 in process_timeouts /src/c-ares/src/lib/ares_process.c:556:15\r\
+      \n          #5 0x56382ead20a1 in processfds /src/c-ares/src/lib/ares_process.c:127:3\r\
+      \n          #6 0x56382eac3e28 in LLVMFuzzerTestOneInput /src/c-ares/test/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_24.cc:141:5\r\
+      \n          #7 0x56382e960e7d in fuzzer::Fuzzer::ExecuteCallback(unsigned char\
+      \ const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:619:13\r\
+      \n          #8 0x56382e9604b5 in fuzzer::Fuzzer::RunOne(unsigned char const*,\
+      \ unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7\r\
+      \n          #9 0x56382e962185 in fuzzer::Fuzzer::MutateAndTestOne() /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:765:19\r\
+      \n          #10 0x56382e962de5 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector<fuzzer::SizedFile,\
+      \ std::__Fuzzer::allocator<fuzzer::SizedFile>>&) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:910:5\r\
+      \n          #11 0x56382e951985 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned\
+      \ char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:917:6\r\
+      \n          #12 0x56382e97d5f2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10\r\
+      \n          #13 0x7fcd4c68f082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082)\
+      \ (BuildId: 5792732f783158c66fb4f3756458ca24e46e827d)\r\n          #14 0x56382e944cdd\
+      \ in _start (/out/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_24+0x48cdd)\r\
+      \n\r\n      DEDUP_TOKEN: query_callback(void*, int, int, unsigned char*, int)--qcallback--end_query\r\
+      \n      \e[1m\e[32mAddress 0x7ffd11e127d0 is located in stack of thread T0 at\
+      \ offset 144 in frame\e[1m\e[0m\r\n      \e[1m\e[0m    #0 0x56382eac375f in\
+      \ LLVMFuzzerTestOneInput /src/c-ares/test/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_24.cc:48\r\
+      \n\r\n      DEDUP_TOKEN: LLVMFuzzerTestOneInput\r\n        This frame has 4\
+      \ object(s):\r\n          [32, 144) 'options' (line 37)\e[1m\e[32m <== Memory\
+      \ access at offset 144 overflows this variable\e[1m\e[0m\r\n          [176,\
+      \ 184) 'ctx' (line 128)\r\n          [208, 336) 'readers' (line 144)\r\n   \
+      \       [368, 496) 'writers' (line 144)\r\n      HINT: this may be a false positive\
+      \ if your program uses some custom stack unwind mechanism, swapcontext or vfork\r\
+      \n            (longjmp and C++ exceptions *are* supported)\r\n      SUMMARY:\
+      \ AddressSanitizer: stack-buffer-overflow /src/c-ares/test/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_24.cc:30:24\
+      \ in query_callback(void*, int, int, unsigned char*, int)\r\n      Shadow bytes\
+      \ around the buggy address:\r\n        0x7ffd11e12500: \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\r\n        0x7ffd11e12580: \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\r\n        0x7ffd11e12600: \e\
+      [1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\r\n        0x7ffd11e12680:\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\r\n        0x7ffd11e12700:\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[31mf1\e[1m\e[0m \e[1m\e[31mf1\e[1m\e\
+      [0m \e[1m\e[31mf1\e[1m\e[0m \e[1m\e[31mf1\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m\
+      \ \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m\r\n\
+      \      =>0x7ffd11e12780: \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e\
+      [1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e\
+      [35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e\
+      [1m\e[0m \e[1m\e[35mf8\e[1m\e[0m[\e[1m\e[31mf2\e[1m\e[0m]\e[1m\e[31mf2\e[1m\e\
+      [0m \e[1m\e[31mf2\e[1m\e[0m \e[1m\e[31mf2\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e\
+      [1m\e[31mf2\e[1m\e[0m\r\n        0x7ffd11e12800: \e[1m\e[31mf2\e[1m\e[0m \e\
+      [1m\e[31mf2\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e\
+      [35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e\
+      [1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e\
+      [0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m\
+      \ \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m\r\n        0x7ffd11e12880:\
+      \ \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[31mf2\e[1m\e[0m \e\
+      [1m\e[31mf2\e[1m\e[0m \e[1m\e[31mf2\e[1m\e[0m \e[1m\e[31mf2\e[1m\e[0m \e[1m\e\
+      [35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e\
+      [1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e\
+      [0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m\r\
+      \n        0x7ffd11e12900: \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e\
+      [1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e[35mf8\e[1m\e[0m \e[1m\e\
+      [35mf8\e[1m\e[0m \e[1m\e[31mf3\e[1m\e[0m \e[1m\e[31mf3\e[1m\e[0m \e[1m\e[31mf3\e\
+      [1m\e[0m \e[1m\e[31mf3\e[1m\e[0m \e[1m\e[31mf3\e[1m\e[0m \e[1m\e[31mf3\e[1m\e\
+      [0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e\
+      [1m\e[0m00\e[1m\e[0m\r\n        0x7ffd11e12980: \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m\r\n        0x7ffd11e12a00: \e[1m\e[0m00\e[1m\e\
+      [0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e\
+      [1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e\
+      [1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\
+      \ \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m \e[1m\e\
+      [0m00\e[1m\e[0m \e[1m\e[0m00\e[1m\e[0m\r\n      Shadow byte legend (one shadow\
+      \ byte represents 8 application bytes):\r\n        Addressable:           \e\
+      [1m\e[0m00\e[1m\e[0m\r\n        Partially addressable: \e[1m\e[0m01\e[1m\e[0m\
+      \ \e[1m\e[0m02\e[1m\e[0m \e[1m\e[0m03\e[1m\e[0m \e[1m\e[0m04\e[1m\e[0m \e[1m\e\
+      [0m05\e[1m\e[0m \e[1m\e[0m06\e[1m\e[0m \e[1m\e[0m07\e[1m\e[0m \r\n        Heap\
+      \ left redzone:       \e[1m\e[31mfa\e[1m\e[0m\r\n        Freed heap region:\
+      \       \e[1m\e[35mfd\e[1m\e[0m\r\n        Stack left redzone:      \e[1m\e\
+      [31mf1\e[1m\e[0m\r\n        Stack mid redzone:       \e[1m\e[31mf2\e[1m\e[0m\r\
+      \n        Stack right redzone:     \e[1m\e[31mf3\e[1m\e[0m\r\n        Stack\
+      \ after return:      \e[1m\e[35mf5\e[1m\e[0m\r\n        Stack use after scope:\
+      \   \e[1m\e[35mf8\e[1m\e[0m\r\n        Global redzone:          \e[1m\e[31mf9\e\
+      [1m\e[0m\r\n        Global init order:       \e[1m\e[36mf6\e[1m\e[0m\r\n   \
+      \     Poisoned by user:        \e[1m\e[34mf7\e[1m\e[0m\r\n        Container\
+      \ overflow:      \e[1m\e[34mfc\e[1m\e[0m\r\n        Array cookie:          \
+      \  \e[1m\e[31mac\e[1m\e[0m\r\n        Intra object redzone:    \e[1m\e[33mbb\e\
+      [1m\e[0m\r\n        ASan internal:           \e[1m\e[33mfe\e[1m\e[0m\r\n   \
+      \     Left alloca redzone:     \e[1m\e[34mca\e[1m\e[0m\r\n        Right alloca\
+      \ redzone:    \e[1m\e[34mcb\e[1m\e[0m\r\n      ==12==ABORTING\r\n      MS: 2\
+      \ ChangeByte-CMP- DE: \"\\001\\000\\000\\000\\000\\017=\\236\"-; base unit:\
+      \ 24482d58582e036a5874f08ac221be3e832b5df2\r\n      0x0,0x6,0x1,0x0,0x0,0x0,0x0,0xf,0x3d,0x9e,\r\
+      \n      \\000\\006\\001\\000\\000\\000\\000\\017=\\236\r\n      artifact_prefix='./';\
+      \ Test unit written to ./crash-4d7d37ca3bbe6e2200305847a4ae403c2c5e3db9\r\n\
+      \      Base64: AAYBAAAAAA89ng=="
+    fuzz_driver_file: fix_c-ares_fuzz_driver_False_qwen3-coder-plus_24_crash_2.cc
+    timestamp: '2026-02-26T03:06:10.479035'

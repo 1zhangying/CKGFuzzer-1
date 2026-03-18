@@ -1,0 +1,92 @@
+- crash_1:
+    is_api_bug: true
+    crash_category: Memory Management Error (Double-Free)
+    crash_analysis: |-
+      |
+            ```json
+            {
+              "is_api_bug": true,
+              "crash_location": "ares_parse_aaaa_reply function calling ares__addrinfo2hostent, then the fuzz driver attempting to free the returned host structure",
+              "variables_involved": [
+                "host variable in the fuzz driver (struct hostent **host)",
+                "memory allocated in ares__addrinfo2hostent.c:145:15 by malloc",
+                "the hostent structure and its contained fields (h_name, h_aliases, h_addr_list)"
+              ],
+              "relevant_error_patterns": [
+                "Incorrect freeing of hostent structure - The code attempts to free individual address entries in h_addr_list with free(), but these are typically pointers into the original buffer allocated by c-ares, not separately malloc'd memory",
+                "Null pointer dereference in alias cleanup - The loop 'for (int i = 0; host->h_aliases[i]; i++)' assumes 'h_aliases' is non-null and properly formatted, but parsed data could make it invalid"
+              ],
+              "behavior_violations": [
+                "The fuzz driver incorrectly assumes it should individually free elements within the hostent structure when these elements are actually parts of a single memory block allocated by c-ares",
+                "The API returns a hostent structure with aliased memory layout where sub-elements point to parts of the same block, but the driver treats them as separate allocations"
+              ],
+              "relevant_cwes": [
+                "CWE-415: Double Free",
+                "CWE-672: Operation on a Resource After Expiration of its Lifetime"
+              ],
+              "reasoning": "The stack trace shows that a memory block was allocated by ares__addrinfo2hostent (line 145) during the ares_parse_aaaa_reply call, but then the fuzz driver attempts to free components of the hostent structure individually using standard free() instead of using the appropriate c-ares free functions. The c-ares library likely returns a hostent structure where the entire structure including h_name, h_aliases, and h_addr_list elements are part of a single contiguous memory allocation, but the fuzz driver tries to free individual components with free(), causing a double-free when the same memory is later freed again. The actual bug lies in the c-ares library's implementation where the memory layout of the returned hostent structure isn't clearly documented for proper freeing, and the structure's components may share memory with the parent structure.",
+              "category": "Memory Management Error (Double-Free)",
+              "driver_snippet": "int aaaa_result = ares_parse_aaaa_reply(local_data, size, &host, addrttls, &naddrttls);\n    if (aaaa_result == ARES_SUCCESS && host) {\n        // Free the hostent structure if allocated\n        if (host->h_name) {\n            ares_free_string(host->h_name);  // Correct way for strings\n        }\n        if (host->h_aliases) {\n            for (int i = 0; host->h_aliases[i]; i++) {\n                ares_free_string(host->h_aliases[i]);\n            }\n            free(host->h_aliases);  // This and other free() calls are problematic\n        }\n        if (host->h_addr_list) {\n            for (int i = 0; host->h_addr_list[i]; i++) {\n                free(host->h_addr_list[i]);  // May be freeing internal memory\n            }\n            free(host->h_addr_list);  // May be freeing internal memory\n        }\n        free(host);  // May conflict with internal memory layout\n        host = NULL;\n    }",
+              "api_issue": "The c-ares library's ares_parse_aaaa_reply function returns a hostent structure where components may be part of a single allocation block, but this memory management strategy isn't clear from the API contract. The hostent structure returned contains elements that are aliases to parts of the same memory block, which should be freed together using c-ares specific functions rather than individual free() calls."
+            }
+            ```
+    crash_info: "|\n      ERROR: AddressSanitizer: attempting free on address which\
+      \ was not malloc()-ed: 0x7b4930b2d5f0 in thread T0\r\n      \e[1m\e[0mSCARINESS:\
+      \ 40 (bad-free)\r\n          #0 0x55ce37841536 in free /src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\r\
+      \n          #1 0x55ce37885a47 in LLVMFuzzerTestOneInput /src/c-ares/test/c-ares_fuzz_driver_False_qwen3-coder-plus_5.cc:69:17\r\
+      \n          #2 0x55ce37722e7d in fuzzer::Fuzzer::ExecuteCallback(unsigned char\
+      \ const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:619:13\r\
+      \n          #3 0x55ce377224b5 in fuzzer::Fuzzer::RunOne(unsigned char const*,\
+      \ unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7\r\
+      \n          #4 0x55ce37724185 in fuzzer::Fuzzer::MutateAndTestOne() /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:765:19\r\
+      \n          #5 0x55ce37724de5 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector<fuzzer::SizedFile,\
+      \ std::__Fuzzer::allocator<fuzzer::SizedFile>>&) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:910:5\r\
+      \n          #6 0x55ce37713985 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned\
+      \ char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:917:6\r\
+      \n          #7 0x55ce3773f5f2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10\r\
+      \n          #8 0x7f193194f082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082)\
+      \ (BuildId: 5792732f783158c66fb4f3756458ca24e46e827d)\r\n          #9 0x55ce37706cdd\
+      \ in _start (/out/c-ares_fuzz_driver_False_qwen3-coder-plus_5+0x48cdd)\r\n\r\
+      \n      DEDUP_TOKEN: __interceptor_free--LLVMFuzzerTestOneInput--fuzzer::Fuzzer::ExecuteCallback(unsigned\
+      \ char const*, unsigned long)\r\n      \e[1m\e[32m0x7b4930b2d5f0 is located\
+      \ 16 bytes inside of 32-byte region [0x7b4930b2d5e0,0x7b4930b2d600)\r\n    \
+      \  \e[1m\e[0m\e[1m\e[35mfreed by thread T0 here:\e[1m\e[0m\r\n          #0 0x55ce37841536\
+      \ in free /src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\r\
+      \n          #1 0x55ce37885a47 in LLVMFuzzerTestOneInput /src/c-ares/test/c-ares_fuzz_driver_False_qwen3-coder-plus_5.cc:69:17\r\
+      \n          #2 0x55ce37722e7d in fuzzer::Fuzzer::ExecuteCallback(unsigned char\
+      \ const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:619:13\r\
+      \n          #3 0x55ce377224b5 in fuzzer::Fuzzer::RunOne(unsigned char const*,\
+      \ unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7\r\
+      \n          #4 0x55ce37724185 in fuzzer::Fuzzer::MutateAndTestOne() /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:765:19\r\
+      \n          #5 0x55ce37724de5 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector<fuzzer::SizedFile,\
+      \ std::__Fuzzer::allocator<fuzzer::SizedFile>>&) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:910:5\r\
+      \n          #6 0x55ce37713985 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned\
+      \ char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:917:6\r\
+      \n          #7 0x55ce3773f5f2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10\r\
+      \n          #8 0x7f193194f082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082)\
+      \ (BuildId: 5792732f783158c66fb4f3756458ca24e46e827d)\r\n\r\n      DEDUP_TOKEN:\
+      \ __interceptor_free--LLVMFuzzerTestOneInput--fuzzer::Fuzzer::ExecuteCallback(unsigned\
+      \ char const*, unsigned long)\r\n      \e[1m\e[35mpreviously allocated by thread\
+      \ T0 here:\e[1m\e[0m\r\n          #0 0x55ce378417d4 in malloc /src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:67:3\r\
+      \n          #1 0x55ce37889e97 in ares__addrinfo2hostent /src/c-ares/src/lib/ares__addrinfo2hostent.c:145:15\r\
+      \n          #2 0x55ce37888bb0 in ares_parse_aaaa_reply /src/c-ares/src/lib/ares_parse_aaaa_reply.c:71:16\r\
+      \n          #3 0x55ce3788588b in LLVMFuzzerTestOneInput /src/c-ares/test/c-ares_fuzz_driver_False_qwen3-coder-plus_5.cc:55:23\r\
+      \n          #4 0x55ce37722e7d in fuzzer::Fuzzer::ExecuteCallback(unsigned char\
+      \ const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:619:13\r\
+      \n          #5 0x55ce377224b5 in fuzzer::Fuzzer::RunOne(unsigned char const*,\
+      \ unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7\r\
+      \n          #6 0x55ce37724185 in fuzzer::Fuzzer::MutateAndTestOne() /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:765:19\r\
+      \n          #7 0x55ce37724de5 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector<fuzzer::SizedFile,\
+      \ std::__Fuzzer::allocator<fuzzer::SizedFile>>&) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:910:5\r\
+      \n          #8 0x55ce37713985 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned\
+      \ char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:917:6\r\
+      \n          #9 0x55ce3773f5f2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10\r\
+      \n          #10 0x7f193194f082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082)\
+      \ (BuildId: 5792732f783158c66fb4f3756458ca24e46e827d)\r\n\r\n      DEDUP_TOKEN:\
+      \ __interceptor_malloc--ares__addrinfo2hostent--ares_parse_aaaa_reply\r\n  \
+      \    SUMMARY: AddressSanitizer: bad-free /src/c-ares/test/c-ares_fuzz_driver_False_qwen3-coder-plus_5.cc:69:17\
+      \ in LLVMFuzzerTestOneInput\r\n      ==12==ABORTING\r\n      MS: 2 CMP-CopyPart-\
+      \ DE: \"\\256\\000\\000\\000\\000\\000\\000\\000\"-; base unit: 939c4f62ab7850ad3bcf53dc422872a0aeabe1e5\r\
+      \n      artifact_prefix='./'; Test unit written to ./crash-8e850af41eff2c623e4402bd2c4bdc42b0ee7a19"
+    fuzz_driver_file: c-ares_fuzz_driver_False_qwen3-coder-plus_5_crash_1.cc
+    timestamp: '2026-02-25T14:30:41.463240'
