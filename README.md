@@ -75,9 +75,24 @@ Run the fuzzing script with the following command:
 cd ..
 python fuzzing.py --yaml /fuzzing_llm_engine/external_database/{project}/config.yaml --gen_driver --summary_api --check_compilation --gen_input
 ```
+
+--gen_driver
+--summary_api
+--check_compilation
+--gen_input
+
 **Skipping Steps**
 If you want to skip certain steps, use the `--skip_*` options. For example:
 ```bash
 python fuzzing.py --yaml /fuzzing_llm_engine/external_database/{project}/config.yaml --skip_gen_driver --skip_summary_api --skip_check_compilation --skip_gen_input
-```
+``
 This command skips the fuzz driver generation and proceeds with the remaining steps.
+
+
+
+
+
+
+1、a木笔哦库
+2\
+3\

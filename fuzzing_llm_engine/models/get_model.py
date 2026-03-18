@@ -46,4 +46,3 @@ def get_embedding_model(llm_config=None, device='cpu'):
         model_name = model_name.replace("ollama-", "").strip()
         return OllamaEmbedding( model_name = model_name, base_url=llm_config["base_url"], ollama_additional_kwargs={"mirostat": 0})
     assert False, f"Non-support Emb Model Name, The LLM config is {llm_config}. Please use the Ollama Model, OpenAI model and Deepseek Model"
-

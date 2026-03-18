@@ -1,5 +1,6 @@
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.llms.openai_like import OpenAILike
+#from llama_index.llms.openai_like import OpenAILike
+from llama_index.llms.openai import OpenAI as OpenAILike
 from llama_index.core.prompts import PromptTemplate
 from llama_index.core import Settings
 from llama_index.core import StorageContext, load_index_from_storage, get_response_synthesizer,Document
