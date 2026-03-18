@@ -1,0 +1,187 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int\nares_parse_mx_reply (const unsigned char *abuf, int alen,\n                     struct ares_mx_reply **mx_out)\n{\n  unsigned int qdcount, ancount, i;\n  const unsigned char *aptr, *vptr;\n  int status, rr_type, rr_class, rr_len;\n  long len;\n  char *hostname = NULL, *rr_name = NULL;\n  struct ares_mx_reply *mx_head = NULL;\n  struct ares_mx_reply *mx_last = NULL;\n  struct ares_mx_reply *mx_curr;\n\n  /* Set *mx_out to NULL for all failure cases. */\n  *mx_out = NULL;\n\n  /* Give up if abuf doesn't have room for a header. */\n  if (alen < HFIXEDSZ)\n    return ARES_EBADRESP;\n\n  /* Fetch the question and answer count from the header. */\n  qdcount = DNS_HEADER_QDCOUNT (abuf);\n  ancount = DNS_HEADER_ANCOUNT (abuf);\n  if (qdcount != 1)\n    return ARES_EBADRESP;\n  if (ancount == 0)\n    return ARES_ENODATA;\n\n  /* Expand the name from the question, and skip past the question. */\n  aptr = abuf + HFIXEDSZ;\n  status = ares_expand_name (aptr, abuf, alen, &hostname, &len);\n  if (status != ARES_SUCCESS)\n    return status;\n\n  if (aptr + len + QFIXEDSZ > abuf + alen)\n    {\n      ares_free (hostname);\n      return ARES_EBADRESP;\n    }\n  aptr += len + QFIXEDSZ;\n\n  /* Examine each answer resource record (RR) in turn. */\n  for (i = 0; i < ancount; i++)\n    {\n      /* Decode the RR up to the data field. */\n      status = ares_expand_name (aptr, abuf, alen, &rr_name, &len);\n      if (status != ARES_SUCCESS)\n        {\n          break;\n        }\n      aptr += len;\n      if (aptr + RRFIXEDSZ > abuf + alen)\n        {\n          status = ARES_EBADRESP;\n          break;\n        }\n      rr_type = DNS_RR_TYPE (aptr);\n      rr_class = DNS_RR_CLASS (aptr);\n      rr_len = DNS_RR_LEN (aptr);\n      aptr += RRFIXEDSZ;\n      if (aptr + rr_len > abuf + alen)\n        {\n          status = ARES_EBADRESP;\n          break;\n        }\n\n      /* Check if we are really looking at a MX record */\n      if (rr_class == C_IN && rr_type == T_MX)\n        {\n          /* parse the MX record itself */\n          if (rr_len < 2)\n            {\n              status = ARES_EBADRESP;\n              break;\n            }\n\n          /* Allocate storage for this MX answer appending it to the list */\n          mx_curr = ares_malloc_data(ARES_DATATYPE_MX_REPLY);\n          if (!mx_curr)\n            {\n              status = ARES_ENOMEM;\n              break;\n            }\n          if (mx_last)\n            {\n              mx_last->next = mx_curr;\n            }\n          else\n            {\n              mx_head = mx_curr;\n            }\n          mx_last = mx_curr;\n\n          vptr = aptr;\n          mx_curr->priority = DNS__16BIT(vptr);\n          vptr += sizeof(unsigned short);\n\n          status = ares_expand_name (vptr, abuf, alen, &mx_curr->host, &len);\n          if (status != ARES_SUCCESS)\n            break;\n        }\n\n      /* Don't lose memory in the next iteration */\n      ares_free (rr_name);\n      rr_name = NULL;\n\n      /* Move on to the next record */\n      aptr += rr_len;\n    }\n\n  if (hostname)\n    ares_free (hostname);\n  if (rr_name)\n    ares_free (rr_name);\n\n  /* clean up on error */\n  if (status != ARES_SUCCESS)\n    {\n      if (mx_head)\n        ares_free_data (mx_head);\n      return status;\n    }\n\n  /* everything looks fine, return the data */\n  *mx_out = mx_head;\n\n  return ARES_SUCCESS;\n}",
+      "fn_code_pos": [
+        [
+          36,
+          0
+        ],
+        [
+          163,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_parse_mx_reply",
+        "parameters": {
+          "abuf": "unsigned char",
+          "alen": "int",
+          "mx_out": "struct ares_mx_reply"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct ares_mx_reply",
+      {},
+      "",
+      [
+        38,
+        21
+      ],
+      [
+        38,
+        41
+      ]
+    ],
+    [
+      "struct ares_mx_reply",
+      {},
+      "",
+      [
+        45,
+        2
+      ],
+      [
+        45,
+        22
+      ]
+    ],
+    [
+      "struct ares_mx_reply",
+      {},
+      "",
+      [
+        46,
+        2
+      ],
+      [
+        46,
+        22
+      ]
+    ],
+    [
+      "struct ares_mx_reply",
+      {},
+      "",
+      [
+        47,
+        2
+      ],
+      [
+        47,
+        22
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        20,
+        0
+      ],
+      [
+        21,
+        0
+      ]
+    ],
+    [
+      "#  include <netdb.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_dns.h\"\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_data.h\"\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

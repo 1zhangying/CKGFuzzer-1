@@ -1,0 +1,427 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int isCCITTCompression(TIFF *tif)\n{\n    uint16_t compress;\n    TIFFGetField(tif, TIFFTAG_COMPRESSION, &compress);\n    return (compress == COMPRESSION_CCITTFAX3 ||\n            compress == COMPRESSION_CCITTFAX4 ||\n            compress == COMPRESSION_CCITTRLE ||\n            compress == COMPRESSION_CCITTRLEW);\n}",
+      "fn_code_pos": [
+        [
+          58,
+          0
+        ],
+        [
+          66,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "isCCITTCompression",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFImageIterBegin(TIFFImageIter *img, TIFF *tif, int stop, char emsg[1024])\n{\n    uint16_t *sampleinfo;\n    uint16_t extrasamples;\n    uint16_t planarconfig;\n    int colorchannels;\n\n    img->tif = tif;\n    img->stoponerr = stop;\n    TIFFGetFieldDefaulted(tif, TIFFTAG_BITSPERSAMPLE, &img->bitspersample);\n    img->alpha = 0;\n    TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLESPERPIXEL, &img->samplesperpixel);\n    TIFFGetFieldDefaulted(tif, TIFFTAG_EXTRASAMPLES, &extrasamples,\n                          &sampleinfo);\n    if (extrasamples == 1)\n        switch (sampleinfo[0])\n        {\n            case EXTRASAMPLE_ASSOCALPHA: /* data is pre-multiplied */\n            case EXTRASAMPLE_UNASSALPHA: /* data is not pre-multiplied */\n                img->alpha = sampleinfo[0];\n                break;\n        }\n    colorchannels = img->samplesperpixel - extrasamples;\n    TIFFGetFieldDefaulted(tif, TIFFTAG_PLANARCONFIG, &planarconfig);\n    if (!TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &img->photometric))\n    {\n        switch (colorchannels)\n        {\n            case 1:\n                if (isCCITTCompression(tif))\n                    img->photometric = PHOTOMETRIC_MINISWHITE;\n                else\n                    img->photometric = PHOTOMETRIC_MINISBLACK;\n                break;\n            case 3:\n                img->photometric = PHOTOMETRIC_RGB;\n                break;\n            default:\n                sprintf(emsg, \"Missing needed %s tag\", photoTag);\n                return (0);\n        }\n    }\n    switch (img->photometric)\n    {\n        case PHOTOMETRIC_PALETTE:\n            if (!TIFFGetField(tif, TIFFTAG_COLORMAP, &img->redcmap,\n                              &img->greencmap, &img->bluecmap))\n            {\n                TIFFErrorExtR(tif, TIFFFileName(tif),\n                              \"Missing required \\\"Colormap\\\" tag\");\n                return (0);\n            }\n            /* fall through... */\n        case PHOTOMETRIC_MINISWHITE:\n        case PHOTOMETRIC_MINISBLACK:\n            /* This should work now so skip the check - BSR\n                    if (planarconfig == PLANARCONFIG_CONTIG &&\n               img->samplesperpixel != 1) { sprintf(emsg, \"Sorry, can not handle\n               contiguous data with %s=%d, and %s=%d\", photoTag,\n               img->photometric, \"Samples/pixel\", img->samplesperpixel); return\n               (0);\n                    }\n             */\n            break;\n        case PHOTOMETRIC_YCBCR:\n            if (planarconfig != PLANARCONFIG_CONTIG)\n            {\n                sprintf(emsg, \"Sorry, can not handle YCbCr images with %s=%d\",\n                        \"Planarconfiguration\", planarconfig);\n                return (0);\n            }\n            /* It would probably be nice to have a reality check here. */\n            {\n                uint16_t compress;\n                TIFFGetField(tif, TIFFTAG_COMPRESSION, &compress);\n                if (compress == COMPRESSION_JPEG &&\n                    planarconfig == PLANARCONFIG_CONTIG)\n                {\n                    /* can rely on libjpeg to convert to RGB */\n                    /* XXX should restore current state on exit */\n                    TIFFSetField(tif, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB);\n                    img->photometric = PHOTOMETRIC_RGB;\n                }\n            }\n            break;\n        case PHOTOMETRIC_RGB:\n            if (colorchannels < 3)\n            {\n                sprintf(emsg, \"Sorry, can not handle RGB image with %s=%d\",\n                        \"Color channels\", colorchannels);\n                return (0);\n            }\n            break;\n        case PHOTOMETRIC_SEPARATED:\n        {\n            uint16_t inkset;\n            TIFFGetFieldDefaulted(tif, TIFFTAG_INKSET, &inkset);\n            if (inkset != INKSET_CMYK)\n            {\n                sprintf(emsg,\n                        \"Sorry, can not handle separated image with %s=%d\",\n                        \"InkSet\", inkset);\n                return (0);\n            }\n            if (img->samplesperpixel != 4)\n            {\n                sprintf(emsg,\n                        \"Sorry, can not handle separated image with %s=%d\",\n                        \"Samples/pixel\", img->samplesperpixel);\n                return (0);\n            }\n            break;\n        }\n        default:\n            sprintf(emsg, \"Sorry, can not handle image with %s=%d\", photoTag,\n                    img->photometric);\n            return (0);\n    }\n    TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &img->width);\n    TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &img->height);\n\n    TIFFGetFieldDefaulted(tif, TIFFTAG_ORIENTATION, &img->orientation);\n    switch (img->orientation)\n    {\n        case ORIENTATION_BOTRIGHT:\n        case ORIENTATION_RIGHTBOT: /* XXX */\n        case ORIENTATION_LEFTBOT:  /* XXX */\n            TIFFWarning(TIFFFileName(tif), \"using bottom-left orientation\");\n            img->orientation = ORIENTATION_BOTLEFT;\n            /* fall through... */\n        case ORIENTATION_BOTLEFT:\n            break;\n        case ORIENTATION_TOPRIGHT:\n        case ORIENTATION_RIGHTTOP: /* XXX */\n        case ORIENTATION_LEFTTOP:  /* XXX */\n        default:\n            TIFFWarning(TIFFFileName(tif), \"using top-left orientation\");\n            img->orientation = ORIENTATION_TOPLEFT;\n            /* fall through... */\n        case ORIENTATION_TOPLEFT:\n            break;\n    }\n\n    img->isContig =\n        !(planarconfig == PLANARCONFIG_SEPARATE && colorchannels > 1);\n    if (img->isContig)\n    {\n        img->get = TIFFIsTiled(tif) ? gtTileContig : gtStripContig;\n    }\n    else\n    {\n        img->get = TIFFIsTiled(tif) ? gtTileSeparate : gtStripSeparate;\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          68,
+          0
+        ],
+        [
+          222,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFImageIterBegin",
+        "parameters": {
+          "img": "TIFFImageIter",
+          "tif": "TIFF",
+          "stop": "int",
+          "emsg": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFImageIterGet(TIFFImageIter *img, void *udata, uint32_t w, uint32_t h)\n{\n    if (img->get == NULL)\n    {\n        TIFFErrorExtR(img->tif, TIFFFileName(img->tif),\n                      \"No \\\"get\\\" routine setup\");\n        return (0);\n    }\n    if (img->callback.any == NULL)\n    {\n        TIFFErrorExtR(\n            img->tif, TIFFFileName(img->tif),\n            \"No \\\"put\\\" routine setupl; probably can not handle image format\");\n        return (0);\n    }\n    return (*img->get)(img, udata, w, h);\n}",
+      "fn_code_pos": [
+        [
+          224,
+          0
+        ],
+        [
+          240,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFImageIterGet",
+        "parameters": {
+          "img": "TIFFImageIter",
+          "udata": "void",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFImageIterEnd(TIFFImageIter *img)\n{ /* Nothing to free... ? */\n}",
+      "fn_code_pos": [
+        [
+          242,
+          0
+        ],
+        [
+          244,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFImageIterEnd",
+        "parameters": {
+          "img": "TIFFImageIter"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "int TIFFReadImageIter(TIFF *tif, uint32_t rwidth, uint32_t rheight,\n                      uint8_t *raster, int stop)\n{\n    char emsg[1024];\n    TIFFImageIter img;\n    int ok;\n\n    if (TIFFImageIterBegin(&img, tif, stop, emsg))\n    {\n        /* XXX verify rwidth and rheight against width and height */\n        ok = TIFFImageIterGet(&img, raster, rwidth, img.height);\n        TIFFImageIterEnd(&img);\n    }\n    else\n    {\n        TIFFErrorExtR(tif, TIFFFileName(tif), emsg);\n        ok = 0;\n    }\n    return (ok);\n}",
+      "fn_code_pos": [
+        [
+          249,
+          0
+        ],
+        [
+          268,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFReadImageIter",
+        "parameters": {
+          "tif": "TIFF",
+          "rwidth": "uint32_t",
+          "rheight": "uint32_t",
+          "raster": "uint8_t",
+          "stop": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int gtTileContig(TIFFImageIter *img, void *udata, uint32_t w, uint32_t h)\n{\n    TIFF *tif = img->tif;\n    ImageIterTileContigRoutine callback = img->callback.contig;\n    uint16_t orientation;\n    uint32_t col, row;\n    uint32_t tw, th;\n    u_char *buf;\n    int32_t fromskew;\n    uint32_t nrow;\n\n    buf = (u_char *)_TIFFmalloc(TIFFTileSize(tif));\n    if (buf == 0)\n    {\n        TIFFErrorExtR(tif, TIFFFileName(tif), \"No space for tile buffer\");\n        return (0);\n    }\n    TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tw);\n    TIFFGetField(tif, TIFFTAG_TILELENGTH, &th);\n    orientation = img->orientation;\n    for (row = 0; row < h; row += th)\n    {\n        nrow = (row + th > h ? h - row : th);\n        for (col = 0; col < w; col += tw)\n        {\n            if (TIFFReadTile(tif, buf, col, row, 0, 0) < 0 && img->stoponerr)\n                break;\n            if (col + tw > w)\n            {\n                /*\n                 * Tile is clipped horizontally.  Calculate\n                 * visible portion and skewing factors.\n                 */\n                uint32_t npix = w - col;\n                fromskew = tw - npix;\n                (*callback)(img, udata, col, row, npix, nrow, fromskew, buf);\n            }\n            else\n            {\n                (*callback)(img, udata, col, row, tw, nrow, 0, buf);\n            }\n        }\n    }\n    _TIFFfree(buf);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          276,
+          0
+        ],
+        [
+          321,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "gtTileContig",
+        "parameters": {
+          "img": "TIFFImageIter",
+          "udata": "void",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int gtTileSeparate(TIFFImageIter *img, void *udata, uint32_t w,\n                          uint32_t h)\n{\n    TIFF *tif = img->tif;\n    ImageIterTileSeparateRoutine callback = img->callback.separate;\n    uint16_t orientation;\n    uint32_t col, row;\n    uint32_t tw, th;\n    u_char *buf;\n    u_char *r;\n    u_char *g;\n    u_char *b;\n    u_char *a;\n    tsize_t tilesize;\n    int32_t fromskew;\n    int alpha = img->alpha;\n    uint32_t nrow;\n\n    tilesize = TIFFTileSize(tif);\n    buf = (u_char *)_TIFFmalloc(4 * tilesize);\n    if (buf == 0)\n    {\n        TIFFErrorExtR(tif, TIFFFileName(tif), \"No space for tile buffer\");\n        return (0);\n    }\n    r = buf;\n    g = r + tilesize;\n    b = g + tilesize;\n    a = b + tilesize;\n    if (!alpha)\n        memset(a, 0xff, tilesize);\n    TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tw);\n    TIFFGetField(tif, TIFFTAG_TILELENGTH, &th);\n    orientation = img->orientation;\n    for (row = 0; row < h; row += th)\n    {\n        nrow = (row + th > h ? h - row : th);\n        for (col = 0; col < w; col += tw)\n        {\n            if (TIFFReadTile(tif, r, col, row, 0, 0) < 0 && img->stoponerr)\n                break;\n            if (TIFFReadTile(tif, g, col, row, 0, 1) < 0 && img->stoponerr)\n                break;\n            if (TIFFReadTile(tif, b, col, row, 0, 2) < 0 && img->stoponerr)\n                break;\n            if (alpha && TIFFReadTile(tif, a, col, row, 0, 3) < 0 &&\n                img->stoponerr)\n                break;\n            if (col + tw > w)\n            {\n                /*\n                 * Tile is clipped horizontally.  Calculate\n                 * visible portion and skewing factors.\n                 */\n                uint32_t npix = w - col;\n                fromskew = tw - npix;\n                (*callback)(img, udata, col, row, npix, nrow, fromskew, r, g, b,\n                            a);\n            }\n            else\n            {\n                (*callback)(img, udata, col, row, tw, nrow, 0, r, g, b, a);\n            }\n        }\n    }\n    _TIFFfree(buf);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          329,
+          0
+        ],
+        [
+          396,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "gtTileSeparate",
+        "parameters": {
+          "img": "TIFFImageIter",
+          "udata": "void",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int gtStripContig(TIFFImageIter *img, void *udata, uint32_t w,\n                         uint32_t h)\n{\n    TIFF *tif = img->tif;\n    ImageIterTileContigRoutine callback = img->callback.contig;\n    uint16_t orientation;\n    uint32_t row, nrow;\n    u_char *buf;\n    uint32_t rowsperstrip;\n    uint32_t imagewidth = img->width;\n    tsize_t scanline;\n    int32_t fromskew;\n\n    buf = (u_char *)_TIFFmalloc(TIFFStripSize(tif));\n    if (buf == 0)\n    {\n        TIFFErrorExtR(tif, TIFFFileName(tif), \"No space for strip buffer\");\n        return (0);\n    }\n    orientation = img->orientation;\n    TIFFGetFieldDefaulted(tif, TIFFTAG_ROWSPERSTRIP, &rowsperstrip);\n    scanline = TIFFScanlineSize(tif);\n    fromskew = (w < imagewidth ? imagewidth - w : 0);\n    for (row = 0; row < h; row += rowsperstrip)\n    {\n        nrow = (row + rowsperstrip > h ? h - row : rowsperstrip);\n        if (TIFFReadEncodedStrip(tif, TIFFComputeStrip(tif, row, 0), buf,\n                                 nrow * scanline) < 0 &&\n            img->stoponerr)\n            break;\n        (*callback)(img, udata, 0, row, w, nrow, fromskew, buf);\n    }\n    _TIFFfree(buf);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          404,
+          0
+        ],
+        [
+          438,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "gtStripContig",
+        "parameters": {
+          "img": "TIFFImageIter",
+          "udata": "void",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int gtStripSeparate(TIFFImageIter *img, void *udata, uint32_t w,\n                           uint32_t h)\n{\n    TIFF *tif = img->tif;\n    ImageIterTileSeparateRoutine callback = img->callback.separate;\n    uint16_t orientation;\n    u_char *buf;\n    u_char *r, *g, *b, *a;\n    uint32_t row, nrow;\n    tsize_t scanline;\n    uint32_t rowsperstrip;\n    uint32_t imagewidth = img->width;\n    tsize_t stripsize;\n    int32_t fromskew;\n    int alpha = img->alpha;\n\n    stripsize = TIFFStripSize(tif);\n    r = buf = (u_char *)_TIFFmalloc(4 * stripsize);\n    if (buf == 0)\n    {\n        TIFFErrorExtR(tif, TIFFFileName(tif), \"No space for tile buffer\");\n        return (0);\n    }\n    g = r + stripsize;\n    b = g + stripsize;\n    a = b + stripsize;\n    if (!alpha)\n        memset(a, 0xff, stripsize);\n    orientation = img->orientation;\n    TIFFGetFieldDefaulted(tif, TIFFTAG_ROWSPERSTRIP, &rowsperstrip);\n    scanline = TIFFScanlineSize(tif);\n    fromskew = (w < imagewidth ? imagewidth - w : 0);\n    for (row = 0; row < h; row += rowsperstrip)\n    {\n        nrow = (row + rowsperstrip > h ? h - row : rowsperstrip);\n        if (TIFFReadEncodedStrip(tif, TIFFComputeStrip(tif, row, 0), r,\n                                 nrow * scanline) < 0 &&\n            img->stoponerr)\n            break;\n        if (TIFFReadEncodedStrip(tif, TIFFComputeStrip(tif, row, 1), g,\n                                 nrow * scanline) < 0 &&\n            img->stoponerr)\n            break;\n        if (TIFFReadEncodedStrip(tif, TIFFComputeStrip(tif, row, 2), b,\n                                 nrow * scanline) < 0 &&\n            img->stoponerr)\n            break;\n        if (alpha && (TIFFReadEncodedStrip(tif, TIFFComputeStrip(tif, row, 3),\n                                           a, nrow * scanline) < 0 &&\n                      img->stoponerr))\n            break;\n        (*callback)(img, udata, 0, row, w, nrow, fromskew, r, g, b, a);\n    }\n    _TIFFfree(buf);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          446,
+          0
+        ],
+        [
+          501,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "gtStripSeparate",
+        "parameters": {
+          "img": "TIFFImageIter",
+          "udata": "void",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "DECLAREContigCallbackFunc(TestContigCallback)\n{\n    printf(\"Contig Callback called with x = %d, y = %d, w = %d, h = %d, \"\n           \"fromskew = %d\\n\",\n           x, y, w, h, fromskew);\n}",
+      "fn_code_pos": [
+        [
+          503,
+          0
+        ],
+        [
+          508,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DECLAREContigCallbackFunc",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "DECLARESepCallbackFunc(TestSepCallback)\n{\n    printf(\"Sep Callback called with x = %d, y = %d, w = %d, h = %d, fromskew \"\n           \"= %d\\n\",\n           x, y, w, h, fromskew);\n}",
+      "fn_code_pos": [
+        [
+          510,
+          0
+        ],
+        [
+          515,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DECLARESepCallbackFunc",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "main(int argc, char **argv)\n{\n    char emsg[1024];\n    TIFFImageIter img;\n    int ok;\n    int stop = 1;\n\n    TIFF *tif;\n    unsigned long nx, ny;\n    unsigned short BitsPerSample, SamplesPerPixel;\n    int isColorMapped, isPliFile;\n    unsigned char *ColorMap;\n    unsigned char *data;\n\n    if (argc < 2)\n    {\n        fprintf(stderr, \"usage: %s tiff_file\\n\", argv[0]);\n        exit(1);\n    }\n    tif = (TIFF *)PLIGetImage(argv[1], (void *)&data, &ColorMap, &nx, &ny,\n                              &BitsPerSample, &SamplesPerPixel, &isColorMapped,\n                              &isPliFile);\n    if (tif != NULL)\n    {\n\n        if (TIFFImageIterBegin(&img, tif, stop, emsg))\n        {\n            /* Here need to set data and callback function! */\n            if (img.isContig)\n            {\n                img.callback = TestContigCallback;\n            }\n            else\n            {\n                img.callback = TestSepCallback;\n            }\n            ok = TIFFImageIterGet(&img, NULL, img.width, img.height);\n            TIFFImageIterEnd(&img);\n        }\n        else\n        {\n            TIFFErrorExtR(tif, TIFFFileName(tif), emsg);\n        }\n    }\n}",
+      "fn_code_pos": [
+        [
+          518,
+          0
+        ],
+        [
+          562,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "gtTileContig(TIFFImageIter *, void *udata, uint32_t, uint32_t)",
+      "fn_dec_pos": [
+        [
+          51,
+          11
+        ],
+        [
+          51,
+          73
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "gtTileContig",
+        "parameters": {
+          "udata": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "gtTileSeparate(TIFFImageIter *, void *udata, uint32_t, uint32_t)",
+      "fn_dec_pos": [
+        [
+          52,
+          11
+        ],
+        [
+          52,
+          75
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "gtTileSeparate",
+        "parameters": {
+          "udata": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "gtStripContig(TIFFImageIter *, void *udata, uint32_t, uint32_t)",
+      "fn_dec_pos": [
+        [
+          53,
+          11
+        ],
+        [
+          53,
+          74
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "gtStripContig",
+        "parameters": {
+          "udata": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "gtStripSeparate(TIFFImageIter *, void *udata, uint32_t, uint32_t)",
+      "fn_dec_pos": [
+        [
+          54,
+          11
+        ],
+        [
+          54,
+          76
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "gtStripSeparate",
+        "parameters": {
+          "udata": "void"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tif_imageiter.h\"\n",
+      [
+        46,
+        0
+      ],
+      [
+        47,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        47,
+        0
+      ],
+      [
+        48,
+        0
+      ]
+    ],
+    [
+      "#include <assert.h>\n",
+      [
+        48,
+        0
+      ],
+      [
+        49,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        49,
+        0
+      ],
+      [
+        50,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

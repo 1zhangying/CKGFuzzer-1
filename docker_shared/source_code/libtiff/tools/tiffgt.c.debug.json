@@ -1,0 +1,635 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    int c;\n    int dirnum = -1;\n    uint32_t diroff = 0;\n\n    oerror = TIFFSetErrorHandler(NULL);\n    owarning = TIFFSetWarningHandler(NULL);\n    while ((c = getopt(argc, argv, \"d:o:p:eflmsvwh\")) != -1)\n        switch (c)\n        {\n            case 'd':\n                dirnum = atoi(optarg);\n                break;\n            case 'e':\n                oerror = TIFFSetErrorHandler(oerror);\n                break;\n            case 'l':\n                order0 = FILLORDER_LSB2MSB;\n                break;\n            case 'm':\n                order0 = FILLORDER_MSB2LSB;\n                break;\n            case 'o':\n                diroff = strtoul(optarg, NULL, 0);\n                break;\n            case 'p':\n                photo0 = photoArg(optarg);\n                break;\n            case 's':\n                stoponerr = 1;\n                break;\n            case 'w':\n                owarning = TIFFSetWarningHandler(owarning);\n                break;\n            case 'v':\n                verbose = 1;\n                break;\n            case 'h':\n                usage(EXIT_SUCCESS);\n                /*NOTREACHED*/\n                break;\n            case '?':\n                usage(EXIT_FAILURE);\n                /*NOTREACHED*/\n                break;\n        }\n    filenum = argc - optind;\n    if (filenum < 1)\n        usage(EXIT_FAILURE);\n\n    glutInit(&argc, argv);\n    glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);\n\n    /*\n     * Get the screen size\n     */\n    xmax = glutGet(GLUT_SCREEN_WIDTH);\n    ymax = glutGet(GLUT_SCREEN_HEIGHT);\n\n    /*\n     * Use 90% of the screen size\n     */\n    xmax = xmax - xmax / 10.0;\n    ymax = ymax - ymax / 10.0;\n\n    filelist = (char **)_TIFFmalloc(filenum * sizeof(char *));\n    if (!filelist)\n    {\n        TIFFError(argv[0], \"Can not allocate space for the file list.\");\n        return EXIT_FAILURE;\n    }\n    _TIFFmemcpy(filelist, argv + optind, filenum * sizeof(char *));\n    fileindex = -1;\n    if (nextImage() < 0)\n    {\n        _TIFFfree(filelist);\n        return EXIT_FAILURE;\n    }\n    /*\n     * Set initial directory if user-specified\n     * file was opened successfully.\n     */\n    if (dirnum != -1 && !TIFFSetDirectory(tif, dirnum))\n        TIFFError(argv[0], \"Error, seeking to directory %d\", dirnum);\n    if (diroff != 0 && !TIFFSetSubDirectory(tif, diroff))\n        TIFFError(argv[0], \"Error, setting subdirectory at %#x\", diroff);\n    order = order0;\n    photo = photo0;\n    if (initImage() < 0)\n    {\n        _TIFFfree(filelist);\n        return EXIT_FAILURE;\n    }\n    /*\n     * Create a new window or reconfigure an existing\n     * one to suit the image to be displayed.\n     */\n    glutInitWindowSize(width, height);\n    snprintf(title, TITLE_LENGTH - 1, \"%s [%u]\", filelist[fileindex],\n             TIFFCurrentDirectory(tif));\n    glutCreateWindow(title);\n    glutDisplayFunc(raster_draw);\n    glutReshapeFunc(raster_reshape);\n    glutKeyboardFunc(raster_keys);\n    glutSpecialFunc(raster_special);\n    glutMainLoop();\n\n    cleanup_and_exit(EXIT_SUCCESS);\n    return EXIT_SUCCESS;\n}",
+      "fn_code_pos": [
+        [
+          100,
+          0
+        ],
+        [
+          210,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void cleanup_and_exit(int code)\n{\n    TIFFRGBAImageEnd(&img);\n    if (filelist != NULL)\n        _TIFFfree(filelist);\n    if (raster != NULL)\n        _TIFFfree(raster);\n    if (tif != NULL)\n        TIFFClose(tif);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          212,
+          0
+        ],
+        [
+          222,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cleanup_and_exit",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int initImage(void)\n{\n    uint32_t w, h;\n\n    if (order)\n        TIFFSetField(tif, TIFFTAG_FILLORDER, order);\n    if (photo != (uint16_t)-1)\n        TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, photo);\n    if (!TIFFRGBAImageBegin(&img, tif, stoponerr, title))\n    {\n        TIFFError(filelist[fileindex], \"%s\", title);\n        TIFFClose(tif);\n        tif = NULL;\n        return -1;\n    }\n\n    /*\n     * Setup the image raster as required.\n     */\n    h = img.height;\n    w = img.width;\n    if (h > ymax)\n    {\n        w = (int)(w * ((float)ymax / h));\n        h = ymax;\n    }\n    if (w > xmax)\n    {\n        h = (int)(h * ((float)xmax / w));\n        w = xmax;\n    }\n\n    if (w != width || h != height)\n    {\n        uint32_t rastersize = _TIFFMultiply32(tif, img.width, img.height,\n                                              \"allocating raster buffer\");\n        if (raster != NULL)\n            _TIFFfree(raster), raster = NULL;\n        raster = (uint32_t *)_TIFFCheckMalloc(tif, rastersize, sizeof(uint32_t),\n                                              \"allocating raster buffer\");\n        if (raster == NULL)\n        {\n            width = height = 0;\n            TIFFError(filelist[fileindex], \"No space for raster buffer\");\n            cleanup_and_exit(EXIT_FAILURE);\n        }\n        width = w;\n        height = h;\n    }\n    TIFFRGBAImageGet(&img, raster, img.width, img.height);\n#if HOST_BIGENDIAN\n    TIFFSwabArrayOfLong(raster, img.width * img.height);\n#endif\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          224,
+          0
+        ],
+        [
+          278,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "initImage",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int prevImage(void)\n{\n    if (fileindex > 0)\n        fileindex--;\n    else if (tif)\n        return fileindex;\n    if (tif)\n        TIFFClose(tif);\n    tif = TIFFOpen(filelist[fileindex], \"r\");\n    if (tif == NULL)\n        return -1;\n    return fileindex;\n}",
+      "fn_code_pos": [
+        [
+          280,
+          0
+        ],
+        [
+          292,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "prevImage",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int nextImage(void)\n{\n    if (fileindex < filenum - 1)\n        fileindex++;\n    else if (tif)\n        return fileindex;\n    if (tif)\n        TIFFClose(tif);\n    tif = TIFFOpen(filelist[fileindex], \"r\");\n    if (tif == NULL)\n        return -1;\n    return fileindex;\n}",
+      "fn_code_pos": [
+        [
+          294,
+          0
+        ],
+        [
+          306,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "nextImage",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void setWindowSize(void) { glutReshapeWindow(width, height); }",
+      "fn_code_pos": [
+        [
+          308,
+          0
+        ],
+        [
+          308,
+          69
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setWindowSize",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void raster_draw(void)\n{\n    glDrawPixels(img.width, img.height, GL_RGBA, GL_UNSIGNED_BYTE,\n                 (const GLvoid *)raster);\n    glFlush();\n}",
+      "fn_code_pos": [
+        [
+          310,
+          0
+        ],
+        [
+          315,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "raster_draw",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void raster_reshape(int win_w, int win_h)\n{\n    GLfloat xratio = (GLfloat)win_w / img.width;\n    GLfloat yratio = (GLfloat)win_h / img.height;\n    int ratio = (int)(((xratio > yratio) ? xratio : yratio) * 100);\n\n    glPixelZoom(xratio, yratio);\n    glViewport(0, 0, win_w, win_h);\n    snprintf(title, 1024, \"%s [%u] %d%%\", filelist[fileindex],\n             TIFFCurrentDirectory(tif), ratio);\n    glutSetWindowTitle(title);\n}",
+      "fn_code_pos": [
+        [
+          317,
+          0
+        ],
+        [
+          328,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "raster_reshape",
+        "parameters": {
+          "win_w": "int",
+          "win_h": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void raster_keys(unsigned char key, int x, int y)\n{\n    (void)x;\n    (void)y;\n    switch (key)\n    {\n        case 'b': /* photometric MinIsBlack */\n            photo = PHOTOMETRIC_MINISBLACK;\n            initImage();\n            break;\n        case 'l': /* lsb-to-msb FillOrder */\n            order = FILLORDER_LSB2MSB;\n            initImage();\n            break;\n        case 'm': /* msb-to-lsb FillOrder */\n            order = FILLORDER_MSB2LSB;\n            initImage();\n            break;\n        case 'w': /* photometric MinIsWhite */\n            photo = PHOTOMETRIC_MINISWHITE;\n            initImage();\n            break;\n        case 'W': /* toggle warnings */\n            owarning = TIFFSetWarningHandler(owarning);\n            initImage();\n            break;\n        case 'E': /* toggle errors */\n            oerror = TIFFSetErrorHandler(oerror);\n            initImage();\n            break;\n        case 'z': /* reset to defaults */\n        case 'Z':\n            order = order0;\n            photo = photo0;\n            if (owarning == NULL)\n                owarning = TIFFSetWarningHandler(NULL);\n            if (oerror == NULL)\n                oerror = TIFFSetErrorHandler(NULL);\n            initImage();\n            break;\n        case 'q': /* exit */\n        case '\\033':\n            cleanup_and_exit(EXIT_SUCCESS);\n    }\n    glutPostRedisplay();\n}",
+      "fn_code_pos": [
+        [
+          330,
+          0
+        ],
+        [
+          375,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "raster_keys",
+        "parameters": {
+          "key": "unsigned char",
+          "x": "int",
+          "y": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void raster_special(int key, int x, int y)\n{\n    (void)x;\n    (void)y;\n    switch (key)\n    {\n        case GLUT_KEY_PAGE_UP: /* previous logical image */\n            if (TIFFCurrentDirectory(tif) > 0)\n            {\n                if (TIFFSetDirectory(tif, TIFFCurrentDirectory(tif) - 1))\n                {\n                    initImage();\n                    setWindowSize();\n                }\n            }\n            else\n            {\n                TIFFRGBAImageEnd(&img);\n                prevImage();\n                initImage();\n                setWindowSize();\n            }\n            break;\n        case GLUT_KEY_PAGE_DOWN: /* next logical image */\n            if (!TIFFLastDirectory(tif))\n            {\n                if (TIFFReadDirectory(tif))\n                {\n                    initImage();\n                    setWindowSize();\n                }\n            }\n            else\n            {\n                TIFFRGBAImageEnd(&img);\n                nextImage();\n                initImage();\n                setWindowSize();\n            }\n            break;\n        case GLUT_KEY_HOME: /* 1st image in current file */\n            if (TIFFSetDirectory(tif, 0))\n            {\n                TIFFRGBAImageEnd(&img);\n                initImage();\n                setWindowSize();\n            }\n            break;\n        case GLUT_KEY_END: /* last image in current file */\n            TIFFRGBAImageEnd(&img);\n            while (!TIFFLastDirectory(tif))\n                TIFFReadDirectory(tif);\n            initImage();\n            setWindowSize();\n            break;\n    }\n    glutPostRedisplay();\n}",
+      "fn_code_pos": [
+        [
+          377,
+          0
+        ],
+        [
+          434,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "raster_special",
+        "parameters": {
+          "key": "int",
+          "x": "int",
+          "y": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    int i;\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"%s\\n\\n\", TIFFGetVersion());\n    for (i = 0; stuff[i] != NULL; i++)\n        fprintf(out, \"%s\\n\", stuff[i]);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          457,
+          0
+        ],
+        [
+          466,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static uint16_t photoArg(const char *arg)\n{\n    if (strcmp(arg, \"miniswhite\") == 0)\n        return (PHOTOMETRIC_MINISWHITE);\n    else if (strcmp(arg, \"minisblack\") == 0)\n        return (PHOTOMETRIC_MINISBLACK);\n    else if (strcmp(arg, \"rgb\") == 0)\n        return (PHOTOMETRIC_RGB);\n    else if (strcmp(arg, \"palette\") == 0)\n        return (PHOTOMETRIC_PALETTE);\n    else if (strcmp(arg, \"mask\") == 0)\n        return (PHOTOMETRIC_MASK);\n    else if (strcmp(arg, \"separated\") == 0)\n        return (PHOTOMETRIC_SEPARATED);\n    else if (strcmp(arg, \"ycbcr\") == 0)\n        return (PHOTOMETRIC_YCBCR);\n    else if (strcmp(arg, \"cielab\") == 0)\n        return (PHOTOMETRIC_CIELAB);\n    else if (strcmp(arg, \"logl\") == 0)\n        return (PHOTOMETRIC_LOGL);\n    else if (strcmp(arg, \"logluv\") == 0)\n        return (PHOTOMETRIC_LOGLUV);\n    else\n        return ((uint16_t)-1);\n}",
+      "fn_code_pos": [
+        [
+          468,
+          0
+        ],
+        [
+          492,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "photoArg",
+        "parameters": {
+          "arg": "char"
+        },
+        "return_type": "uint16_t"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "cleanup_and_exit(int)",
+      "fn_dec_pos": [
+        [
+          75,
+          12
+        ],
+        [
+          75,
+          33
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cleanup_and_exit",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "initImage(void)",
+      "fn_dec_pos": [
+        [
+          76,
+          11
+        ],
+        [
+          76,
+          26
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "initImage",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "prevImage(void)",
+      "fn_dec_pos": [
+        [
+          77,
+          11
+        ],
+        [
+          77,
+          26
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "prevImage",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "nextImage(void)",
+      "fn_dec_pos": [
+        [
+          78,
+          11
+        ],
+        [
+          78,
+          26
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "nextImage",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "setWindowSize(void)",
+      "fn_dec_pos": [
+        [
+          79,
+          12
+        ],
+        [
+          79,
+          31
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setWindowSize",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "usage(int)",
+      "fn_dec_pos": [
+        [
+          80,
+          12
+        ],
+        [
+          80,
+          22
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "photoArg(const char *)",
+      "fn_dec_pos": [
+        [
+          81,
+          16
+        ],
+        [
+          81,
+          38
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "photoArg",
+        "parameters": {},
+        "return_type": "uint16_t"
+      }
+    },
+    {
+      "fn_code": "raster_draw(void)",
+      "fn_dec_pos": [
+        [
+          82,
+          12
+        ],
+        [
+          82,
+          29
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "raster_draw",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "raster_reshape(int, int)",
+      "fn_dec_pos": [
+        [
+          83,
+          12
+        ],
+        [
+          83,
+          36
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "raster_reshape",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "raster_keys(unsigned char, int, int)",
+      "fn_dec_pos": [
+        [
+          84,
+          12
+        ],
+        [
+          84,
+          48
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "raster_keys",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "raster_special(int, int, int)",
+      "fn_dec_pos": [
+        [
+          85,
+          12
+        ],
+        [
+          85,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "raster_special",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include <OpenGL/gl.h>\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ],
+    [
+      "#include <windows.h>\n",
+      [
+        39,
+        0
+      ],
+      [
+        40,
+        0
+      ]
+    ],
+    [
+      "#include <GL/gl.h>\n",
+      [
+        41,
+        0
+      ],
+      [
+        42,
+        0
+      ]
+    ],
+    [
+      "#include <GLUT/glut.h>\n",
+      [
+        44,
+        0
+      ],
+      [
+        45,
+        0
+      ]
+    ],
+    [
+      "#include <GL/glut.h>\n",
+      [
+        46,
+        0
+      ],
+      [
+        47,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        49,
+        0
+      ],
+      [
+        50,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        50,
+        0
+      ],
+      [
+        51,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -1,0 +1,198 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int\nares_parse_caa_reply (const unsigned char *abuf, int alen,\n                      struct ares_caa_reply **caa_out)\n{\n  unsigned int qdcount, ancount, i;\n  const unsigned char *aptr;\n  const unsigned char *strptr;\n  int status, rr_type, rr_class, rr_len;\n  long len;\n  char *hostname = NULL, *rr_name = NULL;\n  struct ares_caa_reply *caa_head = NULL;\n  struct ares_caa_reply *caa_last = NULL;\n  struct ares_caa_reply *caa_curr;\n\n  /* Set *caa_out to NULL for all failure cases. */\n  *caa_out = NULL;\n\n  /* Give up if abuf doesn't have room for a header. */\n  if (alen < HFIXEDSZ)\n    return ARES_EBADRESP;\n\n  /* Fetch the question and answer count from the header. */\n  qdcount = DNS_HEADER_QDCOUNT (abuf);\n  ancount = DNS_HEADER_ANCOUNT (abuf);\n  if (qdcount != 1)\n    return ARES_EBADRESP;\n  if (ancount == 0)\n    return ARES_ENODATA;\n\n  /* Expand the name from the question, and skip past the question. */\n  aptr = abuf + HFIXEDSZ;\n  status = ares_expand_name (aptr, abuf, alen, &hostname, &len);\n  if (status != ARES_SUCCESS)\n    return status;\n\n  if (aptr + len + QFIXEDSZ > abuf + alen)\n    {\n      ares_free (hostname);\n      return ARES_EBADRESP;\n    }\n  aptr += len + QFIXEDSZ;\n\n  /* Examine each answer resource record (RR) in turn. */\n  for (i = 0; i < ancount; i++)\n    {\n      /* Decode the RR up to the data field. */\n      status = ares_expand_name (aptr, abuf, alen, &rr_name, &len);\n      if (status != ARES_SUCCESS)\n        {\n          break;\n        }\n      aptr += len;\n      if (aptr + RRFIXEDSZ > abuf + alen)\n        {\n          status = ARES_EBADRESP;\n          break;\n        }\n      rr_type = DNS_RR_TYPE (aptr);\n      rr_class = DNS_RR_CLASS (aptr);\n      rr_len = DNS_RR_LEN (aptr);\n      aptr += RRFIXEDSZ;\n      if (aptr + rr_len > abuf + alen)\n        {\n          status = ARES_EBADRESP;\n          break;\n        }\n\n      /* Check if we are really looking at a CAA record */\n      if ((rr_class == C_IN || rr_class == C_CHAOS) && rr_type == T_CAA)\n        {\n          strptr = aptr;\n\n          /* Allocate storage for this CAA answer appending it to the list */\n          caa_curr = ares_malloc_data(ARES_DATATYPE_CAA_REPLY);\n          if (!caa_curr)\n            {\n              status = ARES_ENOMEM;\n              break;\n            }\n          if (caa_last)\n            {\n              caa_last->next = caa_curr;\n            }\n          else\n            {\n              caa_head = caa_curr;\n            }\n          caa_last = caa_curr;\n          if (rr_len < 2)\n            {\n              status = ARES_EBADRESP;\n              break;\n            }\n          caa_curr->critical = (int)*strptr++;\n          caa_curr->plength = (int)*strptr++;\n          if (caa_curr->plength <= 0 || (int)caa_curr->plength >= rr_len - 2)\n            {\n              status = ARES_EBADRESP;\n              break;\n            }\n          caa_curr->property = ares_malloc (caa_curr->plength + 1/* Including null byte */);\n          if (caa_curr->property == NULL)\n            {\n              status = ARES_ENOMEM;\n              break;\n            }\n          memcpy ((char *) caa_curr->property, strptr, caa_curr->plength);\n          /* Make sure we NULL-terminate */\n          caa_curr->property[caa_curr->plength] = 0;\n          strptr += caa_curr->plength;\n\n          caa_curr->length = rr_len - caa_curr->plength - 2;\n          if (caa_curr->length <= 0)\n            {\n              status = ARES_EBADRESP;\n              break;\n            }\n          caa_curr->value = ares_malloc (caa_curr->length + 1/* Including null byte */);\n          if (caa_curr->value == NULL)\n            {\n              status = ARES_ENOMEM;\n              break;\n            }\n          memcpy ((char *) caa_curr->value, strptr, caa_curr->length);\n          /* Make sure we NULL-terminate */\n          caa_curr->value[caa_curr->length] = 0;\n        }\n\n      /* Propagate any failures */\n      if (status != ARES_SUCCESS)\n        {\n          break;\n        }\n\n      /* Don't lose memory in the next iteration */\n      ares_free (rr_name);\n      rr_name = NULL;\n\n      /* Move on to the next record */\n      aptr += rr_len;\n    }\n\n  if (hostname)\n    ares_free (hostname);\n  if (rr_name)\n    ares_free (rr_name);\n\n  /* clean up on error */\n  if (status != ARES_SUCCESS)\n    {\n      if (caa_head)\n        ares_free_data (caa_head);\n      return status;\n    }\n\n  /* everything looks fine, return the data */\n  *caa_out = caa_head;\n\n  return ARES_SUCCESS;\n}",
+      "fn_code_pos": [
+        [
+          39,
+          0
+        ],
+        [
+          198,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_parse_caa_reply",
+        "parameters": {
+          "abuf": "unsigned char",
+          "alen": "int",
+          "caa_out": "struct ares_caa_reply"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct ares_caa_reply",
+      {},
+      "",
+      [
+        41,
+        22
+      ],
+      [
+        41,
+        43
+      ]
+    ],
+    [
+      "struct ares_caa_reply",
+      {},
+      "",
+      [
+        49,
+        2
+      ],
+      [
+        49,
+        23
+      ]
+    ],
+    [
+      "struct ares_caa_reply",
+      {},
+      "",
+      [
+        50,
+        2
+      ],
+      [
+        50,
+        23
+      ]
+    ],
+    [
+      "struct ares_caa_reply",
+      {},
+      "",
+      [
+        51,
+        2
+      ],
+      [
+        51,
+        23
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#  include <netdb.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#  include <strings.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_dns.h\"\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_data.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -1,0 +1,587 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int LERCFixupTags(TIFF *tif)\n{\n    (void)tif;\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          98,
+          0
+        ],
+        [
+          102,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCFixupTags",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LERCSetupDecode(TIFF *tif)\n{\n    LERCState *sp = LERCDecoderState(tif);\n\n    assert(sp != NULL);\n\n    /* if we were last encoding, terminate this mode */\n    if (sp->state & LSTATE_INIT_ENCODE)\n    {\n        sp->state = 0;\n    }\n\n    sp->state |= LSTATE_INIT_DECODE;\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          104,
+          0
+        ],
+        [
+          118,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCSetupDecode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int GetLercDataType(TIFF *tif)\n{\n    TIFFDirectory *td = &tif->tif_dir;\n    static const char module[] = \"GetLercDataType\";\n\n    if (td->td_sampleformat == SAMPLEFORMAT_INT && td->td_bitspersample == 8)\n    {\n        return 0;\n    }\n\n    if (td->td_sampleformat == SAMPLEFORMAT_UINT && td->td_bitspersample == 8)\n    {\n        return 1;\n    }\n\n    if (td->td_sampleformat == SAMPLEFORMAT_INT && td->td_bitspersample == 16)\n    {\n        return 2;\n    }\n\n    if (td->td_sampleformat == SAMPLEFORMAT_UINT && td->td_bitspersample == 16)\n    {\n        return 3;\n    }\n\n    if (td->td_sampleformat == SAMPLEFORMAT_INT && td->td_bitspersample == 32)\n    {\n        return 4;\n    }\n\n    if (td->td_sampleformat == SAMPLEFORMAT_UINT && td->td_bitspersample == 32)\n    {\n        return 5;\n    }\n\n    if (td->td_sampleformat == SAMPLEFORMAT_IEEEFP &&\n        td->td_bitspersample == 32)\n    {\n        return 6;\n    }\n\n    if (td->td_sampleformat == SAMPLEFORMAT_IEEEFP &&\n        td->td_bitspersample == 64)\n    {\n        return 7;\n    }\n\n    TIFFErrorExtR(\n        tif, module,\n        \"Unsupported combination of SampleFormat and td_bitspersample\");\n    return -1;\n}",
+      "fn_code_pos": [
+        [
+          120,
+          0
+        ],
+        [
+          171,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetLercDataType",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int SetupBuffers(TIFF *tif, LERCState *sp, const char *module)\n{\n    TIFFDirectory *td = &tif->tif_dir;\n    uint64_t new_size_64;\n    uint64_t new_alloc_64;\n    unsigned int new_size;\n    unsigned int new_alloc;\n\n    sp->uncompressed_offset = 0;\n\n    if (isTiled(tif))\n    {\n        sp->segment_width = td->td_tilewidth;\n        sp->segment_height = td->td_tilelength;\n    }\n    else\n    {\n        sp->segment_width = td->td_imagewidth;\n        sp->segment_height = td->td_imagelength - tif->tif_row;\n        if (sp->segment_height > td->td_rowsperstrip)\n            sp->segment_height = td->td_rowsperstrip;\n    }\n\n    new_size_64 = (uint64_t)sp->segment_width * sp->segment_height *\n                  (td->td_bitspersample / 8);\n    if (td->td_planarconfig == PLANARCONFIG_CONTIG)\n    {\n        new_size_64 *= td->td_samplesperpixel;\n    }\n\n    new_size = (unsigned int)new_size_64;\n    sp->uncompressed_size = new_size;\n\n    /* add some margin as we are going to use it also to store deflate/zstd\n     * compressed data. We also need extra margin when writing very small\n     * rasters with one mask per band. */\n    new_alloc_64 = 256 + new_size_64 + new_size_64 / 3;\n#ifdef ZSTD_SUPPORT\n    {\n        size_t zstd_max = ZSTD_compressBound((size_t)new_size_64);\n        if (new_alloc_64 < zstd_max)\n        {\n            new_alloc_64 = zstd_max;\n        }\n    }\n#endif\n    new_alloc = (unsigned int)new_alloc_64;\n    if (new_alloc != new_alloc_64)\n    {\n        TIFFErrorExtR(tif, module, \"Too large uncompressed strip/tile\");\n        _TIFFfreeExt(tif, sp->uncompressed_buffer);\n        sp->uncompressed_buffer = 0;\n        sp->uncompressed_alloc = 0;\n        return 0;\n    }\n\n    if (sp->uncompressed_alloc < new_alloc)\n    {\n        _TIFFfreeExt(tif, sp->uncompressed_buffer);\n        sp->uncompressed_buffer = _TIFFmallocExt(tif, new_alloc);\n        if (!sp->uncompressed_buffer)\n        {\n            TIFFErrorExtR(tif, module, \"Cannot allocate buffer\");\n            _TIFFfreeExt(tif, sp->uncompressed_buffer);\n            sp->uncompressed_buffer = 0;\n            sp->uncompressed_alloc = 0;\n            return 0;\n        }\n        sp->uncompressed_alloc = new_alloc;\n    }\n\n    if ((td->td_planarconfig == PLANARCONFIG_CONTIG &&\n         td->td_extrasamples > 0 &&\n         td->td_sampleinfo[td->td_extrasamples - 1] == EXTRASAMPLE_UNASSALPHA &&\n         GetLercDataType(tif) == 1) ||\n        (td->td_sampleformat == SAMPLEFORMAT_IEEEFP &&\n         (td->td_bitspersample == 32 || td->td_bitspersample == 64)))\n    {\n        unsigned int mask_size = sp->segment_width * sp->segment_height;\n#if LERC_AT_LEAST_VERSION(3, 0, 0)\n        if (td->td_sampleformat == SAMPLEFORMAT_IEEEFP &&\n            td->td_planarconfig == PLANARCONFIG_CONTIG)\n        {\n            /* We may need one mask per band */\n            mask_size *= td->td_samplesperpixel;\n        }\n#endif\n        if (sp->mask_size < mask_size)\n        {\n            void *mask_buffer =\n                _TIFFreallocExt(tif, sp->mask_buffer, mask_size);\n            if (mask_buffer == NULL)\n            {\n                TIFFErrorExtR(tif, module, \"Cannot allocate buffer\");\n                sp->mask_size = 0;\n                _TIFFfreeExt(tif, sp->uncompressed_buffer);\n                sp->uncompressed_buffer = 0;\n                sp->uncompressed_alloc = 0;\n                return 0;\n            }\n            sp->mask_buffer = (uint8_t *)mask_buffer;\n            sp->mask_size = mask_size;\n        }\n    }\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          173,
+          0
+        ],
+        [
+          279,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetupBuffers",
+        "parameters": {
+          "tif": "TIFF",
+          "sp": "LERCState",
+          "module": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LERCPreDecode(TIFF *tif, uint16_t s)\n{\n    static const char module[] = \"LERCPreDecode\";\n    lerc_status lerc_ret;\n    TIFFDirectory *td = &tif->tif_dir;\n    LERCState *sp = LERCDecoderState(tif);\n    int lerc_data_type;\n    unsigned int infoArray[9];\n    unsigned nomask_bands = td->td_samplesperpixel;\n    int ndims;\n    int use_mask = 0;\n    uint8_t *lerc_data = tif->tif_rawcp;\n    unsigned int lerc_data_size = (unsigned int)tif->tif_rawcc;\n\n    (void)s;\n    assert(sp != NULL);\n    if (sp->state != LSTATE_INIT_DECODE)\n        tif->tif_setupdecode(tif);\n\n    lerc_data_type = GetLercDataType(tif);\n    if (lerc_data_type < 0)\n        return 0;\n\n    if (!SetupBuffers(tif, sp, module))\n        return 0;\n\n    if (sp->additional_compression != LERC_ADD_COMPRESSION_NONE)\n    {\n        if (sp->compressed_size < sp->uncompressed_alloc)\n        {\n            _TIFFfreeExt(tif, sp->compressed_buffer);\n            sp->compressed_buffer = _TIFFmallocExt(tif, sp->uncompressed_alloc);\n            if (!sp->compressed_buffer)\n            {\n                sp->compressed_size = 0;\n                return 0;\n            }\n            sp->compressed_size = sp->uncompressed_alloc;\n        }\n    }\n\n    if (sp->additional_compression == LERC_ADD_COMPRESSION_DEFLATE)\n    {\n#if LIBDEFLATE_SUPPORT\n        enum libdeflate_result res;\n        size_t lerc_data_sizet = 0;\n        if (sp->libdeflate_dec == NULL)\n        {\n            sp->libdeflate_dec = libdeflate_alloc_decompressor();\n            if (sp->libdeflate_dec == NULL)\n            {\n                TIFFErrorExtR(tif, module, \"Cannot allocate decompressor\");\n                return 0;\n            }\n        }\n\n        res = libdeflate_zlib_decompress(\n            sp->libdeflate_dec, tif->tif_rawcp, (size_t)tif->tif_rawcc,\n            sp->compressed_buffer, sp->compressed_size, &lerc_data_sizet);\n        if (res != LIBDEFLATE_SUCCESS)\n        {\n            TIFFErrorExtR(tif, module, \"Decoding error at scanline %lu\",\n                          (unsigned long)tif->tif_row);\n            return 0;\n        }\n        assert(lerc_data_sizet == (unsigned int)lerc_data_sizet);\n        lerc_data = sp->compressed_buffer;\n        lerc_data_size = (unsigned int)lerc_data_sizet;\n#else\n        z_stream strm;\n        int zlib_ret;\n\n        memset(&strm, 0, sizeof(strm));\n        strm.zalloc = NULL;\n        strm.zfree = NULL;\n        strm.opaque = NULL;\n        zlib_ret = inflateInit(&strm);\n        if (zlib_ret != Z_OK)\n        {\n            TIFFErrorExtR(tif, module, \"inflateInit() failed\");\n            inflateEnd(&strm);\n            return 0;\n        }\n\n        strm.avail_in = (uInt)tif->tif_rawcc;\n        strm.next_in = tif->tif_rawcp;\n        strm.avail_out = sp->compressed_size;\n        strm.next_out = sp->compressed_buffer;\n        zlib_ret = inflate(&strm, Z_FINISH);\n        if (zlib_ret != Z_STREAM_END && zlib_ret != Z_OK)\n        {\n            TIFFErrorExtR(tif, module, \"inflate() failed\");\n            inflateEnd(&strm);\n            return 0;\n        }\n        lerc_data = sp->compressed_buffer;\n        lerc_data_size = sp->compressed_size - strm.avail_out;\n        inflateEnd(&strm);\n#endif\n    }\n    else if (sp->additional_compression == LERC_ADD_COMPRESSION_ZSTD)\n    {\n#ifdef ZSTD_SUPPORT\n        size_t zstd_ret;\n\n        zstd_ret = ZSTD_decompress(sp->compressed_buffer, sp->compressed_size,\n                                   tif->tif_rawcp, tif->tif_rawcc);\n        if (ZSTD_isError(zstd_ret))\n        {\n            TIFFErrorExtR(tif, module, \"Error in ZSTD_decompress(): %s\",\n                          ZSTD_getErrorName(zstd_ret));\n            return 0;\n        }\n\n        lerc_data = sp->compressed_buffer;\n        lerc_data_size = (unsigned int)zstd_ret;\n#else\n        TIFFErrorExtR(tif, module, \"ZSTD support missing\");\n        return 0;\n#endif\n    }\n    else if (sp->additional_compression != LERC_ADD_COMPRESSION_NONE)\n    {\n        TIFFErrorExtR(tif, module, \"Unhandled additional compression\");\n        return 0;\n    }\n\n    lerc_ret =\n        lerc_getBlobInfo(lerc_data, lerc_data_size, infoArray, NULL, 9, 0);\n    if (lerc_ret != 0)\n    {\n        TIFFErrorExtR(tif, module, \"lerc_getBlobInfo() failed\");\n        return 0;\n    }\n\n    /* If the configuration is compatible of a LERC mask, and that the */\n    /* LERC info has dim == samplesperpixel - 1, then there is a LERC */\n    /* mask. */\n    if (td->td_planarconfig == PLANARCONFIG_CONTIG && td->td_extrasamples > 0 &&\n        td->td_sampleinfo[td->td_extrasamples - 1] == EXTRASAMPLE_UNASSALPHA &&\n        GetLercDataType(tif) == 1 &&\n        infoArray[2] == td->td_samplesperpixel - 1U)\n    {\n        use_mask = 1;\n        nomask_bands--;\n    }\n    else if (td->td_sampleformat == SAMPLEFORMAT_IEEEFP)\n    {\n        use_mask = 1;\n    }\n\n    ndims = td->td_planarconfig == PLANARCONFIG_CONTIG ? nomask_bands : 1;\n\n    /* Info returned in infoArray is { version, dataType, nDim/nDepth, nCols,\n        nRows, nBands, nValidPixels, blobSize,\n        and starting with liblerc 3.0 nRequestedMasks } */\n    if (infoArray[0] != (unsigned)sp->lerc_version)\n    {\n        TIFFWarningExtR(tif, module,\n                        \"Unexpected version number: %d. Expected: %d\",\n                        infoArray[0], sp->lerc_version);\n    }\n    if (infoArray[1] != (unsigned)lerc_data_type)\n    {\n        TIFFErrorExtR(tif, module, \"Unexpected dataType: %d. Expected: %d\",\n                      infoArray[1], lerc_data_type);\n        return 0;\n    }\n\n    const unsigned nFoundDims = infoArray[2];\n#if LERC_AT_LEAST_VERSION(3, 0, 0)\n    if (td->td_sampleformat == SAMPLEFORMAT_IEEEFP &&\n        td->td_planarconfig == PLANARCONFIG_CONTIG &&\n        td->td_samplesperpixel > 1)\n    {\n        if (nFoundDims != 1 && nFoundDims != (unsigned)ndims)\n        {\n            TIFFErrorExtR(tif, module, \"Unexpected nDim: %d. Expected: 1 or %d\",\n                          nFoundDims, ndims);\n            return 0;\n        }\n    }\n    else\n#endif\n        if (nFoundDims != (unsigned)ndims)\n    {\n        TIFFErrorExtR(tif, module, \"Unexpected nDim: %d. Expected: %d\",\n                      nFoundDims, ndims);\n        return 0;\n    }\n\n    if (infoArray[3] != sp->segment_width)\n    {\n        TIFFErrorExtR(tif, module, \"Unexpected nCols: %d. Expected: %du\",\n                      infoArray[3], sp->segment_width);\n        return 0;\n    }\n    if (infoArray[4] != sp->segment_height)\n    {\n        TIFFErrorExtR(tif, module, \"Unexpected nRows: %d. Expected: %u\",\n                      infoArray[4], sp->segment_height);\n        return 0;\n    }\n\n    const unsigned nFoundBands = infoArray[5];\n    if (td->td_sampleformat == SAMPLEFORMAT_IEEEFP &&\n        td->td_planarconfig == PLANARCONFIG_CONTIG &&\n        td->td_samplesperpixel > 1 && nFoundDims == 1)\n    {\n#if !LERC_AT_LEAST_VERSION(3, 0, 0)\n        if (nFoundBands == td->td_samplesperpixel)\n        {\n            TIFFErrorExtR(\n                tif, module,\n                \"Unexpected nBands: %d. This file may have been generated with \"\n                \"a liblerc version >= 3.0, with one mask per band, and is not \"\n                \"supported by this older version of liblerc\",\n                nFoundBands);\n            return 0;\n        }\n#endif\n        if (nFoundBands != td->td_samplesperpixel)\n        {\n            TIFFErrorExtR(tif, module, \"Unexpected nBands: %d. Expected: %d\",\n                          nFoundBands, td->td_samplesperpixel);\n            return 0;\n        }\n    }\n    else if (nFoundBands != 1)\n    {\n        TIFFErrorExtR(tif, module, \"Unexpected nBands: %d. Expected: %d\",\n                      nFoundBands, 1);\n        return 0;\n    }\n\n    if (infoArray[7] != lerc_data_size)\n    {\n        TIFFErrorExtR(tif, module, \"Unexpected blobSize: %d. Expected: %u\",\n                      infoArray[7], lerc_data_size);\n        return 0;\n    }\n\n    int nRequestedMasks = use_mask ? 1 : 0;\n#if LERC_AT_LEAST_VERSION(3, 0, 0)\n    const int nFoundMasks = infoArray[8];\n    if (td->td_sampleformat == SAMPLEFORMAT_IEEEFP &&\n        td->td_planarconfig == PLANARCONFIG_CONTIG &&\n        td->td_samplesperpixel > 1 && nFoundDims == 1)\n    {\n        if (nFoundMasks != 0 && nFoundMasks != td->td_samplesperpixel)\n        {\n            TIFFErrorExtR(tif, module,\n                          \"Unexpected nFoundMasks: %d. Expected: 0 or %d\",\n                          nFoundMasks, td->td_samplesperpixel);\n            return 0;\n        }\n        nRequestedMasks = nFoundMasks;\n    }\n    else\n    {\n        if (nFoundMasks != 0 && nFoundMasks != 1)\n        {\n            TIFFErrorExtR(tif, module,\n                          \"Unexpected nFoundMasks: %d. Expected: 0 or 1\",\n                          nFoundMasks);\n            return 0;\n        }\n    }\n    if (td->td_sampleformat == SAMPLEFORMAT_IEEEFP && nFoundMasks == 0)\n    {\n        nRequestedMasks = 0;\n        use_mask = 0;\n    }\n#endif\n\n    const unsigned nb_pixels = sp->segment_width * sp->segment_height;\n\n#if LERC_AT_LEAST_VERSION(3, 0, 0)\n    if (nRequestedMasks > 1)\n    {\n        unsigned int num_bytes_needed =\n            nb_pixels * td->td_samplesperpixel * (td->td_bitspersample / 8);\n        if (sp->uncompressed_buffer_multiband_alloc < num_bytes_needed)\n        {\n            _TIFFfreeExt(tif, sp->uncompressed_buffer_multiband);\n            sp->uncompressed_buffer_multiband =\n                _TIFFmallocExt(tif, num_bytes_needed);\n            if (!sp->uncompressed_buffer_multiband)\n            {\n                sp->uncompressed_buffer_multiband_alloc = 0;\n                return 0;\n            }\n            sp->uncompressed_buffer_multiband_alloc = num_bytes_needed;\n        }\n        lerc_ret = lerc_decode(lerc_data, lerc_data_size, nRequestedMasks,\n                               sp->mask_buffer, nFoundDims, sp->segment_width,\n                               sp->segment_height, nFoundBands, lerc_data_type,\n                               sp->uncompressed_buffer_multiband);\n    }\n    else\n#endif\n    {\n        lerc_ret =\n            lerc_decode(lerc_data, lerc_data_size,\n#if LERC_AT_LEAST_VERSION(3, 0, 0)\n                        nRequestedMasks,\n#endif\n                        use_mask ? sp->mask_buffer : NULL, nFoundDims,\n                        sp->segment_width, sp->segment_height, nFoundBands,\n                        lerc_data_type, sp->uncompressed_buffer);\n    }\n    if (lerc_ret != 0)\n    {\n        TIFFErrorExtR(tif, module, \"lerc_decode() failed\");\n        return 0;\n    }\n\n    /* Interleave alpha mask with other samples. */\n    if (use_mask && GetLercDataType(tif) == 1)\n    {\n        unsigned src_stride =\n            (td->td_samplesperpixel - 1) * (td->td_bitspersample / 8);\n        unsigned dst_stride =\n            td->td_samplesperpixel * (td->td_bitspersample / 8);\n        unsigned i = sp->segment_width * sp->segment_height;\n        /* Operate from end to begin to be able to move in place */\n        while (i > 0 && i > nomask_bands)\n        {\n            i--;\n            sp->uncompressed_buffer[i * dst_stride + td->td_samplesperpixel -\n                                    1] = 255 * sp->mask_buffer[i];\n            memcpy(sp->uncompressed_buffer + i * dst_stride,\n                   sp->uncompressed_buffer + i * src_stride, src_stride);\n        }\n        /* First pixels must use memmove due to overlapping areas */\n        while (i > 0)\n        {\n            i--;\n            sp->uncompressed_buffer[i * dst_stride + td->td_samplesperpixel -\n                                    1] = 255 * sp->mask_buffer[i];\n            memmove(sp->uncompressed_buffer + i * dst_stride,\n                    sp->uncompressed_buffer + i * src_stride, src_stride);\n        }\n    }\n    else if (use_mask && td->td_sampleformat == SAMPLEFORMAT_IEEEFP)\n    {\n        unsigned i;\n#if WORDS_BIGENDIAN\n        const unsigned char nan_bytes[] = {0x7f, 0xc0, 0, 0};\n#else\n        const unsigned char nan_bytes[] = {0, 0, 0xc0, 0x7f};\n#endif\n        float nan_float32;\n        memcpy(&nan_float32, nan_bytes, 4);\n\n        if (td->td_planarconfig == PLANARCONFIG_SEPARATE ||\n            td->td_samplesperpixel == 1)\n        {\n            if (td->td_bitspersample == 32)\n            {\n                for (i = 0; i < nb_pixels; i++)\n                {\n                    if (sp->mask_buffer[i] == 0)\n                        ((float *)sp->uncompressed_buffer)[i] = nan_float32;\n                }\n            }\n            else\n            {\n                const double nan_float64 = nan_float32;\n                for (i = 0; i < nb_pixels; i++)\n                {\n                    if (sp->mask_buffer[i] == 0)\n                        ((double *)sp->uncompressed_buffer)[i] = nan_float64;\n                }\n            }\n        }\n        else if (nRequestedMasks == 1)\n        {\n            assert(nFoundDims == td->td_samplesperpixel);\n            assert(nFoundBands == 1);\n\n            unsigned k = 0;\n            if (td->td_bitspersample == 32)\n            {\n                for (i = 0; i < nb_pixels; i++)\n                {\n                    for (int j = 0; j < td->td_samplesperpixel; j++)\n                    {\n                        if (sp->mask_buffer[i] == 0)\n                            ((float *)sp->uncompressed_buffer)[k] = nan_float32;\n                        ++k;\n                    }\n                }\n            }\n            else\n            {\n                const double nan_float64 = nan_float32;\n                for (i = 0; i < nb_pixels; i++)\n                {\n                    for (int j = 0; j < td->td_samplesperpixel; j++)\n                    {\n                        if (sp->mask_buffer[i] == 0)\n                            ((double *)sp->uncompressed_buffer)[k] =\n                                nan_float64;\n                        ++k;\n                    }\n                }\n            }\n        }\n#if LERC_AT_LEAST_VERSION(3, 0, 0)\n        else\n        {\n            assert(nRequestedMasks == td->td_samplesperpixel);\n            assert(nFoundDims == 1);\n            assert(nFoundBands == td->td_samplesperpixel);\n\n            unsigned k = 0;\n            if (td->td_bitspersample == 32)\n            {\n                for (i = 0; i < nb_pixels; i++)\n                {\n                    for (int j = 0; j < td->td_samplesperpixel; j++)\n                    {\n                        if (sp->mask_buffer[i + j * nb_pixels] == 0)\n                            ((float *)sp->uncompressed_buffer)[k] = nan_float32;\n                        else\n                            ((float *)sp->uncompressed_buffer)[k] =\n                                ((float *)sp->uncompressed_buffer_multiband)\n                                    [i + j * nb_pixels];\n                        ++k;\n                    }\n                }\n            }\n            else\n            {\n                const double nan_float64 = nan_float32;\n                for (i = 0; i < nb_pixels; i++)\n                {\n                    for (int j = 0; j < td->td_samplesperpixel; j++)\n                    {\n                        if (sp->mask_buffer[i + j * nb_pixels] == 0)\n                            ((double *)sp->uncompressed_buffer)[k] =\n                                nan_float64;\n                        else\n                            ((double *)sp->uncompressed_buffer)[k] =\n                                ((double *)sp->uncompressed_buffer_multiband)\n                                    [i + j * nb_pixels];\n                        ++k;\n                    }\n                }\n            }\n        }\n#endif\n    }\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          284,
+          0
+        ],
+        [
+          740,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCPreDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LERCDecode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)\n{\n    static const char module[] = \"LERCDecode\";\n    LERCState *sp = LERCDecoderState(tif);\n\n    (void)s;\n    assert(sp != NULL);\n    assert(sp->state == LSTATE_INIT_DECODE);\n\n    if (sp->uncompressed_buffer == 0)\n    {\n        memset(op, 0, (size_t)occ);\n        TIFFErrorExtR(tif, module, \"Uncompressed buffer not allocated\");\n        return 0;\n    }\n\n    if ((uint64_t)sp->uncompressed_offset + (uint64_t)occ >\n        sp->uncompressed_size)\n    {\n        memset(op, 0, (size_t)occ);\n        TIFFErrorExtR(tif, module, \"Too many bytes read\");\n        return 0;\n    }\n\n    memcpy(op, sp->uncompressed_buffer + sp->uncompressed_offset, occ);\n    sp->uncompressed_offset += (unsigned)occ;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          745,
+          0
+        ],
+        [
+          773,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "op": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LERCSetupEncode(TIFF *tif)\n{\n    LERCState *sp = LERCEncoderState(tif);\n\n    assert(sp != NULL);\n    if (sp->state & LSTATE_INIT_DECODE)\n    {\n        sp->state = 0;\n    }\n\n    sp->state |= LSTATE_INIT_ENCODE;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          775,
+          0
+        ],
+        [
+          788,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCSetupEncode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LERCPreEncode(TIFF *tif, uint16_t s)\n{\n    static const char module[] = \"LERCPreEncode\";\n    LERCState *sp = LERCEncoderState(tif);\n    int lerc_data_type;\n\n    (void)s;\n    assert(sp != NULL);\n    if (sp->state != LSTATE_INIT_ENCODE)\n        tif->tif_setupencode(tif);\n\n    lerc_data_type = GetLercDataType(tif);\n    if (lerc_data_type < 0)\n        return 0;\n\n    if (!SetupBuffers(tif, sp, module))\n        return 0;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          793,
+          0
+        ],
+        [
+          812,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCPreEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LERCEncode(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)\n{\n    static const char module[] = \"LERCEncode\";\n    LERCState *sp = LERCEncoderState(tif);\n\n    (void)s;\n    assert(sp != NULL);\n    assert(sp->state == LSTATE_INIT_ENCODE);\n\n    if ((uint64_t)sp->uncompressed_offset + (uint64_t)cc >\n        sp->uncompressed_size)\n    {\n        TIFFErrorExtR(tif, module, \"Too many bytes written\");\n        return 0;\n    }\n\n    memcpy(sp->uncompressed_buffer + sp->uncompressed_offset, bp, cc);\n    sp->uncompressed_offset += (unsigned)cc;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          817,
+          0
+        ],
+        [
+          837,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LERCPostEncode(TIFF *tif)\n{\n    lerc_status lerc_ret;\n    static const char module[] = \"LERCPostEncode\";\n    LERCState *sp = LERCEncoderState(tif);\n    unsigned int numBytesWritten = 0;\n    TIFFDirectory *td = &tif->tif_dir;\n    int use_mask = 0;\n    unsigned dst_nbands = td->td_samplesperpixel;\n\n    if (sp->uncompressed_offset != sp->uncompressed_size)\n    {\n        TIFFErrorExtR(tif, module, \"Unexpected number of bytes in the buffer\");\n        return 0;\n    }\n\n    int mask_count = 1;\n    const unsigned nb_pixels = sp->segment_width * sp->segment_height;\n\n    /* Extract alpha mask (if containing only 0 and 255 values, */\n    /* and compact array of regular bands */\n    if (td->td_planarconfig == PLANARCONFIG_CONTIG && td->td_extrasamples > 0 &&\n        td->td_sampleinfo[td->td_extrasamples - 1] == EXTRASAMPLE_UNASSALPHA &&\n        GetLercDataType(tif) == 1)\n    {\n        const unsigned dst_stride =\n            (td->td_samplesperpixel - 1) * (td->td_bitspersample / 8);\n        const unsigned src_stride =\n            td->td_samplesperpixel * (td->td_bitspersample / 8);\n        unsigned i = 0;\n\n        use_mask = 1;\n        for (i = 0; i < nb_pixels; i++)\n        {\n            int v = sp->uncompressed_buffer[i * src_stride +\n                                            td->td_samplesperpixel - 1];\n            if (v != 0 && v != 255)\n            {\n                use_mask = 0;\n                break;\n            }\n        }\n\n        if (use_mask)\n        {\n            dst_nbands--;\n            /* First pixels must use memmove due to overlapping areas */\n            for (i = 0; i < dst_nbands && i < nb_pixels; i++)\n            {\n                memmove(sp->uncompressed_buffer + i * dst_stride,\n                        sp->uncompressed_buffer + i * src_stride, dst_stride);\n                sp->mask_buffer[i] =\n                    sp->uncompressed_buffer[i * src_stride +\n                                            td->td_samplesperpixel - 1];\n            }\n            for (; i < nb_pixels; i++)\n            {\n                memcpy(sp->uncompressed_buffer + i * dst_stride,\n                       sp->uncompressed_buffer + i * src_stride, dst_stride);\n                sp->mask_buffer[i] =\n                    sp->uncompressed_buffer[i * src_stride +\n                                            td->td_samplesperpixel - 1];\n            }\n        }\n    }\n    else if (td->td_sampleformat == SAMPLEFORMAT_IEEEFP &&\n             (td->td_bitspersample == 32 || td->td_bitspersample == 64))\n    {\n        /* Check for NaN values */\n        unsigned i;\n        if (td->td_bitspersample == 32)\n        {\n            if (td->td_planarconfig == PLANARCONFIG_CONTIG && dst_nbands > 1)\n            {\n                unsigned k = 0;\n                for (i = 0; i < nb_pixels; i++)\n                {\n                    int count_nan = 0;\n                    for (int j = 0; j < td->td_samplesperpixel; ++j)\n                    {\n                        const float val = ((float *)sp->uncompressed_buffer)[k];\n                        ++k;\n                        if (val != val)\n                        {\n                            ++count_nan;\n                        }\n                    }\n                    if (count_nan > 0)\n                    {\n                        use_mask = 1;\n                        if (count_nan < td->td_samplesperpixel)\n                        {\n                            mask_count = td->td_samplesperpixel;\n                            break;\n                        }\n                    }\n                }\n            }\n            else\n            {\n                for (i = 0; i < nb_pixels; i++)\n                {\n                    const float val = ((float *)sp->uncompressed_buffer)[i];\n                    if (val != val)\n                    {\n                        use_mask = 1;\n                        break;\n                    }\n                }\n            }\n        }\n        else\n        {\n            if (td->td_planarconfig == PLANARCONFIG_CONTIG && dst_nbands > 1)\n            {\n                unsigned k = 0;\n                for (i = 0; i < nb_pixels; i++)\n                {\n                    int count_nan = 0;\n                    for (int j = 0; j < td->td_samplesperpixel; ++j)\n                    {\n                        const double val =\n                            ((double *)sp->uncompressed_buffer)[k];\n                        ++k;\n                        if (val != val)\n                        {\n                            ++count_nan;\n                        }\n                    }\n                    if (count_nan > 0)\n                    {\n                        use_mask = 1;\n                        if (count_nan < td->td_samplesperpixel)\n                        {\n                            mask_count = td->td_samplesperpixel;\n                            break;\n                        }\n                    }\n                }\n            }\n            else\n            {\n                for (i = 0; i < nb_pixels; i++)\n                {\n                    const double val = ((double *)sp->uncompressed_buffer)[i];\n                    if (val != val)\n                    {\n                        use_mask = 1;\n                        break;\n                    }\n                }\n            }\n        }\n\n        if (use_mask)\n        {\n            if (mask_count > 1)\n            {\n#if LERC_AT_LEAST_VERSION(3, 0, 0)\n                unsigned int num_bytes_needed =\n                    nb_pixels * dst_nbands * (td->td_bitspersample / 8);\n                if (sp->uncompressed_buffer_multiband_alloc < num_bytes_needed)\n                {\n                    _TIFFfreeExt(tif, sp->uncompressed_buffer_multiband);\n                    sp->uncompressed_buffer_multiband =\n                        _TIFFmallocExt(tif, num_bytes_needed);\n                    if (!sp->uncompressed_buffer_multiband)\n                    {\n                        sp->uncompressed_buffer_multiband_alloc = 0;\n                        return 0;\n                    }\n                    sp->uncompressed_buffer_multiband_alloc = num_bytes_needed;\n                }\n\n                unsigned k = 0;\n                if (td->td_bitspersample == 32)\n                {\n                    for (i = 0; i < nb_pixels; i++)\n                    {\n                        for (int j = 0; j < td->td_samplesperpixel; ++j)\n                        {\n                            const float val =\n                                ((float *)sp->uncompressed_buffer)[k];\n                            ((float *)sp->uncompressed_buffer_multiband)\n                                [i + j * nb_pixels] = val;\n                            ++k;\n                            sp->mask_buffer[i + j * nb_pixels] =\n                                (val == val) ? 255 : 0;\n                        }\n                    }\n                }\n                else\n                {\n                    for (i = 0; i < nb_pixels; i++)\n                    {\n                        for (int j = 0; j < td->td_samplesperpixel; ++j)\n                        {\n                            const double val =\n                                ((double *)sp->uncompressed_buffer)[k];\n                            ((double *)sp->uncompressed_buffer_multiband)\n                                [i + j * nb_pixels] = val;\n                            ++k;\n                            sp->mask_buffer[i + j * nb_pixels] =\n                                (val == val) ? 255 : 0;\n                        }\n                    }\n                }\n#else\n                TIFFErrorExtR(tif, module,\n                              \"lerc_encode() would need to create one mask per \"\n                              \"sample, but this requires liblerc >= 3.0\");\n                return 0;\n#endif\n            }\n            else if (td->td_planarconfig == PLANARCONFIG_CONTIG &&\n                     dst_nbands > 1)\n            {\n                if (td->td_bitspersample == 32)\n                {\n                    for (i = 0; i < nb_pixels; i++)\n                    {\n                        const float val =\n                            ((float *)sp->uncompressed_buffer)[i * dst_nbands];\n                        sp->mask_buffer[i] = (val == val) ? 255 : 0;\n                    }\n                }\n                else\n                {\n                    for (i = 0; i < nb_pixels; i++)\n                    {\n                        const double val =\n                            ((double *)sp->uncompressed_buffer)[i * dst_nbands];\n                        sp->mask_buffer[i] = (val == val) ? 255 : 0;\n                    }\n                }\n            }\n            else\n            {\n                if (td->td_bitspersample == 32)\n                {\n                    for (i = 0; i < nb_pixels; i++)\n                    {\n                        const float val = ((float *)sp->uncompressed_buffer)[i];\n                        sp->mask_buffer[i] = (val == val) ? 255 : 0;\n                    }\n                }\n                else\n                {\n                    for (i = 0; i < nb_pixels; i++)\n                    {\n                        const double val =\n                            ((double *)sp->uncompressed_buffer)[i];\n                        sp->mask_buffer[i] = (val == val) ? 255 : 0;\n                    }\n                }\n            }\n        }\n    }\n\n    unsigned int estimated_compressed_size = sp->uncompressed_alloc;\n#if LERC_AT_LEAST_VERSION(3, 0, 0)\n    if (mask_count > 1)\n    {\n        estimated_compressed_size += nb_pixels * mask_count / 8;\n    }\n#endif\n\n    if (sp->compressed_size < estimated_compressed_size)\n    {\n        _TIFFfreeExt(tif, sp->compressed_buffer);\n        sp->compressed_buffer = _TIFFmallocExt(tif, estimated_compressed_size);\n        if (!sp->compressed_buffer)\n        {\n            sp->compressed_size = 0;\n            return 0;\n        }\n        sp->compressed_size = estimated_compressed_size;\n    }\n\n#if LERC_AT_LEAST_VERSION(3, 0, 0)\n    if (mask_count > 1)\n    {\n        lerc_ret = lerc_encodeForVersion(\n            sp->uncompressed_buffer_multiband, sp->lerc_version,\n            GetLercDataType(tif), 1, sp->segment_width, sp->segment_height,\n            dst_nbands, dst_nbands, sp->mask_buffer, sp->maxzerror,\n            sp->compressed_buffer, sp->compressed_size, &numBytesWritten);\n    }\n    else\n#endif\n    {\n        lerc_ret = lerc_encodeForVersion(\n            sp->uncompressed_buffer, sp->lerc_version, GetLercDataType(tif),\n            td->td_planarconfig == PLANARCONFIG_CONTIG ? dst_nbands : 1,\n            sp->segment_width, sp->segment_height, 1,\n#if LERC_AT_LEAST_VERSION(3, 0, 0)\n            use_mask ? 1 : 0,\n#endif\n            use_mask ? sp->mask_buffer : NULL, sp->maxzerror,\n            sp->compressed_buffer, sp->compressed_size, &numBytesWritten);\n    }\n    if (lerc_ret != 0)\n    {\n        TIFFErrorExtR(tif, module, \"lerc_encode() failed\");\n        return 0;\n    }\n    assert(numBytesWritten < estimated_compressed_size);\n\n    if (sp->additional_compression == LERC_ADD_COMPRESSION_DEFLATE)\n    {\n#if LIBDEFLATE_SUPPORT\n        if (sp->libdeflate_enc == NULL)\n        {\n            /* To get results as good as zlib, we ask for an extra */\n            /* level of compression */\n            sp->libdeflate_enc = libdeflate_alloc_compressor(\n                sp->zipquality == Z_DEFAULT_COMPRESSION ? 7\n                : sp->zipquality >= 6 && sp->zipquality <= 9\n                    ? sp->zipquality + 1\n                    : sp->zipquality);\n            if (sp->libdeflate_enc == NULL)\n            {\n                TIFFErrorExtR(tif, module, \"Cannot allocate compressor\");\n                return 0;\n            }\n        }\n\n        /* Should not happen normally */\n        if (libdeflate_zlib_compress_bound(\n                sp->libdeflate_enc, numBytesWritten) > sp->uncompressed_alloc)\n        {\n            TIFFErrorExtR(tif, module,\n                          \"Output buffer for libdeflate too small\");\n            return 0;\n        }\n\n        tif->tif_rawcc = libdeflate_zlib_compress(\n            sp->libdeflate_enc, sp->compressed_buffer, numBytesWritten,\n            sp->uncompressed_buffer, sp->uncompressed_alloc);\n\n        if (tif->tif_rawcc == 0)\n        {\n            TIFFErrorExtR(tif, module, \"Encoder error at scanline %lu\",\n                          (unsigned long)tif->tif_row);\n            return 0;\n        }\n#else\n        z_stream strm;\n        int zlib_ret;\n        int cappedQuality = sp->zipquality;\n        if (cappedQuality > Z_BEST_COMPRESSION)\n            cappedQuality = Z_BEST_COMPRESSION;\n\n        memset(&strm, 0, sizeof(strm));\n        strm.zalloc = NULL;\n        strm.zfree = NULL;\n        strm.opaque = NULL;\n        zlib_ret = deflateInit(&strm, cappedQuality);\n        if (zlib_ret != Z_OK)\n        {\n            TIFFErrorExtR(tif, module, \"deflateInit() failed\");\n            return 0;\n        }\n\n        strm.avail_in = numBytesWritten;\n        strm.next_in = sp->compressed_buffer;\n        strm.avail_out = sp->uncompressed_alloc;\n        strm.next_out = sp->uncompressed_buffer;\n        zlib_ret = deflate(&strm, Z_FINISH);\n        if (zlib_ret == Z_STREAM_END)\n        {\n            tif->tif_rawcc = sp->uncompressed_alloc - strm.avail_out;\n        }\n        deflateEnd(&strm);\n        if (zlib_ret != Z_STREAM_END)\n        {\n            TIFFErrorExtR(tif, module, \"deflate() failed\");\n            return 0;\n        }\n#endif\n        {\n            int ret;\n            uint8_t *tif_rawdata_backup = tif->tif_rawdata;\n            tif->tif_rawdata = sp->uncompressed_buffer;\n            ret = TIFFFlushData1(tif);\n            tif->tif_rawdata = tif_rawdata_backup;\n            if (!ret)\n            {\n                return 0;\n            }\n        }\n    }\n    else if (sp->additional_compression == LERC_ADD_COMPRESSION_ZSTD)\n    {\n#ifdef ZSTD_SUPPORT\n        size_t zstd_ret = ZSTD_compress(\n            sp->uncompressed_buffer, sp->uncompressed_alloc,\n            sp->compressed_buffer, numBytesWritten, sp->zstd_compress_level);\n        if (ZSTD_isError(zstd_ret))\n        {\n            TIFFErrorExtR(tif, module, \"Error in ZSTD_compress(): %s\",\n                          ZSTD_getErrorName(zstd_ret));\n            return 0;\n        }\n\n        {\n            int ret;\n            uint8_t *tif_rawdata_backup = tif->tif_rawdata;\n            tif->tif_rawdata = sp->uncompressed_buffer;\n            tif->tif_rawcc = zstd_ret;\n            ret = TIFFFlushData1(tif);\n            tif->tif_rawdata = tif_rawdata_backup;\n            if (!ret)\n            {\n                return 0;\n            }\n        }\n#else\n        TIFFErrorExtR(tif, module, \"ZSTD support missing\");\n        return 0;\n#endif\n    }\n    else if (sp->additional_compression != LERC_ADD_COMPRESSION_NONE)\n    {\n        TIFFErrorExtR(tif, module, \"Unhandled additional compression\");\n        return 0;\n    }\n    else\n    {\n        int ret;\n        uint8_t *tif_rawdata_backup = tif->tif_rawdata;\n        tif->tif_rawdata = sp->compressed_buffer;\n        tif->tif_rawcc = numBytesWritten;\n        ret = TIFFFlushData1(tif);\n        tif->tif_rawdata = tif_rawdata_backup;\n        if (!ret)\n            return 0;\n    }\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          842,
+          0
+        ],
+        [
+          1282,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCPostEncode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void LERCCleanup(TIFF *tif)\n{\n    LERCState *sp = GetLERCState(tif);\n\n    assert(sp != 0);\n\n    tif->tif_tagmethods.vgetfield = sp->vgetparent;\n    tif->tif_tagmethods.vsetfield = sp->vsetparent;\n\n    _TIFFfreeExt(tif, sp->uncompressed_buffer);\n    _TIFFfreeExt(tif, sp->uncompressed_buffer_multiband);\n    _TIFFfreeExt(tif, sp->compressed_buffer);\n    _TIFFfreeExt(tif, sp->mask_buffer);\n\n#if LIBDEFLATE_SUPPORT\n    if (sp->libdeflate_dec)\n        libdeflate_free_decompressor(sp->libdeflate_dec);\n    if (sp->libdeflate_enc)\n        libdeflate_free_compressor(sp->libdeflate_enc);\n#endif\n\n    _TIFFfreeExt(tif, sp);\n    tif->tif_data = NULL;\n\n    _TIFFSetDefaultCompressionState(tif);\n}",
+      "fn_code_pos": [
+        [
+          1284,
+          0
+        ],
+        [
+          1309,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCCleanup",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int LERCVSetFieldBase(TIFF *tif, uint32_t tag, ...)\n{\n    LERCState *sp = GetLERCState(tif);\n    int ret;\n    va_list ap;\n    va_start(ap, tag);\n    ret = (*sp->vsetparent)(tif, tag, ap);\n    va_end(ap);\n    return ret;\n}",
+      "fn_code_pos": [
+        [
+          1330,
+          0
+        ],
+        [
+          1339,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCVSetFieldBase",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LERCVSetField(TIFF *tif, uint32_t tag, va_list ap)\n{\n    static const char module[] = \"LERCVSetField\";\n    LERCState *sp = GetLERCState(tif);\n\n    switch (tag)\n    {\n        case TIFFTAG_LERC_PARAMETERS:\n        {\n            uint32_t count = va_arg(ap, int);\n            int *params = va_arg(ap, int *);\n            if (count < 2)\n            {\n                TIFFErrorExtR(tif, module,\n                              \"Invalid count for LercParameters: %u\", count);\n                return 0;\n            }\n            sp->lerc_version = params[0];\n            sp->additional_compression = params[1];\n            return LERCVSetFieldBase(tif, TIFFTAG_LERC_PARAMETERS, count,\n                                     params);\n        }\n        case TIFFTAG_LERC_MAXZERROR:\n            sp->maxzerror = va_arg(ap, double);\n            return 1;\n        case TIFFTAG_LERC_VERSION:\n        {\n            int params[2] = {0, 0};\n            int version = va_arg(ap, int);\n            if (version != LERC_VERSION_2_4)\n            {\n                TIFFErrorExtR(tif, module, \"Invalid value for LercVersion: %d\",\n                              version);\n                return 0;\n            }\n            sp->lerc_version = version;\n            params[0] = sp->lerc_version;\n            params[1] = sp->additional_compression;\n            return LERCVSetFieldBase(tif, TIFFTAG_LERC_PARAMETERS, 2, params);\n        }\n        case TIFFTAG_LERC_ADD_COMPRESSION:\n        {\n            int params[2] = {0, 0};\n            int additional_compression = va_arg(ap, int);\n#ifndef ZSTD_SUPPORT\n            if (additional_compression == LERC_ADD_COMPRESSION_ZSTD)\n            {\n                TIFFErrorExtR(tif, module,\n                              \"LERC_ZSTD requested, but ZSTD not available\");\n                return 0;\n            }\n#endif\n            if (additional_compression != LERC_ADD_COMPRESSION_NONE &&\n                additional_compression != LERC_ADD_COMPRESSION_DEFLATE &&\n                additional_compression != LERC_ADD_COMPRESSION_ZSTD)\n            {\n                TIFFErrorExtR(tif, module,\n                              \"Invalid value for LercAdditionalCompression: %d\",\n                              additional_compression);\n                return 0;\n            }\n            sp->additional_compression = additional_compression;\n            params[0] = sp->lerc_version;\n            params[1] = sp->additional_compression;\n            return LERCVSetFieldBase(tif, TIFFTAG_LERC_PARAMETERS, 2, params);\n        }\n#ifdef ZSTD_SUPPORT\n        case TIFFTAG_ZSTD_LEVEL:\n        {\n            sp->zstd_compress_level = (int)va_arg(ap, int);\n            if (sp->zstd_compress_level <= 0 ||\n                sp->zstd_compress_level > ZSTD_maxCLevel())\n            {\n                TIFFWarningExtR(tif, module,\n                                \"ZSTD_LEVEL should be between 1 and %d\",\n                                ZSTD_maxCLevel());\n            }\n            return 1;\n        }\n#endif\n        case TIFFTAG_ZIPQUALITY:\n        {\n            sp->zipquality = (int)va_arg(ap, int);\n            if (sp->zipquality < Z_DEFAULT_COMPRESSION ||\n                sp->zipquality > LIBDEFLATE_MAX_COMPRESSION_LEVEL)\n            {\n                TIFFErrorExtR(\n                    tif, module,\n                    \"Invalid ZipQuality value. Should be in [-1,%d] range\",\n                    LIBDEFLATE_MAX_COMPRESSION_LEVEL);\n                return 0;\n            }\n\n#if LIBDEFLATE_SUPPORT\n            if (sp->libdeflate_enc)\n            {\n                libdeflate_free_compressor(sp->libdeflate_enc);\n                sp->libdeflate_enc = NULL;\n            }\n#endif\n\n            return (1);\n        }\n        default:\n            return (*sp->vsetparent)(tif, tag, ap);\n    }\n    /*NOTREACHED*/\n}",
+      "fn_code_pos": [
+        [
+          1341,
+          0
+        ],
+        [
+          1448,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCVSetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LERCVGetField(TIFF *tif, uint32_t tag, va_list ap)\n{\n    LERCState *sp = GetLERCState(tif);\n\n    switch (tag)\n    {\n        case TIFFTAG_LERC_MAXZERROR:\n            *va_arg(ap, double *) = sp->maxzerror;\n            break;\n        case TIFFTAG_LERC_VERSION:\n            *va_arg(ap, int *) = sp->lerc_version;\n            break;\n        case TIFFTAG_LERC_ADD_COMPRESSION:\n            *va_arg(ap, int *) = sp->additional_compression;\n            break;\n        case TIFFTAG_ZSTD_LEVEL:\n            *va_arg(ap, int *) = sp->zstd_compress_level;\n            break;\n        case TIFFTAG_ZIPQUALITY:\n            *va_arg(ap, int *) = sp->zipquality;\n            break;\n        default:\n            return (*sp->vgetparent)(tif, tag, ap);\n    }\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          1450,
+          0
+        ],
+        [
+          1475,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCVGetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFInitLERC(TIFF *tif, int scheme)\n{\n    static const char module[] = \"TIFFInitLERC\";\n    LERCState *sp;\n\n    (void)scheme;\n    assert(scheme == COMPRESSION_LERC);\n\n    /*\n     * Merge codec-specific tag information.\n     */\n    if (!_TIFFMergeFields(tif, LERCFields, TIFFArrayCount(LERCFields)))\n    {\n        TIFFErrorExtR(tif, module, \"Merging LERC codec-specific tags failed\");\n        return 0;\n    }\n\n    /*\n     * Allocate state block so tag methods have storage to record values.\n     */\n    tif->tif_data = (uint8_t *)_TIFFcallocExt(tif, 1, sizeof(LERCState));\n    if (tif->tif_data == NULL)\n        goto bad;\n    sp = GetLERCState(tif);\n\n    /*\n     * Override parent get/set field methods.\n     */\n    sp->vgetparent = tif->tif_tagmethods.vgetfield;\n    tif->tif_tagmethods.vgetfield = LERCVGetField; /* hook for codec tags */\n    sp->vsetparent = tif->tif_tagmethods.vsetfield;\n    tif->tif_tagmethods.vsetfield = LERCVSetField; /* hook for codec tags */\n\n    /*\n     * Install codec methods.\n     */\n    tif->tif_fixuptags = LERCFixupTags;\n    tif->tif_setupdecode = LERCSetupDecode;\n    tif->tif_predecode = LERCPreDecode;\n    tif->tif_decoderow = LERCDecode;\n    tif->tif_decodestrip = LERCDecode;\n    tif->tif_decodetile = LERCDecode;\n    tif->tif_setupencode = LERCSetupEncode;\n    tif->tif_preencode = LERCPreEncode;\n    tif->tif_postencode = LERCPostEncode;\n    tif->tif_encoderow = LERCEncode;\n    tif->tif_encodestrip = LERCEncode;\n    tif->tif_encodetile = LERCEncode;\n    tif->tif_cleanup = LERCCleanup;\n\n    /* Default values for codec-specific fields */\n    TIFFSetField(tif, TIFFTAG_LERC_VERSION, LERC_VERSION_2_4);\n    TIFFSetField(tif, TIFFTAG_LERC_ADD_COMPRESSION, LERC_ADD_COMPRESSION_NONE);\n    sp->maxzerror = 0.0;\n    sp->zstd_compress_level = 9;            /* default comp. level */\n    sp->zipquality = Z_DEFAULT_COMPRESSION; /* default comp. level */\n    sp->state = 0;\n\n    return 1;\nbad:\n    TIFFErrorExtR(tif, module, \"No space for LERC state block\");\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          1477,
+          0
+        ],
+        [
+          1539,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFInitLERC",
+        "parameters": {
+          "tif": "TIFF",
+          "scheme": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "LERCEncode(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)",
+      "fn_dec_pos": [
+        [
+          95,
+          11
+        ],
+        [
+          95,
+          70
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "LERCDecode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)",
+      "fn_dec_pos": [
+        [
+          96,
+          11
+        ],
+        [
+          96,
+          71
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LERCDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "op": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct\n{\n    double maxzerror; /* max z error */\n    int lerc_version;\n    int additional_compression;\n    int zstd_compress_level; /* zstd */\n    int zipquality;          /* deflate */\n    int state;               /* state flags */\n\n    uint32_t segment_width;\n    uint32_t segment_height;\n\n    unsigned int uncompressed_size;\n    unsigned int uncompressed_alloc;\n    uint8_t *uncompressed_buffer;\n    unsigned int uncompressed_offset;\n\n    uint8_t *uncompressed_buffer_multiband;\n    unsigned int uncompressed_buffer_multiband_alloc;\n\n    unsigned int mask_size;\n    uint8_t *mask_buffer;\n\n    unsigned int compressed_size;\n    void *compressed_buffer;\n\n#if LIBDEFLATE_SUPPORT\n    struct libdeflate_decompressor *libdeflate_dec;\n    struct libdeflate_compressor *libdeflate_enc;\n#endif\n\n    TIFFVGetMethod vgetparent; /* super-class method */\n    TIFFVSetMethod vsetparent; /* super-class method */\n} LERCState;",
+      {
+        "maxzerror": "double",
+        "lerc_version": "int",
+        "additional_compression": "int",
+        "zstd_compress_level": "int",
+        "zipquality": "int",
+        "state": "int",
+        "segment_width": "uint32_t",
+        "segment_height": "uint32_t",
+        "uncompressed_size": "unsigned int",
+        "uncompressed_alloc": "unsigned int",
+        "*uncompressed_buffer": "uint8_t",
+        "uncompressed_offset": "unsigned int",
+        "*uncompressed_buffer_multiband": "uint8_t",
+        "uncompressed_buffer_multiband_alloc": "unsigned int",
+        "mask_size": "unsigned int",
+        "*mask_buffer": "uint8_t",
+        "compressed_size": "unsigned int",
+        "*compressed_buffer": "void",
+        "*libdeflate_dec": "struct libdeflate_decompressor",
+        "*libdeflate_enc": "struct libdeflate_compressor",
+        "vgetparent": "TIFFVGetMethod",
+        "vsetparent": "TIFFVSetMethod"
+      },
+      "LERCState",
+      [
+        56,
+        0
+      ],
+      [
+        89,
+        12
+      ]
+    ],
+    [
+      "typedef struct\n{\n    double maxzerror; /* max z error */\n    int lerc_version;\n    int additional_compression;\n    int zstd_compress_level; /* zstd */\n    int zipquality;          /* deflate */\n    int state;               /* state flags */\n\n    uint32_t segment_width;\n    uint32_t segment_height;\n\n    unsigned int uncompressed_size;\n    unsigned int uncompressed_alloc;\n    uint8_t *uncompressed_buffer;\n    unsigned int uncompressed_offset;\n\n    uint8_t *uncompressed_buffer_multiband;\n    unsigned int uncompressed_buffer_multiband_alloc;\n\n    unsigned int mask_size;\n    uint8_t *mask_buffer;\n\n    unsigned int compressed_size;\n    void *compressed_buffer;\n\n#if LIBDEFLATE_SUPPORT\n    struct libdeflate_decompressor *libdeflate_dec;\n    struct libdeflate_compressor *libdeflate_enc;\n#endif\n\n    TIFFVGetMethod vgetparent; /* super-class method */\n    TIFFVSetMethod vsetparent; /* super-class method */\n} LERCState;",
+      {
+        "maxzerror": "double",
+        "lerc_version": "int",
+        "additional_compression": "int",
+        "zstd_compress_level": "int",
+        "zipquality": "int",
+        "state": "int",
+        "segment_width": "uint32_t",
+        "segment_height": "uint32_t",
+        "uncompressed_size": "unsigned int",
+        "uncompressed_alloc": "unsigned int",
+        "*uncompressed_buffer": "uint8_t",
+        "uncompressed_offset": "unsigned int",
+        "*uncompressed_buffer_multiband": "uint8_t",
+        "uncompressed_buffer_multiband_alloc": "unsigned int",
+        "mask_size": "unsigned int",
+        "*mask_buffer": "uint8_t",
+        "compressed_size": "unsigned int",
+        "*compressed_buffer": "void",
+        "*libdeflate_dec": "struct libdeflate_decompressor",
+        "*libdeflate_enc": "struct libdeflate_compressor",
+        "vgetparent": "TIFFVGetMethod",
+        "vsetparent": "TIFFVSetMethod"
+      },
+      "LERCState",
+      [
+        56,
+        0
+      ],
+      [
+        89,
+        12
+      ]
+    ],
+    [
+      "struct libdeflate_decompressor",
+      {},
+      "",
+      [
+        83,
+        4
+      ],
+      [
+        83,
+        34
+      ]
+    ],
+    [
+      "struct libdeflate_compressor",
+      {},
+      "",
+      [
+        84,
+        4
+      ],
+      [
+        84,
+        32
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"Lerc_c_api.h\"\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include \"zlib.h\"\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include \"zstd.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ],
+    [
+      "#include \"libdeflate.h\"\n",
+      [
+        40,
+        0
+      ],
+      [
+        41,
+        0
+      ]
+    ],
+    [
+      "#include <assert.h>\n",
+      [
+        44,
+        0
+      ],
+      [
+        45,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": [
+    [
+      "enum libdeflate_result",
+      {},
+      "",
+      [
+        328,
+        8
+      ],
+      [
+        328,
+        30
+      ]
+    ]
+  ]
+}

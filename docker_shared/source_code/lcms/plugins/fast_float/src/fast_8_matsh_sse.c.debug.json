@@ -1,0 +1,389 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nXMatShaper8Data* malloc_aligned(cmsContext ContextID)\n{\n    cmsUInt8Number* real_ptr = (cmsUInt8Number*) _cmsMallocZero(ContextID, sizeof(XMatShaper8Data) + 32);\n    cmsUInt8Number* aligned = (cmsUInt8Number*) (((uintptr_t)real_ptr + 16) & ~0xf);\n    XMatShaper8Data* p = (XMatShaper8Data*) aligned;\n\n    p ->real_ptr = real_ptr;\n    return p;\n}",
+      "fn_code_pos": [
+        [
+          60,
+          0
+        ],
+        [
+          69,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "malloc_aligned",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "XMatShaper8Data"
+      }
+    },
+    {
+      "fn_code": "static\nvoid free_aligned(XMatShaper8Data* a)\n{\n    _cmsFree(a->ContextID, a->real_ptr);\n}",
+      "fn_code_pos": [
+        [
+          71,
+          0
+        ],
+        [
+          75,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "free_aligned",
+        "parameters": {
+          "a": "XMatShaper8Data"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid FreeMatShaper(cmsContext ContextID, void* Data)\n{\n    UNUSED_PARAMETER(ContextID);\n\n    if (Data != NULL) free_aligned((XMatShaper8Data*) Data);\n}",
+      "fn_code_pos": [
+        [
+          79,
+          0
+        ],
+        [
+          85,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FreeMatShaper",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Data": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid FillFirstShaper(cmsFloat32Number* Table, cmsToneCurve* Curve)\n{\n    cmsInt32Number i;\n    cmsFloat32Number R;\n\n    for (i = 0; i < 256; i++) {\n\n        R = (cmsFloat32Number)(i / 255.0);\n        Table[i] = cmsEvalToneCurveFloat(Curve, R);\n    }\n}",
+      "fn_code_pos": [
+        [
+          89,
+          0
+        ],
+        [
+          100,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FillFirstShaper",
+        "parameters": {
+          "Table": "cmsFloat32Number",
+          "Curve": "cmsToneCurve"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid FillSecondShaper(cmsUInt8Number* Table, cmsToneCurve* Curve)\n{\n    int i;\n    cmsFloat32Number R, Val;\n    cmsInt32Number w;\n\n    for (i=0; i < 0x4001; i++) {\n\n        R   = (cmsFloat32Number) (i / 16384.0f);\n        Val = cmsEvalToneCurveFloat(Curve, R);    \n        w = (cmsInt32Number) (Val * 255.0f + 0.5f);\n        if (w < 0) w = 0;\n        if (w > 255) w = 255;\n\n        Table[i] = (cmsInt8Number) w;\n\n    }\n}",
+      "fn_code_pos": [
+        [
+          104,
+          0
+        ],
+        [
+          122,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FillSecondShaper",
+        "parameters": {
+          "Table": "cmsUInt8Number",
+          "Curve": "cmsToneCurve"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nXMatShaper8Data* SetMatShaper(cmsContext ContextID, cmsToneCurve* Curve1[3], cmsMAT3* Mat, cmsVEC3* Off, cmsToneCurve* Curve2[3])\n{\n    XMatShaper8Data* p;\n    int i, j;\n\n    // Allocate a big chuck of memory to store precomputed tables\n    p = malloc_aligned(ContextID);\n    if (p == NULL) return FALSE;\n\n    p -> ContextID = ContextID;\n\n    // Precompute tables\n    FillFirstShaper(p ->Shaper1R, Curve1[0]);\n    FillFirstShaper(p ->Shaper1G, Curve1[1]);\n    FillFirstShaper(p ->Shaper1B, Curve1[2]);\n\n    FillSecondShaper(p ->Shaper2R, Curve2[0]);\n    FillSecondShaper(p ->Shaper2G, Curve2[1]);\n    FillSecondShaper(p ->Shaper2B, Curve2[2]);\n \n        \n    // Convert matrix to float\n    for (i=0; i < 3; i++) {\n        for (j=0; j < 3; j++) {         \n            p ->Mat[j][i] = (cmsFloat32Number) Mat->v[i].n[j];\n        }        \n    }\n      \n    // Roundoff\n    for (i=0; i < 3; i++) {\n\n        if (Off == NULL) {   \n            \n            p->Mat[3][i] = 0.0f;\n        }\n        else {                              \n            p->Mat[3][i] = (cmsFloat32Number)Off->n[i];\n        }\n    }\n\n \n    return p;\n}",
+      "fn_code_pos": [
+        [
+          125,
+          0
+        ],
+        [
+          168,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetMatShaper",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Curve1": "cmsToneCurve",
+          "Mat": "cmsMAT3",
+          "Off": "cmsVEC3",
+          "Curve2": "cmsToneCurve"
+        },
+        "return_type": "XMatShaper8Data"
+      }
+    },
+    {
+      "fn_code": "static\nvoid MatShaperXform8SSE(struct _cmstransform_struct *CMMcargo,\n                     const void* Input,\n                     void* Output,\n                     cmsUInt32Number PixelsPerLine,\n                     cmsUInt32Number LineCount,\n                     const cmsStride* Stride)\n{    \n    XMatShaper8Data* p = (XMatShaper8Data*) _cmsGetTransformUserData(CMMcargo);\n\n    cmsUInt32Number i, ii;\n\n    cmsUInt32Number SourceStartingOrder[cmsMAXCHANNELS];\n    cmsUInt32Number SourceIncrements[cmsMAXCHANNELS];\n    cmsUInt32Number DestStartingOrder[cmsMAXCHANNELS];\n    cmsUInt32Number DestIncrements[cmsMAXCHANNELS];\n\n    const cmsUInt8Number* rin;\n    const cmsUInt8Number* gin;\n    const cmsUInt8Number* bin;\n    const cmsUInt8Number* ain = NULL;\n\n    cmsUInt8Number* rout;\n    cmsUInt8Number* gout;\n    cmsUInt8Number* bout;\n    cmsUInt8Number* aout = NULL;\n\n    cmsUInt32Number nalpha, strideIn, strideOut;\n \n \n    __m128 mat0 = _mm_load_ps(p->Mat[0]);\n    __m128 mat1 = _mm_load_ps(p->Mat[1]);\n    __m128 mat2 = _mm_load_ps(p->Mat[2]);\n    __m128 mat3 = _mm_load_ps(p->Mat[3]);\n\n    __m128 zero = _mm_setzero_ps();\n    __m128 one = _mm_set1_ps(1.0f);\n    __m128 scale = _mm_set1_ps((cmsFloat32Number)0x4000);\n\n    cmsUInt8Number buffer[32];\n    cmsUInt32Number* output_index = (cmsUInt32Number*)(((uintptr_t)buffer + 16) & ~0xf);\n\n\n    _cmsComputeComponentIncrements(cmsGetTransformInputFormat((cmsHTRANSFORM)CMMcargo), Stride->BytesPerPlaneIn, NULL, &nalpha, SourceStartingOrder, SourceIncrements);\n    _cmsComputeComponentIncrements(cmsGetTransformOutputFormat((cmsHTRANSFORM)CMMcargo), Stride->BytesPerPlaneOut, NULL, &nalpha, DestStartingOrder, DestIncrements);\n\n    if (!(_cmsGetTransformFlags((cmsHTRANSFORM)CMMcargo) & cmsFLAGS_COPY_ALPHA))\n        nalpha = 0;\n\n    strideIn = strideOut = 0;\n    for (i = 0; i < LineCount; i++) {\n\n           rin = (const cmsUInt8Number*)Input + SourceStartingOrder[0] + strideIn;\n           gin = (const cmsUInt8Number*)Input + SourceStartingOrder[1] + strideIn;\n           bin = (const cmsUInt8Number*)Input + SourceStartingOrder[2] + strideIn;\n           if (nalpha)\n                  ain = (const cmsUInt8Number*)Input + SourceStartingOrder[3] + strideIn;\n\n\n           rout = (cmsUInt8Number*)Output + DestStartingOrder[0] + strideOut;\n           gout = (cmsUInt8Number*)Output + DestStartingOrder[1] + strideOut;\n           bout = (cmsUInt8Number*)Output + DestStartingOrder[2] + strideOut;\n           if (nalpha)\n                  aout = (cmsUInt8Number*)Output + DestStartingOrder[3] + strideOut;\n           \n           /**\n           * Prefetch\n           */\n           __m128 rvector = _mm_set1_ps(p->Shaper1R[*rin]);\n           __m128 gvector = _mm_set1_ps(p->Shaper1G[*gin]);\n           __m128 bvector = _mm_set1_ps(p->Shaper1B[*bin]);\n        \n           for (ii = 0; ii < PixelsPerLine; ii++) {\n                                        \n               __m128 el1 = _mm_mul_ps(rvector, mat0);\n               __m128 el2 = _mm_mul_ps(gvector, mat1);\n               __m128 el3 = _mm_mul_ps(bvector, mat2);\n               \n               __m128 sum = _mm_add_ps(el1, _mm_add_ps(el2, _mm_add_ps(el3, mat3)));\n\n               __m128 out = _mm_min_ps(_mm_max_ps(sum, zero), one);\n\n               out = _mm_mul_ps(out, scale);\n\n               /**\n               * Rounding and converting to index. \n               * Actually this is a costly instruction that may be blocking performance\n               */\n               _mm_store_si128((__m128i*)output_index, _mm_cvtps_epi32(out));\n\n           \n               // Handle alpha\n               if (ain) {\n                   *aout = *ain;\n               }\n\n               rin += SourceIncrements[0];\n               gin += SourceIncrements[1];\n               bin += SourceIncrements[2];\n               if (ain) ain += SourceIncrements[3];\n\n               /**\n               * Take next value whilst store is being performed\n               */\n               if (ii < PixelsPerLine - 1)\n               {\n                   rvector = _mm_set1_ps(p->Shaper1R[*rin]);\n                   gvector = _mm_set1_ps(p->Shaper1G[*gin]);\n                   bvector = _mm_set1_ps(p->Shaper1B[*bin]);\n               }\n\n               *rout = p->Shaper2R[output_index[0]];\n               *gout = p->Shaper2G[output_index[1]];\n               *bout = p->Shaper2B[output_index[2]];\n\n               rout += DestIncrements[0];\n               gout += DestIncrements[1];\n               bout += DestIncrements[2];\n               if (aout) aout += DestIncrements[3];\n           }\n\n           strideIn += Stride->BytesPerLineIn;\n           strideOut += Stride->BytesPerLineOut;\n    }\n}",
+      "fn_code_pos": [
+        [
+          172,
+          0
+        ],
+        [
+          296,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MatShaperXform8SSE",
+        "parameters": {
+          "CMMcargo": "struct _cmstransform_struct",
+          "Input": "void",
+          "Output": "void",
+          "PixelsPerLine": "cmsUInt32Number",
+          "LineCount": "cmsUInt32Number",
+          "Stride": "cmsStride"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool IsSSE2Available(void)\n{\n#ifdef _MSC_VER\n    int cpuinfo[4];\n\n    __cpuid(cpuinfo, 1);\n    if (!(cpuinfo[3] & (1 << 26))) return FALSE;\n    return TRUE;\n\n#else\n  unsigned int level = 1u;\n  unsigned int eax, ebx, ecx, edx;\n  unsigned int bits = (1u << 26);\n  unsigned int max = __get_cpuid_max(0, NULL);\n  if (level > max) {\n    return FALSE;\n  }\n  __cpuid_count(level, 0, eax, ebx, ecx, edx);\n  return (edx & bits) == bits;\n#endif\n}",
+      "fn_code_pos": [
+        [
+          299,
+          0
+        ],
+        [
+          320,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "IsSSE2Available",
+        "parameters": {},
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool Optimize8MatrixShaperSSE(_cmsTransform2Fn* TransformFn,                                  \n                                  void** UserData,\n                                  _cmsFreeUserDataFn* FreeUserData,\n                                  cmsPipeline** Lut, \n                                  cmsUInt32Number* InputFormat, \n                                  cmsUInt32Number* OutputFormat, \n                                  cmsUInt32Number* dwFlags)    \n{\n    cmsStage* Curve1, *Curve2;\n    cmsStage* Matrix1, *Matrix2;\n    _cmsStageMatrixData* Data1;\n    _cmsStageMatrixData* Data2;\n    cmsMAT3 res;\n    cmsBool IdentityMat = FALSE;\n    cmsPipeline* Dest, *Src;\n    cmsContext ContextID;\n    cmsUInt32Number nChans;\n    \n    // Check for SSE2 support\n    if (!(IsSSE2Available())) return FALSE;\n\n    // Only works on 3 to 3, probably RGB \n    if ( !( (T_CHANNELS(*InputFormat) == 3 && T_CHANNELS(*OutputFormat) == 3) ) ) return FALSE;\n                   \n    // Only works on 8 bit input\n    if (T_BYTES(*InputFormat) != 1 || T_BYTES(*OutputFormat) != 1) return FALSE;\n\n    // Seems suitable, proceed\n    Src = *Lut;\n\n    // Check for shaper-matrix-matrix-shaper structure, that is what this optimizer stands for\n    if (!cmsPipelineCheckAndRetreiveStages(Src, 4, \n        cmsSigCurveSetElemType, cmsSigMatrixElemType, cmsSigMatrixElemType, cmsSigCurveSetElemType, \n        &Curve1, &Matrix1, &Matrix2, &Curve2)) return FALSE;\n\n    ContextID = cmsGetPipelineContextID(Src);\n    nChans    = T_CHANNELS(*InputFormat);\n\n    // Get both matrices, which are 3x3\n    Data1 = (_cmsStageMatrixData*) cmsStageData(Matrix1);\n    Data2 = (_cmsStageMatrixData*) cmsStageData(Matrix2);\n\n    // Input offset should be zero\n    if (Data1->Offset != NULL) return FALSE;\n\n    // Multiply both matrices to get the result\n    _cmsMAT3per(&res, (cmsMAT3*)Data2->Double, (cmsMAT3*)Data1->Double);\n\n    // Now the result is in res + Data2 -> Offset. Maybe is a plain identity?\n    IdentityMat = FALSE;\n    if (_cmsMAT3isIdentity(&res) && Data2->Offset == NULL) {\n\n        // We can get rid of full matrix\n        IdentityMat = TRUE;\n    }\n\n    // Allocate an empty LUT \n    Dest =  cmsPipelineAlloc(ContextID, nChans, nChans);\n    if (!Dest) return FALSE;\n\n    // Assamble the new LUT\n    cmsPipelineInsertStage(Dest, cmsAT_BEGIN, cmsStageDup(Curve1));\n    \n    if (!IdentityMat) {\n\n        cmsPipelineInsertStage(Dest, cmsAT_END,\n                    cmsStageAllocMatrix(ContextID, 3, 3, (const cmsFloat64Number*) &res, Data2 ->Offset));\n    } \n\n\n    cmsPipelineInsertStage(Dest, cmsAT_END, cmsStageDup(Curve2));\n\n    // If identity on matrix, we can further optimize the curves, so call the join curves routine\n    if (IdentityMat) {\n\n      Optimize8ByJoiningCurves(TransformFn, UserData, FreeUserData, &Dest, InputFormat, OutputFormat, dwFlags);\n    }\n    else {\n        _cmsStageToneCurvesData* mpeC1 = (_cmsStageToneCurvesData*) cmsStageData(Curve1);\n        _cmsStageToneCurvesData* mpeC2 = (_cmsStageToneCurvesData*) cmsStageData(Curve2);\n                \n        // In this particular optimization, cache does not help as it takes more time to deal with \n        // the cache that with the pixel handling\n        *dwFlags |= cmsFLAGS_NOCACHE;\n  \n\n        // Setup the optimizarion routines\n        *UserData = SetMatShaper(ContextID, mpeC1 ->TheCurves, &res, (cmsVEC3*) Data2 ->Offset, mpeC2->TheCurves);\n        *FreeUserData = FreeMatShaper; \n\n        *TransformFn = MatShaperXform8SSE;         \n    }\n\n    *dwFlags &= ~cmsFLAGS_CAN_CHANGE_FORMATTER;\n    cmsPipelineFree(Src);\n    *Lut = Dest;\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          324,
+          0
+        ],
+        [
+          421,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Optimize8MatrixShaperSSE",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeUserData": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "malloc_aligned(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          61,
+          17
+        ],
+        [
+          61,
+          53
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "malloc_aligned",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "SetMatShaper(cmsContext ContextID, cmsToneCurve* Curve1[3], cmsMAT3* Mat, cmsVEC3* Off, cmsToneCurve* Curve2[3])",
+      "fn_dec_pos": [
+        [
+          126,
+          17
+        ],
+        [
+          126,
+          129
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetMatShaper",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Curve1": "cmsToneCurve",
+          "Mat": "cmsMAT3",
+          "Off": "cmsVEC3",
+          "Curve2": "cmsToneCurve"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n\n    // This is for SSE, MUST be aligned at 16 bit boundary\n    \n    cmsFloat32Number Mat[4][4];     // n.14 to n.14 (needs a saturation after that)\n\n    void * real_ptr;\n    \n    cmsContext ContextID;\n\n    cmsFloat32Number Shaper1R[256];  // from 0..255 to 1.14  (0.0...1.0)\n    cmsFloat32Number Shaper1G[256];\n    cmsFloat32Number Shaper1B[256];\n    \n    cmsUInt8Number Shaper2R[0x4001];    // 1.14 to 0..255 \n    cmsUInt8Number Shaper2G[0x4001];\n    cmsUInt8Number Shaper2B[0x4001];    \n\n} XMatShaper8Data;",
+      {
+        "Mat[4][4]": "cmsFloat32Number",
+        "* real_ptr": "void",
+        "ContextID": "cmsContext",
+        "Shaper1R[256]": "cmsFloat32Number",
+        "Shaper1G[256]": "cmsFloat32Number",
+        "Shaper1B[256]": "cmsFloat32Number",
+        "Shaper2R[0x4001]": "cmsUInt8Number",
+        "Shaper2G[0x4001]": "cmsUInt8Number",
+        "Shaper2B[0x4001]": "cmsUInt8Number"
+      },
+      "XMatShaper8Data",
+      [
+        39,
+        0
+      ],
+      [
+        57,
+        18
+      ]
+    ],
+    [
+      "typedef struct {\n\n    // This is for SSE, MUST be aligned at 16 bit boundary\n    \n    cmsFloat32Number Mat[4][4];     // n.14 to n.14 (needs a saturation after that)\n\n    void * real_ptr;\n    \n    cmsContext ContextID;\n\n    cmsFloat32Number Shaper1R[256];  // from 0..255 to 1.14  (0.0...1.0)\n    cmsFloat32Number Shaper1G[256];\n    cmsFloat32Number Shaper1B[256];\n    \n    cmsUInt8Number Shaper2R[0x4001];    // 1.14 to 0..255 \n    cmsUInt8Number Shaper2G[0x4001];\n    cmsUInt8Number Shaper2B[0x4001];    \n\n} XMatShaper8Data;",
+      {
+        "Mat[4][4]": "cmsFloat32Number",
+        "* real_ptr": "void",
+        "ContextID": "cmsContext",
+        "Shaper1R[256]": "cmsFloat32Number",
+        "Shaper1G[256]": "cmsFloat32Number",
+        "Shaper1B[256]": "cmsFloat32Number",
+        "Shaper2R[0x4001]": "cmsUInt8Number",
+        "Shaper2G[0x4001]": "cmsUInt8Number",
+        "Shaper2B[0x4001]": "cmsUInt8Number"
+      },
+      "XMatShaper8Data",
+      [
+        39,
+        0
+      ],
+      [
+        57,
+        18
+      ]
+    ],
+    [
+      "struct _cmstransform_struct",
+      {},
+      "",
+      [
+        173,
+        24
+      ],
+      [
+        173,
+        51
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"fast_float_internal.h\"\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <intrin.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <x86intrin.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include <cpuid.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include <emmintrin.h>\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

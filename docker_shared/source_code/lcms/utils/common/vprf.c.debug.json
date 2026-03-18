@@ -1,0 +1,290 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void FatalError(const char *frm, ...)\n{\n    va_list args;\n\n    va_start(args, frm);\n    fprintf(stderr, \"[%s fatal error]: \", ProgramName);\n    vfprintf(stderr, frm, args);\n    fprintf(stderr, \"\\n\");\n    va_end(args);\n\n    exit(1);\n}",
+      "fn_code_pos": [
+        [
+          33,
+          0
+        ],
+        [
+          44,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FatalError",
+        "parameters": {
+          "frm": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid MyErrorLogHandler(cmsContext ContextID, cmsUInt32Number ErrorCode, const char *Text)\n{\n    if (Verbose >= 0)\n        fprintf(stderr, \"[%s]: %s\\n\", ProgramName, Text);\n\n    UTILS_UNUSED_PARAMETER(ErrorCode);\n    UTILS_UNUSED_PARAMETER(ContextID);\n}",
+      "fn_code_pos": [
+        [
+          47,
+          0
+        ],
+        [
+          55,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyErrorLogHandler",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "ErrorCode": "cmsUInt32Number",
+          "Text": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void InitUtils(const char* PName)\n{\n      strncpy(ProgramName, PName, sizeof(ProgramName));\n      ProgramName[sizeof(ProgramName)-1] = 0;\n\n      cmsSetLogErrorHandler(MyErrorLogHandler);\n}",
+      "fn_code_pos": [
+        [
+          58,
+          0
+        ],
+        [
+          64,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "InitUtils",
+        "parameters": {
+          "PName": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE OpenStockProfile(cmsContext ContextID, const char* File)\n{\n       if (!File)\n            return cmsCreate_sRGBProfileTHR(ContextID);\n\n       if (cmsstrcasecmp(File, \"*Lab2\") == 0)\n                return cmsCreateLab2ProfileTHR(ContextID, NULL);\n\n       if (cmsstrcasecmp(File, \"*Lab4\") == 0)\n                return cmsCreateLab4ProfileTHR(ContextID, NULL);\n\n       if (cmsstrcasecmp(File, \"*Lab\") == 0)\n                return cmsCreateLab4ProfileTHR(ContextID, NULL);\n\n       if (cmsstrcasecmp(File, \"*LabD65\") == 0) {\n\n           cmsCIExyY D65xyY;\n\n           cmsWhitePointFromTemp( &D65xyY, 6504);\n           return cmsCreateLab4ProfileTHR(ContextID, &D65xyY);\n       }\n\n       if (cmsstrcasecmp(File, \"*XYZ\") == 0)\n                return cmsCreateXYZProfileTHR(ContextID);\n\n       if (cmsstrcasecmp(File, \"*Gray22\") == 0) {\n\n           cmsToneCurve* Curve = cmsBuildGamma(ContextID, 2.2);\n           cmsHPROFILE hProfile = cmsCreateGrayProfileTHR(ContextID, cmsD50_xyY(), Curve);\n           cmsFreeToneCurve(Curve);\n           return hProfile;\n       }\n\n        if (cmsstrcasecmp(File, \"*Gray30\") == 0) {\n\n           cmsToneCurve* Curve = cmsBuildGamma(ContextID, 3.0);\n           cmsHPROFILE hProfile = cmsCreateGrayProfileTHR(ContextID, cmsD50_xyY(), Curve);\n           cmsFreeToneCurve(Curve);\n           return hProfile;\n       }\n\n       if (cmsstrcasecmp(File, \"*srgb\") == 0)\n                return cmsCreate_sRGBProfileTHR(ContextID);\n\n       if (cmsstrcasecmp(File, \"*null\") == 0)\n                return cmsCreateNULLProfileTHR(ContextID);\n\n\n       if (cmsstrcasecmp(File, \"*Lin2222\") == 0) {\n\n            cmsToneCurve*  Gamma = cmsBuildGamma(0, 2.2);\n            cmsToneCurve*  Gamma4[4];\n            cmsHPROFILE hProfile;\n\n            Gamma4[0] = Gamma4[1] = Gamma4[2] = Gamma4[3] = Gamma;\n            hProfile = cmsCreateLinearizationDeviceLink(cmsSigCmykData, Gamma4);\n            cmsFreeToneCurve(Gamma);\n            return hProfile;\n       }\n\n\n        return cmsOpenProfileFromFileTHR(ContextID, File, \"r\");\n}",
+      "fn_code_pos": [
+        [
+          68,
+          0
+        ],
+        [
+          130,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OpenStockProfile",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "File": "char"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "void PrintBuiltins(void)\n{\n     fprintf(stderr, \"\\nBuilt-in profiles:\\n\\n\");\n     fprintf(stderr, \"\\t*Lab2  -- D50-based v2 CIEL*a*b\\n\"\n                     \"\\t*Lab4  -- D50-based v4 CIEL*a*b\\n\"\n                     \"\\t*Lab   -- D50-based v4 CIEL*a*b\\n\"\n                     \"\\t*XYZ   -- CIE XYZ (PCS)\\n\"\n                     \"\\t*sRGB  -- sRGB color space\\n\"\n                     \"\\t*Gray22 - Monochrome of Gamma 2.2\\n\"\n                     \"\\t*Gray30 - Monochrome of Gamma 3.0\\n\"\n                     \"\\t*null   - Monochrome black for all input\\n\"\n                     \"\\t*Lin2222- CMYK linearization of gamma 2.2 on each channel\\n\\n\");\n}",
+      "fn_code_pos": [
+        [
+          133,
+          0
+        ],
+        [
+          145,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintBuiltins",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid PrintInfo(cmsHPROFILE h, cmsInfoType Info)\n{\n    char* text;\n    int len;\n\n    len = cmsGetProfileInfoASCII(h, Info, \"en\", \"US\", NULL, 0);\n    if (len == 0) return;\n\n    text = (char*) malloc(len * sizeof(char));\n    if (text == NULL) return;\n\n    cmsGetProfileInfoASCII(h, Info, \"en\", \"US\", text, len);\n\n    if (strlen(text) > 0)\n        printf(\"%s\\n\", text);\n\n    free(text);\n}",
+      "fn_code_pos": [
+        [
+          149,
+          0
+        ],
+        [
+          167,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintInfo",
+        "parameters": {
+          "h": "cmsHPROFILE",
+          "Info": "cmsInfoType"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid PrintColorantTable(cmsHPROFILE hInput, cmsTagSignature Sig, const char* Title)\n{\n    cmsNAMEDCOLORLIST* list;\n    int i, n;\n\n    if (cmsIsTag(hInput, Sig)) {\n\n        printf(\"%s:\\n\", Title);\n\n        list = (cmsNAMEDCOLORLIST*) cmsReadTag(hInput, Sig);\n        if (list == NULL) {\n            printf(\"(Unavailable)\\n\");\n            return;\n        }\n\n        n = cmsNamedColorCount(list);\n        for (i=0; i < n; i++) {\n\n            char Name[cmsMAX_PATH];\n\n            cmsNamedColorInfo(list, i, Name, NULL, NULL, NULL, NULL);\n            printf(\"\\t%s\\n\", Name);\n        }\n\n        printf(\"\\n\");\n    }\n\n}",
+      "fn_code_pos": [
+        [
+          172,
+          0
+        ],
+        [
+          200,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintColorantTable",
+        "parameters": {
+          "hInput": "cmsHPROFILE",
+          "Sig": "cmsTagSignature",
+          "Title": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void PrintProfileInformation(cmsHPROFILE hInput)\n{\n    if (hInput == NULL) {\n\t\t\tfprintf(stderr, \"*Wrong or corrupted profile*\\n\");\n            return;\n    }\n\n    PrintInfo(hInput, cmsInfoDescription);\n    PrintInfo(hInput, cmsInfoManufacturer);\n    PrintInfo(hInput, cmsInfoModel);\n    PrintInfo(hInput, cmsInfoCopyright);\n\n    if (Verbose > 2) {\n\n        PrintColorantTable(hInput, cmsSigColorantTableTag,    \"Input colorant table\");\n        PrintColorantTable(hInput, cmsSigColorantTableOutTag, \"Input colorant out table\");\n    }\n\n    printf(\"\\n\");\n}",
+      "fn_code_pos": [
+        [
+          203,
+          0
+        ],
+        [
+          222,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintProfileInformation",
+        "parameters": {
+          "hInput": "cmsHPROFILE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void PrintRenderingIntents(void)\n{\n    cmsUInt32Number Codes[200];\n    char* Descriptions[200];\n    cmsUInt32Number n, i;\n\n    fprintf(stderr, \"-t<n> rendering intent:\\n\\n\");\n\n    n = cmsGetSupportedIntents(200, Codes, Descriptions);\n\n    for (i=0; i < n; i++) {\n        fprintf(stderr, \"\\t%u - %s\\n\", Codes[i], Descriptions[i]);\n    }\n    fprintf(stderr, \"\\n\");\n}",
+      "fn_code_pos": [
+        [
+          227,
+          0
+        ],
+        [
+          241,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintRenderingIntents",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool SaveMemoryBlock(const cmsUInt8Number* Buffer, cmsUInt32Number dwLen, const char* Filename)\n{\n    FILE* out = fopen(Filename, \"wb\");\n    if (out == NULL) {\n        FatalError(\"Cannot create '%s'\", Filename);\n        return FALSE;\n    }\n\n    if (fwrite(Buffer, 1, dwLen, out) != dwLen) {\n        FatalError(\"Cannot write %ld bytes to %s\", (long) dwLen, Filename);\n        return FALSE;\n    }\n\n    if (fclose(out) != 0) {\n        FatalError(\"Error flushing file '%s'\", Filename);\n        return FALSE;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          247,
+          0
+        ],
+        [
+          266,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SaveMemoryBlock",
+        "parameters": {
+          "Buffer": "cmsUInt8Number",
+          "dwLen": "cmsUInt32Number",
+          "Filename": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "int PixelTypeFromChanCount(int ColorChannels)\n{\n    switch (ColorChannels) {\n\n        case 1: return PT_GRAY;\n        case 2: return PT_MCH2;\n        case 3: return PT_MCH3;\n        case 4: return PT_CMYK;\n        case 5: return PT_MCH5;\n        case 6: return PT_MCH6;\n        case 7: return PT_MCH7;\n        case 8: return PT_MCH8;\n        case 9: return PT_MCH9;\n        case 10: return PT_MCH10;\n        case 11: return PT_MCH11;\n        case 12: return PT_MCH12;\n        case 13: return PT_MCH13;\n        case 14: return PT_MCH14;\n        case 15: return PT_MCH15;\n\n        default:\n\n            FatalError(\"What a weird separation of %d channels?!?!\", ColorChannels);\n            return -1;\n    }\n}",
+      "fn_code_pos": [
+        [
+          271,
+          0
+        ],
+        [
+          296,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PixelTypeFromChanCount",
+        "parameters": {
+          "ColorChannels": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ChanCountFromPixelType(int ColorChannels)\n{\n    switch (ColorChannels) {\n\n      case PT_GRAY: return 1;\n\n      case PT_RGB:\n      case PT_CMY:\n      case PT_Lab:\n      case PT_YUV:\n      case PT_YCbCr: return 3;\n\n      case PT_CMYK: return 4 ;\n      case PT_MCH2: return 2 ;\n      case PT_MCH3: return 3 ;\n      case PT_MCH4: return 4 ;\n      case PT_MCH5: return 5 ;\n      case PT_MCH6: return 6 ;\n      case PT_MCH7: return 7 ;\n      case PT_MCH8: return 8 ;\n      case PT_MCH9: return 9 ;\n      case PT_MCH10: return 10;\n      case PT_MCH11: return 11;\n      case PT_MCH12: return 12;\n      case PT_MCH13: return 12;\n      case PT_MCH14: return 14;\n      case PT_MCH15: return 15;\n\n      default:\n\n          FatalError(\"Unsupported color space of %d channels\", ColorChannels);\n          return -1;\n    }\n}",
+      "fn_code_pos": [
+        [
+          302,
+          0
+        ],
+        [
+          335,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ChanCountFromPixelType",
+        "parameters": {
+          "ColorChannels": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"utils.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

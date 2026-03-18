@@ -1,0 +1,269 @@
+Line	Count	Source	
+1		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+2		* Copyright 2005 Dominick Meglio	
+3		* Copyright (C) 2019 by Andrew Selivanov	
+4		* Copyright (C) 2021 by Brad House	
+5		*	
+6		* Permission to use, copy, modify, and distribute this	
+7		* software and its documentation for any purpose and without	
+8		* fee is hereby granted, provided that the above copyright	
+9		* notice appear in all copies and that both that copyright	
+10		* notice and this permission notice appear in supporting	
+11		* documentation, and that the name of M.I.T. not be used in	
+12		* advertising or publicity pertaining to distribution of the	
+13		* software without specific, written prior permission.	
+14		* M.I.T. makes no representations about the suitability of	
+15		* this software for any purpose.  It is provided "as is"	
+16		* without express or implied warranty.	
+17		*/	
+18			
+19		#include "ares_setup.h"	
+20			
+21		#ifdef HAVE_NETINET_IN_H	
+22		#  include <netinet/in.h>	
+23		#endif	
+24		#ifdef HAVE_NETDB_H	
+25		#  include <netdb.h>	
+26		#endif	
+27		#ifdef HAVE_ARPA_INET_H	
+28		#  include <arpa/inet.h>	
+29		#endif	
+30			
+31		#include "ares_nameser.h"	
+32			
+33		#ifdef HAVE_STRINGS_H	
+34		#  include <strings.h>	
+35		#endif	
+36			
+37		#ifdef HAVE_LIMITS_H	
+38		#  include <limits.h>	
+39		#endif	
+40			
+41		#include "ares.h"	
+42		#include "ares_dns.h"	
+43		#include "ares_inet_net_pton.h"	
+44		#include "ares_private.h"	
+45			
+46		int ares__addrinfo2hostent(const struct ares_addrinfo *ai, int family,	
+47		struct hostent **host)	
+48	36	{	
+49	36	struct ares_addrinfo_node *next;	
+50	36	struct ares_addrinfo_cname *next_cname;	
+51	36	char **aliases = NULL;	
+52	36	char *addrs = NULL;	
+53	36	int naliases = 0, naddrs = 0, alias = 0, i;	
+54			
+55	36	if (ai == NULL || host == NULL)	
+56	0	returnARES_EBADQUERY;	
+57			
+58	36	*host = ares_malloc(sizeof(**host));	
+59	36	if (!(*host))	
+60	0	{	
+61	0	goto enomem;	
+62	0	}	
+63	36	memset(*host, 0, sizeof(**host));	
+64			
+65		/* Use the first node of the response as the family, since hostent can only	
+66		* represent one family.  We assume getaddrinfo() returned a sorted list if	
+67		* the user requested AF_UNSPEC. */	
+68	36	if (family == AF_UNSPEC &&ai->nodes)	
+69	0	family = ai->nodes->ai_family;	
+70			
+71	36	next = ai->nodes;	
+72	42	while (next)	
+73	6	{	
+74	6	if(next->ai_family == family)	
+75	3	{	
+76	3	++naddrs;	
+77	3	}	
+78	6	next = next->ai_next;	
+79	6	}	
+80			
+81	36	next_cname = ai->cnames;	
+82	121	while (next_cname)	
+83	85	{	
+84	85	if(next_cname->alias)	
+85	85	++naliases;	
+86	85	next_cname = next_cname->next;	
+87	85	}	
+88			
+89	36	aliases = ares_malloc((naliases + 1) * sizeof(char *));	
+90	36	if (!aliases)	
+91	0	{	
+92	0	goto enomem;	
+93	0	}	
+94	36	(*host)->h_aliases = aliases;	
+95	36	memset(aliases, 0, (naliases + 1) * sizeof(char *));	
+96			
+97	36	if (naliases)	
+98	22	{	
+99	22	next_cname = ai->cnames;	
+100	107	while (next_cname)	
+101	85	{	
+102	85	if(next_cname->alias) {	
+103	85	aliases[alias] = ares_strdup(next_cname->alias);	
+104	85	if (!aliases[alias]){	
+105	0	goto enomem;	
+106	0	}	
+107	85	alias++;	
+108	85	}	
+109	85	next_cname = next_cname->next;	
+110	85	}	
+111	22	}	
+112			
+113			
+114	36	(*host)->h_addr_list = ares_malloc((naddrs + 1) * sizeof(char *));	
+115	36	if (!(*host)->h_addr_list)	
+116	0	{	
+117	0	goto enomem;	
+118	0	}	
+119			
+120	36	memset((*host)->h_addr_list, 0, (naddrs + 1) * sizeof(char *));	
+121			
+122	36	if (ai->cnames)	
+123	22	{	
+124	22	(*host)->h_name = ares_strdup(ai->cnames->name);	
+125	22	if ((*host)->h_name == NULL &&ai->cnames->name)	
+126	0	{	
+127	0	goto enomem;	
+128	0	}	
+129	22	}	
+130	14	else	
+131	14	{	
+132	14	(*host)->h_name = ares_strdup(ai->name);	
+133	14	if ((*host)->h_name == NULL && ai->name)	
+134	0	{	
+135	0	goto enomem;	
+136	0	}	
+137	14	}	
+138			
+139	36	(*host)->h_addrtype = family;	
+140	36	(*host)->h_length = (family == AF_INET)?	
+141	23	sizeof(struct in_addr):sizeof(struct ares_in6_addr);	
+142			
+143	36	if (naddrs)	
+144	3	{	
+145	3	addrs = ares_malloc(naddrs * (*host)->h_length);	
+146	3	if (!addrs)	
+147	0	{	
+148	0	goto enomem;	
+149	0	}	
+150			
+151	3	i = 0;	
+152	3	next = ai->nodes;	
+153	6	while (next)	
+154	3	{	
+155	3	if(next->ai_family == family)	
+156	3	{	
+157	3	(*host)->h_addr_list[i] = addrs + (i * (*host)->h_length);	
+158	3	if (family == AF_INET6)	
+159	1	{	
+160	1	memcpy((*host)->h_addr_list[i],	
+161	1	&(CARES_INADDR_CAST(struct sockaddr_in6 *, next->ai_addr)->sin6_addr),	
+162	1	(*host)->h_length);	
+163	1	}	
+164	2	else	
+165	2	{	
+166	2	memcpy((*host)->h_addr_list[i],	
+167	2	&(CARES_INADDR_CAST(struct sockaddr_in *, next->ai_addr)->sin_addr),	
+168	2	(*host)->h_length);	
+169	2	}	
+170	3	++i;	
+171	3	}	
+172	3	next = next->ai_next;	
+173	3	}	
+174			
+175	3	if (i == 0)	
+176	0	{	
+177	0	ares_free(addrs);	
+178	0	}	
+179	3	}	
+180			
+181	36	if (naddrs == 0 && naliases == 0)	
+182	11	{	
+183	11	ares_free_hostent(*host);	
+184	11	*host = NULL;	
+185	11	return ARES_ENODATA;	
+186	11	}	
+187			
+188	25	return ARES_SUCCESS;	
+189			
+190	0	enomem:	
+191	0	ares_free_hostent(*host);	
+192	0	*host =NULL;	
+193	0	returnARES_ENOMEM;	
+194	36	}	
+195			
+196			
+197		int ares__addrinfo2addrttl(const struct ares_addrinfo *ai, int family,	
+198		int req_naddrttls, struct ares_addrttl *addrttls,	
+199		struct ares_addr6ttl *addr6ttls, int *naddrttls)	
+200	36	{	
+201	36	struct ares_addrinfo_node *next;	
+202	36	struct ares_addrinfo_cname *next_cname;	
+203	36	int cname_ttl = INT_MAX;	
+204			
+205	36	if (family != AF_INET && family != AF_INET6)	
+206	0	returnARES_EBADQUERY;	
+207			
+208	36	if (ai == NULL || naddrttls == NULL)	
+209	0	returnARES_EBADQUERY;	
+210			
+211	36	if (family == AF_INET && addrttls == NULL)	
+212	0	returnARES_EBADQUERY;	
+213			
+214	36	if (family == AF_INET6 && addr6ttls == NULL)	
+215	0	returnARES_EBADQUERY;	
+216			
+217	36	if (req_naddrttls == 0)	
+218	0	returnARES_EBADQUERY;	
+219			
+220	36	*naddrttls = 0;	
+221			
+222	36	next_cname = ai->cnames;	
+223	121	while (next_cname)	
+224	85	{	
+225	85	if(next_cname->ttl < cname_ttl)	
+226	32	cname_ttl = next_cname->ttl;	
+227	85	next_cname = next_cname->next;	
+228	85	}	
+229			
+230	36	next = ai->nodes;	
+231	42	while (next)	
+232	6	{	
+233	6	if(next->ai_family == family)	
+234	3	{	
+235	3	if (*naddrttls < req_naddrttls)	
+236	3	{	
+237	3	if (family == AF_INET6)	
+238	1	{	
+239	1	if(next->ai_ttl > cname_ttl)	
+240	0	addr6ttls[*naddrttls].ttl = cname_ttl;	
+241	1	else	
+242	1	addr6ttls[*naddrttls].ttl = next->ai_ttl;	
+243			
+244	1	memcpy(&addr6ttls[*naddrttls].ip6addr,	
+245	1	&(CARES_INADDR_CAST(struct sockaddr_in6 *, next->ai_addr)->sin6_addr),	
+246	1	sizeof(struct ares_in6_addr));	
+247	1	}	
+248	2	else	
+249	2	{	
+250	2	if(next->ai_ttl > cname_ttl)	
+251	0	addrttls[*naddrttls].ttl = cname_ttl;	
+252	2	else	
+253	2	addrttls[*naddrttls].ttl = next->ai_ttl;	
+254	2	memcpy(&addrttls[*naddrttls].ipaddr,	
+255	2	&(CARES_INADDR_CAST(struct sockaddr_in *, next->ai_addr)->sin_addr),	
+256	2	sizeof(struct in_addr));	
+257	2	}	
+258	3	(*naddrttls)++;	
+259	3	}	
+260	3	}	
+261	6	next = next->ai_next;	
+262	6	}	
+263			
+264	36	return ARES_SUCCESS;	
+265	36	}	
+266			
+
+

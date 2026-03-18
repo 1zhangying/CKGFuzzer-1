@@ -1,0 +1,68 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int getopt(int argc, char *const argv[], const char *optstring)\n{\n    static char *place = EMSG; /* option letter processing */\n    char *oli;                 /* option letter list index */\n\n    if (optreset || *place == 0)\n    { /* update scanning pointer */\n        optreset = 0;\n        place = argv[optind];\n        if (optind >= argc || *place++ != '-')\n        {\n            /* Argument is absent or is not an option */\n            place = EMSG;\n            return (-1);\n        }\n        optopt = *place++;\n        if (optopt == '-' && *place == 0)\n        {\n            /* \"--\" => end of options */\n            ++optind;\n            place = EMSG;\n            return (-1);\n        }\n        if (optopt == 0)\n        {\n            /* Solitary '-', treat as a '-' option\n               if the program (eg su) is looking for it. */\n            place = EMSG;\n            if (strchr(optstring, '-') == NULL)\n                return -1;\n            optopt = '-';\n        }\n    }\n    else\n        optopt = *place++;\n\n    /* See if option letter is one the caller wanted... */\n    if (optopt == ':' || (oli = strchr(optstring, optopt)) == NULL)\n    {\n        if (*place == 0)\n            ++optind;\n        if (opterr && *optstring != ':')\n            (void)fprintf(stderr, \"unknown option -- %c\\n\", optopt);\n        return (BADCH);\n    }\n\n    /* Does this option need an argument? */\n    if (oli[1] != ':')\n    {\n        /* don't need argument */\n        optarg = NULL;\n        if (*place == 0)\n            ++optind;\n    }\n    else\n    {\n        /* Option-argument is either the rest of this argument or the\n           entire next argument. */\n        if (*place)\n            optarg = place;\n        else if (argc > ++optind)\n            optarg = argv[optind];\n        else\n        {\n            /* option-argument absent */\n            place = EMSG;\n            if (*optstring == ':')\n                return (BADARG);\n            if (opterr)\n                (void)fprintf(stderr, \"option requires an argument -- %c\\n\",\n                              optopt);\n            return (BADCH);\n        }\n        place = EMSG;\n        ++optind;\n    }\n    return (optopt); /* return option letter */\n}",
+      "fn_code_pos": [
+        [
+          52,
+          0
+        ],
+        [
+          129,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "getopt",
+        "parameters": {
+          "argc": "int",
+          "argv": "char",
+          "optstring": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

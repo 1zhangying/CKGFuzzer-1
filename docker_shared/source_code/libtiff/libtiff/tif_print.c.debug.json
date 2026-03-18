@@ -1,0 +1,249 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void _TIFFPrintField(FILE *fd, const TIFFField *fip,\n                            uint32_t value_count, void *raw_data)\n{\n    uint32_t j;\n\n    /* Print a user-friendly name for tags of relatively common use, but */\n    /* which aren't registered by libtiff itself. */\n    const char *field_name = fip->field_name;\n    if (TIFFFieldIsAnonymous(fip))\n    {\n        for (size_t i = 0; i < NTAGS; ++i)\n        {\n            if (fip->field_tag == tagnames[i].tag)\n            {\n                field_name = tagnames[i].name;\n                break;\n            }\n        }\n    }\n    fprintf(fd, \"  %s: \", field_name);\n\n    for (j = 0; j < value_count; j++)\n    {\n        if (fip->field_type == TIFF_BYTE)\n            fprintf(fd, \"%\" PRIu8, ((uint8_t *)raw_data)[j]);\n        else if (fip->field_type == TIFF_UNDEFINED)\n            fprintf(fd, \"0x%\" PRIx8, ((uint8_t *)raw_data)[j]);\n        else if (fip->field_type == TIFF_SBYTE)\n            fprintf(fd, \"%\" PRId8, ((int8_t *)raw_data)[j]);\n        else if (fip->field_type == TIFF_SHORT)\n            fprintf(fd, \"%\" PRIu16, ((uint16_t *)raw_data)[j]);\n        else if (fip->field_type == TIFF_SSHORT)\n            fprintf(fd, \"%\" PRId16, ((int16_t *)raw_data)[j]);\n        else if (fip->field_type == TIFF_LONG)\n            fprintf(fd, \"%\" PRIu32, ((uint32_t *)raw_data)[j]);\n        else if (fip->field_type == TIFF_SLONG)\n            fprintf(fd, \"%\" PRId32, ((int32_t *)raw_data)[j]);\n        else if (fip->field_type == TIFF_IFD)\n            fprintf(fd, \"0x%\" PRIx32, ((uint32_t *)raw_data)[j]);\n        else if (fip->field_type == TIFF_RATIONAL ||\n                 fip->field_type == TIFF_SRATIONAL)\n        {\n            int tv_size = TIFFFieldSetGetSize(fip);\n            if (tv_size == 8)\n                fprintf(fd, \"%lf\", ((double *)raw_data)[j]);\n            else\n                fprintf(fd, \"%f\", ((float *)raw_data)[j]);\n        }\n        else if (fip->field_type == TIFF_FLOAT)\n            fprintf(fd, \"%f\", ((float *)raw_data)[j]);\n        else if (fip->field_type == TIFF_LONG8)\n            fprintf(fd, \"%\" PRIu64, ((uint64_t *)raw_data)[j]);\n        else if (fip->field_type == TIFF_SLONG8)\n            fprintf(fd, \"%\" PRId64, ((int64_t *)raw_data)[j]);\n        else if (fip->field_type == TIFF_IFD8)\n            fprintf(fd, \"0x%\" PRIx64, ((uint64_t *)raw_data)[j]);\n        else if (fip->field_type == TIFF_DOUBLE)\n            fprintf(fd, \"%lf\", ((double *)raw_data)[j]);\n        else if (fip->field_type == TIFF_ASCII)\n        {\n            fprintf(fd, \"%s\", (char *)raw_data);\n            break;\n        }\n        else\n        {\n            fprintf(fd, \"<unsupported data type in TIFFPrint>\");\n            break;\n        }\n\n        if (j < value_count - 1)\n            fprintf(fd, \",\");\n    }\n\n    fprintf(fd, \"\\n\");\n}",
+      "fn_code_pos": [
+        [
+          74,
+          0
+        ],
+        [
+          148,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFPrintField",
+        "parameters": {
+          "fd": "FILE",
+          "fip": "TIFFField",
+          "value_count": "uint32_t",
+          "raw_data": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int _TIFFPrettyPrintField(TIFF *tif, const TIFFField *fip, FILE *fd,\n                                 uint32_t tag, uint32_t value_count,\n                                 void *raw_data)\n{\n    (void)tif;\n\n    /* do not try to pretty print auto-defined fields */\n    if (TIFFFieldIsAnonymous(fip))\n    {\n        return 0;\n    }\n\n    switch (tag)\n    {\n        case TIFFTAG_INKSET:\n            if (value_count == 2 && fip->field_type == TIFF_SHORT)\n            {\n                fprintf(fd, \"  Ink Set: \");\n                switch (*((uint16_t *)raw_data))\n                {\n                    case INKSET_CMYK:\n                        fprintf(fd, \"CMYK\\n\");\n                        break;\n                    default:\n                        fprintf(fd, \"%\" PRIu16 \" (0x%\" PRIx16 \")\\n\",\n                                *((uint16_t *)raw_data),\n                                *((uint16_t *)raw_data));\n                        break;\n                }\n                return 1;\n            }\n            return 0;\n\n        case TIFFTAG_DOTRANGE:\n            if (value_count == 2 && fip->field_type == TIFF_SHORT)\n            {\n                fprintf(fd, \"  Dot Range: %\" PRIu16 \"-%\" PRIu16 \"\\n\",\n                        ((uint16_t *)raw_data)[0], ((uint16_t *)raw_data)[1]);\n                return 1;\n            }\n            return 0;\n\n        case TIFFTAG_WHITEPOINT:\n            if (value_count == 2 && fip->field_type == TIFF_RATIONAL)\n            {\n                fprintf(fd, \"  White Point: %g-%g\\n\", ((float *)raw_data)[0],\n                        ((float *)raw_data)[1]);\n                return 1;\n            }\n            return 0;\n\n        case TIFFTAG_XMLPACKET:\n        {\n            uint32_t i;\n\n            fprintf(fd, \"  XMLPacket (XMP Metadata):\\n\");\n            for (i = 0; i < value_count; i++)\n                fputc(((char *)raw_data)[i], fd);\n            fprintf(fd, \"\\n\");\n            return 1;\n        }\n        case TIFFTAG_RICHTIFFIPTC:\n            fprintf(fd, \"  RichTIFFIPTC Data: <present>, %\" PRIu32 \" bytes\\n\",\n                    value_count);\n            return 1;\n\n        case TIFFTAG_PHOTOSHOP:\n            fprintf(fd, \"  Photoshop Data: <present>, %\" PRIu32 \" bytes\\n\",\n                    value_count);\n            return 1;\n\n        case TIFFTAG_ICCPROFILE:\n            fprintf(fd, \"  ICC Profile: <present>, %\" PRIu32 \" bytes\\n\",\n                    value_count);\n            return 1;\n\n        case TIFFTAG_STONITS:\n            if (value_count == 1 && fip->field_type == TIFF_DOUBLE)\n            {\n                fprintf(fd, \"  Sample to Nits conversion factor: %.4e\\n\",\n                        *((double *)raw_data));\n                return 1;\n            }\n            return 0;\n    }\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          150,
+          0
+        ],
+        [
+          237,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFPrettyPrintField",
+        "parameters": {
+          "tif": "TIFF",
+          "fip": "TIFFField",
+          "fd": "FILE",
+          "tag": "uint32_t",
+          "value_count": "uint32_t",
+          "raw_data": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void TIFFPrintDirectory(TIFF *tif, FILE *fd, long flags)\n{\n    TIFFDirectory *td = &tif->tif_dir;\n    char *sep;\n    long l, n;\n\n    fprintf(fd, \"TIFF Directory at offset 0x%\" PRIx64 \" (%\" PRIu64 \")\\n\",\n            tif->tif_diroff, tif->tif_diroff);\n    if (TIFFFieldSet(tif, FIELD_SUBFILETYPE))\n    {\n        fprintf(fd, \"  Subfile Type:\");\n        sep = \" \";\n        if (td->td_subfiletype & FILETYPE_REDUCEDIMAGE)\n        {\n            fprintf(fd, \"%sreduced-resolution image\", sep);\n            sep = \"/\";\n        }\n        if (td->td_subfiletype & FILETYPE_PAGE)\n        {\n            fprintf(fd, \"%smulti-page document\", sep);\n            sep = \"/\";\n        }\n        if (td->td_subfiletype & FILETYPE_MASK)\n            fprintf(fd, \"%stransparency mask\", sep);\n        fprintf(fd, \" (%\" PRIu32 \" = 0x%\" PRIx32 \")\\n\", td->td_subfiletype,\n                td->td_subfiletype);\n    }\n    if (TIFFFieldSet(tif, FIELD_IMAGEDIMENSIONS))\n    {\n        fprintf(fd, \"  Image Width: %\" PRIu32 \" Image Length: %\" PRIu32,\n                td->td_imagewidth, td->td_imagelength);\n        if (TIFFFieldSet(tif, FIELD_IMAGEDEPTH))\n            fprintf(fd, \" Image Depth: %\" PRIu32, td->td_imagedepth);\n        fprintf(fd, \"\\n\");\n    }\n    if (TIFFFieldSet(tif, FIELD_TILEDIMENSIONS))\n    {\n        fprintf(fd, \"  Tile Width: %\" PRIu32 \" Tile Length: %\" PRIu32,\n                td->td_tilewidth, td->td_tilelength);\n        if (TIFFFieldSet(tif, FIELD_TILEDEPTH))\n            fprintf(fd, \" Tile Depth: %\" PRIu32, td->td_tiledepth);\n        fprintf(fd, \"\\n\");\n    }\n    if (TIFFFieldSet(tif, FIELD_RESOLUTION))\n    {\n        fprintf(fd, \"  Resolution: %g, %g\", td->td_xresolution,\n                td->td_yresolution);\n        if (TIFFFieldSet(tif, FIELD_RESOLUTIONUNIT))\n        {\n            switch (td->td_resolutionunit)\n            {\n                case RESUNIT_NONE:\n                    fprintf(fd, \" (unitless)\");\n                    break;\n                case RESUNIT_INCH:\n                    fprintf(fd, \" pixels/inch\");\n                    break;\n                case RESUNIT_CENTIMETER:\n                    fprintf(fd, \" pixels/cm\");\n                    break;\n                default:\n                    fprintf(fd, \" (unit %\" PRIu16 \" = 0x%\" PRIx16 \")\",\n                            td->td_resolutionunit, td->td_resolutionunit);\n                    break;\n            }\n        }\n        fprintf(fd, \"\\n\");\n    }\n    if (TIFFFieldSet(tif, FIELD_POSITION))\n        fprintf(fd, \"  Position: %g, %g\\n\", td->td_xposition, td->td_yposition);\n    if (TIFFFieldSet(tif, FIELD_BITSPERSAMPLE))\n        fprintf(fd, \"  Bits/Sample: %\" PRIu16 \"\\n\", td->td_bitspersample);\n    if (TIFFFieldSet(tif, FIELD_SAMPLEFORMAT))\n    {\n        fprintf(fd, \"  Sample Format: \");\n        switch (td->td_sampleformat)\n        {\n            case SAMPLEFORMAT_VOID:\n                fprintf(fd, \"void\\n\");\n                break;\n            case SAMPLEFORMAT_INT:\n                fprintf(fd, \"signed integer\\n\");\n                break;\n            case SAMPLEFORMAT_UINT:\n                fprintf(fd, \"unsigned integer\\n\");\n                break;\n            case SAMPLEFORMAT_IEEEFP:\n                fprintf(fd, \"IEEE floating point\\n\");\n                break;\n            case SAMPLEFORMAT_COMPLEXINT:\n                fprintf(fd, \"complex signed integer\\n\");\n                break;\n            case SAMPLEFORMAT_COMPLEXIEEEFP:\n                fprintf(fd, \"complex IEEE floating point\\n\");\n                break;\n            default:\n                fprintf(fd, \"%\" PRIu16 \" (0x%\" PRIx16 \")\\n\",\n                        td->td_sampleformat, td->td_sampleformat);\n                break;\n        }\n    }\n    if (TIFFFieldSet(tif, FIELD_COMPRESSION))\n    {\n        const TIFFCodec *c = TIFFFindCODEC(td->td_compression);\n        fprintf(fd, \"  Compression Scheme: \");\n        if (c)\n            fprintf(fd, \"%s\\n\", c->name);\n        else\n            fprintf(fd, \"%\" PRIu16 \" (0x%\" PRIx16 \")\\n\", td->td_compression,\n                    td->td_compression);\n    }\n    if (TIFFFieldSet(tif, FIELD_PHOTOMETRIC))\n    {\n        fprintf(fd, \"  Photometric Interpretation: \");\n        if (td->td_photometric < NPHOTONAMES)\n            fprintf(fd, \"%s\\n\", photoNames[td->td_photometric]);\n        else\n        {\n            switch (td->td_photometric)\n            {\n                case PHOTOMETRIC_LOGL:\n                    fprintf(fd, \"CIE Log2(L)\\n\");\n                    break;\n                case PHOTOMETRIC_LOGLUV:\n                    fprintf(fd, \"CIE Log2(L) (u',v')\\n\");\n                    break;\n                default:\n                    fprintf(fd, \"%\" PRIu16 \" (0x%\" PRIx16 \")\\n\",\n                            td->td_photometric, td->td_photometric);\n                    break;\n            }\n        }\n    }\n    if (TIFFFieldSet(tif, FIELD_EXTRASAMPLES) && td->td_extrasamples)\n    {\n        uint16_t i;\n        fprintf(fd, \"  Extra Samples: %\" PRIu16 \"<\", td->td_extrasamples);\n        sep = \"\";\n        for (i = 0; i < td->td_extrasamples; i++)\n        {\n            switch (td->td_sampleinfo[i])\n            {\n                case EXTRASAMPLE_UNSPECIFIED:\n                    fprintf(fd, \"%sunspecified\", sep);\n                    break;\n                case EXTRASAMPLE_ASSOCALPHA:\n                    fprintf(fd, \"%sassoc-alpha\", sep);\n                    break;\n                case EXTRASAMPLE_UNASSALPHA:\n                    fprintf(fd, \"%sunassoc-alpha\", sep);\n                    break;\n                default:\n                    fprintf(fd, \"%s%\" PRIu16 \" (0x%\" PRIx16 \")\", sep,\n                            td->td_sampleinfo[i], td->td_sampleinfo[i]);\n                    break;\n            }\n            sep = \", \";\n        }\n        fprintf(fd, \">\\n\");\n    }\n    if (TIFFFieldSet(tif, FIELD_INKNAMES))\n    {\n        char *cp;\n        uint16_t i;\n        fprintf(fd, \"  Ink Names: \");\n        i = td->td_samplesperpixel;\n        sep = \"\";\n        for (cp = td->td_inknames;\n             i > 0 && cp < td->td_inknames + td->td_inknameslen;\n             cp = strchr(cp, '\\0') + 1, i--)\n        {\n            size_t max_chars = td->td_inknameslen - (cp - td->td_inknames);\n            fputs(sep, fd);\n            _TIFFprintAsciiBounded(fd, cp, max_chars);\n            sep = \", \";\n        }\n        fputs(\"\\n\", fd);\n    }\n    if (TIFFFieldSet(tif, FIELD_NUMBEROFINKS))\n    {\n        fprintf(fd, \"  NumberOfInks: %d\\n\", td->td_numberofinks);\n    }\n    if (TIFFFieldSet(tif, FIELD_THRESHHOLDING))\n    {\n        fprintf(fd, \"  Thresholding: \");\n        switch (td->td_threshholding)\n        {\n            case THRESHHOLD_BILEVEL:\n                fprintf(fd, \"bilevel art scan\\n\");\n                break;\n            case THRESHHOLD_HALFTONE:\n                fprintf(fd, \"halftone or dithered scan\\n\");\n                break;\n            case THRESHHOLD_ERRORDIFFUSE:\n                fprintf(fd, \"error diffused\\n\");\n                break;\n            default:\n                fprintf(fd, \"%\" PRIu16 \" (0x%\" PRIx16 \")\\n\",\n                        td->td_threshholding, td->td_threshholding);\n                break;\n        }\n    }\n    if (TIFFFieldSet(tif, FIELD_FILLORDER))\n    {\n        fprintf(fd, \"  FillOrder: \");\n        switch (td->td_fillorder)\n        {\n            case FILLORDER_MSB2LSB:\n                fprintf(fd, \"msb-to-lsb\\n\");\n                break;\n            case FILLORDER_LSB2MSB:\n                fprintf(fd, \"lsb-to-msb\\n\");\n                break;\n            default:\n                fprintf(fd, \"%\" PRIu16 \" (0x%\" PRIx16 \")\\n\", td->td_fillorder,\n                        td->td_fillorder);\n                break;\n        }\n    }\n    if (TIFFFieldSet(tif, FIELD_YCBCRSUBSAMPLING))\n    {\n        fprintf(fd, \"  YCbCr Subsampling: %\" PRIu16 \", %\" PRIu16 \"\\n\",\n                td->td_ycbcrsubsampling[0], td->td_ycbcrsubsampling[1]);\n    }\n    if (TIFFFieldSet(tif, FIELD_YCBCRPOSITIONING))\n    {\n        fprintf(fd, \"  YCbCr Positioning: \");\n        switch (td->td_ycbcrpositioning)\n        {\n            case YCBCRPOSITION_CENTERED:\n                fprintf(fd, \"centered\\n\");\n                break;\n            case YCBCRPOSITION_COSITED:\n                fprintf(fd, \"cosited\\n\");\n                break;\n            default:\n                fprintf(fd, \"%\" PRIu16 \" (0x%\" PRIx16 \")\\n\",\n                        td->td_ycbcrpositioning, td->td_ycbcrpositioning);\n                break;\n        }\n    }\n    if (TIFFFieldSet(tif, FIELD_HALFTONEHINTS))\n        fprintf(fd, \"  Halftone Hints: light %\" PRIu16 \" dark %\" PRIu16 \"\\n\",\n                td->td_halftonehints[0], td->td_halftonehints[1]);\n    if (TIFFFieldSet(tif, FIELD_ORIENTATION))\n    {\n        fprintf(fd, \"  Orientation: \");\n        if (td->td_orientation < NORIENTNAMES)\n            fprintf(fd, \"%s\\n\", orientNames[td->td_orientation]);\n        else\n            fprintf(fd, \"%\" PRIu16 \" (0x%\" PRIx16 \")\\n\", td->td_orientation,\n                    td->td_orientation);\n    }\n    if (TIFFFieldSet(tif, FIELD_SAMPLESPERPIXEL))\n        fprintf(fd, \"  Samples/Pixel: %\" PRIx16 \"\\n\", td->td_samplesperpixel);\n    if (TIFFFieldSet(tif, FIELD_ROWSPERSTRIP))\n    {\n        fprintf(fd, \"  Rows/Strip: \");\n        if (td->td_rowsperstrip == (uint32_t)-1)\n            fprintf(fd, \"(infinite)\\n\");\n        else\n            fprintf(fd, \"%\" PRIu32 \"\\n\", td->td_rowsperstrip);\n    }\n    if (TIFFFieldSet(tif, FIELD_MINSAMPLEVALUE))\n        fprintf(fd, \"  Min Sample Value: %\" PRIu16 \"\\n\", td->td_minsamplevalue);\n    if (TIFFFieldSet(tif, FIELD_MAXSAMPLEVALUE))\n        fprintf(fd, \"  Max Sample Value: %\" PRIu16 \"\\n\", td->td_maxsamplevalue);\n    if (TIFFFieldSet(tif, FIELD_SMINSAMPLEVALUE))\n    {\n        int i;\n        int count =\n            (tif->tif_flags & TIFF_PERSAMPLE) ? td->td_samplesperpixel : 1;\n        fprintf(fd, \"  SMin Sample Value:\");\n        for (i = 0; i < count; ++i)\n            fprintf(fd, \" %g\", td->td_sminsamplevalue[i]);\n        fprintf(fd, \"\\n\");\n    }\n    if (TIFFFieldSet(tif, FIELD_SMAXSAMPLEVALUE))\n    {\n        int i;\n        int count =\n            (tif->tif_flags & TIFF_PERSAMPLE) ? td->td_samplesperpixel : 1;\n        fprintf(fd, \"  SMax Sample Value:\");\n        for (i = 0; i < count; ++i)\n            fprintf(fd, \" %g\", td->td_smaxsamplevalue[i]);\n        fprintf(fd, \"\\n\");\n    }\n    if (TIFFFieldSet(tif, FIELD_PLANARCONFIG))\n    {\n        fprintf(fd, \"  Planar Configuration: \");\n        switch (td->td_planarconfig)\n        {\n            case PLANARCONFIG_CONTIG:\n                fprintf(fd, \"single image plane\\n\");\n                break;\n            case PLANARCONFIG_SEPARATE:\n                fprintf(fd, \"separate image planes\\n\");\n                break;\n            default:\n                fprintf(fd, \"%\" PRIu16 \" (0x%\" PRIx16 \")\\n\",\n                        td->td_planarconfig, td->td_planarconfig);\n                break;\n        }\n    }\n    if (TIFFFieldSet(tif, FIELD_PAGENUMBER))\n        fprintf(fd, \"  Page Number: %\" PRIu16 \"-%\" PRIu16 \"\\n\",\n                td->td_pagenumber[0], td->td_pagenumber[1]);\n    if (TIFFFieldSet(tif, FIELD_COLORMAP))\n    {\n        fprintf(fd, \"  Color Map: \");\n        if (flags & TIFFPRINT_COLORMAP)\n        {\n            fprintf(fd, \"\\n\");\n            n = 1L << td->td_bitspersample;\n            for (l = 0; l < n; l++)\n                fprintf(fd, \"   %5ld: %5\" PRIu16 \" %5\" PRIu16 \" %5\" PRIu16 \"\\n\",\n                        l, td->td_colormap[0][l], td->td_colormap[1][l],\n                        td->td_colormap[2][l]);\n        }\n        else\n            fprintf(fd, \"(present)\\n\");\n    }\n    if (TIFFFieldSet(tif, FIELD_REFBLACKWHITE))\n    {\n        int i;\n        fprintf(fd, \"  Reference Black/White:\\n\");\n        for (i = 0; i < 3; i++)\n            fprintf(fd, \"    %2d: %5g %5g\\n\", i,\n                    td->td_refblackwhite[2 * i + 0],\n                    td->td_refblackwhite[2 * i + 1]);\n    }\n    if (TIFFFieldSet(tif, FIELD_TRANSFERFUNCTION))\n    {\n        fprintf(fd, \"  Transfer Function: \");\n        if (flags & TIFFPRINT_CURVES)\n        {\n            fprintf(fd, \"\\n\");\n            n = 1L << td->td_bitspersample;\n            for (l = 0; l < n; l++)\n            {\n                uint16_t i;\n                fprintf(fd, \"    %2ld: %5\" PRIu16, l,\n                        td->td_transferfunction[0][l]);\n                for (i = 1;\n                     i < td->td_samplesperpixel - td->td_extrasamples && i < 3;\n                     i++)\n                    fprintf(fd, \" %5\" PRIu16, td->td_transferfunction[i][l]);\n                fputc('\\n', fd);\n            }\n        }\n        else\n            fprintf(fd, \"(present)\\n\");\n    }\n    if (TIFFFieldSet(tif, FIELD_SUBIFD) && (td->td_subifd))\n    {\n        uint16_t i;\n        fprintf(fd, \"  SubIFD Offsets:\");\n        for (i = 0; i < td->td_nsubifd; i++)\n            fprintf(fd, \" %5\" PRIu64, td->td_subifd[i]);\n        fputc('\\n', fd);\n    }\n\n    /*\n    ** Custom tag support.\n    */\n    {\n        int i;\n        short count;\n\n        count = (short)TIFFGetTagListCount(tif);\n        for (i = 0; i < count; i++)\n        {\n            uint32_t tag = TIFFGetTagListEntry(tif, i);\n            const TIFFField *fip;\n            uint32_t value_count;\n            int mem_alloc = 0;\n            void *raw_data = NULL;\n            uint16_t dotrange[2]; /* must be kept in that scope and not moved in\n                                     the below TIFFTAG_DOTRANGE specific case */\n\n            fip = TIFFFieldWithTag(tif, tag);\n            if (fip == NULL)\n                continue;\n\n            if (fip->field_passcount)\n            {\n                if (fip->field_readcount == TIFF_VARIABLE2)\n                {\n                    if (TIFFGetField(tif, tag, &value_count, &raw_data) != 1)\n                        continue;\n                }\n                else if (fip->field_readcount == TIFF_VARIABLE)\n                {\n                    uint16_t small_value_count;\n                    if (TIFFGetField(tif, tag, &small_value_count, &raw_data) !=\n                        1)\n                        continue;\n                    value_count = small_value_count;\n                }\n                else\n                {\n                    assert(fip->field_readcount == TIFF_VARIABLE ||\n                           fip->field_readcount == TIFF_VARIABLE2);\n                    continue;\n                }\n            }\n            else\n            {\n                if (fip->field_readcount == TIFF_VARIABLE ||\n                    fip->field_readcount == TIFF_VARIABLE2)\n                    value_count = 1;\n                else if (fip->field_readcount == TIFF_SPP)\n                    value_count = td->td_samplesperpixel;\n                else\n                    value_count = fip->field_readcount;\n                if (fip->field_tag == TIFFTAG_DOTRANGE &&\n                    strcmp(fip->field_name, \"DotRange\") == 0)\n                {\n                    /* TODO: This is an evil exception and should not have been\n                       handled this way ... likely best if we move it into\n                       the directory structure with an explicit field in\n                       libtiff 4.1 and assign it a FIELD_ value */\n                    raw_data = dotrange;\n                    TIFFGetField(tif, tag, dotrange + 0, dotrange + 1);\n                }\n                else if (fip->field_type == TIFF_ASCII ||\n                         fip->field_readcount == TIFF_VARIABLE ||\n                         fip->field_readcount == TIFF_VARIABLE2 ||\n                         fip->field_readcount == TIFF_SPP || value_count > 1)\n                {\n                    if (TIFFGetField(tif, tag, &raw_data) != 1)\n                        continue;\n                }\n                else\n                {\n                    /*--: Rational2Double: For Rationals evaluate\n                     * \"set_field_type\" to determine internal storage size. */\n                    int tv_size = TIFFFieldSetGetSize(fip);\n                    raw_data = _TIFFmallocExt(tif, tv_size * value_count);\n                    mem_alloc = 1;\n                    if (TIFFGetField(tif, tag, raw_data) != 1)\n                    {\n                        _TIFFfreeExt(tif, raw_data);\n                        continue;\n                    }\n                }\n            }\n\n            /*\n             * Catch the tags which needs to be specially handled\n             * and pretty print them. If tag not handled in\n             * _TIFFPrettyPrintField() fall down and print it as\n             * any other tag.\n             */\n            if (raw_data != NULL &&\n                !_TIFFPrettyPrintField(tif, fip, fd, tag, value_count,\n                                       raw_data))\n                _TIFFPrintField(fd, fip, value_count, raw_data);\n\n            if (mem_alloc)\n                _TIFFfreeExt(tif, raw_data);\n        }\n    }\n\n    if (tif->tif_tagmethods.printdir)\n        (*tif->tif_tagmethods.printdir)(tif, fd, flags);\n\n    if ((flags & TIFFPRINT_STRIPS) && TIFFFieldSet(tif, FIELD_STRIPOFFSETS))\n    {\n        uint32_t s;\n\n        fprintf(fd, \"  %\" PRIu32 \" %s:\\n\", td->td_nstrips,\n                isTiled(tif) ? \"Tiles\" : \"Strips\");\n        for (s = 0; s < td->td_nstrips; s++)\n            fprintf(fd, \"    %3\" PRIu32 \": [%8\" PRIu64 \", %8\" PRIu64 \"]\\n\", s,\n                    TIFFGetStrileOffset(tif, s),\n                    TIFFGetStrileByteCount(tif, s));\n    }\n}",
+      "fn_code_pos": [
+        [
+          243,
+          0
+        ],
+        [
+          721,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFPrintDirectory",
+        "parameters": {
+          "tif": "TIFF",
+          "fd": "FILE",
+          "flags": "long"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _TIFFprintAscii(FILE *fd, const char *cp)\n{\n    _TIFFprintAsciiBounded(fd, cp, strlen(cp));\n}",
+      "fn_code_pos": [
+        [
+          723,
+          0
+        ],
+        [
+          726,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFprintAscii",
+        "parameters": {
+          "fd": "FILE",
+          "cp": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void _TIFFprintAsciiBounded(FILE *fd, const char *cp, size_t max_chars)\n{\n    for (; max_chars > 0 && *cp != '\\0'; cp++, max_chars--)\n    {\n        const char *tp;\n\n        if (isprint((int)*cp))\n        {\n            fputc(*cp, fd);\n            continue;\n        }\n        for (tp = \"\\tt\\bb\\rr\\nn\\vv\"; *tp; tp++)\n            if (*tp++ == *cp)\n                break;\n        if (*tp)\n            fprintf(fd, \"\\\\%c\", *tp);\n        else\n            fprintf(fd, \"\\\\%03o\", *cp & 0xff);\n    }\n}",
+      "fn_code_pos": [
+        [
+          728,
+          0
+        ],
+        [
+          747,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFprintAsciiBounded",
+        "parameters": {
+          "fd": "FILE",
+          "cp": "char",
+          "max_chars": "size_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _TIFFprintAsciiTag(FILE *fd, const char *name, const char *value)\n{\n    fprintf(fd, \"  %s: \\\"\", name);\n    _TIFFprintAscii(fd, value);\n    fprintf(fd, \"\\\"\\n\");\n}",
+      "fn_code_pos": [
+        [
+          749,
+          0
+        ],
+        [
+          754,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFprintAsciiTag",
+        "parameters": {
+          "fd": "FILE",
+          "name": "char",
+          "value": "char"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "_TIFFprintAsciiBounded(FILE *fd, const char *cp, size_t max_chars)",
+      "fn_dec_pos": [
+        [
+          34,
+          12
+        ],
+        [
+          34,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFprintAsciiBounded",
+        "parameters": {
+          "fd": "FILE",
+          "cp": "char",
+          "max_chars": "size_t"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct tagname\n{\n    uint16_t tag;\n    const char *name;\n}",
+      {
+        "tag": "uint16_t",
+        "char": "const"
+      },
+      "tagname",
+      [
+        64,
+        13
+      ],
+      [
+        68,
+        1
+      ]
+    ],
+    [
+      "struct tagname\n{\n    uint16_t tag;\n    const char *name;\n}",
+      {
+        "tag": "uint16_t",
+        "char": "const"
+      },
+      "tagname",
+      [
+        64,
+        13
+      ],
+      [
+        68,
+        1
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <ctype.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -1,0 +1,359 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseUriReplyOK) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com\", T_URI))\n    .add_answer(new DNSUriRR(\"example.com\", 100, 10, 20, \"uri.example.com\"))\n    .add_answer(new DNSUriRR(\"example.com\", 200, 11, 21, \"uri2.example.com\"));\n  std::vector<byte> data = pkt.data();\n\n  struct ares_uri_reply* uri = nullptr;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_uri_reply(data.data(), data.size(), &uri));\n  ASSERT_NE(nullptr, uri);\n\n  EXPECT_EQ(\"uri.example.com\", std::string(uri->uri));\n  EXPECT_EQ(10, uri->priority);\n  EXPECT_EQ(20, uri->weight);\n  EXPECT_EQ(100, uri->ttl);\n\n  struct ares_uri_reply* uri2 = uri->next;\n  ASSERT_NE(nullptr, uri2);\n  EXPECT_EQ(\"uri2.example.com\", std::string(uri2->uri));\n  EXPECT_EQ(11, uri2->priority);\n  EXPECT_EQ(21, uri2->weight);\n  EXPECT_EQ(200, uri2->ttl);\n  EXPECT_EQ(nullptr, uri2->next);\n\n  ares_free_data(uri);\n}",
+      "fn_code_pos": [
+        [
+          9,
+          0
+        ],
+        [
+          35,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseUriReplySingle) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.abc.def.com\", T_URI))\n    .add_answer(new DNSUriRR(\"example.abc.def.com\", 180, 0, 10, \"example.abc.def.com\"))\n    .add_auth(new DNSNsRR(\"abc.def.com\", 44, \"else1.where.com\"))\n    .add_auth(new DNSNsRR(\"abc.def.com\", 44, \"else2.where.com\"))\n    .add_auth(new DNSNsRR(\"abc.def.com\", 44, \"else3.where.com\"))\n    .add_auth(new DNSNsRR(\"abc.def.com\", 44, \"else4.where.com\"))\n    .add_auth(new DNSNsRR(\"abc.def.com\", 44, \"else5.where.com\"))\n    .add_additional(new DNSARR(\"else2.where.com\", 42, {172,19,0,1}))\n    .add_additional(new DNSARR(\"else5.where.com\", 42, {172,19,0,2}));\n  std::vector<byte> data = pkt.data();\n\n  struct ares_uri_reply* uri = nullptr;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_uri_reply(data.data(), data.size(), &uri));\n  ASSERT_NE(nullptr, uri);\n\n  EXPECT_EQ(\"example.abc.def.com\", std::string(uri->uri));\n  EXPECT_EQ(0, uri->priority);\n  EXPECT_EQ(10, uri->weight);\n  EXPECT_EQ(180, uri->ttl);\n  EXPECT_EQ(nullptr, uri->next);\n\n  ares_free_data(uri);\n}",
+      "fn_code_pos": [
+        [
+          37,
+          0
+        ],
+        [
+          62,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseUriReplyMalformed) {\n  std::vector<byte> data = {\n    0x12, 0x34,  // qid\n    0x84, // response + query + AA + not-TC + not-RD\n    0x00, // not-RA + not-Z + not-AD + not-CD + rc=NoError\n    0x00, 0x01,  // num questions\n    0x00, 0x01,  // num answer RRs\n    0x00, 0x00,  // num authority RRs\n    0x00, 0x00,  // num additional RRs\n    // Question\n    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x01, 0x00,  // type URI\n    0x00, 0x01,  // class IN\n    // Answer 1\n    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x01, 0x00,  // RR type\n    0x00, 0x01,  // class IN\n    0x01, 0x02, 0x03, 0x04, // TTL\n    0x00, 0x04,  // rdata length -- too short\n    0x02, 0x03, 0x04, 0x05,\n  };\n\n  struct ares_uri_reply* uri = nullptr;\n  EXPECT_EQ(ARES_EBADRESP, ares_parse_uri_reply(data.data(), data.size(), &uri));\n  ASSERT_EQ(nullptr, uri);\n}",
+      "fn_code_pos": [
+        [
+          64,
+          0
+        ],
+        [
+          93,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseUriReplyMultiple) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_ra().set_rd()\n    .add_question(new DNSQuestion(\"uri.example.com\", T_URI))\n    .add_answer(new DNSUriRR(\"uri.example.com\", 600, 0, 5, \"a1.uri.example.com\"))\n    .add_answer(new DNSUriRR(\"uri.example.com\", 660, 0, 5, \"a2.uri.example.com\"))\n    .add_answer(new DNSUriRR(\"uri.example.com\", 720, 0, 5, \"a3.uri.example.com\"))\n    .add_auth(new DNSNsRR(\"example.com\", 300, \"ns1.example.com\"))\n    .add_auth(new DNSNsRR(\"example.com\", 300, \"ns2.example.com\"))\n    .add_auth(new DNSNsRR(\"example.com\", 300, \"ns3.example.com\"))\n    .add_additional(new DNSARR(\"a1.uri.example.com\", 300, {172,19,1,1}))\n    .add_additional(new DNSARR(\"a2.uri.example.com\", 300, {172,19,1,2}))\n    .add_additional(new DNSARR(\"a3.uri.example.com\", 300, {172,19,1,3}))\n    .add_additional(new DNSARR(\"n1.example.com\", 300, {172,19,0,1}))\n    .add_additional(new DNSARR(\"n2.example.com\", 300, {172,19,0,2}))\n    .add_additional(new DNSARR(\"n3.example.com\", 300, {172,19,0,3}));\n  std::vector<byte> data = pkt.data();\n\n  struct ares_uri_reply* uri0 = nullptr;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_uri_reply(data.data(), data.size(), &uri0));\n  ASSERT_NE(nullptr, uri0);\n  struct ares_uri_reply* uri = uri0;\n\n  EXPECT_EQ(\"a1.uri.example.com\", std::string(uri->uri));\n  EXPECT_EQ(0, uri->priority);\n  EXPECT_EQ(5, uri->weight);\n  EXPECT_EQ(600, uri->ttl);\n  EXPECT_NE(nullptr, uri->next);\n  uri = uri->next;\n\n  EXPECT_EQ(\"a2.uri.example.com\", std::string(uri->uri));\n  EXPECT_EQ(0, uri->priority);\n  EXPECT_EQ(5, uri->weight);\n  EXPECT_EQ(660, uri->ttl);\n  EXPECT_NE(nullptr, uri->next);\n  uri = uri->next;\n\n  EXPECT_EQ(\"a3.uri.example.com\", std::string(uri->uri));\n  EXPECT_EQ(0, uri->priority);\n  EXPECT_EQ(5, uri->weight);\n  EXPECT_EQ(720, uri->ttl);\n  EXPECT_EQ(nullptr, uri->next);\n\n  ares_free_data(uri0);\n}",
+      "fn_code_pos": [
+        [
+          95,
+          0
+        ],
+        [
+          139,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseUriReplyCname) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.abc.def.com\", T_URI))\n    .add_answer(new DNSCnameRR(\"example.abc.def.com\", 300, \"cname.abc.def.com\"))\n    .add_answer(new DNSUriRR(\"cname.abc.def.com\", 600, 0, 10, \"uri.abc.def.com\"))\n    .add_auth(new DNSNsRR(\"abc.def.com\", 44, \"else1.where.com\"))\n    .add_auth(new DNSNsRR(\"abc.def.com\", 44, \"else2.where.com\"))\n    .add_auth(new DNSNsRR(\"abc.def.com\", 44, \"else3.where.com\"))\n    .add_additional(new DNSARR(\"example.abc.def.com\", 300, {172,19,0,1}))\n    .add_additional(new DNSARR(\"else1.where.com\", 42, {172,19,0,1}))\n    .add_additional(new DNSARR(\"else2.where.com\", 42, {172,19,0,2}))\n    .add_additional(new DNSARR(\"else3.where.com\", 42, {172,19,0,3}));\n  std::vector<byte> data = pkt.data();\n\n  struct ares_uri_reply* uri = nullptr;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_uri_reply(data.data(), data.size(), &uri));\n  ASSERT_NE(nullptr, uri);\n\n  EXPECT_EQ(\"uri.abc.def.com\", std::string(uri->uri));\n  EXPECT_EQ(0, uri->priority);\n  EXPECT_EQ(10, uri->weight);\n  EXPECT_EQ(600, uri->ttl);\n  EXPECT_EQ(nullptr, uri->next);\n\n  ares_free_data(uri);\n}",
+      "fn_code_pos": [
+        [
+          141,
+          0
+        ],
+        [
+          167,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseUriReplyCnameMultiple) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_ra().set_rd()\n    .add_question(new DNSQuestion(\"query.example.com\", T_URI))\n    .add_answer(new DNSCnameRR(\"query.example.com\", 300, \"uri.example.com\"))\n    .add_answer(new DNSUriRR(\"uri.example.com\", 600, 0, 5, \"a1.uri.example.com\"))\n    .add_answer(new DNSUriRR(\"uri.example.com\", 660, 0, 5, \"a2.uri.example.com\"))\n    .add_answer(new DNSUriRR(\"uri.example.com\", 720, 0, 5, \"a3.uri.example.com\"))\n    .add_auth(new DNSNsRR(\"example.com\", 300, \"ns1.example.com\"))\n    .add_auth(new DNSNsRR(\"example.com\", 300, \"ns2.example.com\"))\n    .add_auth(new DNSNsRR(\"example.com\", 300, \"ns3.example.com\"))\n    .add_additional(new DNSARR(\"a1.uri.example.com\", 300, {172,19,1,1}))\n    .add_additional(new DNSARR(\"a2.uri.example.com\", 300, {172,19,1,2}))\n    .add_additional(new DNSARR(\"a3.uri.example.com\", 300, {172,19,1,3}))\n    .add_additional(new DNSARR(\"n1.example.com\", 300, {172,19,0,1}))\n    .add_additional(new DNSARR(\"n2.example.com\", 300, {172,19,0,2}))\n    .add_additional(new DNSARR(\"n3.example.com\", 300, {172,19,0,3}));\n  std::vector<byte> data = pkt.data();\n\n  struct ares_uri_reply* uri0 = nullptr;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_uri_reply(data.data(), data.size(), &uri0));\n  ASSERT_NE(nullptr, uri0);\n  struct ares_uri_reply* uri = uri0;\n\n  EXPECT_EQ(\"a1.uri.example.com\", std::string(uri->uri));\n  EXPECT_EQ(0, uri->priority);\n  EXPECT_EQ(5, uri->weight);\n  EXPECT_EQ(600, uri->ttl);\n  EXPECT_NE(nullptr, uri->next);\n  uri = uri->next;\n\n  EXPECT_EQ(\"a2.uri.example.com\", std::string(uri->uri));\n  EXPECT_EQ(0, uri->priority);\n  EXPECT_EQ(5, uri->weight);\n  EXPECT_EQ(660, uri->ttl);\n  EXPECT_NE(nullptr, uri->next);\n  uri = uri->next;\n\n  EXPECT_EQ(\"a3.uri.example.com\", std::string(uri->uri));\n  EXPECT_EQ(0, uri->priority);\n  EXPECT_EQ(5, uri->weight);\n  EXPECT_EQ(720, uri->ttl);\n  EXPECT_EQ(nullptr, uri->next);\n\n  ares_free_data(uri0);\n}",
+      "fn_code_pos": [
+        [
+          169,
+          0
+        ],
+        [
+          214,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseUriReplyErrors) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.abc.def.com\", T_URI))\n    .add_answer(new DNSUriRR(\"example.abc.def.com\", 180, 0, 10, \"example.abc.def.com\"));\n  std::vector<byte> data;\n  struct ares_uri_reply* uri = nullptr;\n\n  // No question.\n  pkt.questions_.clear();\n  data = pkt.data();\n  EXPECT_EQ(ARES_EBADRESP, ares_parse_uri_reply(data.data(), data.size(), &uri));\n  pkt.add_question(new DNSQuestion(\"example.abc.def.com\", T_URI));\n\n#ifdef DISABLED\n  // Question != answer\n  pkt.questions_.clear();\n  pkt.add_question(new DNSQuestion(\"Axample.com\", T_URI));\n  data = pkt.data();\n  EXPECT_EQ(ARES_ENODATA, ares_parse_uri_reply(data.data(), data.size(), &uri));\n  pkt.questions_.clear();\n  pkt.add_question(new DNSQuestion(\"example.com\", T_URI));\n#endif\n\n  // Two questions.\n  pkt.add_question(new DNSQuestion(\"example.abc.def.com\", T_URI));\n  data = pkt.data();\n  EXPECT_EQ(ARES_EBADRESP, ares_parse_uri_reply(data.data(), data.size(), &uri));\n  pkt.questions_.clear();\n  pkt.add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR));\n\n  // Wrong sort of answer.\n  pkt.answers_.clear();\n  pkt.add_answer(new DNSMxRR(\"example.com\", 100, 100, \"mx1.example.com\"));\n  data = pkt.data();\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_uri_reply(data.data(), data.size(), &uri));\n  EXPECT_EQ(nullptr, uri);\n  pkt.answers_.clear();\n  pkt.add_answer(new DNSUriRR(\"example.abc.def.com\", 180, 0, 10, \"example.abc.def.com\"));\n\n  // No answer.\n  pkt.answers_.clear();\n  data = pkt.data();\n  EXPECT_EQ(ARES_ENODATA, ares_parse_uri_reply(data.data(), data.size(), &uri));\n  pkt.add_answer(new DNSUriRR(\"example.abc.def.com\", 180, 0, 10, \"example.abc.def.com\"));\n\n  // Truncated packets.\n  data = pkt.data();\n  for (size_t len = 1; len < data.size(); len++) {\n    int rc = ares_parse_uri_reply(data.data(), len, &uri);\n    EXPECT_TRUE(rc == ARES_EBADRESP || rc == ARES_EBADNAME);\n  }\n}",
+      "fn_code_pos": [
+        [
+          216,
+          0
+        ],
+        [
+          268,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseUriReplyAllocFail) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.abc.def.com\", T_URI))\n    .add_answer(new DNSCnameRR(\"example.com\", 300, \"c.example.com\"))\n    .add_answer(new DNSUriRR(\"example.abc.def.com\", 180, 0, 10, \"example.abc.def.com\"));\n  std::vector<byte> data = pkt.data();\n  struct ares_uri_reply* uri = nullptr;\n\n  for (int ii = 1; ii <= 5; ii++) {\n    ClearFails();\n    SetAllocFail(ii);\n    EXPECT_EQ(ARES_ENOMEM, ares_parse_uri_reply(data.data(), data.size(), &uri)) << ii;\n  }\n}",
+      "fn_code_pos": [
+        [
+          270,
+          0
+        ],
+        [
+          284,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        17,
+        2
+      ],
+      [
+        17,
+        23
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        26,
+        2
+      ],
+      [
+        26,
+        23
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        51,
+        2
+      ],
+      [
+        51,
+        23
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        90,
+        2
+      ],
+      [
+        90,
+        23
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        113,
+        2
+      ],
+      [
+        113,
+        23
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        116,
+        2
+      ],
+      [
+        116,
+        23
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        156,
+        2
+      ],
+      [
+        156,
+        23
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        188,
+        2
+      ],
+      [
+        188,
+        23
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        191,
+        2
+      ],
+      [
+        191,
+        23
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        222,
+        2
+      ],
+      [
+        222,
+        23
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        277,
+        2
+      ],
+      [
+        277,
+        23
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares-test.h\"\n",
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    [
+      "#include \"dns-proto.h\"\n",
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    [
+      "#include <sstream>\n",
+      [
+        3,
+        0
+      ],
+      [
+        4,
+        0
+      ]
+    ],
+    [
+      "#include <vector>\n",
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

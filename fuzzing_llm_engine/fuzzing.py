@@ -139,7 +139,7 @@ if __name__ == '__main__':
 
     # set default LLM settings
     Settings.llm = get_model(None)
-    Settings.embed_model = get_embedding_model(None, device='cuda:1')
+    Settings.embed_model = get_embedding_model(None, device='cpu')
     logger.info(f"Init Default LLM Model and Embedding Model, LLM config: { Settings.llm.metadata } \n Embed config: {Settings.embed_model}")
 
         

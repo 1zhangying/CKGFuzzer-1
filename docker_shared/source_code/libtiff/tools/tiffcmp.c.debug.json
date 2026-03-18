@@ -1,0 +1,778 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    TIFF *tif1, *tif2;\n    int c, dirnum;\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n\n    while ((c = getopt(argc, argv, \"ltz:h\")) != -1)\n        switch (c)\n        {\n            case 'l':\n                stopondiff = 0;\n                break;\n            case 'z':\n                stopondiff = atoi(optarg);\n                break;\n            case 't':\n                stoponfirsttag = 0;\n                break;\n            case 'h':\n                usage(EXIT_SUCCESS);\n                break;\n            case '?':\n                usage(2);\n                /*NOTREACHED*/\n                break;\n        }\n    if (argc - optind < 2)\n        usage(2);\n    tif1 = TIFFOpen(argv[optind], \"r\");\n    if (tif1 == NULL)\n        return (2);\n    tif2 = TIFFOpen(argv[optind + 1], \"r\");\n    if (tif2 == NULL)\n        return (2);\n    dirnum = 0;\n    while (tiffcmp(tif1, tif2))\n    {\n        if (!TIFFReadDirectory(tif1))\n        {\n            if (!TIFFReadDirectory(tif2))\n                break;\n            printf(\"No more directories for %s\\n\", TIFFFileName(tif1));\n            return (1);\n        }\n        else if (!TIFFReadDirectory(tif2))\n        {\n            printf(\"No more directories for %s\\n\", TIFFFileName(tif2));\n            return (1);\n        }\n        printf(\"Directory %d:\\n\", ++dirnum);\n    }\n\n    TIFFClose(tif1);\n    TIFFClose(tif2);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          71,
+          0
+        ],
+        [
+          129,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"%s\\n\\n\", TIFFGetVersion());\n    fprintf(out, \"%s\", usage_info);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          141,
+          0
+        ],
+        [
+          148,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int tiffcmp(TIFF *tif1, TIFF *tif2)\n{\n    uint16_t config1, config2;\n    tsize_t size1;\n    uint32_t row;\n    tsample_t s;\n    unsigned char *buf1, *buf2;\n\n    if (!CheckShortTag(tif1, tif2, TIFFTAG_BITSPERSAMPLE, \"BitsPerSample\"))\n        return (0);\n    if (!CheckShortTag(tif1, tif2, TIFFTAG_SAMPLESPERPIXEL, \"SamplesPerPixel\"))\n        return (0);\n    if (!CheckLongTag(tif1, tif2, TIFFTAG_IMAGEWIDTH, \"ImageWidth\"))\n        return (0);\n    if (!cmptags(tif1, tif2))\n        return (1);\n    (void)TIFFGetField(tif1, TIFFTAG_BITSPERSAMPLE, &bitspersample);\n    (void)TIFFGetField(tif1, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);\n    (void)TIFFGetField(tif1, TIFFTAG_SAMPLEFORMAT, &sampleformat);\n    (void)TIFFGetField(tif1, TIFFTAG_IMAGEWIDTH, &imagewidth);\n    (void)TIFFGetField(tif1, TIFFTAG_IMAGELENGTH, &imagelength);\n    (void)TIFFGetField(tif1, TIFFTAG_PLANARCONFIG, &config1);\n    (void)TIFFGetField(tif2, TIFFTAG_PLANARCONFIG, &config2);\n    buf1 = (unsigned char *)_TIFFmalloc(size1 = TIFFScanlineSize(tif1));\n    buf2 = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(tif2));\n    if (buf1 == NULL || buf2 == NULL)\n    {\n        fprintf(stderr, \"No space for scanline buffers\\n\");\n        exit(2);\n    }\n    if (config1 != config2 && bitspersample != 8 && samplesperpixel > 1)\n    {\n        fprintf(stderr, \"Can't handle different planar configuration w/ \"\n                        \"different bits/sample\\n\");\n        goto bad;\n    }\n#define pack(a, b) ((a) << 8) | (b)\n    switch (pack(config1, config2))\n    {\n        case pack(PLANARCONFIG_SEPARATE, PLANARCONFIG_CONTIG):\n            for (row = 0; row < imagelength; row++)\n            {\n                if (TIFFReadScanline(tif2, buf2, row, 0) < 0)\n                    checkEOF(tif2, row, -1) for (s = 0; s < samplesperpixel;\n                                                 s++)\n                    {\n                        if (TIFFReadScanline(tif1, buf1, row, s) < 0)\n                            checkEOF(tif1, row, s) if (SeparateCompare(\n                                                           1, s, row, buf2,\n                                                           buf1) < 0) goto bad1;\n                    }\n            }\n            break;\n        case pack(PLANARCONFIG_CONTIG, PLANARCONFIG_SEPARATE):\n            for (row = 0; row < imagelength; row++)\n            {\n                if (TIFFReadScanline(tif1, buf1, row, 0) < 0)\n                    checkEOF(tif1, row, -1) for (s = 0; s < samplesperpixel;\n                                                 s++)\n                    {\n                        if (TIFFReadScanline(tif2, buf2, row, s) < 0)\n                            checkEOF(tif2, row, s) if (SeparateCompare(\n                                                           0, s, row, buf1,\n                                                           buf2) < 0) goto bad1;\n                    }\n            }\n            break;\n        case pack(PLANARCONFIG_SEPARATE, PLANARCONFIG_SEPARATE):\n            for (s = 0; s < samplesperpixel; s++)\n                for (row = 0; row < imagelength; row++)\n                {\n                    if (TIFFReadScanline(tif1, buf1, row, s) < 0)\n                        checkEOF(tif1, row, s) if (TIFFReadScanline(tif2, buf2,\n                                                                    row, s) < 0)\n                            checkEOF(tif2, row,\n                                     s) if (ContigCompare(s, row, buf1, buf2,\n                                                          size1) < 0) goto bad1;\n                }\n            break;\n        case pack(PLANARCONFIG_CONTIG, PLANARCONFIG_CONTIG):\n            for (row = 0; row < imagelength; row++)\n            {\n                if (TIFFReadScanline(tif1, buf1, row, 0) < 0)\n                    checkEOF(tif1, row,\n                             -1) if (TIFFReadScanline(tif2, buf2, row, 0) < 0)\n                        checkEOF(tif2, row,\n                                 -1) if (ContigCompare(-1, row, buf1, buf2,\n                                                       size1) < 0) goto bad1;\n            }\n            break;\n    }\n    if (buf1)\n        _TIFFfree(buf1);\n    if (buf2)\n        _TIFFfree(buf2);\n    return (1);\nbad:\n    if (stopondiff)\n        exit(1);\nbad1:\n    if (buf1)\n        _TIFFfree(buf1);\n    if (buf2)\n        _TIFFfree(buf2);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          163,
+          0
+        ],
+        [
+          268,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tiffcmp",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int cmptags(TIFF *tif1, TIFF *tif2)\n{\n    uint16_t compression1, compression2;\n    CmpLongField(TIFFTAG_SUBFILETYPE, \"SubFileType\");\n    CmpLongField(TIFFTAG_IMAGEWIDTH, \"ImageWidth\");\n    CmpLongField(TIFFTAG_IMAGELENGTH, \"ImageLength\");\n    CmpShortField(TIFFTAG_BITSPERSAMPLE, \"BitsPerSample\");\n    CmpShortField(TIFFTAG_COMPRESSION, \"Compression\");\n    CmpShortField(TIFFTAG_PREDICTOR, \"Predictor\");\n    CmpShortField(TIFFTAG_PHOTOMETRIC, \"PhotometricInterpretation\");\n    CmpShortField(TIFFTAG_THRESHHOLDING, \"Thresholding\");\n    CmpShortField(TIFFTAG_FILLORDER, \"FillOrder\");\n    CmpShortField(TIFFTAG_ORIENTATION, \"Orientation\");\n    CmpShortField(TIFFTAG_SAMPLESPERPIXEL, \"SamplesPerPixel\");\n    CmpShortField(TIFFTAG_MINSAMPLEVALUE, \"MinSampleValue\");\n    CmpShortField(TIFFTAG_MAXSAMPLEVALUE, \"MaxSampleValue\");\n    CmpShortField(TIFFTAG_SAMPLEFORMAT, \"SampleFormat\");\n    CmpFloatField(TIFFTAG_XRESOLUTION, \"XResolution\");\n    CmpFloatField(TIFFTAG_YRESOLUTION, \"YResolution\");\n    if (TIFFGetField(tif1, TIFFTAG_COMPRESSION, &compression1) &&\n        compression1 == COMPRESSION_CCITTFAX3 &&\n        TIFFGetField(tif2, TIFFTAG_COMPRESSION, &compression2) &&\n        compression2 == COMPRESSION_CCITTFAX3)\n    {\n        CmpLongField(TIFFTAG_GROUP3OPTIONS, \"Group3Options\");\n    }\n    if (TIFFGetField(tif1, TIFFTAG_COMPRESSION, &compression1) &&\n        compression1 == COMPRESSION_CCITTFAX4 &&\n        TIFFGetField(tif2, TIFFTAG_COMPRESSION, &compression2) &&\n        compression2 == COMPRESSION_CCITTFAX4)\n    {\n        CmpLongField(TIFFTAG_GROUP4OPTIONS, \"Group4Options\");\n    }\n    CmpShortField(TIFFTAG_RESOLUTIONUNIT, \"ResolutionUnit\");\n    CmpShortField(TIFFTAG_PLANARCONFIG, \"PlanarConfiguration\");\n    CmpLongField(TIFFTAG_ROWSPERSTRIP, \"RowsPerStrip\");\n    CmpFloatField(TIFFTAG_XPOSITION, \"XPosition\");\n    CmpFloatField(TIFFTAG_YPOSITION, \"YPosition\");\n    CmpShortField(TIFFTAG_GRAYRESPONSEUNIT, \"GrayResponseUnit\");\n    CmpShortField(TIFFTAG_COLORRESPONSEUNIT, \"ColorResponseUnit\");\n#ifdef notdef\n    {\n        uint16_t *graycurve;\n        CmpField(TIFFTAG_GRAYRESPONSECURVE, graycurve);\n    }\n    {\n        uint16_t *red, *green, *blue;\n        CmpField3(TIFFTAG_COLORRESPONSECURVE, red, green, blue);\n    }\n    {\n        uint16_t *red, *green, *blue;\n        CmpField3(TIFFTAG_COLORMAP, red, green, blue);\n    }\n#endif\n    CmpShortField2(TIFFTAG_PAGENUMBER, \"PageNumber\");\n    CmpStringField(TIFFTAG_ARTIST, \"Artist\");\n    CmpStringField(TIFFTAG_IMAGEDESCRIPTION, \"ImageDescription\");\n    CmpStringField(TIFFTAG_MAKE, \"Make\");\n    CmpStringField(TIFFTAG_MODEL, \"Model\");\n    CmpStringField(TIFFTAG_SOFTWARE, \"Software\");\n    CmpStringField(TIFFTAG_DATETIME, \"DateTime\");\n    CmpStringField(TIFFTAG_HOSTCOMPUTER, \"HostComputer\");\n    CmpStringField(TIFFTAG_PAGENAME, \"PageName\");\n    CmpStringField(TIFFTAG_DOCUMENTNAME, \"DocumentName\");\n    CmpShortField(TIFFTAG_MATTEING, \"Matteing\");\n    CmpShortArrayField(TIFFTAG_EXTRASAMPLES, \"ExtraSamples\");\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          289,
+          0
+        ],
+        [
+          356,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmptags",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ContigCompare(int sample, uint32_t row, unsigned char *p1,\n                         unsigned char *p2, tsize_t size)\n{\n    uint32_t pix;\n    int samples_to_test;\n\n    if (memcmp(p1, p2, size) == 0)\n        return 0;\n\n    samples_to_test = (sample == -1) ? samplesperpixel : 1;\n\n    switch (bitspersample)\n    {\n        case 1:\n        case 2:\n        case 4:\n        case 8:\n        {\n            unsigned char *pix1 = p1, *pix2 = p2;\n            unsigned bits = 0;\n\n            for (pix = 0; pix < imagewidth; pix++)\n            {\n                int s;\n\n                for (s = 0; s < samples_to_test; s++)\n                {\n                    if (*pix1 != *pix2)\n                    {\n                        if (sample == -1)\n                            PrintIntDiff(row, s, pix, *pix1, *pix2);\n                        else\n                            PrintIntDiff(row, sample, pix, *pix1, *pix2);\n                    }\n\n                    bits += bitspersample;\n                    pix1 += (bits / 8);\n                    pix2 += (bits / 8);\n                    bits &= 7;\n                }\n            }\n            break;\n        }\n        case 16:\n        {\n            uint16_t *pix1 = (uint16_t *)p1, *pix2 = (uint16_t *)p2;\n\n            for (pix = 0; pix < imagewidth; pix++)\n            {\n                int s;\n\n                for (s = 0; s < samples_to_test; s++)\n                {\n                    if (*pix1 != *pix2)\n                        PrintIntDiff(row, sample, pix, *pix1, *pix2);\n\n                    pix1++;\n                    pix2++;\n                }\n            }\n            break;\n        }\n        case 32:\n            if (sampleformat == SAMPLEFORMAT_UINT ||\n                sampleformat == SAMPLEFORMAT_INT)\n            {\n                uint32_t *pix1 = (uint32_t *)p1, *pix2 = (uint32_t *)p2;\n\n                for (pix = 0; pix < imagewidth; pix++)\n                {\n                    int s;\n\n                    for (s = 0; s < samples_to_test; s++)\n                    {\n                        if (*pix1 != *pix2)\n                        {\n                            PrintIntDiff(row, sample, pix, *pix1, *pix2);\n                        }\n\n                        pix1++;\n                        pix2++;\n                    }\n                }\n            }\n            else if (sampleformat == SAMPLEFORMAT_IEEEFP)\n            {\n                float *pix1 = (float *)p1, *pix2 = (float *)p2;\n\n                for (pix = 0; pix < imagewidth; pix++)\n                {\n                    int s;\n\n                    for (s = 0; s < samples_to_test; s++)\n                    {\n                        if (fabs(*pix1 - *pix2) < 0.000000000001)\n                        {\n                            PrintFloatDiff(row, sample, pix, *pix1, *pix2);\n                        }\n\n                        pix1++;\n                        pix2++;\n                    }\n                }\n            }\n            else\n            {\n                fprintf(stderr, \"Sample format %\" PRIu16 \" is not supported.\\n\",\n                        sampleformat);\n                return -1;\n            }\n            break;\n        default:\n            fprintf(stderr, \"Bit depth %\" PRIu16 \" is not supported.\\n\",\n                    bitspersample);\n            return -1;\n    }\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          358,
+          0
+        ],
+        [
+          476,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ContigCompare",
+        "parameters": {
+          "sample": "int",
+          "row": "uint32_t",
+          "p1": "unsigned char",
+          "p2": "unsigned char",
+          "size": "tsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void PrintIntDiff(uint32_t row, int sample, uint32_t pix, uint32_t w1,\n                         uint32_t w2)\n{\n    if (sample < 0)\n        sample = 0;\n    switch (bitspersample)\n    {\n        case 1:\n        case 2:\n        case 4:\n        {\n            int32_t mask1, mask2, s;\n\n            /* mask1 should have the n lowest bits set, where n == bitspersample\n             */\n            mask1 = ((int32_t)1 << bitspersample) - 1;\n            s = (8 - bitspersample);\n            mask2 = mask1 << s;\n            for (; mask2 && pix < imagewidth;\n                 mask2 >>= bitspersample, s -= bitspersample, pix++)\n            {\n                if ((w1 & mask2) ^ (w2 & mask2))\n                {\n                    printf(\"Scanline %\" PRIu32 \", pixel %\" PRIu32\n                           \", sample %d: %01\" PRIx32 \" %01\" PRIx32 \"\\n\",\n                           row, pix, sample, (w1 >> s) & mask1,\n                           (w2 >> s) & mask1);\n                    if (--stopondiff == 0)\n                        exit(1);\n                }\n            }\n            break;\n        }\n        case 8:\n            printf(\"Scanline %\" PRIu32 \", pixel %\" PRIu32\n                   \", sample %d: %02\" PRIx32 \" %02\" PRIx32 \"\\n\",\n                   row, pix, sample, w1, w2);\n            if (--stopondiff == 0)\n                exit(1);\n            break;\n        case 16:\n            printf(\"Scanline %\" PRIu32 \", pixel %\" PRIu32\n                   \", sample %d: %04\" PRIx32 \" %04\" PRIx32 \"\\n\",\n                   row, pix, sample, w1, w2);\n            if (--stopondiff == 0)\n                exit(1);\n            break;\n        case 32:\n            printf(\"Scanline %\" PRIu32 \", pixel %\" PRIu32\n                   \", sample %d: %08\" PRIx32 \" %08\" PRIx32 \"\\n\",\n                   row, pix, sample, w1, w2);\n            if (--stopondiff == 0)\n                exit(1);\n            break;\n        default:\n            break;\n    }\n}",
+      "fn_code_pos": [
+        [
+          478,
+          0
+        ],
+        [
+          535,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintIntDiff",
+        "parameters": {
+          "row": "uint32_t",
+          "sample": "int",
+          "pix": "uint32_t",
+          "w1": "uint32_t",
+          "w2": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void PrintFloatDiff(uint32_t row, int sample, uint32_t pix, double w1,\n                           double w2)\n{\n    if (sample < 0)\n        sample = 0;\n    switch (bitspersample)\n    {\n        case 32:\n            printf(\"Scanline %\" PRIu32 \", pixel %\" PRIu32\n                   \", sample %d: %g %g\\n\",\n                   row, pix, sample, w1, w2);\n            if (--stopondiff == 0)\n                exit(1);\n            break;\n        default:\n            break;\n    }\n}",
+      "fn_code_pos": [
+        [
+          537,
+          0
+        ],
+        [
+          554,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintFloatDiff",
+        "parameters": {
+          "row": "uint32_t",
+          "sample": "int",
+          "pix": "uint32_t",
+          "w1": "double",
+          "w2": "double"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int SeparateCompare(int reversed, int sample, uint32_t row,\n                           unsigned char *cp1, unsigned char *p2)\n{\n    uint32_t npixels = imagewidth;\n    int pixel;\n\n    cp1 += sample;\n    for (pixel = 0; npixels-- > 0; pixel++, cp1 += samplesperpixel, p2++)\n    {\n        if (*cp1 != *p2)\n        {\n            printf(\"Scanline %\" PRIu32 \", pixel %\" PRIu32 \", sample %d: \", row,\n                   pixel, sample);\n            if (reversed)\n                printf(\"%02x %02x\\n\", *p2, *cp1);\n            else\n                printf(\"%02x %02x\\n\", *cp1, *p2);\n            if (--stopondiff == 0)\n                exit(1);\n        }\n    }\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          556,
+          0
+        ],
+        [
+          579,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SeparateCompare",
+        "parameters": {
+          "reversed": "int",
+          "sample": "int",
+          "row": "uint32_t",
+          "cp1": "unsigned char",
+          "p2": "unsigned char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int checkTag(TIFF *tif1, TIFF *tif2, int tag, char *name, void *p1,\n                    void *p2)\n{\n\n    if (TIFFGetField(tif1, tag, p1))\n    {\n        if (!TIFFGetField(tif2, tag, p2))\n        {\n            printf(\"%s tag appears only in %s\\n\", name, TIFFFileName(tif1));\n            return (0);\n        }\n        return (1);\n    }\n    else if (TIFFGetField(tif2, tag, p2))\n    {\n        printf(\"%s tag appears only in %s\\n\", name, TIFFFileName(tif2));\n        return (0);\n    }\n    return (-1);\n}",
+      "fn_code_pos": [
+        [
+          581,
+          0
+        ],
+        [
+          600,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "checkTag",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF",
+          "tag": "int",
+          "name": "char",
+          "p1": "void",
+          "p2": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int CheckShortTag(TIFF *tif1, TIFF *tif2, int tag, char *name)\n{\n    uint16_t v1, v2;\n    CHECK(v1 == v2, \"%s: %\" PRIu16 \" %\" PRIu16 \"\\n\");\n}",
+      "fn_code_pos": [
+        [
+          615,
+          0
+        ],
+        [
+          619,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckShortTag",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF",
+          "tag": "int",
+          "name": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int CheckShort2Tag(TIFF *tif1, TIFF *tif2, int tag, char *name)\n{\n    uint16_t v11, v12, v21, v22;\n\n    if (TIFFGetField(tif1, tag, &v11, &v12))\n    {\n        if (!TIFFGetField(tif2, tag, &v21, &v22))\n        {\n            printf(\"%s tag appears only in %s\\n\", name, TIFFFileName(tif1));\n            return (0);\n        }\n        if (v11 == v21 && v12 == v22)\n            return (1);\n        printf(\"%s: <%\" PRIu16 \",%\" PRIu16 \"> <%\" PRIu16 \",%\" PRIu16 \">\\n\",\n               name, v11, v12, v21, v22);\n    }\n    else if (TIFFGetField(tif2, tag, &v21, &v22))\n        printf(\"%s tag appears only in %s\\n\", name, TIFFFileName(tif2));\n    else\n        return (1);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          621,
+          0
+        ],
+        [
+          642,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckShort2Tag",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF",
+          "tag": "int",
+          "name": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int CheckShortArrayTag(TIFF *tif1, TIFF *tif2, int tag, char *name)\n{\n    uint16_t n1, *a1;\n    uint16_t n2, *a2;\n\n    if (TIFFGetField(tif1, tag, &n1, &a1))\n    {\n        if (!TIFFGetField(tif2, tag, &n2, &a2))\n        {\n            printf(\"%s tag appears only in %s\\n\", name, TIFFFileName(tif1));\n            return (0);\n        }\n        if (n1 == n2)\n        {\n            char *sep;\n            uint16_t i;\n\n            if (memcmp(a1, a2, n1 * sizeof(uint16_t)) == 0)\n                return (1);\n            printf(\"%s: value mismatch, <%\" PRIu16 \":\", name, n1);\n            sep = \"\";\n            for (i = 0; i < n1; i++)\n                printf(\"%s%\" PRIu16, sep, a1[i]), sep = \",\";\n            printf(\"> and <%\" PRIu16 \": \", n2);\n            sep = \"\";\n            for (i = 0; i < n2; i++)\n                printf(\"%s%\" PRIu16, sep, a2[i]), sep = \",\";\n            printf(\">\\n\");\n        }\n        else\n            printf(\"%s: %\" PRIu16 \" items in %s, %\" PRIu16 \" items in %s\", name,\n                   n1, TIFFFileName(tif1), n2, TIFFFileName(tif2));\n    }\n    else if (TIFFGetField(tif2, tag, &n2, &a2))\n        printf(\"%s tag appears only in %s\\n\", name, TIFFFileName(tif2));\n    else\n        return (1);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          644,
+          0
+        ],
+        [
+          682,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckShortArrayTag",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF",
+          "tag": "int",
+          "name": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int CheckLongTag(TIFF *tif1, TIFF *tif2, int tag, char *name)\n{\n    uint32_t v1, v2;\n    CHECK(v1 == v2, \"%s: %\" PRIu32 \" %\" PRIu32 \"\\n\");\n}",
+      "fn_code_pos": [
+        [
+          684,
+          0
+        ],
+        [
+          688,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckLongTag",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF",
+          "tag": "int",
+          "name": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int CheckFloatTag(TIFF *tif1, TIFF *tif2, int tag, char *name)\n{\n    float v1, v2;\n    CHECK(v1 == v2, \"%s: %g %g\\n\");\n}",
+      "fn_code_pos": [
+        [
+          690,
+          0
+        ],
+        [
+          694,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckFloatTag",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF",
+          "tag": "int",
+          "name": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int CheckStringTag(TIFF *tif1, TIFF *tif2, int tag, char *name)\n{\n    char *v1, *v2;\n    CHECK(strcmp(v1, v2) == 0, \"%s: \\\"%s\\\" \\\"%s\\\"\\n\");\n}",
+      "fn_code_pos": [
+        [
+          696,
+          0
+        ],
+        [
+          700,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckStringTag",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF",
+          "tag": "int",
+          "name": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void leof(const char *name, uint32_t row, int s)\n{\n\n    printf(\"%s: EOF at scanline %\" PRIu32, name, row);\n    if (s >= 0)\n        printf(\", sample %d\", s);\n    printf(\"\\n\");\n}",
+      "fn_code_pos": [
+        [
+          702,
+          0
+        ],
+        [
+          709,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "leof",
+        "parameters": {
+          "name": "char",
+          "row": "uint32_t",
+          "s": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "usage(int code)",
+      "fn_dec_pos": [
+        [
+          53,
+          12
+        ],
+        [
+          53,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "tiffcmp(TIFF *, TIFF *)",
+      "fn_dec_pos": [
+        [
+          54,
+          11
+        ],
+        [
+          54,
+          34
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tiffcmp",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cmptags(TIFF *, TIFF *)",
+      "fn_dec_pos": [
+        [
+          55,
+          11
+        ],
+        [
+          55,
+          34
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmptags",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "ContigCompare(int, uint32_t, unsigned char *, unsigned char *,\n                         tsize_t)",
+      "fn_dec_pos": [
+        [
+          56,
+          11
+        ],
+        [
+          57,
+          33
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ContigCompare",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "SeparateCompare(int, int, uint32_t, unsigned char *,\n                           unsigned char *)",
+      "fn_dec_pos": [
+        [
+          58,
+          11
+        ],
+        [
+          59,
+          43
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SeparateCompare",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "PrintIntDiff(uint32_t, int, uint32_t, uint32_t, uint32_t)",
+      "fn_dec_pos": [
+        [
+          60,
+          12
+        ],
+        [
+          60,
+          69
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintIntDiff",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PrintFloatDiff(uint32_t, int, uint32_t, double, double)",
+      "fn_dec_pos": [
+        [
+          61,
+          12
+        ],
+        [
+          61,
+          67
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintFloatDiff",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "leof(const char *, uint32_t, int)",
+      "fn_dec_pos": [
+        [
+          63,
+          12
+        ],
+        [
+          63,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "leof",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "CheckShortTag(TIFF *, TIFF *, int, char *)",
+      "fn_dec_pos": [
+        [
+          156,
+          11
+        ],
+        [
+          156,
+          53
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckShortTag",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "CheckShort2Tag(TIFF *, TIFF *, int, char *)",
+      "fn_dec_pos": [
+        [
+          157,
+          11
+        ],
+        [
+          157,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckShort2Tag",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "CheckShortArrayTag(TIFF *, TIFF *, int, char *)",
+      "fn_dec_pos": [
+        [
+          158,
+          11
+        ],
+        [
+          158,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckShortArrayTag",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "CheckLongTag(TIFF *, TIFF *, int, char *)",
+      "fn_dec_pos": [
+        [
+          159,
+          11
+        ],
+        [
+          159,
+          52
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckLongTag",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "CheckFloatTag(TIFF *, TIFF *, int, char *)",
+      "fn_dec_pos": [
+        [
+          160,
+          11
+        ],
+        [
+          160,
+          53
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckFloatTag",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "CheckStringTag(TIFF *, TIFF *, int, char *)",
+      "fn_dec_pos": [
+        [
+          161,
+          11
+        ],
+        [
+          161,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckStringTag",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

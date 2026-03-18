@@ -1,0 +1,593 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    uint32_t width, length;\n    uint16_t nbands = 1; /* number of bands in input image */\n    uint16_t depth = 8;  /* bits per pixel in input image */\n    uint32_t rowsperstrip = (uint32_t)-1;\n    uint16_t photometric = PHOTOMETRIC_MINISBLACK;\n    int fd = 0;\n    _TIFF_stat_s instat;\n    char *outfilename = NULL, *infilename = NULL;\n    TIFF *out = NULL;\n\n    BMPFileHeader file_hdr;\n    BMPInfoHeader info_hdr;\n    int bmp_type;\n    uint32_t clr_tbl_size, n_clr_elems = 3;\n    unsigned char *clr_tbl;\n    unsigned short *red_tbl = NULL, *green_tbl = NULL, *blue_tbl = NULL;\n    uint32_t row, clr;\n\n    int c;\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n\n    while ((c = getopt(argc, argv, \"c:r:o:h\")) != -1)\n    {\n        switch (c)\n        {\n            case 'c': /* compression scheme */\n                if (!processCompressOptions(optarg))\n                    usage();\n                break;\n            case 'r': /* rows/strip */\n                rowsperstrip = atoi(optarg);\n                break;\n            case 'o':\n                outfilename = optarg;\n                break;\n            case 'h':\n                usage();\n            default:\n                break;\n        }\n    }\n\n    if (argc - optind < 2)\n        usage();\n\n    if (outfilename == NULL)\n        outfilename = argv[argc - 1];\n    out = TIFFOpen(outfilename, \"w\");\n    if (out == NULL)\n    {\n        TIFFError(infilename, \"Cannot open file %s for output\", outfilename);\n        goto bad3;\n    }\n\n    while (optind < argc - 1)\n    {\n        infilename = argv[optind];\n        optind++;\n\n        fd = open(infilename, O_RDONLY | O_BINARY, 0);\n        if (fd < 0)\n        {\n            TIFFError(infilename, \"Cannot open input file\");\n            return -1;\n        }\n\n        if (read(fd, file_hdr.bType, 2) != 2)\n        {\n            TIFFError(infilename, \"Failed to read from file (%s)\",\n                      strerror(errno));\n            goto bad;\n        }\n        if (file_hdr.bType[0] != 'B' || file_hdr.bType[1] != 'M')\n        {\n            TIFFError(infilename, \"File is not BMP\");\n            goto bad;\n        }\n\n        /* --------------------------------------------------------------------\n         */\n        /*      Read the BMPFileHeader. We need iOffBits value only */\n        /* --------------------------------------------------------------------\n         */\n        if (_TIFF_lseek_f(fd, 10, SEEK_SET) == (_TIFF_off_t)-1)\n        {\n            TIFFError(infilename, \"Failed to seek to offset\");\n            goto bad;\n        }\n        if (read(fd, &file_hdr.iOffBits, 4) != 4)\n        {\n            TIFFError(infilename, \"Failed to read from file (%s)\",\n                      strerror(errno));\n            goto bad;\n        }\n#ifdef WORDS_BIGENDIAN\n        TIFFSwabLong(&file_hdr.iOffBits);\n#endif\n        if (_TIFF_fstat_f(fd, &instat) == -1)\n        {\n            TIFFError(infilename, \"Failed obtain file information\");\n            goto bad;\n        }\n        file_hdr.iSize = instat.st_size;\n\n        /* --------------------------------------------------------------------\n         */\n        /*      Read the BMPInfoHeader. */\n        /* --------------------------------------------------------------------\n         */\n\n        if (_TIFF_lseek_f(fd, BFH_SIZE, SEEK_SET) == (_TIFF_off_t)-1)\n        {\n            TIFFError(infilename, \"Failed to seek to offset\");\n            goto bad;\n        }\n        if (read(fd, &info_hdr.iSize, 4) != 4)\n        {\n            TIFFError(infilename, \"Failed to read from file (%s)\",\n                      strerror(errno));\n            goto bad;\n        }\n#ifdef WORDS_BIGENDIAN\n        TIFFSwabLong(&info_hdr.iSize);\n#endif\n\n        if (info_hdr.iSize == BIH_WIN4SIZE)\n            bmp_type = BMPT_WIN4;\n        else if (info_hdr.iSize == BIH_OS21SIZE)\n            bmp_type = BMPT_OS21;\n        else if (info_hdr.iSize == BIH_OS22SIZE || info_hdr.iSize == 16)\n            bmp_type = BMPT_OS22;\n        else\n            bmp_type = BMPT_WIN5;\n\n        if (bmp_type == BMPT_WIN4 || bmp_type == BMPT_WIN5 ||\n            bmp_type == BMPT_OS22)\n        {\n            if ((read(fd, &info_hdr.iWidth, 4) != 4) ||\n                (read(fd, &info_hdr.iHeight, 4) != 4) ||\n                (read(fd, &info_hdr.iPlanes, 2) != 2) ||\n                (read(fd, &info_hdr.iBitCount, 2) != 2) ||\n                (read(fd, &info_hdr.iCompression, 4) != 4) ||\n                (read(fd, &info_hdr.iSizeImage, 4) != 4) ||\n                (read(fd, &info_hdr.iXPelsPerMeter, 4) != 4) ||\n                (read(fd, &info_hdr.iYPelsPerMeter, 4) != 4) ||\n                (read(fd, &info_hdr.iClrUsed, 4) != 4) ||\n                (read(fd, &info_hdr.iClrImportant, 4) != 4))\n            {\n                TIFFError(infilename, \"Failed to read from file (%s)\",\n                          strerror(errno));\n                goto bad;\n            }\n#ifdef WORDS_BIGENDIAN\n            TIFFSwabLong((uint32_t *)&info_hdr.iWidth);\n            TIFFSwabLong((uint32_t *)&info_hdr.iHeight);\n            TIFFSwabShort((uint16_t *)&info_hdr.iPlanes);\n            TIFFSwabShort((uint16_t *)&info_hdr.iBitCount);\n            TIFFSwabLong((uint32_t *)&info_hdr.iCompression);\n            TIFFSwabLong((uint32_t *)&info_hdr.iSizeImage);\n            TIFFSwabLong((uint32_t *)&info_hdr.iXPelsPerMeter);\n            TIFFSwabLong((uint32_t *)&info_hdr.iYPelsPerMeter);\n            TIFFSwabLong((uint32_t *)&info_hdr.iClrUsed);\n            TIFFSwabLong((uint32_t *)&info_hdr.iClrImportant);\n#endif\n            n_clr_elems = 4;\n        }\n\n        if (bmp_type == BMPT_OS22)\n        {\n            /*\n             * FIXME: different info in different documents\n             * regarding this!\n             */\n            n_clr_elems = 3;\n        }\n\n        if (bmp_type == BMPT_OS21)\n        {\n            int16_t iShort;\n\n            if (read(fd, &iShort, 2) != 2)\n            {\n                TIFFError(infilename, \"Failed to read from file (%s)\",\n                          strerror(errno));\n                goto bad;\n            }\n#ifdef WORDS_BIGENDIAN\n            TIFFSwabShort((uint16_t *)&iShort);\n#endif\n            info_hdr.iWidth = iShort;\n            if (read(fd, &iShort, 2) != 2)\n            {\n                TIFFError(infilename, \"Failed to read from file (%s)\",\n                          strerror(errno));\n                goto bad;\n            }\n#ifdef WORDS_BIGENDIAN\n            TIFFSwabShort((uint16_t *)&iShort);\n#endif\n            info_hdr.iHeight = iShort;\n            if (read(fd, &iShort, 2) != 2)\n            {\n                TIFFError(infilename, \"Failed to read from file (%s)\",\n                          strerror(errno));\n                goto bad;\n            }\n#ifdef WORDS_BIGENDIAN\n            TIFFSwabShort((uint16_t *)&iShort);\n#endif\n            info_hdr.iPlanes = iShort;\n            if (read(fd, &iShort, 2) != 2)\n            {\n                TIFFError(infilename, \"Failed to read from file (%s)\",\n                          strerror(errno));\n                goto bad;\n            }\n#ifdef WORDS_BIGENDIAN\n            TIFFSwabShort((uint16_t *)&iShort);\n#endif\n            info_hdr.iBitCount = iShort;\n            info_hdr.iCompression = BMPC_RGB;\n            n_clr_elems = 3;\n        }\n\n        if (info_hdr.iBitCount != 1 && info_hdr.iBitCount != 4 &&\n            info_hdr.iBitCount != 8 && info_hdr.iBitCount != 16 &&\n            info_hdr.iBitCount != 24 && info_hdr.iBitCount != 32)\n        {\n            TIFFError(infilename, \"Cannot process BMP file with bit count %d\",\n                      info_hdr.iBitCount);\n            close(fd);\n            return 0;\n        }\n\n        width = info_hdr.iWidth;\n        length = (info_hdr.iHeight > 0) ? info_hdr.iHeight : -info_hdr.iHeight;\n        if (width <= 0 || length <= 0)\n        {\n            TIFFError(infilename, \"Invalid dimensions of BMP file\");\n            close(fd);\n            return -1;\n        }\n\n        switch (info_hdr.iBitCount)\n        {\n            case 1:\n            case 4:\n            case 8:\n                nbands = 1;\n                depth = info_hdr.iBitCount;\n                photometric = PHOTOMETRIC_PALETTE;\n                /* Allocate memory for colour table and read it. */\n                if (info_hdr.iClrUsed)\n                    clr_tbl_size = ((uint32_t)(1 << depth) < info_hdr.iClrUsed)\n                                       ? (uint32_t)(1 << depth)\n                                       : info_hdr.iClrUsed;\n                else\n                    clr_tbl_size = 1 << depth;\n                clr_tbl =\n                    (unsigned char *)_TIFFmalloc(n_clr_elems * clr_tbl_size);\n                if (!clr_tbl)\n                {\n                    TIFFError(infilename,\n                              \"Can't allocate space for color table\");\n                    goto bad;\n                }\n\n                if (_TIFF_lseek_f(fd, BFH_SIZE + info_hdr.iSize, SEEK_SET) ==\n                    (_TIFF_off_t)-1)\n                {\n                    TIFFError(infilename, \"Failed to seek to offset\");\n                    goto bad;\n                }\n                if (read(fd, clr_tbl, n_clr_elems * clr_tbl_size) !=\n                    (long)(n_clr_elems * clr_tbl_size))\n                {\n                    TIFFError(infilename, \"Failed to read from file (%s)\",\n                              strerror(errno));\n                    goto bad;\n                }\n\n                red_tbl = (unsigned short *)_TIFFmalloc(\n                    ((tmsize_t)1) << depth * sizeof(unsigned short));\n                if (!red_tbl)\n                {\n                    TIFFError(infilename,\n                              \"Can't allocate space for red component table\");\n                    _TIFFfree(clr_tbl);\n                    goto bad1;\n                }\n                green_tbl = (unsigned short *)_TIFFmalloc(\n                    ((tmsize_t)1) << depth * sizeof(unsigned short));\n                if (!green_tbl)\n                {\n                    TIFFError(infilename,\n                              \"Can't allocate space for green component table\");\n                    _TIFFfree(clr_tbl);\n                    goto bad2;\n                }\n                blue_tbl = (unsigned short *)_TIFFmalloc(\n                    ((tmsize_t)1) << depth * sizeof(unsigned short));\n                if (!blue_tbl)\n                {\n                    TIFFError(infilename,\n                              \"Can't allocate space for blue component table\");\n                    _TIFFfree(clr_tbl);\n                    goto bad3;\n                }\n\n                for (clr = 0; clr < clr_tbl_size; clr++)\n                {\n                    red_tbl[clr] = 257 * clr_tbl[clr * n_clr_elems + 2];\n                    green_tbl[clr] = 257 * clr_tbl[clr * n_clr_elems + 1];\n                    blue_tbl[clr] = 257 * clr_tbl[clr * n_clr_elems];\n                }\n\n                _TIFFfree(clr_tbl);\n                break;\n            case 16:\n            case 24:\n                nbands = 3;\n                depth = info_hdr.iBitCount / nbands;\n                photometric = PHOTOMETRIC_RGB;\n                break;\n            case 32:\n                nbands = 3;\n                depth = 8;\n                photometric = PHOTOMETRIC_RGB;\n                break;\n            default:\n                break;\n        }\n\n        /* --------------------------------------------------------------------\n         */\n        /*  Create output file. */\n        /* --------------------------------------------------------------------\n         */\n\n        TIFFSetField(out, TIFFTAG_IMAGEWIDTH, width);\n        TIFFSetField(out, TIFFTAG_IMAGELENGTH, length);\n        TIFFSetField(out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);\n        TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, nbands);\n        TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, depth);\n        TIFFSetField(out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);\n        TIFFSetField(out, TIFFTAG_PHOTOMETRIC, photometric);\n        TIFFSetField(out, TIFFTAG_ROWSPERSTRIP,\n                     TIFFDefaultStripSize(out, rowsperstrip));\n\n        if (red_tbl && green_tbl && blue_tbl)\n        {\n            TIFFSetField(out, TIFFTAG_COLORMAP, red_tbl, green_tbl, blue_tbl);\n        }\n\n        if (compression == (uint16_t)-1)\n            compression = COMPRESSION_PACKBITS;\n        TIFFSetField(out, TIFFTAG_COMPRESSION, compression);\n        switch (compression)\n        {\n            case COMPRESSION_JPEG:\n                if (photometric == PHOTOMETRIC_RGB &&\n                    jpegcolormode == JPEGCOLORMODE_RGB)\n                    photometric = PHOTOMETRIC_YCBCR;\n                TIFFSetField(out, TIFFTAG_JPEGQUALITY, quality);\n                TIFFSetField(out, TIFFTAG_JPEGCOLORMODE, jpegcolormode);\n                break;\n            case COMPRESSION_LZW:\n            case COMPRESSION_ADOBE_DEFLATE:\n            case COMPRESSION_DEFLATE:\n                if (predictor != 0)\n                    TIFFSetField(out, TIFFTAG_PREDICTOR, predictor);\n                break;\n        }\n\n        /* --------------------------------------------------------------------\n         */\n        /*  Read uncompressed image data. */\n        /* --------------------------------------------------------------------\n         */\n\n        if (info_hdr.iCompression == BMPC_RGB)\n        {\n            uint32_t offset, size;\n            char *scanbuf;\n\n            /* XXX: Avoid integer overflow. We can calculate size\n             * in one step using\n             *\n             *  size = ((width * info_hdr.iBitCount + 31) & ~31) / 8\n             *\n             * formulae, but we should check for overflow\n             * conditions during calculation.\n             */\n            size = width * info_hdr.iBitCount + 31;\n            if (!width || !info_hdr.iBitCount ||\n                (size - 31) / info_hdr.iBitCount != width)\n            {\n                TIFFError(infilename, \"Wrong image parameters; can't \"\n                                      \"allocate space for scanline buffer\");\n                goto bad3;\n            }\n            size = (size & ~31) / 8;\n\n            scanbuf = (char *)_TIFFmalloc(size);\n            if (!scanbuf)\n            {\n                TIFFError(infilename,\n                          \"Can't allocate space for scanline buffer\");\n                goto bad3;\n            }\n\n            for (row = 0; row < length; row++)\n            {\n                if (info_hdr.iHeight > 0)\n                    offset = file_hdr.iOffBits + (length - row - 1) * size;\n                else\n                    offset = file_hdr.iOffBits + row * size;\n                if (_TIFF_lseek_f(fd, offset, SEEK_SET) == (_TIFF_off_t)-1)\n                {\n                    TIFFError(infilename, \"scanline %lu: Seek error\",\n                              (unsigned long)row);\n                    break;\n                }\n\n                if (read(fd, scanbuf, size) != (long)size)\n                {\n                    TIFFError(infilename, \"scanline %lu: Read error\",\n                              (unsigned long)row);\n                    break;\n                }\n\n                rearrangePixels(scanbuf, width, info_hdr.iBitCount);\n\n                if (TIFFWriteScanline(out, scanbuf, row, 0) < 0)\n                {\n                    TIFFError(infilename, \"scanline %lu: Write error\",\n                              (unsigned long)row);\n                    break;\n                }\n            }\n\n            _TIFFfree(scanbuf);\n\n            /* --------------------------------------------------------------------\n             */\n            /*  Read compressed image data. */\n            /* --------------------------------------------------------------------\n             */\n        }\n        else if (info_hdr.iCompression == BMPC_RLE8 ||\n                 info_hdr.iCompression == BMPC_RLE4)\n        {\n            uint32_t i, j, k, runlength;\n            uint32_t compr_size, uncompr_size;\n            unsigned char *comprbuf;\n            unsigned char *uncomprbuf;\n\n            compr_size = file_hdr.iSize - file_hdr.iOffBits;\n            uncompr_size = width * length;\n            /* Detect int overflow */\n            if (uncompr_size / width != length)\n            {\n                TIFFError(infilename, \"Invalid dimensions of BMP file\");\n                close(fd);\n                return -1;\n            }\n            if ((compr_size == 0) || (compr_size > ((uint32_t)~0) >> 1) ||\n                (uncompr_size == 0) || (uncompr_size > ((uint32_t)~0) >> 1))\n            {\n                TIFFError(infilename, \"Invalid dimensions of BMP file\");\n                close(fd);\n                return -1;\n            }\n            comprbuf = (unsigned char *)_TIFFmalloc(compr_size);\n            if (!comprbuf)\n            {\n                TIFFError(\n                    infilename,\n                    \"Can't allocate space for compressed scanline buffer\");\n                goto bad3;\n            }\n            uncomprbuf = (unsigned char *)_TIFFmalloc(uncompr_size);\n            if (!uncomprbuf)\n            {\n                TIFFError(\n                    infilename,\n                    \"Can't allocate space for uncompressed scanline buffer\");\n                goto bad3;\n            }\n\n            if (_TIFF_lseek_f(fd, file_hdr.iOffBits, SEEK_SET) ==\n                (_TIFF_off_t)-1)\n            {\n                TIFFError(infilename, \"Failed to seek to offset\");\n                goto bad3;\n            }\n            if (read(fd, comprbuf, compr_size) != (long)compr_size)\n            {\n                TIFFError(infilename, \"Failed to read from file (%s)\",\n                          strerror(errno));\n                goto bad;\n            }\n            i = 0;\n            j = 0;\n            if (info_hdr.iBitCount == 8)\n            { /* RLE8 */\n                while (j < uncompr_size && i < compr_size)\n                {\n                    if (comprbuf[i])\n                    {\n                        runlength = comprbuf[i++];\n                        while (runlength > 0 && j < uncompr_size &&\n                               i < compr_size)\n                        {\n                            uncomprbuf[j++] = comprbuf[i];\n                            runlength--;\n                        }\n                        i++;\n                    }\n                    else\n                    {\n                        i++;\n                        if (comprbuf[i] == 0) /* Next scanline */\n                            i++;\n                        else if (comprbuf[i] == 1) /* End of image */\n                            break;\n                        else if (comprbuf[i] == 2)\n                        { /* Move to... */\n                            i++;\n                            if (i < compr_size - 1)\n                            {\n                                j += comprbuf[i] + comprbuf[i + 1] * width;\n                                i += 2;\n                            }\n                            else\n                                break;\n                        }\n                        else\n                        { /* Absolute mode */\n                            runlength = comprbuf[i++];\n                            for (k = 0; k < runlength && j < uncompr_size &&\n                                        i < compr_size;\n                                 k++)\n                                uncomprbuf[j++] = comprbuf[i++];\n                            if (k & 0x01)\n                                i++;\n                        }\n                    }\n                }\n            }\n            else\n            { /* RLE4 */\n                while (j < uncompr_size && i < compr_size)\n                {\n                    if (comprbuf[i])\n                    {\n                        runlength = comprbuf[i++];\n                        while (runlength > 0 && j < uncompr_size &&\n                               i < compr_size)\n                        {\n                            if (runlength & 0x01)\n                                uncomprbuf[j++] = (comprbuf[i] & 0xF0) >> 4;\n                            else\n                                uncomprbuf[j++] = comprbuf[i] & 0x0F;\n                            runlength--;\n                        }\n                        i++;\n                    }\n                    else\n                    {\n                        i++;\n                        if (comprbuf[i] == 0) /* Next scanline */\n                            i++;\n                        else if (comprbuf[i] == 1) /* End of image */\n                            break;\n                        else if (comprbuf[i] == 2)\n                        { /* Move to... */\n                            i++;\n                            if (i < compr_size - 1)\n                            {\n                                j += comprbuf[i] + comprbuf[i + 1] * width;\n                                i += 2;\n                            }\n                            else\n                                break;\n                        }\n                        else\n                        { /* Absolute mode */\n                            runlength = comprbuf[i++];\n                            for (k = 0; k < runlength && j < uncompr_size &&\n                                        i < compr_size;\n                                 k++)\n                            {\n                                if (k & 0x01)\n                                    uncomprbuf[j++] = comprbuf[i++] & 0x0F;\n                                else\n                                    uncomprbuf[j++] = (comprbuf[i] & 0xF0) >> 4;\n                            }\n                            if (k & 0x01)\n                                i++;\n                        }\n                    }\n                }\n            }\n\n            _TIFFfree(comprbuf);\n\n            for (row = 0; row < length; row++)\n            {\n                if (TIFFWriteScanline(out,\n                                      uncomprbuf + (length - row - 1) * width,\n                                      row, 0) < 0)\n                {\n                    TIFFError(infilename, \"scanline %lu: Write error.\\n\",\n                              (unsigned long)row);\n                }\n            }\n\n            _TIFFfree(uncomprbuf);\n        }\n        TIFFWriteDirectory(out);\n        if (blue_tbl)\n        {\n            _TIFFfree(blue_tbl);\n            blue_tbl = NULL;\n        }\n        if (green_tbl)\n        {\n            _TIFFfree(green_tbl);\n            green_tbl = NULL;\n        }\n        if (red_tbl)\n        {\n            _TIFFfree(red_tbl);\n            red_tbl = NULL;\n        }\n    }\n\nbad3:\n    if (blue_tbl)\n        _TIFFfree(blue_tbl);\nbad2:\n    if (green_tbl)\n        _TIFFfree(green_tbl);\nbad1:\n    if (red_tbl)\n        _TIFFfree(red_tbl);\nbad:\n    close(fd);\n\n    if (out)\n        TIFFClose(out);\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          227,
+          0
+        ],
+        [
+          885,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void rearrangePixels(char *buf, uint32_t width, uint32_t bit_count)\n{\n    char tmp;\n    uint32_t i;\n\n    switch (bit_count)\n    {\n        case 16: /* FIXME: need a sample file */\n            break;\n        case 24:\n            for (i = 0; i < width; i++, buf += 3)\n            {\n                tmp = *buf;\n                *buf = *(buf + 2);\n                *(buf + 2) = tmp;\n            }\n            break;\n        case 32:\n        {\n            char *buf1 = buf;\n\n            for (i = 0; i < width; i++, buf += 4)\n            {\n                tmp = *buf;\n                *buf1++ = *(buf + 2);\n                *buf1++ = *(buf + 1);\n                *buf1++ = tmp;\n            }\n        }\n        break;\n        default:\n            break;\n    }\n}",
+      "fn_code_pos": [
+        [
+          891,
+          0
+        ],
+        [
+          924,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "rearrangePixels",
+        "parameters": {
+          "buf": "char",
+          "width": "uint32_t",
+          "bit_count": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int processCompressOptions(char *opt)\n{\n    if (strcmp(opt, \"none\") == 0)\n        compression = COMPRESSION_NONE;\n    else if (strcmp(opt, \"packbits\") == 0)\n        compression = COMPRESSION_PACKBITS;\n    else if (strncmp(opt, \"jpeg\", 4) == 0)\n    {\n        char *cp = strchr(opt, ':');\n\n        compression = COMPRESSION_JPEG;\n        while (cp)\n        {\n            if (isdigit((int)cp[1]))\n                quality = atoi(cp + 1);\n            else if (cp[1] == 'r')\n                jpegcolormode = JPEGCOLORMODE_RAW;\n            else\n                usage();\n\n            cp = strchr(cp + 1, ':');\n        }\n    }\n    else if (strncmp(opt, \"lzw\", 3) == 0)\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_LZW;\n    }\n    else if (strncmp(opt, \"zip\", 3) == 0)\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_ADOBE_DEFLATE;\n    }\n    else\n        return (0);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          926,
+          0
+        ],
+        [
+          966,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {
+          "opt": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void usage(void)\n{\n    char buf[BUFSIZ];\n    int i;\n\n    setbuf(stderr, buf);\n    fprintf(stderr, \"%s\\n\\n\", TIFFGetVersion());\n    for (i = 0; stuff[i] != NULL; i++)\n        fprintf(stderr, \"%s\\n\", stuff[i]);\n    exit(-1);\n}",
+      "fn_code_pos": [
+        [
+          994,
+          0
+        ],
+        [
+          1004,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "usage(void)",
+      "fn_dec_pos": [
+        [
+          223,
+          12
+        ],
+        [
+          223,
+          23
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "processCompressOptions(char *)",
+      "fn_dec_pos": [
+        [
+          224,
+          11
+        ],
+        [
+          224,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "rearrangePixels(char *, uint32_t, uint32_t)",
+      "fn_dec_pos": [
+        [
+          225,
+          12
+        ],
+        [
+          225,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "rearrangePixels",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct\n{\n    int32_t iCIEX;\n    int32_t iCIEY;\n    int32_t iCIEZ;\n} BMPCIEXYZ;",
+      {
+        "iCIEX": "int32_t",
+        "iCIEY": "int32_t",
+        "iCIEZ": "int32_t"
+      },
+      "BMPCIEXYZ",
+      [
+        117,
+        0
+      ],
+      [
+        122,
+        12
+      ]
+    ],
+    [
+      "typedef struct /* This structure contains the x, y, and z */\n{              /* coordinates of the three colors that */\n    /* correspond */\n    BMPCIEXYZ iCIERed;   /* to the red, green, and blue endpoints for */\n    BMPCIEXYZ iCIEGreen; /* a specified logical color space. */\n    BMPCIEXYZ iCIEBlue;\n} BMPCIEXYZTriple;",
+      {
+        "iCIERed": "BMPCIEXYZ",
+        "iCIEGreen": "BMPCIEXYZ",
+        "iCIEBlue": "BMPCIEXYZ"
+      },
+      "BMPCIEXYZTriple",
+      [
+        124,
+        0
+      ],
+      [
+        130,
+        18
+      ]
+    ],
+    [
+      "typedef struct\n{\n    char bType[2];       /* Signature \"BM\" */\n    uint32_t iSize;      /* Size in bytes of the bitmap file. Should\n                          * always be ignored while reading because\n                          * of error in Windows 3.0 SDK's description\n                          * of this field */\n    uint16_t iReserved1; /* Reserved, set as 0 */\n    uint16_t iReserved2; /* Reserved, set as 0 */\n    uint32_t iOffBits;   /* Offset of the image from file start in bytes */\n} BMPFileHeader;",
+      {
+        "bType[2]": "char",
+        "iSize": "uint32_t",
+        "iReserved1": "uint16_t",
+        "iReserved2": "uint16_t",
+        "iOffBits": "uint32_t"
+      },
+      "BMPFileHeader",
+      [
+        132,
+        0
+      ],
+      [
+        142,
+        16
+      ]
+    ],
+    [
+      "typedef struct\n{\n    uint32_t iSize;         /* Size of BMPInfoHeader structure in bytes.\n                             * Should be used to determine start of the\n                             * colour table */\n    int32_t iWidth;         /* Image width */\n    int32_t iHeight;        /* Image height. If positive, image has bottom\n                             * left origin, if negative --- top left. */\n    int16_t iPlanes;        /* Number of image planes (must be set to 1) */\n    int16_t iBitCount;      /* Number of bits per pixel (1, 4, 8, 16, 24\n                             * or 32). If 0 then the number of bits per\n                             * pixel is specified or is implied by the\n                             * JPEG or PNG format. */\n    uint32_t iCompression;  /* Compression method */\n    uint32_t iSizeImage;    /* Size of uncomressed image in bytes. May\n                             * be 0 for BMPC_RGB bitmaps. If iCompression\n                             * is BI_JPEG or BI_PNG, iSizeImage indicates\n                             * the size of the JPEG or PNG image buffer. */\n    int32_t iXPelsPerMeter; /* X resolution, pixels per meter (0 if not used) */\n    int32_t iYPelsPerMeter; /* Y resolution, pixels per meter (0 if not used) */\n    uint32_t iClrUsed;      /* Size of colour table. If 0, iBitCount should\n                             * be used to calculate this value\n                             * (1<<iBitCount). This value should be\n                             * unsigned for proper shifting. */\n    int32_t iClrImportant;  /* Number of important colours. If 0, all\n                             * colours are required */\n\n    /*\n     * Fields above should be used for bitmaps, compatible with Windows NT 3.51\n     * and earlier. Windows 98/Me, Windows 2000/XP introduces additional fields:\n     */\n\n    int32_t iRedMask;           /* Colour mask that specifies the red component\n                                 * of each pixel, valid only if iCompression\n                                 * is set to BI_BITFIELDS. */\n    int32_t iGreenMask;         /* The same for green component */\n    int32_t iBlueMask;          /* The same for blue component */\n    int32_t iAlphaMask;         /* Colour mask that specifies the alpha\n                                 * component of each pixel. */\n    uint32_t iCSType;           /* Colour space of the DIB. */\n    BMPCIEXYZTriple sEndpoints; /* This member is ignored unless the iCSType\n                                 * member specifies BMPLT_CALIBRATED_RGB. */\n    int32_t iGammaRed;          /* Toned response curve for red. This member\n                                 * is ignored unless color values are\n                                 * calibrated RGB values and iCSType is set to\n                                 * BMPLT_CALIBRATED_RGB. Specified\n                                 * in 16^16 format. */\n    int32_t iGammaGreen;        /* Toned response curve for green. */\n    int32_t iGammaBlue;         /* Toned response curve for blue. */\n} BMPInfoHeader;",
+      {
+        "iSize": "uint32_t",
+        "iWidth": "int32_t",
+        "iHeight": "int32_t",
+        "iPlanes": "int16_t",
+        "iBitCount": "int16_t",
+        "iCompression": "uint32_t",
+        "iSizeImage": "uint32_t",
+        "iXPelsPerMeter": "int32_t",
+        "iYPelsPerMeter": "int32_t",
+        "iClrUsed": "uint32_t",
+        "iClrImportant": "int32_t",
+        "iRedMask": "int32_t",
+        "iGreenMask": "int32_t",
+        "iBlueMask": "int32_t",
+        "iAlphaMask": "int32_t",
+        "iCSType": "uint32_t",
+        "sEndpoints": "BMPCIEXYZTriple",
+        "iGammaRed": "int32_t",
+        "iGammaGreen": "int32_t",
+        "iGammaBlue": "int32_t"
+      },
+      "BMPInfoHeader",
+      [
+        147,
+        0
+      ],
+      [
+        196,
+        16
+      ]
+    ],
+    [
+      "typedef struct\n{\n    char bBlue;\n    char bGreen;\n    char bRed;\n    char bReserved; /* Must be 0 */\n} BMPColorEntry;",
+      {
+        "bBlue": "char",
+        "bGreen": "char",
+        "bRed": "char",
+        "bReserved": "char"
+      },
+      "BMPColorEntry",
+      [
+        210,
+        0
+      ],
+      [
+        216,
+        16
+      ]
+    ],
+    [
+      "typedef struct\n{\n    int32_t iCIEX;\n    int32_t iCIEY;\n    int32_t iCIEZ;\n} BMPCIEXYZ;",
+      {
+        "iCIEX": "int32_t",
+        "iCIEY": "int32_t",
+        "iCIEZ": "int32_t"
+      },
+      "BMPCIEXYZ",
+      [
+        117,
+        0
+      ],
+      [
+        122,
+        12
+      ]
+    ],
+    [
+      "typedef struct /* This structure contains the x, y, and z */\n{              /* coordinates of the three colors that */\n    /* correspond */\n    BMPCIEXYZ iCIERed;   /* to the red, green, and blue endpoints for */\n    BMPCIEXYZ iCIEGreen; /* a specified logical color space. */\n    BMPCIEXYZ iCIEBlue;\n} BMPCIEXYZTriple;",
+      {
+        "iCIERed": "BMPCIEXYZ",
+        "iCIEGreen": "BMPCIEXYZ",
+        "iCIEBlue": "BMPCIEXYZ"
+      },
+      "BMPCIEXYZTriple",
+      [
+        124,
+        0
+      ],
+      [
+        130,
+        18
+      ]
+    ],
+    [
+      "typedef struct\n{\n    char bType[2];       /* Signature \"BM\" */\n    uint32_t iSize;      /* Size in bytes of the bitmap file. Should\n                          * always be ignored while reading because\n                          * of error in Windows 3.0 SDK's description\n                          * of this field */\n    uint16_t iReserved1; /* Reserved, set as 0 */\n    uint16_t iReserved2; /* Reserved, set as 0 */\n    uint32_t iOffBits;   /* Offset of the image from file start in bytes */\n} BMPFileHeader;",
+      {
+        "bType[2]": "char",
+        "iSize": "uint32_t",
+        "iReserved1": "uint16_t",
+        "iReserved2": "uint16_t",
+        "iOffBits": "uint32_t"
+      },
+      "BMPFileHeader",
+      [
+        132,
+        0
+      ],
+      [
+        142,
+        16
+      ]
+    ],
+    [
+      "typedef struct\n{\n    uint32_t iSize;         /* Size of BMPInfoHeader structure in bytes.\n                             * Should be used to determine start of the\n                             * colour table */\n    int32_t iWidth;         /* Image width */\n    int32_t iHeight;        /* Image height. If positive, image has bottom\n                             * left origin, if negative --- top left. */\n    int16_t iPlanes;        /* Number of image planes (must be set to 1) */\n    int16_t iBitCount;      /* Number of bits per pixel (1, 4, 8, 16, 24\n                             * or 32). If 0 then the number of bits per\n                             * pixel is specified or is implied by the\n                             * JPEG or PNG format. */\n    uint32_t iCompression;  /* Compression method */\n    uint32_t iSizeImage;    /* Size of uncomressed image in bytes. May\n                             * be 0 for BMPC_RGB bitmaps. If iCompression\n                             * is BI_JPEG or BI_PNG, iSizeImage indicates\n                             * the size of the JPEG or PNG image buffer. */\n    int32_t iXPelsPerMeter; /* X resolution, pixels per meter (0 if not used) */\n    int32_t iYPelsPerMeter; /* Y resolution, pixels per meter (0 if not used) */\n    uint32_t iClrUsed;      /* Size of colour table. If 0, iBitCount should\n                             * be used to calculate this value\n                             * (1<<iBitCount). This value should be\n                             * unsigned for proper shifting. */\n    int32_t iClrImportant;  /* Number of important colours. If 0, all\n                             * colours are required */\n\n    /*\n     * Fields above should be used for bitmaps, compatible with Windows NT 3.51\n     * and earlier. Windows 98/Me, Windows 2000/XP introduces additional fields:\n     */\n\n    int32_t iRedMask;           /* Colour mask that specifies the red component\n                                 * of each pixel, valid only if iCompression\n                                 * is set to BI_BITFIELDS. */\n    int32_t iGreenMask;         /* The same for green component */\n    int32_t iBlueMask;          /* The same for blue component */\n    int32_t iAlphaMask;         /* Colour mask that specifies the alpha\n                                 * component of each pixel. */\n    uint32_t iCSType;           /* Colour space of the DIB. */\n    BMPCIEXYZTriple sEndpoints; /* This member is ignored unless the iCSType\n                                 * member specifies BMPLT_CALIBRATED_RGB. */\n    int32_t iGammaRed;          /* Toned response curve for red. This member\n                                 * is ignored unless color values are\n                                 * calibrated RGB values and iCSType is set to\n                                 * BMPLT_CALIBRATED_RGB. Specified\n                                 * in 16^16 format. */\n    int32_t iGammaGreen;        /* Toned response curve for green. */\n    int32_t iGammaBlue;         /* Toned response curve for blue. */\n} BMPInfoHeader;",
+      {
+        "iSize": "uint32_t",
+        "iWidth": "int32_t",
+        "iHeight": "int32_t",
+        "iPlanes": "int16_t",
+        "iBitCount": "int16_t",
+        "iCompression": "uint32_t",
+        "iSizeImage": "uint32_t",
+        "iXPelsPerMeter": "int32_t",
+        "iYPelsPerMeter": "int32_t",
+        "iClrUsed": "uint32_t",
+        "iClrImportant": "int32_t",
+        "iRedMask": "int32_t",
+        "iGreenMask": "int32_t",
+        "iBlueMask": "int32_t",
+        "iAlphaMask": "int32_t",
+        "iCSType": "uint32_t",
+        "sEndpoints": "BMPCIEXYZTriple",
+        "iGammaRed": "int32_t",
+        "iGammaGreen": "int32_t",
+        "iGammaBlue": "int32_t"
+      },
+      "BMPInfoHeader",
+      [
+        147,
+        0
+      ],
+      [
+        196,
+        16
+      ]
+    ],
+    [
+      "typedef struct\n{\n    char bBlue;\n    char bGreen;\n    char bRed;\n    char bReserved; /* Must be 0 */\n} BMPColorEntry;",
+      {
+        "bBlue": "char",
+        "bGreen": "char",
+        "bRed": "char",
+        "bReserved": "char"
+      },
+      "BMPColorEntry",
+      [
+        210,
+        0
+      ],
+      [
+        216,
+        16
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <ctype.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <errno.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include <sys/stat.h>\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include <sys/types.h>\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        39,
+        0
+      ],
+      [
+        40,
+        0
+      ]
+    ],
+    [
+      "#include <fcntl.h>\n",
+      [
+        43,
+        0
+      ],
+      [
+        44,
+        0
+      ]
+    ],
+    [
+      "#include <sys/types.h>\n",
+      [
+        47,
+        0
+      ],
+      [
+        48,
+        0
+      ]
+    ],
+    [
+      "#include <io.h>\n",
+      [
+        51,
+        0
+      ],
+      [
+        52,
+        0
+      ]
+    ],
+    [
+      "#include \"libport.h\"\n",
+      [
+        55,
+        0
+      ],
+      [
+        56,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        58,
+        0
+      ],
+      [
+        59,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        59,
+        0
+      ],
+      [
+        60,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": [
+    [
+      "enum BMPType\n{\n    BMPT_WIN4, /* BMP used in Windows 3.0/NT 3.51/95 */\n    BMPT_WIN5, /* BMP used in Windows NT 4.0/98/Me/2000/XP */\n    BMPT_OS21, /* BMP used in OS/2 PM 1.x */\n    BMPT_OS22  /* BMP used in OS/2 PM 2.x */\n}",
+      {
+        "BMPT_WIN4": "",
+        "BMPT_WIN5": "",
+        "BMPT_OS21": "",
+        "BMPT_OS22": ""
+      },
+      "BMPType",
+      [
+        65,
+        0
+      ],
+      [
+        71,
+        1
+      ]
+    ],
+    [
+      "enum BMPComprMethod\n{\n    BMPC_RGB = 0L,       /* Uncompressed */\n    BMPC_RLE8 = 1L,      /* RLE for 8 bpp images */\n    BMPC_RLE4 = 2L,      /* RLE for 4 bpp images */\n    BMPC_BITFIELDS = 3L, /* Bitmap is not compressed and the colour table\n                          * consists of three DWORD color masks that specify\n                          * the red, green, and blue components of each\n                          * pixel. This is valid when used with\n                          * 16- and 32-bpp bitmaps. */\n    BMPC_JPEG = 4L,      /* Indicates that the image is a JPEG image. */\n    BMPC_PNG = 5L        /* Indicates that the image is a PNG image. */\n}",
+      {
+        "BMPC_RGB": "",
+        "BMPC_RLE8": "",
+        "BMPC_RLE4": "",
+        "BMPC_BITFIELDS": "",
+        "BMPC_JPEG": "",
+        "BMPC_PNG": ""
+      },
+      "BMPComprMethod",
+      [
+        94,
+        0
+      ],
+      [
+        106,
+        1
+      ]
+    ],
+    [
+      "enum BMPLCSType /* Type of logical color space. */\n{\n    BMPLT_CALIBRATED_RGB = 0, /* This value indicates that endpoints and\n                               * gamma values are given in the appropriate\n                               * fields. */\n    BMPLT_DEVICE_RGB = 1,\n    BMPLT_DEVICE_CMYK = 2\n}",
+      {
+        "BMPLT_CALIBRATED_RGB": "",
+        "BMPLT_DEVICE_RGB": "",
+        "BMPLT_DEVICE_CMYK": ""
+      },
+      "",
+      [
+        108,
+        0
+      ],
+      [
+        115,
+        1
+      ]
+    ]
+  ]
+}

@@ -1,0 +1,263 @@
+Line	Count	Source	
+1			
+2		/* Copyright (C) 2010-2013 by Daniel Stenberg	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17			
+18		#include "ares_setup.h"	
+19			
+20		#ifdef HAVE_ASSERT_H	
+21		#  include <assert.h>	
+22		#endif	
+23			
+24		#ifdef HAVE_LIMITS_H	
+25		#include <limits.h>	
+26		#endif	
+27			
+28		#if defined(__INTEL_COMPILER) && defined(__unix__)	
+29			
+30		#ifdef HAVE_NETINET_IN_H	
+31		#  include <netinet/in.h>	
+32		#endif	
+33		#ifdef HAVE_ARPA_INET_H	
+34		#  include <arpa/inet.h>	
+35		#endif	
+36			
+37		#endif /* __INTEL_COMPILER && __unix__ */	
+38			
+39		#define BUILDING_ARES_NOWARN_C 1	
+40			
+41		#include "ares_nowarn.h"	
+42			
+43		#ifndef HAVE_LIMITS_H	
+44		/* systems without <limits.h> we guess have 16 bit shorts, 32bit ints and	
+45		32bit longs */	
+46		#  define CARES_MASK_SSHORT  0x7FFF	
+47		#  define CARES_MASK_USHORT  0xFFFF	
+48		#  define CARES_MASK_SINT    0x7FFFFFFF	
+49		#  define CARES_MASK_UINT    0xFFFFFFFF	
+50		#  define CARES_MASK_SLONG   0x7FFFFFFFL	
+51		#  define CARES_MASK_ULONG   0xFFFFFFFFUL	
+52		#else	
+53	0	#  define CARES_MASK_SSHORTSHRT_MAX	
+54	233	#  define CARES_MASK_USHORT  USHRT_MAX	
+55	9.55k	#  define CARES_MASK_SINT    INT_MAX	
+56	0	#  define CARES_MASK_UINTUINT_MAX	
+57	185	#  define CARES_MASK_SLONG   LONG_MAX	
+58		#  define CARES_MASK_ULONG   ULONG_MAX	
+59		#endif	
+60			
+61		/*	
+62		** unsigned size_t to signed long	
+63		*/	
+64			
+65		long aresx_uztosl(size_t uznum)	
+66	185	{	
+67		#ifdef __INTEL_COMPILER	
+68		#  pragma warning(push)	
+69		#  pragma warning(disable:810) /* conversion may lose significant bits */	
+70		#endif	
+71			
+72	185	return (long)(uznum & (size_t) CARES_MASK_SLONG);	
+73			
+74		#ifdef __INTEL_COMPILER	
+75		#  pragma warning(pop)	
+76		#endif	
+77	185	}	
+78			
+79		/*	
+80		** unsigned size_t to signed int	
+81		*/	
+82			
+83		int aresx_uztosi(size_t uznum)	
+84	9.55k	{	
+85		#ifdef __INTEL_COMPILER	
+86		#  pragma warning(push)	
+87		#  pragma warning(disable:810) /* conversion may lose significant bits */	
+88		#endif	
+89			
+90	9.55k	return (int)(uznum & (size_t) CARES_MASK_SINT);	
+91			
+92		#ifdef __INTEL_COMPILER	
+93		#  pragma warning(pop)	
+94		#endif	
+95	9.55k	}	
+96			
+97		/*	
+98		** unsigned size_t to signed short	
+99		*/	
+100			
+101		short aresx_uztoss(size_t uznum)	
+102	0	{	
+103		#ifdef __INTEL_COMPILER	
+104		#  pragma warning(push)	
+105		#  pragma warning(disable:810) /* conversion may lose significant bits */	
+106		#endif	
+107			
+108	0	return (short)(uznum & (size_t)CARES_MASK_SSHORT);	
+109			
+110		#ifdef __INTEL_COMPILER	
+111		#  pragma warning(pop)	
+112		#endif	
+113	0	}	
+114			
+115		/*	
+116		** signed int to signed short	
+117		*/	
+118			
+119		short aresx_sitoss(int sinum)	
+120	0	{	
+121		#ifdef __INTEL_COMPILER	
+122		#  pragma warning(push)	
+123		#  pragma warning(disable:810) /* conversion may lose significant bits */	
+124		#endif	
+125			
+126	0	DEBUGASSERT(sinum >= 0);	
+127	0	return (short)(sinum & (int)CARES_MASK_SSHORT);	
+128			
+129		#ifdef __INTEL_COMPILER	
+130		#  pragma warning(pop)	
+131		#endif	
+132	0	}	
+133			
+134		/*	
+135		** signed long to signed int	
+136		*/	
+137			
+138		int aresx_sltosi(long slnum)	
+139	0	{	
+140		#ifdef __INTEL_COMPILER	
+141		#  pragma warning(push)	
+142		#  pragma warning(disable:810) /* conversion may lose significant bits */	
+143		#endif	
+144			
+145	0	DEBUGASSERT(slnum >= 0);	
+146	0	return (int)(slnum & (long)CARES_MASK_SINT);	
+147			
+148		#ifdef __INTEL_COMPILER	
+149		#  pragma warning(pop)	
+150		#endif	
+151	0	}	
+152			
+153		/*	
+154		** signed ares_ssize_t to signed int	
+155		*/	
+156			
+157		int aresx_sztosi(ares_ssize_t sznum)	
+158	0	{	
+159		#ifdef __INTEL_COMPILER	
+160		#  pragma warning(push)	
+161		#  pragma warning(disable:810) /* conversion may lose significant bits */	
+162		#endif	
+163			
+164	0	DEBUGASSERT(sznum >= 0);	
+165	0	return (int)(sznum & (ares_ssize_t)CARES_MASK_SINT);	
+166			
+167		#ifdef __INTEL_COMPILER	
+168		#  pragma warning(pop)	
+169		#endif	
+170	0	}	
+171			
+172		/*	
+173		** signed ares_ssize_t to unsigned int	
+174		*/	
+175			
+176		unsigned int aresx_sztoui(ares_ssize_t sznum)	
+177	0	{	
+178		#ifdef __INTEL_COMPILER	
+179		#  pragma warning(push)	
+180		#  pragma warning(disable:810) /* conversion may lose significant bits */	
+181		#endif	
+182			
+183	0	DEBUGASSERT(sznum >= 0);	
+184	0	return (unsigned int)(sznum & (ares_ssize_t)CARES_MASK_UINT);	
+185			
+186		#ifdef __INTEL_COMPILER	
+187		#  pragma warning(pop)	
+188		#endif	
+189	0	}	
+190			
+191		/*	
+192		** signed int to unsigned short	
+193		*/	
+194			
+195		unsigned short aresx_sitous(int sinum)	
+196	233	{	
+197		#ifdef __INTEL_COMPILER	
+198		#  pragma warning(push)	
+199		#  pragma warning(disable:810) /* conversion may lose significant bits */	
+200		#endif	
+201			
+202	233	DEBUGASSERT(sinum >= 0);	
+203	233	return (unsigned short)(sinum & (int) CARES_MASK_USHORT);	
+204			
+205		#ifdef __INTEL_COMPILER	
+206		#  pragma warning(pop)	
+207		#endif	
+208	233	}	
+209			
+210		#if defined(__INTEL_COMPILER) && defined(__unix__)	
+211			
+212		int aresx_FD_ISSET(int fd, fd_set *fdset)	
+213		{	
+214		#pragma warning(push)	
+215		#pragma warning(disable:1469) /* clobber ignored */	
+216		return FD_ISSET(fd, fdset);	
+217		#pragma warning(pop)	
+218		}	
+219			
+220		void aresx_FD_SET(int fd, fd_set *fdset)	
+221		{	
+222		#pragma warning(push)	
+223		#pragma warning(disable:1469) /* clobber ignored */	
+224		FD_SET(fd, fdset);	
+225		#pragma warning(pop)	
+226		}	
+227			
+228		void aresx_FD_ZERO(fd_set *fdset)	
+229		{	
+230		#pragma warning(push)	
+231		#pragma warning(disable:593) /* variable was set but never used */	
+232		FD_ZERO(fdset);	
+233		#pragma warning(pop)	
+234		}	
+235			
+236		unsigned short aresx_htons(unsigned short usnum)	
+237		{	
+238		#if (__INTEL_COMPILER == 910) && defined(__i386__)	
+239		return (unsigned short)(((usnum << 8) & 0xFF00) | ((usnum >> 8) & 0x00FF));	
+240		#else	
+241		#pragma warning(push)	
+242		#pragma warning(disable:810) /* conversion may lose significant bits */	
+243		return htons(usnum);	
+244		#pragma warning(pop)	
+245		#endif	
+246		}	
+247			
+248		unsigned short aresx_ntohs(unsigned short usnum)	
+249		{	
+250		#if (__INTEL_COMPILER == 910) && defined(__i386__)	
+251		return (unsigned short)(((usnum << 8) & 0xFF00) | ((usnum >> 8) & 0x00FF));	
+252		#else	
+253		#pragma warning(push)	
+254		#pragma warning(disable:810) /* conversion may lose significant bits */	
+255		return ntohs(usnum);	
+256		#pragma warning(pop)	
+257		#endif	
+258		}	
+259			
+260		#endif /* __INTEL_COMPILER && __unix__ */	
+
+

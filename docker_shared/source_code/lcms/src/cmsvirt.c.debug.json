@@ -1,0 +1,907 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\ncmsBool SetTextTags(cmsHPROFILE hProfile, const wchar_t* Description)\n{\n    cmsMLU *DescriptionMLU, *CopyrightMLU;\n    cmsBool  rc = FALSE;\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n\n    DescriptionMLU  = cmsMLUalloc(ContextID, 1);\n    CopyrightMLU    = cmsMLUalloc(ContextID, 1);\n\n    if (DescriptionMLU == NULL || CopyrightMLU == NULL) goto Error;\n\n    if (!cmsMLUsetWide(DescriptionMLU,  \"en\", \"US\", Description)) goto Error;\n    if (!cmsMLUsetWide(CopyrightMLU,    \"en\", \"US\", L\"No copyright, use freely\")) goto Error;\n\n    if (!cmsWriteTag(hProfile, cmsSigProfileDescriptionTag,  DescriptionMLU)) goto Error;\n    if (!cmsWriteTag(hProfile, cmsSigCopyrightTag,           CopyrightMLU)) goto Error;\n\n    rc = TRUE;\n\nError:\n\n    if (DescriptionMLU)\n        cmsMLUfree(DescriptionMLU);\n    if (CopyrightMLU)\n        cmsMLUfree(CopyrightMLU);\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          31,
+          0
+        ],
+        [
+          58,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetTextTags",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Description": "wchar_t"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool  SetSeqDescTag(cmsHPROFILE hProfile, const char* Model)\n{\n    cmsBool  rc = FALSE;\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n    cmsSEQ* Seq = cmsAllocProfileSequenceDescription(ContextID, 1);\n\n    if (Seq == NULL) return FALSE;\n\n    Seq->seq[0].deviceMfg = (cmsSignature) 0;\n    Seq->seq[0].deviceModel = (cmsSignature) 0;\n\n#ifdef CMS_DONT_USE_INT64\n    Seq->seq[0].attributes[0] = 0;\n    Seq->seq[0].attributes[1] = 0;\n#else\n    Seq->seq[0].attributes = 0;\n#endif\n\n    Seq->seq[0].technology = (cmsTechnologySignature) 0;\n\n    cmsMLUsetASCII( Seq->seq[0].Manufacturer, cmsNoLanguage, cmsNoCountry, \"Little CMS\");\n    cmsMLUsetASCII( Seq->seq[0].Model,        cmsNoLanguage, cmsNoCountry, Model);\n\n    if (!_cmsWriteProfileSequence(hProfile, Seq)) goto Error;\n\n    rc = TRUE;\n\nError:\n    if (Seq)\n        cmsFreeProfileSequenceDescription(Seq);\n\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          61,
+          0
+        ],
+        [
+          94,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetSeqDescTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Model": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateRGBProfileTHR(cmsContext ContextID,\n                                          const cmsCIExyY* WhitePoint,\n                                          const cmsCIExyYTRIPLE* Primaries,\n                                          cmsToneCurve* const TransferFunction[3])\n{\n    cmsHPROFILE hICC;\n    cmsMAT3 MColorants;\n    cmsCIEXYZTRIPLE Colorants;\n    cmsCIExyY MaxWhite;\n    cmsMAT3 CHAD;\n    cmsCIEXYZ WhitePointXYZ;\n\n    hICC = cmsCreateProfilePlaceholder(ContextID);\n    if (!hICC)                          // can't allocate\n        return NULL;\n\n    cmsSetProfileVersion(hICC, 4.4);\n\n    cmsSetDeviceClass(hICC,      cmsSigDisplayClass);\n    cmsSetColorSpace(hICC,       cmsSigRgbData);\n    cmsSetPCS(hICC,              cmsSigXYZData);\n\n    cmsSetHeaderRenderingIntent(hICC,  INTENT_PERCEPTUAL);\n\n\n    // Implement profile using following tags:\n    //\n    //  1 cmsSigProfileDescriptionTag\n    //  2 cmsSigMediaWhitePointTag\n    //  3 cmsSigRedColorantTag\n    //  4 cmsSigGreenColorantTag\n    //  5 cmsSigBlueColorantTag\n    //  6 cmsSigRedTRCTag\n    //  7 cmsSigGreenTRCTag\n    //  8 cmsSigBlueTRCTag\n    //  9 Chromatic adaptation Tag\n    // This conforms a standard RGB DisplayProfile as says ICC, and then I add (As per addendum II)\n    // 10 cmsSigChromaticityTag\n\n\n    if (!SetTextTags(hICC, L\"RGB built-in\")) goto Error;\n\n    if (WhitePoint) {\n\n        if (!cmsWriteTag(hICC, cmsSigMediaWhitePointTag, cmsD50_XYZ())) goto Error;\n\n        cmsxyY2XYZ(&WhitePointXYZ, WhitePoint);\n        _cmsAdaptationMatrix(&CHAD, NULL, &WhitePointXYZ, cmsD50_XYZ());\n\n        // This is a V4 tag, but many CMM does read and understand it no matter which version\n        if (!cmsWriteTag(hICC, cmsSigChromaticAdaptationTag, (void*) &CHAD)) goto Error;\n    }\n\n    if (WhitePoint && Primaries) {\n\n        MaxWhite.x =  WhitePoint -> x;\n        MaxWhite.y =  WhitePoint -> y;\n        MaxWhite.Y =  1.0;\n\n        if (!_cmsBuildRGB2XYZtransferMatrix(&MColorants, &MaxWhite, Primaries)) goto Error;\n\n        Colorants.Red.X   = MColorants.v[0].n[0];\n        Colorants.Red.Y   = MColorants.v[1].n[0];\n        Colorants.Red.Z   = MColorants.v[2].n[0];\n\n        Colorants.Green.X = MColorants.v[0].n[1];\n        Colorants.Green.Y = MColorants.v[1].n[1];\n        Colorants.Green.Z = MColorants.v[2].n[1];\n\n        Colorants.Blue.X  = MColorants.v[0].n[2];\n        Colorants.Blue.Y  = MColorants.v[1].n[2];\n        Colorants.Blue.Z  = MColorants.v[2].n[2];\n\n        if (!cmsWriteTag(hICC, cmsSigRedColorantTag,   (void*) &Colorants.Red)) goto Error;\n        if (!cmsWriteTag(hICC, cmsSigBlueColorantTag,  (void*) &Colorants.Blue)) goto Error;\n        if (!cmsWriteTag(hICC, cmsSigGreenColorantTag, (void*) &Colorants.Green)) goto Error;\n    }\n\n\n    if (TransferFunction) {\n\n        // Tries to minimize space. Thanks to Richard Hughes for this nice idea         \n        if (!cmsWriteTag(hICC, cmsSigRedTRCTag,   (void*) TransferFunction[0])) goto Error;\n\n        if (TransferFunction[1] == TransferFunction[0]) {\n\n            if (!cmsLinkTag (hICC, cmsSigGreenTRCTag, cmsSigRedTRCTag)) goto Error;\n\n        } else {\n\n            if (!cmsWriteTag(hICC, cmsSigGreenTRCTag, (void*) TransferFunction[1])) goto Error;\n        }\n\n        if (TransferFunction[2] == TransferFunction[0]) {\n\n            if (!cmsLinkTag (hICC, cmsSigBlueTRCTag, cmsSigRedTRCTag)) goto Error;\n\n        } else {\n\n            if (!cmsWriteTag(hICC, cmsSigBlueTRCTag, (void*) TransferFunction[2])) goto Error;\n        }\n    }\n\n    if (Primaries) {\n        if (!cmsWriteTag(hICC, cmsSigChromaticityTag, (void*) Primaries)) goto Error;\n    }\n\n\n    return hICC;\n\nError:\n    if (hICC)\n        cmsCloseProfile(hICC);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          100,
+          0
+        ],
+        [
+          214,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateRGBProfileTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "WhitePoint": "cmsCIExyY",
+          "Primaries": "cmsCIExyYTRIPLE",
+          "TransferFunction": "cmsToneCurve"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateRGBProfile(const cmsCIExyY* WhitePoint,\n                                          const cmsCIExyYTRIPLE* Primaries,\n                                          cmsToneCurve* const TransferFunction[3])\n{\n    return cmsCreateRGBProfileTHR(NULL, WhitePoint, Primaries, TransferFunction);\n}",
+      "fn_code_pos": [
+        [
+          216,
+          0
+        ],
+        [
+          221,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateRGBProfile",
+        "parameters": {
+          "WhitePoint": "cmsCIExyY",
+          "Primaries": "cmsCIExyYTRIPLE",
+          "TransferFunction": "cmsToneCurve"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateGrayProfileTHR(cmsContext ContextID,\n                                           const cmsCIExyY* WhitePoint,\n                                           const cmsToneCurve* TransferFunction)\n{\n    cmsHPROFILE hICC;\n    cmsCIEXYZ tmp;\n\n    hICC = cmsCreateProfilePlaceholder(ContextID);\n    if (!hICC)                          // can't allocate\n        return NULL;\n\n    cmsSetProfileVersion(hICC, 4.4);\n\n    cmsSetDeviceClass(hICC,      cmsSigDisplayClass);\n    cmsSetColorSpace(hICC,       cmsSigGrayData);\n    cmsSetPCS(hICC,              cmsSigXYZData);\n    cmsSetHeaderRenderingIntent(hICC,  INTENT_PERCEPTUAL);\n\n\n    // Implement profile using following tags:\n    //\n    //  1 cmsSigProfileDescriptionTag\n    //  2 cmsSigMediaWhitePointTag\n    //  3 cmsSigGrayTRCTag\n\n    // This conforms a standard Gray DisplayProfile\n\n    // Fill-in the tags\n\n    if (!SetTextTags(hICC, L\"gray built-in\")) goto Error;\n\n\n    if (WhitePoint) {\n\n        cmsxyY2XYZ(&tmp, WhitePoint);\n        if (!cmsWriteTag(hICC, cmsSigMediaWhitePointTag, (void*) &tmp)) goto Error;\n    }\n\n    if (TransferFunction) {\n\n        if (!cmsWriteTag(hICC, cmsSigGrayTRCTag, (void*) TransferFunction)) goto Error;\n    }\n\n    return hICC;\n\nError:\n    if (hICC)\n        cmsCloseProfile(hICC);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          226,
+          0
+        ],
+        [
+          275,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateGrayProfileTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "WhitePoint": "cmsCIExyY",
+          "TransferFunction": "cmsToneCurve"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateGrayProfile(const cmsCIExyY* WhitePoint,\n                                                    const cmsToneCurve* TransferFunction)\n{\n    return cmsCreateGrayProfileTHR(NULL, WhitePoint, TransferFunction);\n}",
+      "fn_code_pos": [
+        [
+          279,
+          0
+        ],
+        [
+          283,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateGrayProfile",
+        "parameters": {
+          "WhitePoint": "cmsCIExyY",
+          "TransferFunction": "cmsToneCurve"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateLinearizationDeviceLinkTHR(cmsContext ContextID,\n                                                          cmsColorSpaceSignature ColorSpace,\n                                                          cmsToneCurve* const TransferFunctions[])\n{\n    cmsHPROFILE hICC;\n    cmsPipeline* Pipeline;\n    cmsInt32Number nChannels;\n\n    hICC = cmsCreateProfilePlaceholder(ContextID);\n    if (!hICC)\n        return NULL;\n\n    cmsSetProfileVersion(hICC, 4.4);\n\n    cmsSetDeviceClass(hICC,      cmsSigLinkClass);\n    cmsSetColorSpace(hICC,       ColorSpace);\n    cmsSetPCS(hICC,              ColorSpace);\n\n    cmsSetHeaderRenderingIntent(hICC,  INTENT_PERCEPTUAL);\n\n    // Set up channels\n    nChannels = cmsChannelsOfColorSpace(ColorSpace);\n\n    // Creates a Pipeline with prelinearization step only\n    Pipeline = cmsPipelineAlloc(ContextID, nChannels, nChannels);\n    if (Pipeline == NULL) goto Error;\n\n\n    // Copy tables to Pipeline\n    if (!cmsPipelineInsertStage(Pipeline, cmsAT_BEGIN, cmsStageAllocToneCurves(ContextID, nChannels, TransferFunctions)))\n        goto Error;\n\n    // Create tags\n    if (!SetTextTags(hICC, L\"Linearization built-in\")) goto Error;\n    if (!cmsWriteTag(hICC, cmsSigAToB0Tag, (void*) Pipeline)) goto Error;\n    if (!SetSeqDescTag(hICC, \"Linearization built-in\")) goto Error;\n\n    // Pipeline is already on virtual profile\n    cmsPipelineFree(Pipeline);\n\n    // Ok, done\n    return hICC;\n\nError:\n    cmsPipelineFree(Pipeline);\n    if (hICC)\n        cmsCloseProfile(hICC);\n\n\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          287,
+          0
+        ],
+        [
+          337,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateLinearizationDeviceLinkTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "ColorSpace": "cmsColorSpaceSignature",
+          "TransferFunctions": "cmsToneCurve"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateLinearizationDeviceLink(cmsColorSpaceSignature ColorSpace,\n                                                                 cmsToneCurve* const TransferFunctions[])\n{\n    return cmsCreateLinearizationDeviceLinkTHR(NULL, ColorSpace, TransferFunctions);\n}",
+      "fn_code_pos": [
+        [
+          339,
+          0
+        ],
+        [
+          343,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateLinearizationDeviceLink",
+        "parameters": {
+          "ColorSpace": "cmsColorSpaceSignature",
+          "TransferFunctions": "cmsToneCurve"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "static\nint InkLimitingSampler(CMSREGISTER const cmsUInt16Number In[], CMSREGISTER cmsUInt16Number Out[], CMSREGISTER void* Cargo)\n{\n    cmsFloat64Number InkLimit = *(cmsFloat64Number *) Cargo;\n    cmsFloat64Number SumCMY, SumCMYK, Ratio;\n\n    InkLimit = (InkLimit * 655.35);\n\n    SumCMY   = (cmsFloat64Number) In[0]  + In[1] + In[2];\n    SumCMYK  = SumCMY + In[3];\n\n    if (SumCMYK > InkLimit) {\n\n        Ratio = 1 - ((SumCMYK - InkLimit) / SumCMY);\n        if (Ratio < 0)\n            Ratio = 0;\n    }\n    else Ratio = 1;\n\n    Out[0] = _cmsQuickSaturateWord(In[0] * Ratio);     // C\n    Out[1] = _cmsQuickSaturateWord(In[1] * Ratio);     // M\n    Out[2] = _cmsQuickSaturateWord(In[2] * Ratio);     // Y\n\n    Out[3] = In[3];                                 // K (untouched)\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          362,
+          0
+        ],
+        [
+          388,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "InkLimitingSampler",
+        "parameters": {
+          "In": "CMSREGISTER",
+          "Out": "CMSREGISTER",
+          "void": "CMSREGISTER"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateInkLimitingDeviceLinkTHR(cmsContext ContextID,\n                                                     cmsColorSpaceSignature ColorSpace,\n                                                     cmsFloat64Number Limit)\n{\n    cmsHPROFILE hICC;\n    cmsPipeline* LUT;\n    cmsStage* CLUT;\n    cmsInt32Number nChannels;\n\n    if (ColorSpace != cmsSigCmykData) {\n        cmsSignalError(ContextID, cmsERROR_COLORSPACE_CHECK, \"InkLimiting: Only CMYK currently supported\");\n        return NULL;\n    }\n\n    if (Limit < 0.0 || Limit > 400) {\n\n        cmsSignalError(ContextID, cmsERROR_RANGE, \"InkLimiting: Limit should be between 0..400\");\n        if (Limit < 0) Limit = 0;\n        if (Limit > 400) Limit = 400;\n\n    }\n\n    hICC = cmsCreateProfilePlaceholder(ContextID);\n    if (!hICC)                          // can't allocate\n        return NULL;\n\n    cmsSetProfileVersion(hICC, 4.4);\n\n    cmsSetDeviceClass(hICC,      cmsSigLinkClass);\n    cmsSetColorSpace(hICC,       ColorSpace);\n    cmsSetPCS(hICC,              ColorSpace);\n\n    cmsSetHeaderRenderingIntent(hICC,  INTENT_PERCEPTUAL);\n\n\n    // Creates a Pipeline with 3D grid only\n    LUT = cmsPipelineAlloc(ContextID, 4, 4);\n    if (LUT == NULL) goto Error;\n\n\n    nChannels = cmsChannelsOf(ColorSpace);\n\n    CLUT = cmsStageAllocCLut16bit(ContextID, 17, nChannels, nChannels, NULL);\n    if (CLUT == NULL) goto Error;\n\n    if (!cmsStageSampleCLut16bit(CLUT, InkLimitingSampler, (void*) &Limit, 0)) goto Error;\n\n    if (!cmsPipelineInsertStage(LUT, cmsAT_BEGIN, _cmsStageAllocIdentityCurves(ContextID, nChannels)) ||\n        !cmsPipelineInsertStage(LUT, cmsAT_END, CLUT) ||\n        !cmsPipelineInsertStage(LUT, cmsAT_END, _cmsStageAllocIdentityCurves(ContextID, nChannels)))\n        goto Error;\n\n    // Create tags\n    if (!SetTextTags(hICC, L\"ink-limiting built-in\")) goto Error;\n\n    if (!cmsWriteTag(hICC, cmsSigAToB0Tag, (void*) LUT))  goto Error;\n    if (!SetSeqDescTag(hICC, \"ink-limiting built-in\")) goto Error;\n\n    // cmsPipeline is already on virtual profile\n    cmsPipelineFree(LUT);\n\n    // Ok, done\n    return hICC;\n\nError:\n    if (LUT != NULL)\n        cmsPipelineFree(LUT);\n\n    if (hICC != NULL)\n        cmsCloseProfile(hICC);\n\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          392,
+          0
+        ],
+        [
+          464,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateInkLimitingDeviceLinkTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "ColorSpace": "cmsColorSpaceSignature",
+          "Limit": "cmsFloat64Number"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateInkLimitingDeviceLink(cmsColorSpaceSignature ColorSpace, cmsFloat64Number Limit)\n{\n    return cmsCreateInkLimitingDeviceLinkTHR(NULL, ColorSpace, Limit);\n}",
+      "fn_code_pos": [
+        [
+          466,
+          0
+        ],
+        [
+          469,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateInkLimitingDeviceLink",
+        "parameters": {
+          "ColorSpace": "cmsColorSpaceSignature",
+          "Limit": "cmsFloat64Number"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateLab2ProfileTHR(cmsContext ContextID, const cmsCIExyY* WhitePoint)\n{\n    cmsHPROFILE hProfile;\n    cmsPipeline* LUT = NULL;\n\n    hProfile = cmsCreateRGBProfileTHR(ContextID, WhitePoint == NULL ? cmsD50_xyY() : WhitePoint, NULL, NULL);\n    if (hProfile == NULL) return NULL;\n\n    cmsSetProfileVersion(hProfile, 2.1);\n\n    cmsSetDeviceClass(hProfile, cmsSigAbstractClass);\n    cmsSetColorSpace(hProfile,  cmsSigLabData);\n    cmsSetPCS(hProfile,         cmsSigLabData);\n\n    if (!SetTextTags(hProfile, L\"Lab identity built-in\")) return NULL;\n\n    // An identity LUT is all we need\n    LUT = cmsPipelineAlloc(ContextID, 3, 3);\n    if (LUT == NULL) goto Error;\n\n    if (!cmsPipelineInsertStage(LUT, cmsAT_BEGIN, _cmsStageAllocIdentityCLut(ContextID, 3)))\n        goto Error;\n\n    if (!cmsWriteTag(hProfile, cmsSigAToB0Tag, LUT)) goto Error;\n    cmsPipelineFree(LUT);\n\n    return hProfile;\n\nError:\n\n    if (LUT != NULL)\n        cmsPipelineFree(LUT);\n\n    if (hProfile != NULL)\n        cmsCloseProfile(hProfile);\n\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          473,
+          0
+        ],
+        [
+          510,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateLab2ProfileTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "WhitePoint": "cmsCIExyY"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateLab2Profile(const cmsCIExyY* WhitePoint)\n{\n    return cmsCreateLab2ProfileTHR(NULL, WhitePoint);\n}",
+      "fn_code_pos": [
+        [
+          513,
+          0
+        ],
+        [
+          516,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateLab2Profile",
+        "parameters": {
+          "WhitePoint": "cmsCIExyY"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateLab4ProfileTHR(cmsContext ContextID, const cmsCIExyY* WhitePoint)\n{\n    cmsHPROFILE hProfile;\n    cmsPipeline* LUT = NULL;\n\n    hProfile = cmsCreateRGBProfileTHR(ContextID, WhitePoint == NULL ? cmsD50_xyY() : WhitePoint, NULL, NULL);\n    if (hProfile == NULL) return NULL;\n\n    cmsSetProfileVersion(hProfile, 4.4);\n\n    cmsSetDeviceClass(hProfile, cmsSigAbstractClass);\n    cmsSetColorSpace(hProfile,  cmsSigLabData);\n    cmsSetPCS(hProfile,         cmsSigLabData);\n\n    if (!SetTextTags(hProfile, L\"Lab identity built-in\")) goto Error;\n\n    // An empty LUTs is all we need\n    LUT = cmsPipelineAlloc(ContextID, 3, 3);\n    if (LUT == NULL) goto Error;\n\n    if (!cmsPipelineInsertStage(LUT, cmsAT_BEGIN, _cmsStageAllocIdentityCurves(ContextID, 3)))\n        goto Error;\n\n    if (!cmsWriteTag(hProfile, cmsSigAToB0Tag, LUT)) goto Error;\n    cmsPipelineFree(LUT);\n\n    return hProfile;\n\nError:\n\n    if (LUT != NULL)\n        cmsPipelineFree(LUT);\n\n    if (hProfile != NULL)\n        cmsCloseProfile(hProfile);\n\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          520,
+          0
+        ],
+        [
+          557,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateLab4ProfileTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "WhitePoint": "cmsCIExyY"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateLab4Profile(const cmsCIExyY* WhitePoint)\n{\n    return cmsCreateLab4ProfileTHR(NULL, WhitePoint);\n}",
+      "fn_code_pos": [
+        [
+          559,
+          0
+        ],
+        [
+          562,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateLab4Profile",
+        "parameters": {
+          "WhitePoint": "cmsCIExyY"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateXYZProfileTHR(cmsContext ContextID)\n{\n    cmsHPROFILE hProfile;\n    cmsPipeline* LUT = NULL;\n\n    hProfile = cmsCreateRGBProfileTHR(ContextID, cmsD50_xyY(), NULL, NULL);\n    if (hProfile == NULL) return NULL;\n\n    cmsSetProfileVersion(hProfile, 4.4);\n\n    cmsSetDeviceClass(hProfile, cmsSigAbstractClass);\n    cmsSetColorSpace(hProfile,  cmsSigXYZData);\n    cmsSetPCS(hProfile,         cmsSigXYZData);\n\n    if (!SetTextTags(hProfile, L\"XYZ identity built-in\")) goto Error;\n\n    // An identity LUT is all we need\n    LUT = cmsPipelineAlloc(ContextID, 3, 3);\n    if (LUT == NULL) goto Error;\n\n    if (!cmsPipelineInsertStage(LUT, cmsAT_BEGIN, _cmsStageAllocIdentityCurves(ContextID, 3)))\n        goto Error;\n\n    if (!cmsWriteTag(hProfile, cmsSigAToB0Tag, LUT)) goto Error;\n    cmsPipelineFree(LUT);\n\n    return hProfile;\n\nError:\n\n    if (LUT != NULL)\n        cmsPipelineFree(LUT);\n\n    if (hProfile != NULL)\n        cmsCloseProfile(hProfile);\n\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          566,
+          0
+        ],
+        [
+          603,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateXYZProfileTHR",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateXYZProfile(void)\n{\n    return cmsCreateXYZProfileTHR(NULL);\n}",
+      "fn_code_pos": [
+        [
+          606,
+          0
+        ],
+        [
+          609,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateXYZProfile",
+        "parameters": {},
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "static\ncmsToneCurve* Build_sRGBGamma(cmsContext ContextID)\n{\n    cmsFloat64Number Parameters[5];\n\n    Parameters[0] = 2.4;\n    Parameters[1] = 1. / 1.055;\n    Parameters[2] = 0.055 / 1.055;\n    Parameters[3] = 1. / 12.92;\n    Parameters[4] = 0.04045;\n\n    return cmsBuildParametricToneCurve(ContextID, 4, Parameters);\n}",
+      "fn_code_pos": [
+        [
+          627,
+          0
+        ],
+        [
+          639,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Build_sRGBGamma",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsToneCurve"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreate_sRGBProfileTHR(cmsContext ContextID)\n{\n       cmsCIExyY       D65 = { 0.3127, 0.3290, 1.0 };\n       cmsCIExyYTRIPLE Rec709Primaries = {\n                                   {0.6400, 0.3300, 1.0},\n                                   {0.3000, 0.6000, 1.0},\n                                   {0.1500, 0.0600, 1.0}\n                                   };\n       cmsToneCurve* Gamma22[3];\n       cmsHPROFILE  hsRGB;\n\n      // cmsWhitePointFromTemp(&D65, 6504);\n       Gamma22[0] = Gamma22[1] = Gamma22[2] = Build_sRGBGamma(ContextID);\n       if (Gamma22[0] == NULL) return NULL;\n\n       hsRGB = cmsCreateRGBProfileTHR(ContextID, &D65, &Rec709Primaries, Gamma22);\n       cmsFreeToneCurve(Gamma22[0]);\n       if (hsRGB == NULL) return NULL;\n\n       if (!SetTextTags(hsRGB, L\"sRGB built-in\")) {\n           cmsCloseProfile(hsRGB);\n           return NULL;\n       }\n\n       return hsRGB;\n}",
+      "fn_code_pos": [
+        [
+          642,
+          0
+        ],
+        [
+          667,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreate_sRGBProfileTHR",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreate_sRGBProfile(void)\n{\n    return cmsCreate_sRGBProfileTHR(NULL);\n}",
+      "fn_code_pos": [
+        [
+          669,
+          0
+        ],
+        [
+          672,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreate_sRGBProfile",
+        "parameters": {},
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "static\nint bchswSampler(CMSREGISTER const cmsUInt16Number In[], CMSREGISTER cmsUInt16Number Out[], CMSREGISTER void* Cargo)\n{\n    cmsCIELab LabIn, LabOut;\n    cmsCIELCh LChIn, LChOut;\n    cmsCIEXYZ XYZ;\n    LPBCHSWADJUSTS bchsw = (LPBCHSWADJUSTS) Cargo;\n\n\n    cmsLabEncoded2Float(&LabIn, In);\n\n\n    cmsLab2LCh(&LChIn, &LabIn);\n\n    // Do some adjusts on LCh\n\n    LChOut.L = LChIn.L * bchsw ->Contrast + bchsw ->Brightness;\n    LChOut.C = LChIn.C + bchsw -> Saturation;\n    LChOut.h = LChIn.h + bchsw -> Hue;\n\n\n    cmsLCh2Lab(&LabOut, &LChOut);\n\n    // Move white point in Lab\n    if (bchsw->lAdjustWP) {\n           cmsLab2XYZ(&bchsw->WPsrc, &XYZ, &LabOut);\n           cmsXYZ2Lab(&bchsw->WPdest, &LabOut, &XYZ);\n    }\n\n    // Back to encoded\n\n    cmsFloat2LabEncoded(Out, &LabOut);\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          687,
+          0
+        ],
+        [
+          721,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "bchswSampler",
+        "parameters": {
+          "In": "CMSREGISTER",
+          "Out": "CMSREGISTER",
+          "void": "CMSREGISTER"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateBCHSWabstractProfileTHR(cmsContext ContextID,\n                                                       cmsUInt32Number nLUTPoints,\n                                                       cmsFloat64Number Bright,\n                                                       cmsFloat64Number Contrast,\n                                                       cmsFloat64Number Hue,\n                                                       cmsFloat64Number Saturation,\n                                                       cmsUInt32Number TempSrc,\n                                                       cmsUInt32Number TempDest)\n{\n    cmsHPROFILE hICC;\n    cmsPipeline* Pipeline;\n    BCHSWADJUSTS bchsw;\n    cmsCIExyY WhitePnt;\n    cmsStage* CLUT;\n    cmsUInt32Number Dimensions[MAX_INPUT_DIMENSIONS];\n    cmsUInt32Number i;\n\n    bchsw.Brightness = Bright;\n    bchsw.Contrast   = Contrast;\n    bchsw.Hue        = Hue;\n    bchsw.Saturation = Saturation;\n    if (TempSrc == TempDest) {\n\n           bchsw.lAdjustWP = FALSE;\n    }\n    else {\n           bchsw.lAdjustWP = TRUE;\n           cmsWhitePointFromTemp(&WhitePnt, TempSrc);\n           cmsxyY2XYZ(&bchsw.WPsrc, &WhitePnt);\n           cmsWhitePointFromTemp(&WhitePnt, TempDest);\n           cmsxyY2XYZ(&bchsw.WPdest, &WhitePnt);\n     \n    }\n\n    hICC = cmsCreateProfilePlaceholder(ContextID);\n    if (!hICC)                          // can't allocate\n        return NULL;\n\n    cmsSetDeviceClass(hICC,      cmsSigAbstractClass);\n    cmsSetColorSpace(hICC,       cmsSigLabData);\n    cmsSetPCS(hICC,              cmsSigLabData);\n\n    cmsSetHeaderRenderingIntent(hICC,  INTENT_PERCEPTUAL);\n\n    // Creates a Pipeline with 3D grid only\n    Pipeline = cmsPipelineAlloc(ContextID, 3, 3);\n    if (Pipeline == NULL) {\n        cmsCloseProfile(hICC);\n        return NULL;\n    }\n\n    for (i=0; i < MAX_INPUT_DIMENSIONS; i++) Dimensions[i] = nLUTPoints;\n    CLUT = cmsStageAllocCLut16bitGranular(ContextID, Dimensions, 3, 3, NULL);\n    if (CLUT == NULL) goto Error;\n\n\n    if (!cmsStageSampleCLut16bit(CLUT, bchswSampler, (void*) &bchsw, 0)) {\n\n        // Shouldn't reach here\n        goto Error;\n    }\n\n    if (!cmsPipelineInsertStage(Pipeline, cmsAT_END, CLUT)) {\n        goto Error;\n    }\n\n    // Create tags\n    if (!SetTextTags(hICC, L\"BCHS built-in\")) return NULL;\n\n    cmsWriteTag(hICC, cmsSigMediaWhitePointTag, (void*) cmsD50_XYZ());\n\n    cmsWriteTag(hICC, cmsSigAToB0Tag, (void*) Pipeline);\n\n    // Pipeline is already on virtual profile\n    cmsPipelineFree(Pipeline);\n\n    // Ok, done\n    return hICC;\n\nError:\n    cmsPipelineFree(Pipeline);\n    cmsCloseProfile(hICC);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          727,
+          0
+        ],
+        [
+          810,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateBCHSWabstractProfileTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nLUTPoints": "cmsUInt32Number",
+          "Bright": "cmsFloat64Number",
+          "Contrast": "cmsFloat64Number",
+          "Hue": "cmsFloat64Number",
+          "Saturation": "cmsFloat64Number",
+          "TempSrc": "cmsUInt32Number",
+          "TempDest": "cmsUInt32Number"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "CMSAPI cmsHPROFILE   CMSEXPORT cmsCreateBCHSWabstractProfile(cmsUInt32Number nLUTPoints,\n                                                             cmsFloat64Number Bright,\n                                                             cmsFloat64Number Contrast,\n                                                             cmsFloat64Number Hue,\n                                                             cmsFloat64Number Saturation,\n                                                             cmsUInt32Number TempSrc,\n                                                             cmsUInt32Number TempDest)\n{\n    return cmsCreateBCHSWabstractProfileTHR(NULL, nLUTPoints, Bright, Contrast, Hue, Saturation, TempSrc, TempDest);\n}",
+      "fn_code_pos": [
+        [
+          813,
+          0
+        ],
+        [
+          822,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateBCHSWabstractProfile",
+        "parameters": {
+          "nLUTPoints": "cmsUInt32Number",
+          "Bright": "cmsFloat64Number",
+          "Contrast": "cmsFloat64Number",
+          "Hue": "cmsFloat64Number",
+          "Saturation": "cmsFloat64Number",
+          "TempSrc": "cmsUInt32Number",
+          "TempDest": "cmsUInt32Number"
+        },
+        "return_type": "CMSAPI"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateNULLProfileTHR(cmsContext ContextID)\n{\n    cmsHPROFILE hProfile;\n    cmsPipeline* LUT = NULL;\n    cmsStage* PostLin;\n    cmsStage* OutLin;\n    cmsToneCurve* EmptyTab[3];\n    cmsUInt16Number Zero[2] = { 0, 0 };\n    const cmsFloat64Number PickLstarMatrix[] = { 1, 0, 0 };\n\n    hProfile = cmsCreateProfilePlaceholder(ContextID);\n    if (!hProfile)                          // can't allocate\n        return NULL;\n\n    cmsSetProfileVersion(hProfile, 4.4);\n\n    if (!SetTextTags(hProfile, L\"NULL profile built-in\")) goto Error;\n\n\n    cmsSetDeviceClass(hProfile, cmsSigOutputClass);\n    cmsSetColorSpace(hProfile,  cmsSigGrayData);\n    cmsSetPCS(hProfile,         cmsSigLabData);\n\n    // Create a valid ICC 4 structure\n    LUT = cmsPipelineAlloc(ContextID, 3, 1);\n    if (LUT == NULL) goto Error;\n    \n    EmptyTab[0] = EmptyTab[1] = EmptyTab[2] = cmsBuildTabulatedToneCurve16(ContextID, 2, Zero);\n    PostLin = cmsStageAllocToneCurves(ContextID, 3, EmptyTab);\n    OutLin  = cmsStageAllocToneCurves(ContextID, 1, EmptyTab);\n    cmsFreeToneCurve(EmptyTab[0]);\n\n    if (!cmsPipelineInsertStage(LUT, cmsAT_END, PostLin))\n        goto Error;\n\n    if (!cmsPipelineInsertStage(LUT, cmsAT_END, cmsStageAllocMatrix(ContextID, 1, 3, PickLstarMatrix, NULL)))\n        goto Error;\n\n    if (!cmsPipelineInsertStage(LUT, cmsAT_END, OutLin))\n        goto Error;\n\n    if (!cmsWriteTag(hProfile, cmsSigBToA0Tag, (void*) LUT)) goto Error;\n    if (!cmsWriteTag(hProfile, cmsSigMediaWhitePointTag, cmsD50_XYZ())) goto Error;\n\n    cmsPipelineFree(LUT);\n    return hProfile;\n\nError:\n\n    if (LUT != NULL)\n        cmsPipelineFree(LUT);\n\n    if (hProfile != NULL)\n        cmsCloseProfile(hProfile);\n\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          827,
+          0
+        ],
+        [
+          883,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateNULLProfileTHR",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateNULLProfile(void)\n{\n    return cmsCreateNULLProfileTHR(NULL);\n}",
+      "fn_code_pos": [
+        [
+          885,
+          0
+        ],
+        [
+          888,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateNULLProfile",
+        "parameters": {},
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "static\nint IsPCS(cmsColorSpaceSignature ColorSpace)\n{\n    return (ColorSpace == cmsSigXYZData ||\n            ColorSpace == cmsSigLabData);\n}",
+      "fn_code_pos": [
+        [
+          891,
+          0
+        ],
+        [
+          896,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "IsPCS",
+        "parameters": {
+          "ColorSpace": "cmsColorSpaceSignature"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nvoid FixColorSpaces(cmsHPROFILE hProfile,\n                              cmsColorSpaceSignature ColorSpace,\n                              cmsColorSpaceSignature PCS,\n                              cmsUInt32Number dwFlags)\n{\n    if (dwFlags & cmsFLAGS_GUESSDEVICECLASS) {\n\n            if (IsPCS(ColorSpace) && IsPCS(PCS)) {\n\n                    cmsSetDeviceClass(hProfile,      cmsSigAbstractClass);\n                    cmsSetColorSpace(hProfile,       ColorSpace);\n                    cmsSetPCS(hProfile,              PCS);\n                    return;\n            }\n\n            if (IsPCS(ColorSpace) && !IsPCS(PCS)) {\n\n                    cmsSetDeviceClass(hProfile, cmsSigOutputClass);\n                    cmsSetPCS(hProfile,         ColorSpace);\n                    cmsSetColorSpace(hProfile,  PCS);\n                    return;\n            }\n\n            if (IsPCS(PCS) && !IsPCS(ColorSpace)) {\n\n                   cmsSetDeviceClass(hProfile,  cmsSigInputClass);\n                   cmsSetColorSpace(hProfile,   ColorSpace);\n                   cmsSetPCS(hProfile,          PCS);\n                   return;\n            }\n    }\n\n    cmsSetDeviceClass(hProfile,      cmsSigLinkClass);\n    cmsSetColorSpace(hProfile,       ColorSpace);\n    cmsSetPCS(hProfile,              PCS);\n}",
+      "fn_code_pos": [
+        [
+          899,
+          0
+        ],
+        [
+          935,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FixColorSpaces",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "ColorSpace": "cmsColorSpaceSignature",
+          "PCS": "cmsColorSpaceSignature",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsHPROFILE CreateNamedColorDevicelink(cmsHTRANSFORM xform)\n{\n    _cmsTRANSFORM* v = (_cmsTRANSFORM*) xform;\n    cmsHPROFILE hICC = NULL;\n    cmsUInt32Number i, nColors;\n    cmsNAMEDCOLORLIST *nc2 = NULL, *Original = NULL;\n\n    // Create an empty placeholder\n    hICC = cmsCreateProfilePlaceholder(v->ContextID);\n    if (hICC == NULL) return NULL;\n\n    // Critical information\n    cmsSetDeviceClass(hICC, cmsSigNamedColorClass);\n    cmsSetColorSpace(hICC, v ->ExitColorSpace);\n    cmsSetPCS(hICC, cmsSigLabData);\n\n    // Tag profile with information\n    if (!SetTextTags(hICC, L\"Named color devicelink\")) goto Error;\n\n    Original = cmsGetNamedColorList(xform);\n    if (Original == NULL) goto Error;\n\n    nColors = cmsNamedColorCount(Original);\n    nc2     = cmsDupNamedColorList(Original);\n    if (nc2 == NULL) goto Error;\n\n    // Colorant count now depends on the output space\n    nc2 ->ColorantCount = cmsPipelineOutputChannels(v ->Lut);\n\n    // Make sure we have proper formatters\n    cmsChangeBuffersFormat(xform, TYPE_NAMED_COLOR_INDEX,\n        FLOAT_SH(0) | COLORSPACE_SH(_cmsLCMScolorSpace(v ->ExitColorSpace))\n        | BYTES_SH(2) | CHANNELS_SH(cmsChannelsOfColorSpace(v ->ExitColorSpace)));\n\n    // Apply the transfor to colorants.\n    for (i=0; i < nColors; i++) {\n        cmsDoTransform(xform, &i, nc2 ->List[i].DeviceColorant, 1);\n    }\n\n    if (!cmsWriteTag(hICC, cmsSigNamedColor2Tag, (void*) nc2)) goto Error;\n    cmsFreeNamedColorList(nc2);\n\n    return hICC;\n\nError:\n    if (hICC != NULL) cmsCloseProfile(hICC);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          943,
+          0
+        ],
+        [
+          991,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CreateNamedColorDevicelink",
+        "parameters": {
+          "xform": "cmsHTRANSFORM"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool CheckOne(const cmsAllowedLUT* Tab, const cmsPipeline* Lut)\n{\n    cmsStage* mpe;\n    int n;\n\n    for (n=0, mpe = Lut ->Elements; mpe != NULL; mpe = mpe ->Next, n++) {\n\n        if (n > Tab ->nTypes) return FALSE;\n        if (cmsStageType(mpe) != Tab ->MpeTypes[n]) return FALSE;\n    }\n\n    return (n == Tab ->nTypes);\n}",
+      "fn_code_pos": [
+        [
+          1025,
+          0
+        ],
+        [
+          1038,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckOne",
+        "parameters": {
+          "Tab": "cmsAllowedLUT",
+          "Lut": "cmsPipeline"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nconst cmsAllowedLUT* FindCombination(const cmsPipeline* Lut, cmsBool IsV4, cmsTagSignature DestinationTag)\n{\n    cmsUInt32Number n;\n\n    for (n=0; n < SIZE_OF_ALLOWED_LUT; n++) {\n\n        const cmsAllowedLUT* Tab = AllowedLUTTypes + n;\n\n        if (IsV4 ^ Tab -> IsV4) continue;\n        if ((Tab ->RequiredTag != 0) && (Tab ->RequiredTag != DestinationTag)) continue;\n\n        if (CheckOne(Tab, Lut)) return Tab;\n    }\n\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          1041,
+          0
+        ],
+        [
+          1057,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FindCombination",
+        "parameters": {
+          "Lut": "cmsPipeline",
+          "IsV4": "cmsBool",
+          "DestinationTag": "cmsTagSignature"
+        },
+        "return_type": "cmsAllowedLUT"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsTransform2DeviceLink(cmsHTRANSFORM hTransform, cmsFloat64Number Version, cmsUInt32Number dwFlags)\n{\n    cmsHPROFILE hProfile = NULL;\n\tcmsUInt32Number FrmIn, FrmOut;\n\tcmsInt32Number ChansIn, ChansOut;\n\tint ColorSpaceBitsIn, ColorSpaceBitsOut;\n    _cmsTRANSFORM* xform = (_cmsTRANSFORM*) hTransform;\n    cmsPipeline* LUT = NULL;\n    cmsStage* mpe;\n    cmsContext ContextID = cmsGetTransformContextID(hTransform);\n    const cmsAllowedLUT* AllowedLUT;\n    cmsTagSignature DestinationTag;\n    cmsProfileClassSignature deviceClass; \n\n    _cmsAssert(hTransform != NULL);\n\n    // Get the first mpe to check for named color\n    mpe = cmsPipelineGetPtrToFirstStage(xform ->Lut);\n\n    // Check if is a named color transform\n    if (mpe != NULL) {\n\n        if (cmsStageType(mpe) == cmsSigNamedColorElemType) {\n            return CreateNamedColorDevicelink(hTransform);\n        }\n    }\n\n    // First thing to do is to get a copy of the transformation\n    LUT = cmsPipelineDup(xform ->Lut);\n    if (LUT == NULL) return NULL;\n\n    // Time to fix the Lab2/Lab4 issue.\n    if ((xform ->EntryColorSpace == cmsSigLabData) && (Version < 4.0)) {\n\n        if (!cmsPipelineInsertStage(LUT, cmsAT_BEGIN, _cmsStageAllocLabV2ToV4curves(ContextID)))\n            goto Error;\n    }\n\n    // On the output side too. Note that due to V2/V4 PCS encoding on lab we cannot fix white misalignments\n    if ((xform ->ExitColorSpace) == cmsSigLabData && (Version < 4.0)) {\n\n        dwFlags |= cmsFLAGS_NOWHITEONWHITEFIXUP;\n        if (!cmsPipelineInsertStage(LUT, cmsAT_END, _cmsStageAllocLabV4ToV2(ContextID)))\n            goto Error;\n    }\n\n\n    hProfile = cmsCreateProfilePlaceholder(ContextID);\n    if (!hProfile) goto Error;                    // can't allocate\n\n    cmsSetProfileVersion(hProfile, Version);\n\n    FixColorSpaces(hProfile, xform -> EntryColorSpace, xform -> ExitColorSpace, dwFlags);\n\n    // Optimize the LUT and precalculate a devicelink\n\n    ChansIn  = cmsChannelsOfColorSpace(xform -> EntryColorSpace);\n    ChansOut = cmsChannelsOfColorSpace(xform -> ExitColorSpace);\n\n    ColorSpaceBitsIn  = _cmsLCMScolorSpace(xform -> EntryColorSpace);\n    ColorSpaceBitsOut = _cmsLCMScolorSpace(xform -> ExitColorSpace);\n\n    FrmIn  = COLORSPACE_SH(ColorSpaceBitsIn) | CHANNELS_SH(ChansIn)|BYTES_SH(2);\n    FrmOut = COLORSPACE_SH(ColorSpaceBitsOut) | CHANNELS_SH(ChansOut)|BYTES_SH(2);\n\n    deviceClass = cmsGetDeviceClass(hProfile);\n\n     if (deviceClass == cmsSigOutputClass)\n         DestinationTag = cmsSigBToA0Tag;\n     else\n         DestinationTag = cmsSigAToB0Tag;\n\n    // Check if the profile/version can store the result\n    if (dwFlags & cmsFLAGS_FORCE_CLUT)\n        AllowedLUT = NULL;\n    else\n        AllowedLUT = FindCombination(LUT, Version >= 4.0, DestinationTag);\n\n    if (AllowedLUT == NULL) {\n\n        // Try to optimize\n        _cmsOptimizePipeline(ContextID, &LUT, xform ->RenderingIntent, &FrmIn, &FrmOut, &dwFlags);\n        AllowedLUT = FindCombination(LUT, Version >= 4.0, DestinationTag);\n\n    }\n\n    // If no way, then force CLUT that for sure can be written\n    if (AllowedLUT == NULL) {\n\n        cmsStage* FirstStage;\n        cmsStage* LastStage;\n\n        dwFlags |= cmsFLAGS_FORCE_CLUT;\n        _cmsOptimizePipeline(ContextID, &LUT, xform ->RenderingIntent, &FrmIn, &FrmOut, &dwFlags);\n\n        // Put identity curves if needed\n        FirstStage = cmsPipelineGetPtrToFirstStage(LUT);\n        if (FirstStage != NULL && FirstStage ->Type != cmsSigCurveSetElemType)\n             if (!cmsPipelineInsertStage(LUT, cmsAT_BEGIN, _cmsStageAllocIdentityCurves(ContextID, ChansIn)))\n                 goto Error;\n\n        LastStage = cmsPipelineGetPtrToLastStage(LUT);\n        if (LastStage != NULL && LastStage ->Type != cmsSigCurveSetElemType)\n             if (!cmsPipelineInsertStage(LUT, cmsAT_END,   _cmsStageAllocIdentityCurves(ContextID, ChansOut)))\n                 goto Error;\n\n        AllowedLUT = FindCombination(LUT, Version >= 4.0, DestinationTag);\n    }\n\n    // Somethings is wrong...\n    if (AllowedLUT == NULL) {\n        goto Error;\n    }\n\n\n    if (dwFlags & cmsFLAGS_8BITS_DEVICELINK)\n                     cmsPipelineSetSaveAs8bitsFlag(LUT, TRUE);\n\n    // Tag profile with information\n    if (!SetTextTags(hProfile, L\"devicelink\")) goto Error;\n\n    // Store result\n    if (!cmsWriteTag(hProfile, DestinationTag, LUT)) goto Error;\n\n\n    if (xform -> InputColorant != NULL) {\n           if (!cmsWriteTag(hProfile, cmsSigColorantTableTag, xform->InputColorant)) goto Error;\n    }\n\n    if (xform -> OutputColorant != NULL) {\n           if (!cmsWriteTag(hProfile, cmsSigColorantTableOutTag, xform->OutputColorant)) goto Error;\n    }\n\n    if ((deviceClass == cmsSigLinkClass) && (xform ->Sequence != NULL)) {\n        if (!_cmsWriteProfileSequence(hProfile, xform ->Sequence)) goto Error;\n    }\n\n    // Set the white point\n    if (deviceClass == cmsSigInputClass) {\n        if (!cmsWriteTag(hProfile, cmsSigMediaWhitePointTag, &xform ->EntryWhitePoint)) goto Error;\n    }\n    else {\n         if (!cmsWriteTag(hProfile, cmsSigMediaWhitePointTag, &xform ->ExitWhitePoint)) goto Error;\n    }\n\n  \n    // Per 7.2.15 in spec 4.3\n    cmsSetHeaderRenderingIntent(hProfile, xform ->RenderingIntent);\n\n    cmsPipelineFree(LUT);\n    return hProfile;\n\nError:\n    if (LUT != NULL) cmsPipelineFree(LUT);\n    cmsCloseProfile(hProfile);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          1061,
+          0
+        ],
+        [
+          1217,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsTransform2DeviceLink",
+        "parameters": {
+          "hTransform": "cmsHTRANSFORM",
+          "Version": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "Build_sRGBGamma(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          628,
+          14
+        ],
+        [
+          628,
+          51
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Build_sRGBGamma",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "FindCombination(const cmsPipeline* Lut, cmsBool IsV4, cmsTagSignature DestinationTag)",
+      "fn_dec_pos": [
+        [
+          1042,
+          21
+        ],
+        [
+          1042,
+          106
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FindCombination",
+        "parameters": {
+          "Lut": "cmsPipeline",
+          "IsV4": "cmsBool",
+          "DestinationTag": "cmsTagSignature"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n                cmsFloat64Number Brightness;\n                cmsFloat64Number Contrast;\n                cmsFloat64Number Hue;\n                cmsFloat64Number Saturation;\n                cmsBool          lAdjustWP;\n                cmsCIEXYZ WPsrc, WPdest;\n\n} BCHSWADJUSTS, *LPBCHSWADJUSTS;",
+      {
+        "Brightness": "cmsFloat64Number",
+        "Contrast": "cmsFloat64Number",
+        "Hue": "cmsFloat64Number",
+        "Saturation": "cmsFloat64Number",
+        "lAdjustWP": "cmsBool",
+        "WPsrc": "cmsCIEXYZ"
+      },
+      "BCHSWADJUSTS",
+      [
+        676,
+        0
+      ],
+      [
+        684,
+        32
+      ]
+    ],
+    [
+      "typedef struct {\n                cmsFloat64Number Brightness;\n                cmsFloat64Number Contrast;\n                cmsFloat64Number Hue;\n                cmsFloat64Number Saturation;\n                cmsBool          lAdjustWP;\n                cmsCIEXYZ WPsrc, WPdest;\n\n} BCHSWADJUSTS, *LPBCHSWADJUSTS;",
+      {
+        "Brightness": "cmsFloat64Number",
+        "Contrast": "cmsFloat64Number",
+        "Hue": "cmsFloat64Number",
+        "Saturation": "cmsFloat64Number",
+        "lAdjustWP": "cmsBool",
+        "WPsrc": "cmsCIEXYZ"
+      },
+      "LPBCHSWADJUSTS",
+      [
+        676,
+        0
+      ],
+      [
+        684,
+        32
+      ]
+    ],
+    [
+      "typedef struct {\n    cmsBool              IsV4;             // Is a V4 tag?\n    cmsTagSignature      RequiredTag;      // Set to 0 for both types\n    cmsTagTypeSignature  LutType;          // The LUT type\n    int                  nTypes;           // Number of types (up to 5)\n    cmsStageSignature    MpeTypes[5];      // 5 is the maximum number\n\n} cmsAllowedLUT;",
+      {
+        "IsV4": "cmsBool",
+        "RequiredTag": "cmsTagSignature",
+        "LutType": "cmsTagTypeSignature",
+        "nTypes": "int",
+        "MpeTypes[5]": "cmsStageSignature"
+      },
+      "cmsAllowedLUT",
+      [
+        996,
+        0
+      ],
+      [
+        1003,
+        16
+      ]
+    ],
+    [
+      "typedef struct {\n                cmsFloat64Number Brightness;\n                cmsFloat64Number Contrast;\n                cmsFloat64Number Hue;\n                cmsFloat64Number Saturation;\n                cmsBool          lAdjustWP;\n                cmsCIEXYZ WPsrc, WPdest;\n\n} BCHSWADJUSTS, *LPBCHSWADJUSTS;",
+      {
+        "Brightness": "cmsFloat64Number",
+        "Contrast": "cmsFloat64Number",
+        "Hue": "cmsFloat64Number",
+        "Saturation": "cmsFloat64Number",
+        "lAdjustWP": "cmsBool",
+        "WPsrc": "cmsCIEXYZ"
+      },
+      "BCHSWADJUSTS",
+      [
+        676,
+        0
+      ],
+      [
+        684,
+        32
+      ]
+    ],
+    [
+      "typedef struct {\n                cmsFloat64Number Brightness;\n                cmsFloat64Number Contrast;\n                cmsFloat64Number Hue;\n                cmsFloat64Number Saturation;\n                cmsBool          lAdjustWP;\n                cmsCIEXYZ WPsrc, WPdest;\n\n} BCHSWADJUSTS, *LPBCHSWADJUSTS;",
+      {
+        "Brightness": "cmsFloat64Number",
+        "Contrast": "cmsFloat64Number",
+        "Hue": "cmsFloat64Number",
+        "Saturation": "cmsFloat64Number",
+        "lAdjustWP": "cmsBool",
+        "WPsrc": "cmsCIEXYZ"
+      },
+      "LPBCHSWADJUSTS",
+      [
+        676,
+        0
+      ],
+      [
+        684,
+        32
+      ]
+    ],
+    [
+      "typedef struct {\n    cmsBool              IsV4;             // Is a V4 tag?\n    cmsTagSignature      RequiredTag;      // Set to 0 for both types\n    cmsTagTypeSignature  LutType;          // The LUT type\n    int                  nTypes;           // Number of types (up to 5)\n    cmsStageSignature    MpeTypes[5];      // 5 is the maximum number\n\n} cmsAllowedLUT;",
+      {
+        "IsV4": "cmsBool",
+        "RequiredTag": "cmsTagSignature",
+        "LutType": "cmsTagTypeSignature",
+        "nTypes": "int",
+        "MpeTypes[5]": "cmsStageSignature"
+      },
+      "cmsAllowedLUT",
+      [
+        996,
+        0
+      ],
+      [
+        1003,
+        16
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"lcms2_internal.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

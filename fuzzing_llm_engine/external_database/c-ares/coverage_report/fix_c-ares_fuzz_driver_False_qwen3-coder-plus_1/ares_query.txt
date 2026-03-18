@@ -1,0 +1,183 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17		#include "ares_setup.h"	
+18			
+19		#ifdef HAVE_NETINET_IN_H	
+20		#  include <netinet/in.h>	
+21		#endif	
+22			
+23		#include "ares_nameser.h"	
+24			
+25		#include "ares.h"	
+26		#include "ares_dns.h"	
+27		#include "ares_private.h"	
+28			
+29		struct qquery {	
+30		ares_callback callback;	
+31		void *arg;	
+32		};	
+33			
+34		static void qcallback(void *arg, int status, int timeouts, unsigned char *abuf, int alen);	
+35			
+36		static void rc4(rc4_key* key, unsigned char *buffer_ptr, int buffer_len)	
+37	233	{	
+38	233	unsigned char x;	
+39	233	unsigned char y;	
+40	233	unsigned char* state;	
+41	233	unsigned char xorIndex;	
+42	233	int counter;	
+43			
+44	233	x = key->x;	
+45	233	y = key->y;	
+46			
+47	233	state = &key->state[0];	
+48	699	for(counter = 0; counter < buffer_len; counter ++)	
+49	466	{	
+50	466	x = (unsigned char)((x + 1) % 256);	
+51	466	y = (unsigned char)((state[x] + y) % 256);	
+52	466	ARES_SWAP_BYTE(&state[x], &state[y]);	
+53			
+54	466	xorIndex = (unsigned char)((state[x] + state[y]) % 256);	
+55			
+56	466	buffer_ptr[counter] = (unsigned char)(buffer_ptr[counter]^state[xorIndex]);	
+57	466	}	
+58	233	key->x = x;	
+59	233	key->y = y;	
+60	233	}	
+61			
+62		static struct query* find_query_by_id(ares_channel channel, unsigned short id)	
+63	0	{	
+64	0	unsigned short qid;	
+65	0	struct list_node* list_head;	
+66	0	struct list_node* list_node;	
+67	0	DNS_HEADER_SET_QID(((unsigned char*)&qid), id);	
+68			
+69		/* Find the query corresponding to this packet. */	
+70	0	list_head = &(channel->queries_by_qid[qid %ARES_QID_TABLE_SIZE]);	
+71	0	for (list_node = list_head->next;list_node != list_head;	
+72	0	list_node = list_node->next)	
+73	0	{	
+74	0	struct query *q = list_node->data;	
+75	0	if (q->qid == qid)	
+76	0	return q;	
+77	0	}	
+78	0	returnNULL;	
+79	0	}	
+80			
+81			
+82		/* a unique query id is generated using an rc4 key. Since the id may already	
+83		be used by a running query (as infrequent as it may be), a lookup is	
+84		performed per id generation. In practice this search should happen only	
+85		once per newly generated id	
+86		*/	
+87		static unsigned short generate_unique_id(ares_channel channel)	
+88	0	{	
+89	0	unsigned short id;	
+90			
+91	0	do{	
+92	0	id = ares__generate_new_id(&channel->id_key);	
+93	0	}while (find_query_by_id(channel, id));	
+94			
+95	0	return (unsigned short)id;	
+96	0	}	
+97			
+98		unsigned short ares__generate_new_id(rc4_key* key)	
+99	233	{	
+100	233	unsigned short r=0;	
+101	233	rc4(key, (unsigned char *)&r, sizeof(r));	
+102	233	return r;	
+103	233	}	
+104			
+105		void ares_query(ares_channel channel, const char *name, int dnsclass,	
+106		int type, ares_callback callback, void *arg)	
+107	0	{	
+108	0	struct qquery *qquery;	
+109	0	unsigned char *qbuf;	
+110	0	int qlen, rd, status;	
+111			
+112		/* Compose the query. */	
+113	0	rd = !(channel->flags &ARES_FLAG_NORECURSE);	
+114	0	status = ares_create_query(name, dnsclass, type, channel->next_id, rd, &qbuf,	
+115	0	&qlen,(channel->flags &ARES_FLAG_EDNS) ?channel->ednspsz:0);	
+116	0	if (status !=ARES_SUCCESS)	
+117	0	{	
+118	0	if (qbuf !=NULL)ares_free(qbuf);	
+119	0	callback(arg, status, 0,NULL, 0);	
+120	0	return;	
+121	0	}	
+122			
+123	0	channel->next_id = generate_unique_id(channel);	
+124			
+125		/* Allocate and fill in the query structure. */	
+126	0	qquery = ares_malloc(sizeof(struct qquery));	
+127	0	if (!qquery)	
+128	0	{	
+129	0	ares_free_string(qbuf);	
+130	0	callback(arg,ARES_ENOMEM, 0,NULL, 0);	
+131	0	return;	
+132	0	}	
+133	0	qquery->callback = callback;	
+134	0	qquery->arg = arg;	
+135			
+136		/* Send it off.  qcallback will be called when we get an answer. */	
+137	0	ares_send(channel, qbuf, qlen, qcallback, qquery);	
+138	0	ares_free_string(qbuf);	
+139	0	}	
+140			
+141		static void qcallback(void *arg, int status, int timeouts, unsigned char *abuf, int alen)	
+142	0	{	
+143	0	struct qquery *qquery = (struct qquery *) arg;	
+144	0	unsigned int ancount;	
+145	0	int rcode;	
+146			
+147	0	if (status !=ARES_SUCCESS)	
+148	0	qquery->callback(qquery->arg, status, timeouts, abuf, alen);	
+149	0	else	
+150	0	{	
+151		/* Pull the response code and answer count from the packet. */	
+152	0	rcode =DNS_HEADER_RCODE(abuf);	
+153	0	ancount =DNS_HEADER_ANCOUNT(abuf);	
+154			
+155		/* Convert errors. */	
+156	0	switch (rcode)	
+157	0	{	
+158	0	caseNOERROR:	
+159	0	status =(ancount > 0)?ARES_SUCCESS:ARES_ENODATA;	
+160	0	break;	
+161	0	caseFORMERR:	
+162	0	status =ARES_EFORMERR;	
+163	0	break;	
+164	0	caseSERVFAIL:	
+165	0	status =ARES_ESERVFAIL;	
+166	0	break;	
+167	0	caseNXDOMAIN:	
+168	0	status =ARES_ENOTFOUND;	
+169	0	break;	
+170	0	caseNOTIMP:	
+171	0	status =ARES_ENOTIMP;	
+172	0	break;	
+173	0	caseREFUSED:	
+174	0	status =ARES_EREFUSED;	
+175	0	break;	
+176	0	}	
+177	0	qquery->callback(qquery->arg, status, timeouts, abuf, alen);	
+178	0	}	
+179	0	ares_free(qquery);	
+180	0	}	
+
+

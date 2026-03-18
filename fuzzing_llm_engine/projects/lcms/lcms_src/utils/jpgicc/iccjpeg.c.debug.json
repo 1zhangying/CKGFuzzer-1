@@ -1,0 +1,125 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void\nwrite_icc_profile (j_compress_ptr cinfo,\n\t\t   const JOCTET *icc_data_ptr,\n\t\t   unsigned int icc_data_len)\n{\n  unsigned int num_markers;\t/* total number of markers we'll write */\n  int cur_marker = 1;\t\t/* per spec, counting starts at 1 */\n  unsigned int length;\t\t/* number of bytes to write in this marker */\n\n  /* Calculate the number of markers we'll need, rounding up of course */\n  num_markers = icc_data_len / MAX_DATA_BYTES_IN_MARKER;\n  if (num_markers * MAX_DATA_BYTES_IN_MARKER != icc_data_len)\n    num_markers++;\n\n  while (icc_data_len > 0) {\n    /* length of profile to put in this marker */\n    length = icc_data_len;\n    if (length > MAX_DATA_BYTES_IN_MARKER)\n      length = MAX_DATA_BYTES_IN_MARKER;\n    icc_data_len -= length;\n\n    /* Write the JPEG marker header (APP2 code and marker length) */\n    jpeg_write_m_header(cinfo, ICC_MARKER,\n\t\t\t(unsigned int) (length + ICC_OVERHEAD_LEN));\n\n    /* Write the marker identifying string \"ICC_PROFILE\" (null-terminated).\n     * We code it in this less-than-transparent way so that the code works\n     * even if the local character set is not ASCII.\n     */\n    jpeg_write_m_byte(cinfo, 0x49);\n    jpeg_write_m_byte(cinfo, 0x43);\n    jpeg_write_m_byte(cinfo, 0x43);\n    jpeg_write_m_byte(cinfo, 0x5F);\n    jpeg_write_m_byte(cinfo, 0x50);\n    jpeg_write_m_byte(cinfo, 0x52);\n    jpeg_write_m_byte(cinfo, 0x4F);\n    jpeg_write_m_byte(cinfo, 0x46);\n    jpeg_write_m_byte(cinfo, 0x49);\n    jpeg_write_m_byte(cinfo, 0x4C);\n    jpeg_write_m_byte(cinfo, 0x45);\n    jpeg_write_m_byte(cinfo, 0x0);\n\n    /* Add the sequencing info */\n    jpeg_write_m_byte(cinfo, cur_marker);\n    jpeg_write_m_byte(cinfo, (int) num_markers);\n\n    /* Add the profile data */\n    while (length--) {\n      jpeg_write_m_byte(cinfo, *icc_data_ptr);\n      icc_data_ptr++;\n    }\n    cur_marker++;\n  }\n}",
+      "fn_code_pos": [
+        [
+          50,
+          0
+        ],
+        [
+          103,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "write_icc_profile",
+        "parameters": {
+          "cinfo": "j_compress_ptr",
+          "icc_data_ptr": "JOCTET",
+          "icc_data_len": "unsigned int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void\nsetup_read_icc_profile (j_decompress_ptr cinfo)\n{\n  /* Tell the library to keep any APP2 data it may find */\n  jpeg_save_markers(cinfo, ICC_MARKER, 0xFFFF);\n}",
+      "fn_code_pos": [
+        [
+          110,
+          0
+        ],
+        [
+          115,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setup_read_icc_profile",
+        "parameters": {
+          "cinfo": "j_decompress_ptr"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static boolean\nmarker_is_icc (jpeg_saved_marker_ptr marker)\n{\n  return\n    marker->marker == ICC_MARKER &&\n    marker->data_length >= ICC_OVERHEAD_LEN &&\n    /* verify the identifying string */\n    GETJOCTET(marker->data[0]) == 0x49 &&\n    GETJOCTET(marker->data[1]) == 0x43 &&\n    GETJOCTET(marker->data[2]) == 0x43 &&\n    GETJOCTET(marker->data[3]) == 0x5F &&\n    GETJOCTET(marker->data[4]) == 0x50 &&\n    GETJOCTET(marker->data[5]) == 0x52 &&\n    GETJOCTET(marker->data[6]) == 0x4F &&\n    GETJOCTET(marker->data[7]) == 0x46 &&\n    GETJOCTET(marker->data[8]) == 0x49 &&\n    GETJOCTET(marker->data[9]) == 0x4C &&\n    GETJOCTET(marker->data[10]) == 0x45 &&\n    GETJOCTET(marker->data[11]) == 0x0;\n}",
+      "fn_code_pos": [
+        [
+          122,
+          0
+        ],
+        [
+          141,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "marker_is_icc",
+        "parameters": {
+          "marker": "jpeg_saved_marker_ptr"
+        },
+        "return_type": "boolean"
+      }
+    },
+    {
+      "fn_code": "boolean\nread_icc_profile (j_decompress_ptr cinfo,\n\t\t  JOCTET **icc_data_ptr,\n\t\t  unsigned int *icc_data_len)\n{\n  jpeg_saved_marker_ptr marker;\n  int num_markers = 0;\n  int seq_no;\n  JOCTET *icc_data;\n  unsigned int total_length;\n#define MAX_SEQ_NO  255\t\t/* sufficient since marker numbers are bytes */\n  char marker_present[MAX_SEQ_NO+1];\t  /* 1 if marker found */\n  unsigned int data_length[MAX_SEQ_NO+1]; /* size of profile data in marker */\n  unsigned int data_offset[MAX_SEQ_NO+1]; /* offset for data in marker */\n\n  *icc_data_ptr = NULL;\t\t/* avoid confusion if FALSE return */\n  *icc_data_len = 0;\n\n  /* This first pass over the saved markers discovers whether there are\n   * any ICC markers and verifies the consistency of the marker numbering.\n   */\n\n  for (seq_no = 1; seq_no <= MAX_SEQ_NO; seq_no++)\n    marker_present[seq_no] = 0;\n\n  for (marker = cinfo->marker_list; marker != NULL; marker = marker->next) {\n    if (marker_is_icc(marker)) {\n      if (num_markers == 0)\n\tnum_markers = GETJOCTET(marker->data[13]);\n      else if (num_markers != GETJOCTET(marker->data[13]))\n\treturn FALSE;\t\t/* inconsistent num_markers fields */\n      seq_no = GETJOCTET(marker->data[12]);\n      if (seq_no <= 0 || seq_no > num_markers)\n\treturn FALSE;\t\t/* bogus sequence number */\n      if (marker_present[seq_no])\n\treturn FALSE;\t\t/* duplicate sequence numbers */\n      marker_present[seq_no] = 1;\n      data_length[seq_no] = marker->data_length - ICC_OVERHEAD_LEN;\n    }\n  }\n\n  if (num_markers == 0)\n    return FALSE;\n\n  /* Check for missing markers, count total space needed,\n   * compute offset of each marker's part of the data.\n   */\n\n  total_length = 0;\n  for (seq_no = 1; seq_no <= num_markers; seq_no++) {\n    if (marker_present[seq_no] == 0)\n      return FALSE;\t\t/* missing sequence number */\n    data_offset[seq_no] = total_length;\n    total_length += data_length[seq_no];\n  }\n\n  if (total_length == 0)\n    return FALSE;\t\t/* found only empty markers? */\n\n  /* Allocate space for assembled data */\n  icc_data = (JOCTET *) malloc(total_length * sizeof(JOCTET));\n  if (icc_data == NULL)\n    return FALSE;\t\t/* oops, out of memory */\n\n  /* and fill it in */\n  for (marker = cinfo->marker_list; marker != NULL; marker = marker->next) {\n    if (marker_is_icc(marker)) {\n      JOCTET FAR *src_ptr;\n      JOCTET *dst_ptr;\n      unsigned int length;\n      seq_no = GETJOCTET(marker->data[12]);\n      dst_ptr = icc_data + data_offset[seq_no];\n      src_ptr = marker->data + ICC_OVERHEAD_LEN;\n      length = data_length[seq_no];\n      while (length--) {\n\t*dst_ptr++ = *src_ptr++;\n      }\n    }\n  }\n\n  *icc_data_ptr = icc_data;\n  *icc_data_len = total_length;\n\n  return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          163,
+          0
+        ],
+        [
+          247,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "read_icc_profile",
+        "parameters": {
+          "cinfo": "j_decompress_ptr",
+          "icc_data_ptr": "JOCTET",
+          "icc_data_len": "unsigned int"
+        },
+        "return_type": "boolean"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"iccjpeg.h\"\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\t\t\t/* define malloc() */\n",
+      [
+        20,
+        0
+      ],
+      [
+        21,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

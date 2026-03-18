@@ -1,0 +1,234 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int fsdither(TIFF *in, TIFF *out)\n{\n    unsigned char *outline, *inputline, *inptr;\n    short *thisline, *nextline, *tmpptr;\n    register unsigned char *outptr;\n    register short *thisptr, *nextptr;\n    register uint32_t i, j;\n    uint32_t imax, jmax;\n    int lastline, lastpixel;\n    int bit;\n    tsize_t outlinesize;\n    int errcode = 0;\n\n    imax = imagelength - 1;\n    jmax = imagewidth - 1;\n    inputline = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(in));\n    thisline = (short *)_TIFFmalloc(\n        TIFFSafeMultiply(tmsize_t, imagewidth, sizeof(short)));\n    nextline = (short *)_TIFFmalloc(\n        TIFFSafeMultiply(tmsize_t, imagewidth, sizeof(short)));\n    outlinesize = TIFFScanlineSize(out);\n    outline = (unsigned char *)_TIFFmalloc(outlinesize);\n    if (!(inputline && thisline && nextline && outline))\n    {\n        fprintf(stderr, \"Out of memory.\\n\");\n        goto skip_on_error;\n    }\n\n    /*\n     * Get first line\n     */\n    if (TIFFReadScanline(in, inputline, 0, 0) <= 0)\n        goto skip_on_error;\n\n    inptr = inputline;\n    nextptr = nextline;\n    for (j = 0; j < imagewidth; ++j)\n        *nextptr++ = *inptr++;\n    for (i = 1; i < imagelength; ++i)\n    {\n        tmpptr = thisline;\n        thisline = nextline;\n        nextline = tmpptr;\n        lastline = (i == imax);\n        if (TIFFReadScanline(in, inputline, i, 0) <= 0)\n            goto skip_on_error;\n        inptr = inputline;\n        nextptr = nextline;\n        for (j = 0; j < imagewidth; ++j)\n            *nextptr++ = *inptr++;\n        thisptr = thisline;\n        nextptr = nextline;\n        _TIFFmemset(outptr = outline, 0, outlinesize);\n        bit = 0x80;\n        for (j = 0; j < imagewidth; ++j)\n        {\n            register int v;\n\n            lastpixel = (j == jmax);\n            v = *thisptr++;\n            if (v < 0)\n                v = 0;\n            else if (v > 255)\n                v = 255;\n            if (v > threshold)\n            {\n                *outptr |= bit;\n                v -= 255;\n            }\n            bit >>= 1;\n            if (bit == 0)\n            {\n                outptr++;\n                bit = 0x80;\n            }\n            if (!lastpixel)\n                thisptr[0] += v * 7 / 16;\n            if (!lastline)\n            {\n                if (j != 0)\n                    nextptr[-1] += v * 3 / 16;\n                *nextptr++ += v * 5 / 16;\n                if (!lastpixel)\n                    nextptr[0] += v / 16;\n            }\n        }\n        if (TIFFWriteScanline(out, outline, i - 1, 0) < 0)\n            goto skip_on_error;\n    }\n    goto exit_label;\n\nskip_on_error:\n    errcode = 1;\nexit_label:\n    _TIFFfree(inputline);\n    _TIFFfree(thisline);\n    _TIFFfree(nextline);\n    _TIFFfree(outline);\n    return errcode;\n}",
+      "fn_code_pos": [
+        [
+          62,
+          0
+        ],
+        [
+          161,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "fsdither",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void processG3Options(char *cp)\n{\n    if ((cp = strchr(cp, ':')))\n    {\n        do\n        {\n            cp++;\n            if (strneq(cp, \"1d\", 2))\n                group3options &= ~GROUP3OPT_2DENCODING;\n            else if (strneq(cp, \"2d\", 2))\n                group3options |= GROUP3OPT_2DENCODING;\n            else if (strneq(cp, \"fill\", 4))\n                group3options |= GROUP3OPT_FILLBITS;\n            else\n                usage(EXIT_FAILURE);\n        } while ((cp = strchr(cp, ':')));\n    }\n}",
+      "fn_code_pos": [
+        [
+          167,
+          0
+        ],
+        [
+          184,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processG3Options",
+        "parameters": {
+          "cp": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int processCompressOptions(char *opt)\n{\n    if (streq(opt, \"none\"))\n        compression = COMPRESSION_NONE;\n    else if (streq(opt, \"packbits\"))\n        compression = COMPRESSION_PACKBITS;\n    else if (strneq(opt, \"g3\", 2))\n    {\n        processG3Options(opt);\n        compression = COMPRESSION_CCITTFAX3;\n    }\n    else if (streq(opt, \"g4\"))\n        compression = COMPRESSION_CCITTFAX4;\n    else if (strneq(opt, \"lzw\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_LZW;\n    }\n    else if (strneq(opt, \"zip\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_ADOBE_DEFLATE;\n    }\n    else\n        return (0);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          186,
+          0
+        ],
+        [
+          216,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {
+          "opt": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    TIFF *in, *out;\n    uint16_t samplesperpixel, bitspersample = 1, shortv;\n    float floatv;\n    char thing[1024];\n    uint32_t rowsperstrip = (uint32_t)-1;\n    uint16_t fillorder = 0;\n    int c;\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n\n    while ((c = getopt(argc, argv, \"c:f:r:t:h\")) != -1)\n        switch (c)\n        {\n            case 'c': /* compression scheme */\n                if (!processCompressOptions(optarg))\n                    usage(EXIT_FAILURE);\n                break;\n            case 'f': /* fill order */\n                if (streq(optarg, \"lsb2msb\"))\n                    fillorder = FILLORDER_LSB2MSB;\n                else if (streq(optarg, \"msb2lsb\"))\n                    fillorder = FILLORDER_MSB2LSB;\n                else\n                    usage(EXIT_FAILURE);\n                break;\n            case 'r': /* rows/strip */\n                rowsperstrip = atoi(optarg);\n                break;\n            case 't':\n                threshold = atoi(optarg);\n                if (threshold < 0)\n                    threshold = 0;\n                else if (threshold > 255)\n                    threshold = 255;\n                break;\n            case 'h':\n                usage(EXIT_SUCCESS);\n                /*NOTREACHED*/\n                break;\n            case '?':\n                usage(EXIT_FAILURE);\n                /*NOTREACHED*/\n                break;\n        }\n    if (argc - optind < 2)\n        usage(EXIT_FAILURE);\n    in = TIFFOpen(argv[optind], \"r\");\n    if (in == NULL)\n        return (EXIT_FAILURE);\n    TIFFGetField(in, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);\n    if (samplesperpixel != 1)\n    {\n        fprintf(stderr, \"%s: Not a b&w image.\\n\", argv[0]);\n        TIFFClose(in);\n        return (EXIT_FAILURE);\n    }\n    TIFFGetField(in, TIFFTAG_BITSPERSAMPLE, &bitspersample);\n    if (bitspersample != 8)\n    {\n        fprintf(stderr, \" %s: Sorry, only handle 8-bit samples.\\n\", argv[0]);\n        TIFFClose(in);\n        return (EXIT_FAILURE);\n    }\n    out = TIFFOpen(argv[optind + 1], \"w\");\n    if (out == NULL)\n    {\n        TIFFClose(in);\n        return (EXIT_FAILURE);\n    }\n    CopyField(TIFFTAG_IMAGEWIDTH, imagewidth);\n    TIFFGetField(in, TIFFTAG_IMAGELENGTH, &imagelength);\n    TIFFSetField(out, TIFFTAG_IMAGELENGTH, imagelength - 1);\n    TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, 1);\n    TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, 1);\n    TIFFSetField(out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);\n    TIFFSetField(out, TIFFTAG_COMPRESSION, compression);\n    if (fillorder)\n        TIFFSetField(out, TIFFTAG_FILLORDER, fillorder);\n    else\n        CopyField(TIFFTAG_FILLORDER, shortv);\n    snprintf(thing, sizeof(thing), \"Dithered B&W version of %s\", argv[optind]);\n    TIFFSetField(out, TIFFTAG_IMAGEDESCRIPTION, thing);\n    CopyField(TIFFTAG_PHOTOMETRIC, shortv);\n    CopyField(TIFFTAG_ORIENTATION, shortv);\n    CopyField(TIFFTAG_XRESOLUTION, floatv);\n    CopyField(TIFFTAG_YRESOLUTION, floatv);\n    CopyField(TIFFTAG_RESOLUTIONUNIT, shortv);\n    rowsperstrip = TIFFDefaultStripSize(out, rowsperstrip);\n    TIFFSetField(out, TIFFTAG_ROWSPERSTRIP, rowsperstrip);\n    switch (compression)\n    {\n        case COMPRESSION_CCITTFAX3:\n            TIFFSetField(out, TIFFTAG_GROUP3OPTIONS, group3options);\n            break;\n        case COMPRESSION_LZW:\n        case COMPRESSION_ADOBE_DEFLATE:\n        case COMPRESSION_DEFLATE:\n            if (predictor)\n                TIFFSetField(out, TIFFTAG_PREDICTOR, predictor);\n            break;\n    }\n    fsdither(in, out);\n    TIFFClose(in);\n    TIFFClose(out);\n    return (EXIT_SUCCESS);\n}",
+      "fn_code_pos": [
+        [
+          218,
+          0
+        ],
+        [
+          327,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"%s\\n\\n\", TIFFGetVersion());\n    fprintf(out, \"%s\", usage_info);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          367,
+          0
+        ],
+        [
+          374,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "usage(int code)",
+      "fn_dec_pos": [
+        [
+          56,
+          12
+        ],
+        [
+          56,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

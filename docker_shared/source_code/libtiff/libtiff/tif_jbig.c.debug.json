@@ -1,0 +1,226 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int JBIGSetupDecode(TIFF *tif)\n{\n    if (TIFFNumberOfStrips(tif) != 1)\n    {\n        TIFFErrorExtR(tif, \"JBIG\",\n                      \"Multistrip images not supported in decoder\");\n        return 0;\n    }\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          37,
+          0
+        ],
+        [
+          47,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "JBIGSetupDecode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int JBIGDecode(TIFF *tif, uint8_t *buffer, tmsize_t size, uint16_t s)\n{\n    struct jbg_dec_state decoder;\n    int decodeStatus = 0;\n    unsigned char *pImage = NULL;\n    unsigned long decodedSize;\n    (void)s;\n\n    if (isFillOrder(tif, tif->tif_dir.td_fillorder))\n    {\n        TIFFReverseBits(tif->tif_rawcp, tif->tif_rawcc);\n    }\n\n    jbg_dec_init(&decoder);\n\n#if defined(HAVE_JBG_NEWLEN)\n    jbg_newlen(tif->tif_rawcp, (size_t)tif->tif_rawcc);\n    /*\n     * I do not check the return status of jbg_newlen because even if this\n     * function fails it does not necessarily mean that decoding the image\n     * will fail.  It is generally only needed for received fax images\n     * that do not contain the actual length of the image in the BIE\n     * header.  I do not log when an error occurs because that will cause\n     * problems when converting JBIG encoded TIFF's to\n     * PostScript.  As long as the actual image length is contained in the\n     * BIE header jbg_dec_in should succeed.\n     */\n#endif /* HAVE_JBG_NEWLEN */\n\n    decodeStatus = jbg_dec_in(&decoder, (unsigned char *)tif->tif_rawcp,\n                              (size_t)tif->tif_rawcc, NULL);\n    if (JBG_EOK != decodeStatus)\n    {\n        /*\n         * XXX: JBG_EN constant was defined in pre-2.0 releases of the\n         * JBIG-KIT. Since the 2.0 the error reporting functions were\n         * changed. We will handle both cases here.\n         */\n        TIFFErrorExtR(tif, \"JBIG\", \"Error (%d) decoding: %s\", decodeStatus,\n#if defined(JBG_EN)\n                      jbg_strerror(decodeStatus, JBG_EN)\n#else\n                      jbg_strerror(decodeStatus)\n#endif\n        );\n        memset(buffer, 0, (size_t)size);\n        jbg_dec_free(&decoder);\n        return 0;\n    }\n\n    decodedSize = jbg_dec_getsize(&decoder);\n    if ((tmsize_t)decodedSize < size)\n    {\n        memset(buffer + decodedSize, 0, (size_t)(size - decodedSize));\n        TIFFWarningExtR(tif, \"JBIG\",\n                        \"Only decoded %lu bytes, whereas %\" TIFF_SSIZE_FORMAT\n                        \" requested\",\n                        decodedSize, size);\n    }\n    else if ((tmsize_t)decodedSize > size)\n    {\n        TIFFErrorExtR(tif, \"JBIG\",\n                      \"Decoded %lu bytes, whereas %\" TIFF_SSIZE_FORMAT\n                      \" were requested\",\n                      decodedSize, size);\n        jbg_dec_free(&decoder);\n        return 0;\n    }\n    pImage = jbg_dec_getimage(&decoder, 0);\n    _TIFFmemcpy(buffer, pImage, decodedSize);\n    jbg_dec_free(&decoder);\n\n    tif->tif_rawcp += tif->tif_rawcc;\n    tif->tif_rawcc = 0;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          49,
+          0
+        ],
+        [
+          125,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "JBIGDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "buffer": "uint8_t",
+          "size": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int JBIGSetupEncode(TIFF *tif)\n{\n    if (TIFFNumberOfStrips(tif) != 1)\n    {\n        TIFFErrorExtR(tif, \"JBIG\",\n                      \"Multistrip images not supported in encoder\");\n        return 0;\n    }\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          127,
+          0
+        ],
+        [
+          137,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "JBIGSetupEncode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int JBIGCopyEncodedData(TIFF *tif, unsigned char *pp, size_t cc,\n                               uint16_t s)\n{\n    (void)s;\n    while (cc > 0)\n    {\n        tmsize_t n = (tmsize_t)cc;\n\n        if (tif->tif_rawcc + n > tif->tif_rawdatasize)\n        {\n            n = tif->tif_rawdatasize - tif->tif_rawcc;\n        }\n\n        assert(n > 0);\n        _TIFFmemcpy(tif->tif_rawcp, pp, n);\n        tif->tif_rawcp += n;\n        tif->tif_rawcc += n;\n        pp += n;\n        cc -= (size_t)n;\n        if (tif->tif_rawcc >= tif->tif_rawdatasize && !TIFFFlushData1(tif))\n        {\n            return (-1);\n        }\n    }\n\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          139,
+          0
+        ],
+        [
+          165,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "JBIGCopyEncodedData",
+        "parameters": {
+          "tif": "TIFF",
+          "pp": "unsigned char",
+          "cc": "size_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void JBIGOutputBie(unsigned char *buffer, size_t len, void *userData)\n{\n    TIFF *tif = (TIFF *)userData;\n\n    if (isFillOrder(tif, tif->tif_dir.td_fillorder))\n    {\n        TIFFReverseBits(buffer, (tmsize_t)len);\n    }\n\n    JBIGCopyEncodedData(tif, buffer, len, 0);\n}",
+      "fn_code_pos": [
+        [
+          167,
+          0
+        ],
+        [
+          177,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "JBIGOutputBie",
+        "parameters": {
+          "buffer": "unsigned char",
+          "len": "size_t",
+          "userData": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int JBIGEncode(TIFF *tif, uint8_t *buffer, tmsize_t size, uint16_t s)\n{\n    TIFFDirectory *dir = &tif->tif_dir;\n    struct jbg_enc_state encoder;\n\n    (void)size, (void)s;\n\n    jbg_enc_init(&encoder, dir->td_imagewidth, dir->td_imagelength, 1, &buffer,\n                 JBIGOutputBie, tif);\n    /*\n     * jbg_enc_out does the \"real\" encoding.  As data is encoded,\n     * JBIGOutputBie is called, which writes the data to the directory.\n     */\n    jbg_enc_out(&encoder);\n    jbg_enc_free(&encoder);\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          179,
+          0
+        ],
+        [
+          196,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "JBIGEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "buffer": "uint8_t",
+          "size": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFInitJBIG(TIFF *tif, int scheme)\n{\n    (void)scheme;\n    assert(scheme == COMPRESSION_JBIG);\n\n    /*\n     * These flags are set so the JBIG Codec can control when to reverse\n     * bits and when not to and to allow the jbig decoder and bit reverser\n     * to write to memory when necessary.\n     */\n    tif->tif_flags |= TIFF_NOBITREV;\n    tif->tif_flags &= ~TIFF_MAPPED;\n    /* We may have read from a previous IFD and thus set TIFF_BUFFERMMAP and\n     * cleared TIFF_MYBUFFER. It is necessary to restore them to their initial\n     * value to be consistent with the state of a non-memory mapped file.\n     */\n    if (tif->tif_flags & TIFF_BUFFERMMAP)\n    {\n        tif->tif_rawdata = NULL;\n        tif->tif_rawdatasize = 0;\n        tif->tif_flags &= ~TIFF_BUFFERMMAP;\n        tif->tif_flags |= TIFF_MYBUFFER;\n    }\n\n    /* Setup the function pointers for encode, decode, and cleanup. */\n    tif->tif_setupdecode = JBIGSetupDecode;\n    tif->tif_decodestrip = JBIGDecode;\n\n    tif->tif_setupencode = JBIGSetupEncode;\n    tif->tif_encodestrip = JBIGEncode;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          198,
+          0
+        ],
+        [
+          230,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFInitJBIG",
+        "parameters": {
+          "tif": "TIFF",
+          "scheme": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct jbg_dec_state",
+      {},
+      "",
+      [
+        51,
+        4
+      ],
+      [
+        51,
+        24
+      ]
+    ],
+    [
+      "struct jbg_enc_state",
+      {},
+      "",
+      [
+        182,
+        4
+      ],
+      [
+        182,
+        24
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include \"jbig.h\"\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

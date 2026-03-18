@@ -1,0 +1,312 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "struct timeval ares__tvnow(void)\n{\n  /*\n  ** GetTickCount() is available on _all_ Windows versions from W95 up\n  ** to nowadays. Returns milliseconds elapsed since last system boot,\n  ** increases monotonically and wraps once 49.7 days have elapsed.\n  */\n  struct timeval now;\n  DWORD milliseconds = GetTickCount();\n  now.tv_sec = milliseconds / 1000;\n  now.tv_usec = (milliseconds % 1000) * 1000;\n  return now;\n}",
+      "fn_code_pos": [
+        [
+          20,
+          0
+        ],
+        [
+          32,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__tvnow",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "struct timeval ares__tvnow(void)\n{\n  /*\n  ** clock_gettime() is granted to be increased monotonically when the\n  ** monotonic clock is queried. Time starting point is unspecified, it\n  ** could be the system start-up time, the Epoch, or something else,\n  ** in any case the time starting point does not change once that the\n  ** system has started up.\n  */\n  struct timeval now;\n  struct timespec tsnow;\n  if(0 == clock_gettime(CLOCK_MONOTONIC, &tsnow)) {\n    now.tv_sec = tsnow.tv_sec;\n    now.tv_usec = tsnow.tv_nsec / 1000;\n  }\n  /*\n  ** Even when the configure process has truly detected monotonic clock\n  ** availability, it might happen that it is not actually available at\n  ** run-time. When this occurs simply fallback to other time source.\n  */\n#ifdef HAVE_GETTIMEOFDAY\n  else\n    (void)gettimeofday(&now, NULL);  /* LCOV_EXCL_LINE */\n#else\n  else {\n    now.tv_sec = (long)time(NULL);\n    now.tv_usec = 0;\n  }\n#endif\n  return now;\n}",
+      "fn_code_pos": [
+        [
+          36,
+          0
+        ],
+        [
+          66,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__tvnow",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "struct timeval ares__tvnow(void)\n{\n  /*\n  ** gettimeofday() is not granted to be increased monotonically, due to\n  ** clock drifting and external source time synchronization it can jump\n  ** forward or backward in time.\n  */\n  struct timeval now;\n  (void)gettimeofday(&now, NULL);\n  return now;\n}",
+      "fn_code_pos": [
+        [
+          70,
+          0
+        ],
+        [
+          80,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__tvnow",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "struct timeval ares__tvnow(void)\n{\n  /*\n  ** time() returns the value of time in seconds since the Epoch.\n  */\n  struct timeval now;\n  now.tv_sec = (long)time(NULL);\n  now.tv_usec = 0;\n  return now;\n}",
+      "fn_code_pos": [
+        [
+          84,
+          0
+        ],
+        [
+          93,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__tvnow",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "long ares__tvdiff(struct timeval newer, struct timeval older)\n{\n  return (newer.tv_sec-older.tv_sec)*1000+\n    (newer.tv_usec-older.tv_usec)/1000;\n}",
+      "fn_code_pos": [
+        [
+          104,
+          0
+        ],
+        [
+          108,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__tvdiff",
+        "parameters": {
+          "newer": "struct timeval",
+          "older": "struct timeval"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "else\n    (void)",
+      "fn_dec_pos": [
+        [
+          57,
+          2
+        ],
+        [
+          58,
+          10
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "else",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        20,
+        0
+      ],
+      [
+        20,
+        14
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        27,
+        2
+      ],
+      [
+        27,
+        16
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        36,
+        0
+      ],
+      [
+        36,
+        14
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        45,
+        2
+      ],
+      [
+        45,
+        16
+      ]
+    ],
+    [
+      "struct timespec",
+      {},
+      "",
+      [
+        46,
+        2
+      ],
+      [
+        46,
+        17
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        70,
+        0
+      ],
+      [
+        70,
+        14
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        77,
+        2
+      ],
+      [
+        77,
+        16
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        84,
+        0
+      ],
+      [
+        84,
+        14
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        89,
+        2
+      ],
+      [
+        89,
+        16
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        104,
+        18
+      ],
+      [
+        104,
+        32
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        104,
+        40
+      ],
+      [
+        104,
+        54
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        14,
+        0
+      ],
+      [
+        15,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        15,
+        0
+      ],
+      [
+        16,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

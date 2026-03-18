@@ -1,0 +1,405 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int ares__addrinfo2hostent(const struct ares_addrinfo *ai, int family,\n                           struct hostent **host)\n{\n  struct ares_addrinfo_node *next;\n  struct ares_addrinfo_cname *next_cname;\n  char **aliases = NULL;\n  char *addrs = NULL;\n  int naliases = 0, naddrs = 0, alias = 0, i;\n\n  if (ai == NULL || host == NULL)\n    return ARES_EBADQUERY;\n\n  *host = ares_malloc(sizeof(**host));\n  if (!(*host))\n    {\n      goto enomem;\n    }\n  memset(*host, 0, sizeof(**host));\n\n  /* Use the first node of the response as the family, since hostent can only\n   * represent one family.  We assume getaddrinfo() returned a sorted list if\n   * the user requested AF_UNSPEC. */\n  if (family == AF_UNSPEC && ai->nodes)\n    family = ai->nodes->ai_family;\n\n  next = ai->nodes;\n  while (next)\n    {\n      if(next->ai_family == family)\n        {\n          ++naddrs;\n        }\n      next = next->ai_next;\n    }\n\n  next_cname = ai->cnames;\n  while (next_cname)\n    {\n      if(next_cname->alias)\n        ++naliases;\n      next_cname = next_cname->next;\n    }\n\n  aliases = ares_malloc((naliases + 1) * sizeof(char *));\n  if (!aliases)\n    {\n      goto enomem;\n    }\n  (*host)->h_aliases = aliases;\n  memset(aliases, 0, (naliases + 1) * sizeof(char *));\n\n  if (naliases)\n    {\n      next_cname = ai->cnames;\n      while (next_cname)\n        {\n          if(next_cname->alias) {\n            aliases[alias] = ares_strdup(next_cname->alias);\n            if (!aliases[alias]) {\n              goto enomem;\n            }\n            alias++;\n          }\n          next_cname = next_cname->next;\n        }\n    }\n\n\n  (*host)->h_addr_list = ares_malloc((naddrs + 1) * sizeof(char *));\n  if (!(*host)->h_addr_list)\n    {\n      goto enomem;\n    }\n\n  memset((*host)->h_addr_list, 0, (naddrs + 1) * sizeof(char *));\n\n  if (ai->cnames)\n    {\n      (*host)->h_name = ares_strdup(ai->cnames->name);\n      if ((*host)->h_name == NULL && ai->cnames->name)\n        {\n          goto enomem;\n        }\n    }\n  else\n    {\n      (*host)->h_name = ares_strdup(ai->name);\n      if ((*host)->h_name == NULL && ai->name)\n        {\n          goto enomem;\n        }\n    }\n\n  (*host)->h_addrtype = family;\n  (*host)->h_length = (family == AF_INET)?\n     sizeof(struct in_addr):sizeof(struct ares_in6_addr);\n\n  if (naddrs)\n    {\n      addrs = ares_malloc(naddrs * (*host)->h_length);\n      if (!addrs)\n        {\n          goto enomem;\n        }\n\n      i = 0;\n      next = ai->nodes;\n      while (next)\n        {\n          if(next->ai_family == family)\n            {\n              (*host)->h_addr_list[i] = addrs + (i * (*host)->h_length);\n              if (family == AF_INET6)\n                {\n                  memcpy((*host)->h_addr_list[i],\n                     &(CARES_INADDR_CAST(struct sockaddr_in6 *, next->ai_addr)->sin6_addr),\n                     (*host)->h_length);\n                }\n              else\n                {\n                  memcpy((*host)->h_addr_list[i],\n                     &(CARES_INADDR_CAST(struct sockaddr_in *, next->ai_addr)->sin_addr),\n                     (*host)->h_length);\n                }\n              ++i;\n            }\n          next = next->ai_next;\n        }\n\n      if (i == 0)\n        {\n          ares_free(addrs);\n        }\n    }\n\n  if (naddrs == 0 && naliases == 0)\n    {\n      ares_free_hostent(*host);\n      *host = NULL;\n      return ARES_ENODATA;\n    }\n\n  return ARES_SUCCESS;\n\nenomem:\n  ares_free_hostent(*host);\n  *host = NULL;\n  return ARES_ENOMEM;\n}",
+      "fn_code_pos": [
+        [
+          45,
+          0
+        ],
+        [
+          193,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__addrinfo2hostent",
+        "parameters": {
+          "ai": "struct ares_addrinfo",
+          "family": "int",
+          "host": "struct hostent"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ares__addrinfo2addrttl(const struct ares_addrinfo *ai, int family,\n                           int req_naddrttls, struct ares_addrttl *addrttls,\n                           struct ares_addr6ttl *addr6ttls, int *naddrttls)\n{\n  struct ares_addrinfo_node *next;\n  struct ares_addrinfo_cname *next_cname;\n  int cname_ttl = INT_MAX;\n\n  if (family != AF_INET && family != AF_INET6)\n    return ARES_EBADQUERY;\n\n  if (ai == NULL || naddrttls == NULL)\n    return ARES_EBADQUERY;\n\n  if (family == AF_INET && addrttls == NULL)\n    return ARES_EBADQUERY;\n\n  if (family == AF_INET6 && addr6ttls == NULL)\n    return ARES_EBADQUERY;\n\n  if (req_naddrttls == 0)\n    return ARES_EBADQUERY;\n\n  *naddrttls = 0;\n\n  next_cname = ai->cnames;\n  while (next_cname)\n    {\n      if(next_cname->ttl < cname_ttl)\n        cname_ttl = next_cname->ttl;\n      next_cname = next_cname->next;\n    }\n\n  next = ai->nodes;\n  while (next)\n    {\n      if(next->ai_family == family)\n        {\n          if (*naddrttls < req_naddrttls)\n            {\n                if (family == AF_INET6)\n                  {\n                    if(next->ai_ttl > cname_ttl)\n                      addr6ttls[*naddrttls].ttl = cname_ttl;\n                    else\n                      addr6ttls[*naddrttls].ttl = next->ai_ttl;\n\n                    memcpy(&addr6ttls[*naddrttls].ip6addr,\n                           &(CARES_INADDR_CAST(struct sockaddr_in6 *, next->ai_addr)->sin6_addr),\n                           sizeof(struct ares_in6_addr));\n                  }\n                else\n                  {\n                    if(next->ai_ttl > cname_ttl)\n                      addrttls[*naddrttls].ttl = cname_ttl;\n                    else\n                      addrttls[*naddrttls].ttl = next->ai_ttl;\n                    memcpy(&addrttls[*naddrttls].ipaddr,\n                           &(CARES_INADDR_CAST(struct sockaddr_in *, next->ai_addr)->sin_addr),\n                           sizeof(struct in_addr));\n                  }\n                (*naddrttls)++;\n             }\n        }\n      next = next->ai_next;\n    }\n\n  return ARES_SUCCESS;\n}",
+      "fn_code_pos": [
+        [
+          196,
+          0
+        ],
+        [
+          264,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__addrinfo2addrttl",
+        "parameters": {
+          "ai": "struct ares_addrinfo",
+          "family": "int",
+          "req_naddrttls": "int",
+          "addrttls": "struct ares_addrttl",
+          "addr6ttls": "struct ares_addr6ttl",
+          "naddrttls": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct ares_addrinfo",
+      {},
+      "",
+      [
+        45,
+        33
+      ],
+      [
+        45,
+        53
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        46,
+        27
+      ],
+      [
+        46,
+        41
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        48,
+        2
+      ],
+      [
+        48,
+        27
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        49,
+        2
+      ],
+      [
+        49,
+        28
+      ]
+    ],
+    [
+      "struct in_addr",
+      {},
+      "",
+      [
+        140,
+        12
+      ],
+      [
+        140,
+        26
+      ]
+    ],
+    [
+      "struct ares_in6_addr",
+      {},
+      "",
+      [
+        140,
+        35
+      ],
+      [
+        140,
+        55
+      ]
+    ],
+    [
+      "struct sockaddr_in6",
+      {},
+      "",
+      [
+        160,
+        41
+      ],
+      [
+        160,
+        60
+      ]
+    ],
+    [
+      "struct sockaddr_in",
+      {},
+      "",
+      [
+        166,
+        41
+      ],
+      [
+        166,
+        59
+      ]
+    ],
+    [
+      "struct ares_addrinfo",
+      {},
+      "",
+      [
+        196,
+        33
+      ],
+      [
+        196,
+        53
+      ]
+    ],
+    [
+      "struct ares_addrttl",
+      {},
+      "",
+      [
+        197,
+        46
+      ],
+      [
+        197,
+        65
+      ]
+    ],
+    [
+      "struct ares_addr6ttl",
+      {},
+      "",
+      [
+        198,
+        27
+      ],
+      [
+        198,
+        47
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        200,
+        2
+      ],
+      [
+        200,
+        27
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        201,
+        2
+      ],
+      [
+        201,
+        28
+      ]
+    ],
+    [
+      "struct sockaddr_in6",
+      {},
+      "",
+      [
+        244,
+        47
+      ],
+      [
+        244,
+        66
+      ]
+    ],
+    [
+      "struct ares_in6_addr",
+      {},
+      "",
+      [
+        245,
+        34
+      ],
+      [
+        245,
+        54
+      ]
+    ],
+    [
+      "struct sockaddr_in",
+      {},
+      "",
+      [
+        254,
+        47
+      ],
+      [
+        254,
+        65
+      ]
+    ],
+    [
+      "struct in_addr",
+      {},
+      "",
+      [
+        255,
+        34
+      ],
+      [
+        255,
+        48
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        18,
+        0
+      ],
+      [
+        19,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#  include <netdb.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#  include <strings.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#  include <limits.h>\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        40,
+        0
+      ],
+      [
+        41,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_dns.h\"\n",
+      [
+        41,
+        0
+      ],
+      [
+        42,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_inet_net_pton.h\"\n",
+      [
+        42,
+        0
+      ],
+      [
+        43,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        43,
+        0
+      ],
+      [
+        44,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

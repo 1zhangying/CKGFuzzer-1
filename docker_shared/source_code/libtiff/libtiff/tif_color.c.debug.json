@@ -1,0 +1,217 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void TIFFCIELabToXYZ(TIFFCIELabToRGB *cielab, uint32_t l, int32_t a, int32_t b,\n                     float *X, float *Y, float *Z)\n{\n    TIFFCIELab16ToXYZ(cielab, l * 257, a * 256, b * 256, X, Y, Z);\n}",
+      "fn_code_pos": [
+        [
+          42,
+          0
+        ],
+        [
+          46,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFCIELabToXYZ",
+        "parameters": {
+          "cielab": "TIFFCIELabToRGB",
+          "l": "uint32_t",
+          "a": "int32_t",
+          "b": "int32_t",
+          "X": "float",
+          "Y": "float",
+          "Z": "float"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void TIFFCIELab16ToXYZ(TIFFCIELabToRGB *cielab, uint32_t l, int32_t a,\n                       int32_t b, float *X, float *Y, float *Z)\n{\n    float L = (float)l * 100.0F / 65535.0F;\n    float cby, tmp;\n\n    if (L < 8.856F)\n    {\n        *Y = (L * cielab->Y0) / 903.292F;\n        cby = 7.787F * (*Y / cielab->Y0) + 16.0F / 116.0F;\n    }\n    else\n    {\n        cby = (L + 16.0F) / 116.0F;\n        *Y = cielab->Y0 * cby * cby * cby;\n    }\n\n    tmp = (float)a / 256.0F / 500.0F + cby;\n    if (tmp < 0.2069F)\n        *X = cielab->X0 * (tmp - 0.13793F) / 7.787F;\n    else\n        *X = cielab->X0 * tmp * tmp * tmp;\n\n    tmp = cby - (float)b / 256.0F / 200.0F;\n    if (tmp < 0.2069F)\n        *Z = cielab->Z0 * (tmp - 0.13793F) / 7.787F;\n    else\n        *Z = cielab->Z0 * tmp * tmp * tmp;\n}",
+      "fn_code_pos": [
+        [
+          54,
+          0
+        ],
+        [
+          82,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFCIELab16ToXYZ",
+        "parameters": {
+          "cielab": "TIFFCIELabToRGB",
+          "l": "uint32_t",
+          "a": "int32_t",
+          "b": "int32_t",
+          "X": "float",
+          "Y": "float",
+          "Z": "float"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void TIFFXYZToRGB(TIFFCIELabToRGB *cielab, float X, float Y, float Z,\n                  uint32_t *r, uint32_t *g, uint32_t *b)\n{\n    size_t i;\n    float Yr, Yg, Yb;\n    float *matrix = &cielab->display.d_mat[0][0];\n\n    /* Multiply through the matrix to get luminosity values. */\n    Yr = matrix[0] * X + matrix[1] * Y + matrix[2] * Z;\n    Yg = matrix[3] * X + matrix[4] * Y + matrix[5] * Z;\n    Yb = matrix[6] * X + matrix[7] * Y + matrix[8] * Z;\n\n    /* Clip input */\n    Yr = TIFFmax(Yr, cielab->display.d_Y0R);\n    Yg = TIFFmax(Yg, cielab->display.d_Y0G);\n    Yb = TIFFmax(Yb, cielab->display.d_Y0B);\n\n    /* Avoid overflow in case of wrong input values */\n    Yr = TIFFmin(Yr, cielab->display.d_YCR);\n    Yg = TIFFmin(Yg, cielab->display.d_YCG);\n    Yb = TIFFmin(Yb, cielab->display.d_YCB);\n\n    /* Turn luminosity to colour value. */\n    i = (size_t)((Yr - cielab->display.d_Y0R) / cielab->rstep);\n    i = TIFFmin((size_t)cielab->range, i);\n    *r = RINT(cielab->Yr2r[i]);\n\n    i = (size_t)((Yg - cielab->display.d_Y0G) / cielab->gstep);\n    i = TIFFmin((size_t)cielab->range, i);\n    *g = RINT(cielab->Yg2g[i]);\n\n    i = (size_t)((Yb - cielab->display.d_Y0B) / cielab->bstep);\n    i = TIFFmin((size_t)cielab->range, i);\n    *b = RINT(cielab->Yb2b[i]);\n\n    /* Clip output. */\n    *r = TIFFmin(*r, cielab->display.d_Vrwr);\n    *g = TIFFmin(*g, cielab->display.d_Vrwg);\n    *b = TIFFmin(*b, cielab->display.d_Vrwb);\n}",
+      "fn_code_pos": [
+        [
+          88,
+          0
+        ],
+        [
+          127,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFXYZToRGB",
+        "parameters": {
+          "cielab": "TIFFCIELabToRGB",
+          "X": "float",
+          "Y": "float",
+          "Z": "float",
+          "r": "uint32_t",
+          "g": "uint32_t",
+          "b": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int TIFFCIELabToRGBInit(TIFFCIELabToRGB *cielab, const TIFFDisplay *display,\n                        float *refWhite)\n{\n    size_t i;\n    double dfGamma;\n\n    cielab->range = CIELABTORGB_TABLE_RANGE;\n\n    _TIFFmemcpy(&cielab->display, display, sizeof(TIFFDisplay));\n\n    /* Red */\n    dfGamma = 1.0 / cielab->display.d_gammaR;\n    cielab->rstep =\n        (cielab->display.d_YCR - cielab->display.d_Y0R) / cielab->range;\n    for (i = 0; i <= (size_t)cielab->range; i++)\n    {\n        cielab->Yr2r[i] = cielab->display.d_Vrwr *\n                          ((float)pow((double)i / cielab->range, dfGamma));\n    }\n\n    /* Green */\n    dfGamma = 1.0 / cielab->display.d_gammaG;\n    cielab->gstep =\n        (cielab->display.d_YCR - cielab->display.d_Y0R) / cielab->range;\n    for (i = 0; i <= (size_t)cielab->range; i++)\n    {\n        cielab->Yg2g[i] = cielab->display.d_Vrwg *\n                          ((float)pow((double)i / cielab->range, dfGamma));\n    }\n\n    /* Blue */\n    dfGamma = 1.0 / cielab->display.d_gammaB;\n    cielab->bstep =\n        (cielab->display.d_YCR - cielab->display.d_Y0R) / cielab->range;\n    for (i = 0; i <= (size_t)cielab->range; i++)\n    {\n        cielab->Yb2b[i] = cielab->display.d_Vrwb *\n                          ((float)pow((double)i / cielab->range, dfGamma));\n    }\n\n    /* Init reference white point */\n    cielab->X0 = refWhite[0];\n    cielab->Y0 = refWhite[1];\n    cielab->Z0 = refWhite[2];\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          134,
+          0
+        ],
+        [
+          180,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFCIELabToRGBInit",
+        "parameters": {
+          "cielab": "TIFFCIELabToRGB",
+          "display": "TIFFDisplay",
+          "refWhite": "float"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void TIFFYCbCrtoRGB(TIFFYCbCrToRGB *ycbcr, uint32_t Y, int32_t Cb, int32_t Cr,\n                    uint32_t *r, uint32_t *g, uint32_t *b)\n{\n    int32_t i;\n\n    /* XXX: Only 8-bit YCbCr input supported for now */\n    Y = HICLAMP(Y, 255);\n    Cb = CLAMP(Cb, 0, 255);\n    Cr = CLAMP(Cr, 0, 255);\n\n    i = ycbcr->Y_tab[Y] + ycbcr->Cr_r_tab[Cr];\n    *r = CLAMP(i, 0, 255);\n    i = ycbcr->Y_tab[Y] +\n        (int)((ycbcr->Cb_g_tab[Cb] + ycbcr->Cr_g_tab[Cr]) >> SHIFT);\n    *g = CLAMP(i, 0, 255);\n    i = ycbcr->Y_tab[Y] + ycbcr->Cb_b_tab[Cb];\n    *b = CLAMP(i, 0, 255);\n}",
+      "fn_code_pos": [
+        [
+          198,
+          0
+        ],
+        [
+          215,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFYCbCrtoRGB",
+        "parameters": {
+          "ycbcr": "TIFFYCbCrToRGB",
+          "Y": "uint32_t",
+          "Cb": "int32_t",
+          "Cr": "int32_t",
+          "r": "uint32_t",
+          "g": "uint32_t",
+          "b": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static float CLAMPw(float v, float vmin, float vmax)\n{\n    if (v < vmin)\n    {\n        /* printf(\"%f clamped to %f\\n\", v, vmin); */\n        return vmin;\n    }\n    if (v > vmax)\n    {\n        /* printf(\"%f clamped to %f\\n\", v, vmax); */\n        return vmax;\n    }\n    return v;\n}",
+      "fn_code_pos": [
+        [
+          219,
+          0
+        ],
+        [
+          232,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CLAMPw",
+        "parameters": {
+          "v": "float",
+          "vmin": "float",
+          "vmax": "float"
+        },
+        "return_type": "float"
+      }
+    },
+    {
+      "fn_code": "int TIFFYCbCrToRGBInit(TIFFYCbCrToRGB *ycbcr, float *luma, float *refBlackWhite)\n{\n    TIFFRGBValue *clamptab;\n    int i;\n\n#define LumaRed luma[0]\n#define LumaGreen luma[1]\n#define LumaBlue luma[2]\n\n    clamptab =\n        (TIFFRGBValue *)((uint8_t *)ycbcr +\n                         TIFFroundup_32(sizeof(TIFFYCbCrToRGB), sizeof(long)));\n    _TIFFmemset(clamptab, 0, 256); /* v < 0 => 0 */\n    ycbcr->clamptab = (clamptab += 256);\n    for (i = 0; i < 256; i++)\n        clamptab[i] = (TIFFRGBValue)i;\n    _TIFFmemset(clamptab + 256, 255, 2 * 256); /* v > 255 => 255 */\n    ycbcr->Cr_r_tab = (int *)(clamptab + 3 * 256);\n    ycbcr->Cb_b_tab = ycbcr->Cr_r_tab + 256;\n    ycbcr->Cr_g_tab = (int32_t *)(ycbcr->Cb_b_tab + 256);\n    ycbcr->Cb_g_tab = ycbcr->Cr_g_tab + 256;\n    ycbcr->Y_tab = ycbcr->Cb_g_tab + 256;\n\n    {\n        float f1 = 2 - 2 * LumaRed;\n        int32_t D1 = FIX(CLAMP(f1, 0.0F, 2.0F));\n        float f2 = LumaRed * f1 / LumaGreen;\n        int32_t D2 = -FIX(CLAMP(f2, 0.0F, 2.0F));\n        float f3 = 2 - 2 * LumaBlue;\n        int32_t D3 = FIX(CLAMP(f3, 0.0F, 2.0F));\n        float f4 = LumaBlue * f3 / LumaGreen;\n        int32_t D4 = -FIX(CLAMP(f4, 0.0F, 2.0F));\n        int x;\n\n#undef LumaBlue\n#undef LumaGreen\n#undef LumaRed\n\n        /*\n         * i is the actual input pixel value in the range 0..255\n         * Cb and Cr values are in the range -128..127 (actually\n         * they are in a range defined by the ReferenceBlackWhite\n         * tag) so there is some range shifting to do here when\n         * constructing tables indexed by the raw pixel data.\n         */\n        for (i = 0, x = -128; i < 256; i++, x++)\n        {\n            int32_t Cr = (int32_t)CLAMPw(Code2V(x, refBlackWhite[4] - 128.0F,\n                                                refBlackWhite[5] - 128.0F, 127),\n                                         -128.0F * 32, 128.0F * 32);\n            int32_t Cb = (int32_t)CLAMPw(Code2V(x, refBlackWhite[2] - 128.0F,\n                                                refBlackWhite[3] - 128.0F, 127),\n                                         -128.0F * 32, 128.0F * 32);\n\n            ycbcr->Cr_r_tab[i] = (int32_t)((D1 * Cr + ONE_HALF) >> SHIFT);\n            ycbcr->Cb_b_tab[i] = (int32_t)((D3 * Cb + ONE_HALF) >> SHIFT);\n            ycbcr->Cr_g_tab[i] = D2 * Cr;\n            ycbcr->Cb_g_tab[i] = D4 * Cb + ONE_HALF;\n            ycbcr->Y_tab[i] = (int32_t)CLAMPw(\n                Code2V(x + 128, refBlackWhite[0], refBlackWhite[1], 255),\n                -128.0F * 32, 128.0F * 32);\n        }\n    }\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          250,
+          0
+        ],
+        [
+          315,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFYCbCrToRGBInit",
+        "parameters": {
+          "ycbcr": "TIFFYCbCrToRGB",
+          "luma": "float",
+          "refBlackWhite": "float"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

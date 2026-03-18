@@ -1,0 +1,171 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		* Copyright (C) 2009 by Jakub Hrozek <jhrozek@redhat.com>	
+4		*	
+5		* Permission to use, copy, modify, and distribute this	
+6		* software and its documentation for any purpose and without	
+7		* fee is hereby granted, provided that the above copyright	
+8		* notice appear in all copies and that both that copyright	
+9		* notice and this permission notice appear in supporting	
+10		* documentation, and that the name of M.I.T. not be used in	
+11		* advertising or publicity pertaining to distribution of the	
+12		* software without specific, written prior permission.	
+13		* M.I.T. makes no representations about the suitability of	
+14		* this software for any purpose.  It is provided "as is"	
+15		* without express or implied warranty.	
+16		*/	
+17			
+18		#include "ares_setup.h"	
+19			
+20		#ifdef HAVE_NETINET_IN_H	
+21		#  include <netinet/in.h>	
+22		#endif	
+23		#ifdef HAVE_NETDB_H	
+24		#  include <netdb.h>	
+25		#endif	
+26		#ifdef HAVE_ARPA_INET_H	
+27		#  include <arpa/inet.h>	
+28		#endif	
+29			
+30		#include "ares_nameser.h"	
+31			
+32		#include "ares.h"	
+33		#include "ares_dns.h"	
+34		#include "ares_data.h"	
+35		#include "ares_private.h"	
+36			
+37		int	
+38		ares_parse_srv_reply (const unsigned char *abuf, int alen,	
+39		struct ares_srv_reply **srv_out)	
+40	479	{	
+41	479	unsigned int qdcount, ancount, i;	
+42	479	const unsigned char *aptr, *vptr;	
+43	479	int status, rr_type, rr_class, rr_len;	
+44	479	long len;	
+45	479	char *hostname = NULL, *rr_name = NULL;	
+46	479	struct ares_srv_reply *srv_head = NULL;	
+47	479	struct ares_srv_reply *srv_last = NULL;	
+48	479	struct ares_srv_reply *srv_curr;	
+49			
+50		/* Set *srv_out to NULL for all failure cases. */	
+51	479	*srv_out = NULL;	
+52			
+53		/* Give up if abuf doesn't have room for a header. */	
+54	479	if (alen < HFIXEDSZ)	
+55	0	returnARES_EBADRESP;	
+56			
+57		/* Fetch the question and answer count from the header. */	
+58	479	qdcount = DNS_HEADER_QDCOUNT (abuf);	
+59	479	ancount = DNS_HEADER_ANCOUNT (abuf);	
+60	479	if (qdcount != 1)	
+61	8	return ARES_EBADRESP;	
+62	471	if (ancount == 0)	
+63	37	return ARES_ENODATA;	
+64			
+65		/* Expand the name from the question, and skip past the question. */	
+66	434	aptr = abuf + HFIXEDSZ;	
+67	434	status = ares_expand_name (aptr, abuf, alen, &hostname, &len);	
+68	434	if (status != ARES_SUCCESS)	
+69	31	return status;	
+70			
+71	403	if (aptr + len + QFIXEDSZ > abuf + alen)	
+72	41	{	
+73	41	ares_free (hostname);	
+74	41	return ARES_EBADRESP;	
+75	41	}	
+76	362	aptr += len + QFIXEDSZ;	
+77			
+78		/* Examine each answer resource record (RR) in turn. */	
+79	12.4k	for (i = 0; i < ancount; i++)	
+80	12.4k	{	
+81		/* Decode the RR up to the data field. */	
+82	12.4k	status = ares_expand_name (aptr, abuf, alen, &rr_name, &len);	
+83	12.4k	if (status != ARES_SUCCESS)	
+84	162	{	
+85	162	break;	
+86	162	}	
+87	12.2k	aptr += len;	
+88	12.2k	if (aptr + RRFIXEDSZ > abuf + alen)	
+89	82	{	
+90	82	status = ARES_EBADRESP;	
+91	82	break;	
+92	82	}	
+93	12.1k	rr_type = DNS_RR_TYPE (aptr);	
+94	12.1k	rr_class = DNS_RR_CLASS (aptr);	
+95	12.1k	rr_len = DNS_RR_LEN (aptr);	
+96	12.1k	aptr += RRFIXEDSZ;	
+97	12.1k	if (aptr + rr_len > abuf + alen)	
+98	28	{	
+99	28	status = ARES_EBADRESP;	
+100	28	break;	
+101	28	}	
+102			
+103		/* Check if we are really looking at a SRV record */	
+104	12.1k	if (rr_class == C_IN && rr_type == T_SRV)	
+105	168	{	
+106		/* parse the SRV record itself */	
+107	168	if (rr_len < 6)	
+108	3	{	
+109	3	status = ARES_EBADRESP;	
+110	3	break;	
+111	3	}	
+112			
+113		/* Allocate storage for this SRV answer appending it to the list */	
+114	165	srv_curr = ares_malloc_data(ARES_DATATYPE_SRV_REPLY);	
+115	165	if (!srv_curr)	
+116	0	{	
+117	0	status =ARES_ENOMEM;	
+118	0	break;	
+119	0	}	
+120	165	if (srv_last)	
+121	116	{	
+122	116	srv_last->next = srv_curr;	
+123	116	}	
+124	49	else	
+125	49	{	
+126	49	srv_head = srv_curr;	
+127	49	}	
+128	165	srv_last = srv_curr;	
+129			
+130	165	vptr = aptr;	
+131	165	srv_curr->priority = DNS__16BIT(vptr);	
+132	165	vptr += sizeof(unsigned short);	
+133	165	srv_curr->weight = DNS__16BIT(vptr);	
+134	165	vptr += sizeof(unsigned short);	
+135	165	srv_curr->port = DNS__16BIT(vptr);	
+136	165	vptr += sizeof(unsigned short);	
+137			
+138	165	status = ares_expand_name (vptr, abuf, alen, &srv_curr->host, &len);	
+139	165	if (status != ARES_SUCCESS)	
+140	18	break;	
+141	165	}	
+142			
+143		/* Don't lose memory in the next iteration */	
+144	12.1k	ares_free (rr_name);	
+145	12.1k	rr_name = NULL;	
+146			
+147		/* Move on to the next record */	
+148	12.1k	aptr += rr_len;	
+149	12.1k	}	
+150			
+151	362	if (hostname)	
+152	362	ares_free (hostname);	
+153	362	if (rr_name)	
+154	131	ares_free (rr_name);	
+155			
+156		/* clean up on error */	
+157	362	if (status != ARES_SUCCESS)	
+158	293	{	
+159	293	if (srv_head)	
+160	47	ares_free_data (srv_head);	
+161	293	return status;	
+162	293	}	
+163			
+164		/* everything looks fine, return the data */	
+165	69	*srv_out = srv_head;	
+166			
+167	69	return ARES_SUCCESS;	
+168	362	}	
+
+

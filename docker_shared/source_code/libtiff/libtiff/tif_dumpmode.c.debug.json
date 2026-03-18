@@ -1,0 +1,140 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int DumpFixupTags(TIFF *tif)\n{\n    (void)tif;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          31,
+          0
+        ],
+        [
+          35,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DumpFixupTags",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int DumpModeEncode(TIFF *tif, uint8_t *pp, tmsize_t cc, uint16_t s)\n{\n    (void)s;\n    while (cc > 0)\n    {\n        tmsize_t n;\n\n        n = cc;\n        if (tif->tif_rawcc + n > tif->tif_rawdatasize)\n            n = tif->tif_rawdatasize - tif->tif_rawcc;\n\n        assert(n > 0);\n\n        /*\n         * Avoid copy if client has setup raw\n         * data buffer to avoid extra copy.\n         */\n        if (tif->tif_rawcp != pp)\n            _TIFFmemcpy(tif->tif_rawcp, pp, n);\n        tif->tif_rawcp += n;\n        tif->tif_rawcc += n;\n        pp += n;\n        cc -= n;\n        if (tif->tif_rawcc >= tif->tif_rawdatasize && !TIFFFlushData1(tif))\n            return (0);\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          40,
+          0
+        ],
+        [
+          67,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DumpModeEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "pp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int DumpModeDecode(TIFF *tif, uint8_t *buf, tmsize_t cc, uint16_t s)\n{\n    static const char module[] = \"DumpModeDecode\";\n    (void)s;\n    if (tif->tif_rawcc < cc)\n    {\n        TIFFErrorExtR(tif, module,\n                      \"Not enough data for scanline %\" PRIu32\n                      \", expected a request for at most %\" TIFF_SSIZE_FORMAT\n                      \" bytes, got a request for %\" TIFF_SSIZE_FORMAT \" bytes\",\n                      tif->tif_row, tif->tif_rawcc, cc);\n        return (0);\n    }\n    /*\n     * Avoid copy if client has setup raw\n     * data buffer to avoid extra copy.\n     */\n    if (tif->tif_rawcp != buf)\n        _TIFFmemcpy(buf, tif->tif_rawcp, cc);\n    tif->tif_rawcp += cc;\n    tif->tif_rawcc -= cc;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          72,
+          0
+        ],
+        [
+          94,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DumpModeDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "buf": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int DumpModeSeek(TIFF *tif, uint32_t nrows)\n{\n    tif->tif_rawcp += nrows * tif->tif_scanlinesize;\n    tif->tif_rawcc -= nrows * tif->tif_scanlinesize;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          99,
+          0
+        ],
+        [
+          104,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DumpModeSeek",
+        "parameters": {
+          "tif": "TIFF",
+          "nrows": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFInitDumpMode(TIFF *tif, int scheme)\n{\n    (void)scheme;\n    tif->tif_fixuptags = DumpFixupTags;\n    tif->tif_decoderow = DumpModeDecode;\n    tif->tif_decodestrip = DumpModeDecode;\n    tif->tif_decodetile = DumpModeDecode;\n    tif->tif_encoderow = DumpModeEncode;\n    tif->tif_encodestrip = DumpModeEncode;\n    tif->tif_encodetile = DumpModeEncode;\n    tif->tif_seek = DumpModeSeek;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          109,
+          0
+        ],
+        [
+          121,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFInitDumpMode",
+        "parameters": {
+          "tif": "TIFF",
+          "scheme": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

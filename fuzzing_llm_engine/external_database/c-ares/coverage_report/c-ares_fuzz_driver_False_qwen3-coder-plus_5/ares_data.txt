@@ -1,0 +1,259 @@
+Line	Count	Source	
+1			
+2		/* Copyright (C) 2009-2013 by Daniel Stenberg	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17			
+18		#include "ares_setup.h"	
+19			
+20		#include <stddef.h>	
+21			
+22		#include "ares.h"	
+23		#include "ares_data.h"	
+24		#include "ares_private.h"	
+25			
+26			
+27		/*	
+28		** ares_free_data() - c-ares external API function.	
+29		**	
+30		** This function must be used by the application to free data memory that	
+31		** has been internally allocated by some c-ares function and for which a	
+32		** pointer has already been returned to the calling application. The list	
+33		** of c-ares functions returning pointers that must be free'ed using this	
+34		** function is:	
+35		**	
+36		**   ares_get_servers()	
+37		**   ares_parse_srv_reply()	
+38		**   ares_parse_txt_reply()	
+39		*/	
+40			
+41		void ares_free_data(void *dataptr)	
+42	17	{	
+43	161	while (dataptr != NULL) {	
+44	144	struct ares_data *ptr;	
+45	144	void *next_data = NULL;	
+46			
+47		#ifdef __INTEL_COMPILER	
+48		#  pragma warning(push)	
+49		#  pragma warning(disable:1684)	
+50		/* 1684: conversion from pointer to same-sized integral type */	
+51		#endif	
+52			
+53	144	ptr = (void *)((char *)dataptr - offsetof(struct ares_data, data));	
+54			
+55		#ifdef __INTEL_COMPILER	
+56		#  pragma warning(pop)	
+57		#endif	
+58			
+59	144	if (ptr->mark != ARES_DATATYPE_MARK)	
+60	0	return;	
+61			
+62	144	switch (ptr->type)	
+63	144	{	
+64	0	case ARES_DATATYPE_MX_REPLY:	
+65			
+66	0	if (ptr->data.mx_reply.next)	
+67	0	next_data = ptr->data.mx_reply.next;	
+68	0	if (ptr->data.mx_reply.host)	
+69	0	ares_free(ptr->data.mx_reply.host);	
+70	0	break;	
+71			
+72	144	case ARES_DATATYPE_SRV_REPLY:	
+73			
+74	144	if (ptr->data.srv_reply.next)	
+75	127	next_data = ptr->data.srv_reply.next;	
+76	144	if (ptr->data.srv_reply.host)	
+77	141	ares_free(ptr->data.srv_reply.host);	
+78	144	break;	
+79			
+80	0	case ARES_DATATYPE_URI_REPLY:	
+81			
+82	0	if (ptr->data.uri_reply.next)	
+83	0	next_data = ptr->data.uri_reply.next;	
+84	0	if (ptr->data.uri_reply.uri)	
+85	0	ares_free(ptr->data.uri_reply.uri);	
+86	0	break;	
+87			
+88	0	case ARES_DATATYPE_TXT_REPLY:	
+89	0	case ARES_DATATYPE_TXT_EXT:	
+90			
+91	0	if (ptr->data.txt_reply.next)	
+92	0	next_data = ptr->data.txt_reply.next;	
+93	0	if (ptr->data.txt_reply.txt)	
+94	0	ares_free(ptr->data.txt_reply.txt);	
+95	0	break;	
+96			
+97	0	case ARES_DATATYPE_ADDR_NODE:	
+98			
+99	0	if (ptr->data.addr_node.next)	
+100	0	next_data = ptr->data.addr_node.next;	
+101	0	break;	
+102			
+103	0	case ARES_DATATYPE_ADDR_PORT_NODE:	
+104			
+105	0	if (ptr->data.addr_port_node.next)	
+106	0	next_data = ptr->data.addr_port_node.next;	
+107	0	break;	
+108			
+109	0	case ARES_DATATYPE_NAPTR_REPLY:	
+110			
+111	0	if (ptr->data.naptr_reply.next)	
+112	0	next_data = ptr->data.naptr_reply.next;	
+113	0	if (ptr->data.naptr_reply.flags)	
+114	0	ares_free(ptr->data.naptr_reply.flags);	
+115	0	if (ptr->data.naptr_reply.service)	
+116	0	ares_free(ptr->data.naptr_reply.service);	
+117	0	if (ptr->data.naptr_reply.regexp)	
+118	0	ares_free(ptr->data.naptr_reply.regexp);	
+119	0	if (ptr->data.naptr_reply.replacement)	
+120	0	ares_free(ptr->data.naptr_reply.replacement);	
+121	0	break;	
+122			
+123	0	case ARES_DATATYPE_SOA_REPLY:	
+124	0	if (ptr->data.soa_reply.nsname)	
+125	0	ares_free(ptr->data.soa_reply.nsname);	
+126	0	if (ptr->data.soa_reply.hostmaster)	
+127	0	ares_free(ptr->data.soa_reply.hostmaster);	
+128	0	break;	
+129			
+130	0	case ARES_DATATYPE_CAA_REPLY:	
+131			
+132	0	if (ptr->data.caa_reply.next)	
+133	0	next_data = ptr->data.caa_reply.next;	
+134	0	if (ptr->data.caa_reply.property)	
+135	0	ares_free(ptr->data.caa_reply.property);	
+136	0	if (ptr->data.caa_reply.value)	
+137	0	ares_free(ptr->data.caa_reply.value);	
+138	0	break;	
+139			
+140	0	default:	
+141	0	return;	
+142	144	}	
+143			
+144	144	ares_free(ptr);	
+145	144	dataptr = next_data;	
+146	144	}	
+147	17	}	
+148			
+149			
+150		/*	
+151		** ares_malloc_data() - c-ares internal helper function.	
+152		**	
+153		** This function allocates memory for a c-ares private ares_data struct	
+154		** for the specified ares_datatype, initializes c-ares private fields	
+155		** and zero initializes those which later might be used from the public	
+156		** API. It returns an interior pointer which can be passed by c-ares	
+157		** functions to the calling application, and that must be free'ed using	
+158		** c-ares external API function ares_free_data().	
+159		*/	
+160			
+161		void *ares_malloc_data(ares_datatype type)	
+162	144	{	
+163	144	struct ares_data *ptr;	
+164			
+165	144	ptr = ares_malloc(sizeof(struct ares_data));	
+166	144	if (!ptr)	
+167	0	returnNULL;	
+168			
+169	144	switch (type)	
+170	144	{	
+171	0	case ARES_DATATYPE_MX_REPLY:	
+172	0	ptr->data.mx_reply.next =NULL;	
+173	0	ptr->data.mx_reply.host =NULL;	
+174	0	ptr->data.mx_reply.priority = 0;	
+175	0	break;	
+176			
+177	144	case ARES_DATATYPE_SRV_REPLY:	
+178	144	ptr->data.srv_reply.next = NULL;	
+179	144	ptr->data.srv_reply.host = NULL;	
+180	144	ptr->data.srv_reply.priority = 0;	
+181	144	ptr->data.srv_reply.weight = 0;	
+182	144	ptr->data.srv_reply.port = 0;	
+183	144	break;	
+184			
+185	0	case ARES_DATATYPE_URI_REPLY:	
+186	0	ptr->data.uri_reply.next =NULL;	
+187	0	ptr->data.uri_reply.priority = 0;	
+188	0	ptr->data.uri_reply.weight = 0;	
+189	0	ptr->data.uri_reply.uri =NULL;	
+190	0	ptr->data.uri_reply.ttl = 0;	
+191	0	break;	
+192			
+193	0	case ARES_DATATYPE_TXT_EXT:	
+194	0	ptr->data.txt_ext.record_start = 0;	
+195		/* FALLTHROUGH */	
+196			
+197	0	case ARES_DATATYPE_TXT_REPLY:	
+198	0	ptr->data.txt_reply.next =NULL;	
+199	0	ptr->data.txt_reply.txt =NULL;	
+200	0	ptr->data.txt_reply.length = 0;	
+201	0	break;	
+202			
+203	0	case ARES_DATATYPE_CAA_REPLY:	
+204	0	ptr->data.caa_reply.next =NULL;	
+205	0	ptr->data.caa_reply.plength = 0;	
+206	0	ptr->data.caa_reply.property =NULL;	
+207	0	ptr->data.caa_reply.length = 0;	
+208	0	ptr->data.caa_reply.value =NULL;	
+209	0	break;	
+210			
+211	0	case ARES_DATATYPE_ADDR_NODE:	
+212	0	ptr->data.addr_node.next =NULL;	
+213	0	ptr->data.addr_node.family = 0;	
+214	0	memset(&ptr->data.addr_node.addrV6, 0,	
+215	0	sizeof(ptr->data.addr_node.addrV6));	
+216	0	break;	
+217			
+218	0	case ARES_DATATYPE_ADDR_PORT_NODE:	
+219	0	ptr->data.addr_port_node.next =NULL;	
+220	0	ptr->data.addr_port_node.family = 0;	
+221	0	ptr->data.addr_port_node.udp_port = 0;	
+222	0	ptr->data.addr_port_node.tcp_port = 0;	
+223	0	memset(&ptr->data.addr_port_node.addrV6, 0,	
+224	0	sizeof(ptr->data.addr_port_node.addrV6));	
+225	0	break;	
+226			
+227	0	case ARES_DATATYPE_NAPTR_REPLY:	
+228	0	ptr->data.naptr_reply.next =NULL;	
+229	0	ptr->data.naptr_reply.flags =NULL;	
+230	0	ptr->data.naptr_reply.service =NULL;	
+231	0	ptr->data.naptr_reply.regexp =NULL;	
+232	0	ptr->data.naptr_reply.replacement =NULL;	
+233	0	ptr->data.naptr_reply.order = 0;	
+234	0	ptr->data.naptr_reply.preference = 0;	
+235	0	break;	
+236			
+237	0	case ARES_DATATYPE_SOA_REPLY:	
+238	0	ptr->data.soa_reply.nsname =NULL;	
+239	0	ptr->data.soa_reply.hostmaster =NULL;	
+240	0	ptr->data.soa_reply.serial = 0;	
+241	0	ptr->data.soa_reply.refresh = 0;	
+242	0	ptr->data.soa_reply.retry = 0;	
+243	0	ptr->data.soa_reply.expire = 0;	
+244	0	ptr->data.soa_reply.minttl = 0;	
+245	0	break;	
+246			
+247	0	default:	
+248	0	ares_free(ptr);	
+249	0	returnNULL;	
+250	144	}	
+251			
+252	144	ptr->mark = ARES_DATATYPE_MARK;	
+253	144	ptr->type = type;	
+254			
+255	144	return &ptr->data;	
+256	144	}	
+
+

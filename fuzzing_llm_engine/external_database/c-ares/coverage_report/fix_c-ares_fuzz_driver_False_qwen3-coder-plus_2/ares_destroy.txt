@@ -1,0 +1,116 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		* Copyright (C) 2004-2011 by Daniel Stenberg	
+4		*	
+5		* Permission to use, copy, modify, and distribute this	
+6		* software and its documentation for any purpose and without	
+7		* fee is hereby granted, provided that the above copyright	
+8		* notice appear in all copies and that both that copyright	
+9		* notice and this permission notice appear in supporting	
+10		* documentation, and that the name of M.I.T. not be used in	
+11		* advertising or publicity pertaining to distribution of the	
+12		* software without specific, written prior permission.	
+13		* M.I.T. makes no representations about the suitability of	
+14		* this software for any purpose.  It is provided "as is"	
+15		* without express or implied warranty.	
+16		*/	
+17			
+18		#include "ares_setup.h"	
+19			
+20		#include <assert.h>	
+21			
+22		#include "ares.h"	
+23		#include "ares_private.h"	
+24			
+25		void ares_destroy_options(struct ares_options *options)	
+26	0	{	
+27	0	int i;	
+28			
+29	0	if(options->servers)	
+30	0	ares_free(options->servers);	
+31	0	for (i = 0;i < options->ndomains;i++)	
+32	0	ares_free(options->domains[i]);	
+33	0	if(options->domains)	
+34	0	ares_free(options->domains);	
+35	0	if(options->sortlist)	
+36	0	ares_free(options->sortlist);	
+37	0	if(options->lookups)	
+38	0	ares_free(options->lookups);	
+39	0	if(options->resolvconf_path)	
+40	0	ares_free(options->resolvconf_path);	
+41	0	}	
+42			
+43		void ares_destroy(ares_channel channel)	
+44	3	{	
+45	3	int i;	
+46	3	struct query *query;	
+47	3	struct list_node* list_head;	
+48	3	struct list_node* list_node;	
+49			
+50	3	if (!channel)	
+51	0	return;	
+52			
+53	3	list_head = &(channel->all_queries);	
+54	3	for (list_node = list_head->next; list_node != list_head; )	
+55	0	{	
+56	0	query = list_node->data;	
+57	0	list_node = list_node->next;  /* since we're deleting the query */	
+58	0	query->callback(query->arg,ARES_EDESTRUCTION, 0,NULL, 0);	
+59	0	ares__free_query(query);	
+60	0	}	
+61	3	#ifndef NDEBUG	
+62		/* Freeing the query should remove it from all the lists in which it sits,	
+63		* so all query lists should be empty now.	
+64		*/	
+65	3	assert(ares__is_list_empty(&(channel->all_queries)));	
+66	6.14k	for (i = 0; i < ARES_QID_TABLE_SIZE; i++)	
+67	6.14k	{	
+68	6.14k	assert(ares__is_list_empty(&(channel->queries_by_qid[i])));	
+69	6.14k	}	
+70	3.07k	for (i = 0; i < ARES_TIMEOUT_TABLE_SIZE; i++)	
+71	3.07k	{	
+72	3.07k	assert(ares__is_list_empty(&(channel->queries_by_timeout[i])));	
+73	3.07k	}	
+74	3	#endif	
+75			
+76	3	ares__destroy_servers_state(channel);	
+77			
+78	3	if (channel->domains) {	
+79	6	for (i = 0; i < channel->ndomains; i++)	
+80	3	ares_free(channel->domains[i]);	
+81	3	ares_free(channel->domains);	
+82	3	}	
+83			
+84	3	if(channel->sortlist)	
+85	0	ares_free(channel->sortlist);	
+86			
+87	3	if (channel->lookups)	
+88	3	ares_free(channel->lookups);	
+89			
+90	3	if (channel->resolvconf_path)	
+91	0	ares_free(channel->resolvconf_path);	
+92			
+93	3	ares_free(channel);	
+94	3	}	
+95			
+96		void ares__destroy_servers_state(ares_channel channel)	
+97	3	{	
+98	3	struct server_state *server;	
+99	3	int i;	
+100			
+101	3	if (channel->servers)	
+102	3	{	
+103	6	for (i = 0; i < channel->nservers; i++)	
+104	3	{	
+105	3	server = &channel->servers[i];	
+106	3	ares__close_sockets(channel, server);	
+107	3	assert(ares__is_list_empty(&server->queries_to_server));	
+108	3	}	
+109	3	ares_free(channel->servers);	
+110	3	channel->servers = NULL;	
+111	3	}	
+112	3	channel->nservers = -1;	
+113	3	}	
+
+

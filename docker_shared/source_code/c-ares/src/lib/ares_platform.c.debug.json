@@ -1,0 +1,209 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "win_platform ares__getplatform(void)\n{\n  OSVERSIONINFOEX OsvEx;\n\n  memset(&OsvEx, 0, sizeof(OsvEx));\n  OsvEx.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);\n#ifdef _MSC_VER\n#pragma warning(push)\n#pragma warning(disable:4996) /* warning C4996: 'GetVersionExW': was declared deprecated */\n#endif\n  if (!GetVersionEx((void *)&OsvEx))\n    {\n      memset(&OsvEx, 0, sizeof(OsvEx));\n      OsvEx.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);\n      if (!GetVersionEx((void *)&OsvEx))\n        return WIN_UNKNOWN;\n    }\n#ifdef _MSC_VER\n#pragma warning(pop)\n#endif\n\n  switch(OsvEx.dwPlatformId)\n    {\n      case V_PLATFORM_WIN32s:\n        return WIN_3X;\n\n      case V_PLATFORM_WIN32_WINDOWS:\n        return WIN_9X;\n\n      case V_PLATFORM_WIN32_NT:\n        return WIN_NT;\n\n      case V_PLATFORM_WIN32_CE:\n        return WIN_CE;\n\n      default:\n        return WIN_UNKNOWN;\n    }\n}",
+      "fn_code_pos": [
+        [
+          32,
+          0
+        ],
+        [
+          70,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__getplatform",
+        "parameters": {},
+        "return_type": "win_platform"
+      }
+    },
+    {
+      "fn_code": "struct servent *getservbyport(int port, const char *proto)\n{\n  unsigned short u_port;\n  const char *protocol = NULL;\n  int i, error = 0;\n\n  u_port = ntohs((unsigned short)port);\n\n  if (proto)\n    {\n      switch (strlen(proto)) {\n      case 3:\n        if (!strncasecmp(proto, \"tcp\", 3))\n          protocol = \"tcp\";\n        else if (!strncasecmp(proto, \"udp\", 3))\n          protocol = \"udp\";\n        else\n          error = WSAEFAULT;\n        break;\n      case 4:\n        if (!strncasecmp(proto, \"sctp\", 4))\n          protocol = \"sctp\";\n        else if (!strncasecmp(proto, \"dccp\", 4))\n          protocol = \"dccp\";\n        else\n          error = WSAEFAULT;\n        break;\n      default:\n        error = WSAEFAULT;\n      }\n    }\n\n  if (!error)\n    {\n      for (i = 0; i < (sizeof(IANAports) / sizeof(IANAports[0])) - 1; i++)\n        {\n          if (u_port == IANAports[i].s_port)\n            {\n              if (!protocol || !strcasecmp(protocol, IANAports[i].s_proto))\n                return (struct servent *)&IANAports[i];\n            }\n        }\n      error = WSANO_DATA;\n    }\n\n  SET_SOCKERRNO(error);\n  return NULL;\n}",
+      "fn_code_pos": [
+        [
+          10992,
+          0
+        ],
+        [
+          11039,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "getservbyport",
+        "parameters": {
+          "port": "int",
+          "proto": "char"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "getservbyport(int port, const char *proto)",
+      "fn_dec_pos": [
+        [
+          10992,
+          16
+        ],
+        [
+          10992,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "getservbyport",
+        "parameters": {
+          "port": "int",
+          "proto": "char"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct pvt_servent {\n  char           *s_name;\n  char          **s_aliases;\n  unsigned short  s_port;\n  char           *s_proto;\n}",
+      {
+        "*s_name": "char",
+        "**s_aliases": "char",
+        "s_port": "unsigned short",
+        "*s_proto": "char"
+      },
+      "pvt_servent",
+      [
+        82,
+        0
+      ],
+      [
+        87,
+        1
+      ]
+    ],
+    [
+      "struct pvt_servent {\n  char           *s_name;\n  char          **s_aliases;\n  unsigned short  s_port;\n  char           *s_proto;\n}",
+      {
+        "*s_name": "char",
+        "**s_aliases": "char",
+        "s_port": "unsigned short",
+        "*s_proto": "char"
+      },
+      "pvt_servent",
+      [
+        82,
+        0
+      ],
+      [
+        87,
+        1
+      ]
+    ],
+    [
+      "struct pvt_servent",
+      {},
+      "",
+      [
+        93,
+        7
+      ],
+      [
+        93,
+        25
+      ]
+    ],
+    [
+      "struct servent",
+      {},
+      "",
+      [
+        10992,
+        0
+      ],
+      [
+        10992,
+        14
+      ]
+    ],
+    [
+      "struct servent",
+      {},
+      "",
+      [
+        11031,
+        24
+      ],
+      [
+        11031,
+        38
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        18,
+        0
+      ],
+      [
+        19,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        20,
+        0
+      ],
+      [
+        21,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_platform.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nowarn.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

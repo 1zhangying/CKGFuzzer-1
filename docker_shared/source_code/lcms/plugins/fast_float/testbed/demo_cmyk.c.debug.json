@@ -1,0 +1,179 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nvoid Fail(const char* frm, ...)\n{\n    va_list args;\n\n    va_start(args, frm);\n    vprintf(frm, args);\n    va_end(args);\n    exit(1);\n}",
+      "fn_code_pos": [
+        [
+          26,
+          0
+        ],
+        [
+          35,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Fail",
+        "parameters": {
+          "frm": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* make_image(size_t size_x, size_t size_y, cmsBool fill_rgb, cmsUInt32Number* stride_x)\n{\n    cmsUInt32Number size_x_aligned = ALIGNED_SIZE(16, size_x);\n    cmsUInt32Number line_size_in_bytes = size_x_aligned * sizeof(cmsUInt32Number); // RGBA\n\n    cmsUInt8Number* ptr_image = (cmsUInt8Number*) calloc(size_y, line_size_in_bytes);\n    \n    if (ptr_image == NULL) Fail(\"Couldn't allocate memory for image\");\n\n    if (fill_rgb)\n    {\n        size_t line;\n\n        for (line = 0; line < size_y; line++)\n        {\n            cmsUInt32Number* ptr_line = (cmsUInt32Number*)(ptr_image + line_size_in_bytes * line);          \n            cmsUInt32Number argb = 0;\n            int col;\n\n            for (col = 0; col < size_x; col++)\n                *ptr_line++ = argb++;\n                \n        }\n    }\n\n    *stride_x = line_size_in_bytes;\n    return (void*) ptr_image;\n}",
+      "fn_code_pos": [
+        [
+          42,
+          0
+        ],
+        [
+          70,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "make_image",
+        "parameters": {
+          "size_x": "size_t",
+          "size_y": "size_t",
+          "fill_rgb": "cmsBool",
+          "stride_x": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsFloat64Number MPixSec(cmsFloat64Number diff)\n{\n    cmsFloat64Number seconds = (cmsFloat64Number)diff / (cmsFloat64Number)CLOCKS_PER_SEC;\n    return (SIZE_X * SIZE_Y) / (1024.0 * 1024.0 * seconds);\n}",
+      "fn_code_pos": [
+        [
+          75,
+          0
+        ],
+        [
+          80,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MPixSec",
+        "parameters": {
+          "diff": "cmsFloat64Number"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsFloat64Number speed_test(void)\n{\n    clock_t atime;\n    cmsFloat64Number diff;\n    cmsHPROFILE hProfileIn;\n    cmsHPROFILE hProfileOut;   \n    cmsHTRANSFORM xform;\n    void* image_in;\n    void* image_out;\n    cmsUInt32Number stride_rgb_x, stride_cmyk_x;\n\n\n    hProfileIn = cmsOpenProfileFromFile(\"sRGB Color Space Profile.icm\", \"r\");\n    hProfileOut = cmsOpenProfileFromFile(\"USWebCoatedSWOP.icc\", \"r\");\n\n    if (hProfileIn == NULL || hProfileOut == NULL)\n        Fail(\"Unable to open profiles\");\n\n    xform = cmsCreateTransform(hProfileIn, TYPE_RGBA_8, hProfileOut, TYPE_CMYK_8, INTENT_PERCEPTUAL, 0);\n    cmsCloseProfile(hProfileIn);\n    cmsCloseProfile(hProfileOut);\n\n    \n    image_in = make_image(SIZE_X, SIZE_Y, TRUE, &stride_rgb_x);\n    image_out = make_image(SIZE_X, SIZE_Y, FALSE, &stride_cmyk_x);\n\n    atime = clock();\n\n    cmsDoTransformLineStride(xform, image_in, image_out, SIZE_X, SIZE_Y, stride_rgb_x, stride_cmyk_x, 0, 0);\n    \n    diff = clock() - atime;\n\n    free(image_in);\n    free(image_out);\n\n    cmsDeleteTransform(xform);\n    return MPixSec(diff);\n}",
+      "fn_code_pos": [
+        [
+          84,
+          0
+        ],
+        [
+          122,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "speed_test",
+        "parameters": {},
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "int main(void)\n{\n    cmsFloat64Number without_plugin;\n    cmsFloat64Number with_plugin;\n    \n    fprintf(stdout, \"DEMO of littleCMS fast float plugin: RGBA -> CMYK in Megapixels per second\\n\");  fflush(stdout);\n\n    // filling cache\n    fprintf(stdout, \"Wait CPU cache to stabilize: \");  fflush(stdout);\n    speed_test();\n    fprintf(stdout, \"Ok\\n\");\n\n    fprintf(stdout, \"Without plugin: \");  fflush(stdout);\n    without_plugin = speed_test();\n    fprintf(stdout, \"%.2f\\n\", without_plugin); fflush(stdout);\n\n    cmsPlugin(cmsFastFloatExtensions());\n\n    fprintf(stdout, \"With plugin: \");  fflush(stdout);\n    with_plugin = speed_test();\n    fprintf(stdout, \"%.2f\\n\", with_plugin); fflush(stdout);\n    \n    fprintf(stdout, \"x %2.2f\\n\", (with_plugin/without_plugin)); fflush(stdout);\n\n    return 0;    \n}",
+      "fn_code_pos": [
+        [
+          125,
+          0
+        ],
+        [
+          150,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "make_image(size_t size_x, size_t size_y, cmsBool fill_rgb, cmsUInt32Number* stride_x)",
+      "fn_dec_pos": [
+        [
+          43,
+          6
+        ],
+        [
+          43,
+          91
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "make_image",
+        "parameters": {
+          "size_x": "size_t",
+          "size_y": "size_t",
+          "fill_rgb": "cmsBool",
+          "stride_x": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"lcms2_fast_float.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <memory.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

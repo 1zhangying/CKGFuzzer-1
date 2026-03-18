@@ -1,0 +1,143 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void ares_send(ares_channel channel, const unsigned char *qbuf, int qlen,\n               ares_callback callback, void *arg)\n{\n  struct query *query;\n  int i, packetsz;\n  struct timeval now;\n\n  /* Verify that the query is at least long enough to hold the header. */\n  if (qlen < HFIXEDSZ || qlen >= (1 << 16))\n    {\n      callback(arg, ARES_EBADQUERY, 0, NULL, 0);\n      return;\n    }\n\n  /* Allocate space for query and allocated fields. */\n  query = ares_malloc(sizeof(struct query));\n  if (!query)\n    {\n      callback(arg, ARES_ENOMEM, 0, NULL, 0);\n      return;\n    }\n  query->tcpbuf = ares_malloc(qlen + 2);\n  if (!query->tcpbuf)\n    {\n      ares_free(query);\n      callback(arg, ARES_ENOMEM, 0, NULL, 0);\n      return;\n    }\n  if (channel->nservers < 1)\n    {\n      ares_free(query);\n      callback(arg, ARES_ESERVFAIL, 0, NULL, 0);\n      return;\n    }\n  query->server_info = ares_malloc(channel->nservers *\n                                   sizeof(query->server_info[0]));\n  if (!query->server_info)\n    {\n      ares_free(query->tcpbuf);\n      ares_free(query);\n      callback(arg, ARES_ENOMEM, 0, NULL, 0);\n      return;\n    }\n\n  /* Compute the query ID.  Start with no timeout. */\n  query->qid = DNS_HEADER_QID(qbuf);\n  query->timeout.tv_sec = 0;\n  query->timeout.tv_usec = 0;\n\n  /* Form the TCP query buffer by prepending qlen (as two\n   * network-order bytes) to qbuf.\n   */\n  query->tcpbuf[0] = (unsigned char)((qlen >> 8) & 0xff);\n  query->tcpbuf[1] = (unsigned char)(qlen & 0xff);\n  memcpy(query->tcpbuf + 2, qbuf, qlen);\n  query->tcplen = qlen + 2;\n\n  /* Fill in query arguments. */\n  query->qbuf = query->tcpbuf + 2;\n  query->qlen = qlen;\n  query->callback = callback;\n  query->arg = arg;\n\n  /* Initialize query status. */\n  query->try_count = 0;\n\n  /* Choose the server to send the query to. If rotation is enabled, keep track\n   * of the next server we want to use. */\n  query->server = channel->last_server;\n  if (channel->rotate == 1)\n    channel->last_server = (channel->last_server + 1) % channel->nservers;\n\n  for (i = 0; i < channel->nservers; i++)\n    {\n      query->server_info[i].skip_server = 0;\n      query->server_info[i].tcp_connection_generation = 0;\n    }\n\n  packetsz = (channel->flags & ARES_FLAG_EDNS) ? channel->ednspsz : PACKETSZ;\n  query->using_tcp = (channel->flags & ARES_FLAG_USEVC) || qlen > packetsz;\n\n  query->error_status = ARES_ECONNREFUSED;\n  query->timeouts = 0;\n\n  /* Initialize our list nodes. */\n  ares__init_list_node(&(query->queries_by_qid),     query);\n  ares__init_list_node(&(query->queries_by_timeout), query);\n  ares__init_list_node(&(query->queries_to_server),  query);\n  ares__init_list_node(&(query->all_queries),        query);\n\n  /* Chain the query into the list of all queries. */\n  ares__insert_in_list(&(query->all_queries), &(channel->all_queries));\n  /* Keep track of queries bucketed by qid, so we can process DNS\n   * responses quickly.\n   */\n  ares__insert_in_list(\n    &(query->queries_by_qid),\n    &(channel->queries_by_qid[query->qid % ARES_QID_TABLE_SIZE]));\n\n  /* Perform the first query action. */\n  now = ares__tvnow();\n  ares__send_query(channel, query, &now);\n}",
+      "fn_code_pos": [
+        [
+          28,
+          0
+        ],
+        [
+          130,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_send",
+        "parameters": {
+          "channel": "ares_channel",
+          "qbuf": "unsigned char",
+          "qlen": "int",
+          "callback": "ares_callback",
+          "arg": "void"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct query",
+      {},
+      "",
+      [
+        31,
+        2
+      ],
+      [
+        31,
+        14
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        33,
+        2
+      ],
+      [
+        33,
+        16
+      ]
+    ],
+    [
+      "struct query",
+      {},
+      "",
+      [
+        43,
+        29
+      ],
+      [
+        43,
+        41
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_dns.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -24,6 +24,18 @@ CPP_LANGUAGE = Language(f'{tree_folder}/codetext/parser/tree-sitter/cpp.so', 'cp
 
 
 class StaticAnalysisAgent:
+    # dfg_generation_prompt = PromptTemplate(
+    #     "As a C/C++ data flow graph analyzer, analyze the provided program and generate a JSON representation of its data flow graph (DFG). Focus on the listed variables.\n\n"
+    #     "Instructions:\n"
+    #     "1. Identify data dependencies between variables.\n"
+    #     "2. Track variable modifications and uses.\n"
+    #     "3. Include function calls that affect variable values.\n"
+    #     "4. Represent each variable as a node.\n"
+    #     "5. Use edges to show data flow between nodes.\n\n"
+    #     "Program:\n{program}\n\n"
+    #     "Variables:\n{variables}\n\n"
+    #     "Provide only the JSON output without additional explanation."
+    #     )
     dfg_generation_prompt = PromptTemplate(
         "As a C/C++ data flow graph analyzer, analyze the provided program and generate a JSON representation of its data flow graph (DFG). Focus on the listed variables.\n\n"
         "Instructions:\n"
@@ -34,9 +46,14 @@ class StaticAnalysisAgent:
         "5. Use edges to show data flow between nodes.\n\n"
         "Program:\n{program}\n\n"
         "Variables:\n{variables}\n\n"
-        "Provide only the JSON output without additional explanation."
-        )
-    
+        "IMPORTANT: Return ONLY the JSON wrapped in ```json code block like this:\n"
+        "```json\n"
+        '{{"nodes": [...], "edges": [...]}}\n'
+        "```\n"
+        "Do not add any explanation or other text."
+    )
+
+
     dfg_generation_prompt_with_memory = PromptTemplate(
         "As a C/C++ data flow graph analyzer, analyze the provided program and generate a JSON representation of its data flow graph (DFG). Focus on the listed variables.\n\n"
         "Instructions:\n"
@@ -122,7 +139,7 @@ class StaticAnalysisAgent:
         traverse(node)
         return declarations
     
-    def dfg_analysis(self, source_code):
+    # def dfg_analysis(self, source_code):
         source_code=self.clean_comments(source_code)
         var_list=self.extract_variables(source_code)
         question = self.dfg_generation_prompt.format(program=source_code,variables=var_list)
@@ -147,7 +164,50 @@ class StaticAnalysisAgent:
         logger.info(f"DFG: {json_data}")
 
         return json_data
-
+    def dfg_analysis(self, source_code):
+        source_code=self.clean_comments(source_code)
+        var_list=self.extract_variables(source_code)
+        question = self.dfg_generation_prompt.format(program=source_code,variables=var_list)
+        if self.use_memory and len(self.composable_memory.get_all()):
+            context_memory = self.composable_memory.get(question)
+            question = self.dfg_generation_prompt_with_memory(context_memory=context_memory,program=source_code,variables=var_list)
+        dfg=self.llm.complete(question).text
+        
+        # ← 添加调试日志：看 LLM 实际返回了什么
+        logger.debug(f"LLM raw response: {dfg[:200]}...")  # 只记录前200字
+        
+        msgs = [
+            ChatMessage.from_str(question, "user"),
+            ChatMessage.from_str(dfg, "assistant")
+        ]
+        self.composable_memory.put_messages(msgs)
+        
+        # ← 改进正则匹配：支持多种格式
+        json_data = "No JSON data found."
+        
+        # 尝试格式1：```json ... ```（标准格式）
+        pattern1 = r'```json\s*(.*?)\s*```'
+        match = re.search(pattern1, dfg, re.DOTALL)
+        if match:
+            json_data = match.group(1).strip()
+        
+        # 尝试格式2：``` ... ```（没有 json 标签）
+        if json_data == "No JSON data found.":
+            pattern2 = r'```\s*(.*?)\s*```'
+            match = re.search(pattern2, dfg, re.DOTALL)
+            if match:
+                json_data = match.group(1).strip()
+        
+        # 尝试格式3：直接 JSON（没有代码块）
+        if json_data == "No JSON data found.":
+            try:
+                json.loads(dfg.strip())
+                json_data = dfg.strip()
+            except:
+                pass
+        
+        logger.info(f"DFG: {json_data}")
+        return json_data    
     
 
 if __name__ == "__main__":

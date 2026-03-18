@@ -1,0 +1,577 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "uint32_t _TIFFMultiply32(TIFF *tif, uint32_t first, uint32_t second,\n                         const char *where)\n{\n    if (second && first > UINT32_MAX / second)\n    {\n        TIFFErrorExtR(tif, where, \"Integer overflow in %s\", where);\n        return 0;\n    }\n\n    return first * second;\n}",
+      "fn_code_pos": [
+        [
+          34,
+          0
+        ],
+        [
+          44,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFMultiply32",
+        "parameters": {
+          "tif": "TIFF",
+          "first": "uint32_t",
+          "second": "uint32_t",
+          "where": "char"
+        },
+        "return_type": "uint32_t"
+      }
+    },
+    {
+      "fn_code": "uint64_t _TIFFMultiply64(TIFF *tif, uint64_t first, uint64_t second,\n                         const char *where)\n{\n    if (second && first > UINT64_MAX / second)\n    {\n        TIFFErrorExtR(tif, where, \"Integer overflow in %s\", where);\n        return 0;\n    }\n\n    return first * second;\n}",
+      "fn_code_pos": [
+        [
+          46,
+          0
+        ],
+        [
+          56,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFMultiply64",
+        "parameters": {
+          "tif": "TIFF",
+          "first": "uint64_t",
+          "second": "uint64_t",
+          "where": "char"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "tmsize_t _TIFFMultiplySSize(TIFF *tif, tmsize_t first, tmsize_t second,\n                            const char *where)\n{\n    if (first <= 0 || second <= 0)\n    {\n        if (tif != NULL && where != NULL)\n        {\n            TIFFErrorExtR(tif, where,\n                          \"Invalid argument to _TIFFMultiplySSize() in %s\",\n                          where);\n        }\n        return 0;\n    }\n\n    if (first > TIFF_TMSIZE_T_MAX / second)\n    {\n        if (tif != NULL && where != NULL)\n        {\n            TIFFErrorExtR(tif, where, \"Integer overflow in %s\", where);\n        }\n        return 0;\n    }\n    return first * second;\n}",
+      "fn_code_pos": [
+        [
+          58,
+          0
+        ],
+        [
+          81,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFMultiplySSize",
+        "parameters": {
+          "tif": "TIFF",
+          "first": "tmsize_t",
+          "second": "tmsize_t",
+          "where": "char"
+        },
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "tmsize_t _TIFFCastUInt64ToSSize(TIFF *tif, uint64_t val, const char *module)\n{\n    if (val > (uint64_t)TIFF_TMSIZE_T_MAX)\n    {\n        if (tif != NULL && module != NULL)\n        {\n            TIFFErrorExtR(tif, module, \"Integer overflow\");\n        }\n        return 0;\n    }\n    return (tmsize_t)val;\n}",
+      "fn_code_pos": [
+        [
+          83,
+          0
+        ],
+        [
+          94,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFCastUInt64ToSSize",
+        "parameters": {
+          "tif": "TIFF",
+          "val": "uint64_t",
+          "module": "char"
+        },
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "void *_TIFFCheckRealloc(TIFF *tif, void *buffer, tmsize_t nmemb,\n                        tmsize_t elem_size, const char *what)\n{\n    void *cp = NULL;\n    tmsize_t count = _TIFFMultiplySSize(tif, nmemb, elem_size, NULL);\n    /*\n     * Check for integer overflow.\n     */\n    if (count != 0)\n    {\n        cp = _TIFFreallocExt(tif, buffer, count);\n    }\n\n    if (cp == NULL)\n    {\n        TIFFErrorExtR(tif, tif->tif_name,\n                      \"Failed to allocate memory for %s \"\n                      \"(%\" TIFF_SSIZE_FORMAT \" elements of %\" TIFF_SSIZE_FORMAT\n                      \" bytes each)\",\n                      what, nmemb, elem_size);\n    }\n\n    return cp;\n}",
+      "fn_code_pos": [
+        [
+          96,
+          0
+        ],
+        [
+          119,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFCheckRealloc",
+        "parameters": {
+          "tif": "TIFF",
+          "buffer": "void",
+          "nmemb": "tmsize_t",
+          "elem_size": "tmsize_t",
+          "what": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void *_TIFFCheckMalloc(TIFF *tif, tmsize_t nmemb, tmsize_t elem_size,\n                       const char *what)\n{\n    return _TIFFCheckRealloc(tif, NULL, nmemb, elem_size, what);\n}",
+      "fn_code_pos": [
+        [
+          121,
+          0
+        ],
+        [
+          125,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFCheckMalloc",
+        "parameters": {
+          "tif": "TIFF",
+          "nmemb": "tmsize_t",
+          "elem_size": "tmsize_t",
+          "what": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int TIFFDefaultTransferFunction(TIFF *tif, TIFFDirectory *td)\n{\n    uint16_t **tf = td->td_transferfunction;\n    tmsize_t i, n, nbytes;\n\n    tf[0] = tf[1] = tf[2] = 0;\n    if (td->td_bitspersample >= sizeof(tmsize_t) * 8 - 2)\n        return 0;\n\n    n = ((tmsize_t)1) << td->td_bitspersample;\n    nbytes = n * sizeof(uint16_t);\n    tf[0] = (uint16_t *)_TIFFmallocExt(tif, nbytes);\n    if (tf[0] == NULL)\n        return 0;\n    tf[0][0] = 0;\n    for (i = 1; i < n; i++)\n    {\n        double t = (double)i / ((double)n - 1.);\n        tf[0][i] = (uint16_t)floor(65535. * pow(t, 2.2) + .5);\n    }\n\n    if (td->td_samplesperpixel - td->td_extrasamples > 1)\n    {\n        tf[1] = (uint16_t *)_TIFFmallocExt(tif, nbytes);\n        if (tf[1] == NULL)\n            goto bad;\n        _TIFFmemcpy(tf[1], tf[0], nbytes);\n        tf[2] = (uint16_t *)_TIFFmallocExt(tif, nbytes);\n        if (tf[2] == NULL)\n            goto bad;\n        _TIFFmemcpy(tf[2], tf[0], nbytes);\n    }\n    return 1;\n\nbad:\n    if (tf[0])\n        _TIFFfreeExt(tif, tf[0]);\n    if (tf[1])\n        _TIFFfreeExt(tif, tf[1]);\n    if (tf[2])\n        _TIFFfreeExt(tif, tf[2]);\n    tf[0] = tf[1] = tf[2] = 0;\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          127,
+          0
+        ],
+        [
+          170,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFDefaultTransferFunction",
+        "parameters": {
+          "tif": "TIFF",
+          "td": "TIFFDirectory"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFDefaultRefBlackWhite(TIFF *tif, TIFFDirectory *td)\n{\n    int i;\n\n    td->td_refblackwhite = (float *)_TIFFmallocExt(tif, 6 * sizeof(float));\n    if (td->td_refblackwhite == NULL)\n        return 0;\n    if (td->td_photometric == PHOTOMETRIC_YCBCR)\n    {\n        /*\n         * YCbCr (Class Y) images must have the ReferenceBlackWhite\n         * tag set. Fix the broken images, which lacks that tag.\n         */\n        td->td_refblackwhite[0] = 0.0F;\n        td->td_refblackwhite[1] = td->td_refblackwhite[3] =\n            td->td_refblackwhite[5] = 255.0F;\n        td->td_refblackwhite[2] = td->td_refblackwhite[4] = 128.0F;\n    }\n    else\n    {\n        /*\n         * Assume RGB (Class R)\n         */\n        for (i = 0; i < 3; i++)\n        {\n            td->td_refblackwhite[2 * i + 0] = 0;\n            td->td_refblackwhite[2 * i + 1] =\n                (float)((1L << td->td_bitspersample) - 1L);\n        }\n    }\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          172,
+          0
+        ],
+        [
+          203,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFDefaultRefBlackWhite",
+        "parameters": {
+          "tif": "TIFF",
+          "td": "TIFFDirectory"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFVGetFieldDefaulted(TIFF *tif, uint32_t tag, va_list ap)\n{\n    TIFFDirectory *td = &tif->tif_dir;\n\n    if (TIFFVGetField(tif, tag, ap))\n        return (1);\n    switch (tag)\n    {\n        case TIFFTAG_SUBFILETYPE:\n            *va_arg(ap, uint32_t *) = td->td_subfiletype;\n            return (1);\n        case TIFFTAG_BITSPERSAMPLE:\n            *va_arg(ap, uint16_t *) = td->td_bitspersample;\n            return (1);\n        case TIFFTAG_THRESHHOLDING:\n            *va_arg(ap, uint16_t *) = td->td_threshholding;\n            return (1);\n        case TIFFTAG_FILLORDER:\n            *va_arg(ap, uint16_t *) = td->td_fillorder;\n            return (1);\n        case TIFFTAG_ORIENTATION:\n            *va_arg(ap, uint16_t *) = td->td_orientation;\n            return (1);\n        case TIFFTAG_SAMPLESPERPIXEL:\n            *va_arg(ap, uint16_t *) = td->td_samplesperpixel;\n            return (1);\n        case TIFFTAG_ROWSPERSTRIP:\n            *va_arg(ap, uint32_t *) = td->td_rowsperstrip;\n            return (1);\n        case TIFFTAG_MINSAMPLEVALUE:\n            *va_arg(ap, uint16_t *) = td->td_minsamplevalue;\n            return (1);\n        case TIFFTAG_MAXSAMPLEVALUE:\n        {\n            uint16_t maxsamplevalue;\n            /* td_bitspersample=1 is always set in TIFFDefaultDirectory().\n             * Therefore, td_maxsamplevalue has to be re-calculated in\n             * TIFFGetFieldDefaulted(). */\n            if (td->td_bitspersample > 0)\n            {\n                /* This shift operation into a uint16_t limits the value to\n                 * 65535 even if td_bitspersamle is > 16 */\n                if (td->td_bitspersample <= 16)\n                {\n                    maxsamplevalue = (1 << td->td_bitspersample) -\n                                     1; /* 2**(BitsPerSample) - 1 */\n                }\n                else\n                {\n                    maxsamplevalue = 65535;\n                }\n            }\n            else\n            {\n                maxsamplevalue = 0;\n            }\n            *va_arg(ap, uint16_t *) = maxsamplevalue;\n            return (1);\n        }\n        case TIFFTAG_PLANARCONFIG:\n            *va_arg(ap, uint16_t *) = td->td_planarconfig;\n            return (1);\n        case TIFFTAG_RESOLUTIONUNIT:\n            *va_arg(ap, uint16_t *) = td->td_resolutionunit;\n            return (1);\n        case TIFFTAG_PREDICTOR:\n        {\n            TIFFPredictorState *sp = (TIFFPredictorState *)tif->tif_data;\n            if (sp == NULL)\n            {\n                TIFFErrorExtR(\n                    tif, tif->tif_name,\n                    \"Cannot get \\\"Predictor\\\" tag as plugin is not configured\");\n                *va_arg(ap, uint16_t *) = 0;\n                return 0;\n            }\n            *va_arg(ap, uint16_t *) = (uint16_t)sp->predictor;\n            return 1;\n        }\n        case TIFFTAG_DOTRANGE:\n            *va_arg(ap, uint16_t *) = 0;\n            *va_arg(ap, uint16_t *) = (1 << td->td_bitspersample) - 1;\n            return (1);\n        case TIFFTAG_INKSET:\n            *va_arg(ap, uint16_t *) = INKSET_CMYK;\n            return 1;\n        case TIFFTAG_NUMBEROFINKS:\n            *va_arg(ap, uint16_t *) = 4;\n            return (1);\n        case TIFFTAG_EXTRASAMPLES:\n            *va_arg(ap, uint16_t *) = td->td_extrasamples;\n            *va_arg(ap, const uint16_t **) = td->td_sampleinfo;\n            return (1);\n        case TIFFTAG_MATTEING:\n            *va_arg(ap, uint16_t *) =\n                (td->td_extrasamples == 1 &&\n                 td->td_sampleinfo[0] == EXTRASAMPLE_ASSOCALPHA);\n            return (1);\n        case TIFFTAG_TILEDEPTH:\n            *va_arg(ap, uint32_t *) = td->td_tiledepth;\n            return (1);\n        case TIFFTAG_DATATYPE:\n            *va_arg(ap, uint16_t *) = td->td_sampleformat - 1;\n            return (1);\n        case TIFFTAG_SAMPLEFORMAT:\n            *va_arg(ap, uint16_t *) = td->td_sampleformat;\n            return (1);\n        case TIFFTAG_IMAGEDEPTH:\n            *va_arg(ap, uint32_t *) = td->td_imagedepth;\n            return (1);\n        case TIFFTAG_YCBCRCOEFFICIENTS:\n        {\n            /* defaults are from CCIR Recommendation 601-1 */\n            static const float ycbcrcoeffs[] = {0.299f, 0.587f, 0.114f};\n            *va_arg(ap, const float **) = ycbcrcoeffs;\n            return 1;\n        }\n        case TIFFTAG_YCBCRSUBSAMPLING:\n            *va_arg(ap, uint16_t *) = td->td_ycbcrsubsampling[0];\n            *va_arg(ap, uint16_t *) = td->td_ycbcrsubsampling[1];\n            return (1);\n        case TIFFTAG_YCBCRPOSITIONING:\n            *va_arg(ap, uint16_t *) = td->td_ycbcrpositioning;\n            return (1);\n        case TIFFTAG_WHITEPOINT:\n        {\n            /* TIFF 6.0 specification tells that it is no default\n               value for the WhitePoint, but AdobePhotoshop TIFF\n               Technical Note tells that it should be CIE D50. */\n            static const float whitepoint[] = {\n                D50_X0 / (D50_X0 + D50_Y0 + D50_Z0),\n                D50_Y0 / (D50_X0 + D50_Y0 + D50_Z0)};\n            *va_arg(ap, const float **) = whitepoint;\n            return 1;\n        }\n        case TIFFTAG_TRANSFERFUNCTION:\n            if (!td->td_transferfunction[0] &&\n                !TIFFDefaultTransferFunction(tif, td))\n            {\n                TIFFErrorExtR(tif, tif->tif_name,\n                              \"No space for \\\"TransferFunction\\\" tag\");\n                return (0);\n            }\n            *va_arg(ap, const uint16_t **) = td->td_transferfunction[0];\n            if (td->td_samplesperpixel - td->td_extrasamples > 1)\n            {\n                *va_arg(ap, const uint16_t **) = td->td_transferfunction[1];\n                *va_arg(ap, const uint16_t **) = td->td_transferfunction[2];\n            }\n            return (1);\n        case TIFFTAG_REFERENCEBLACKWHITE:\n            if (!td->td_refblackwhite && !TIFFDefaultRefBlackWhite(tif, td))\n                return (0);\n            *va_arg(ap, const float **) = td->td_refblackwhite;\n            return (1);\n    }\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          213,
+          0
+        ],
+        [
+          370,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFVGetFieldDefaulted",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFGetFieldDefaulted(TIFF *tif, uint32_t tag, ...)\n{\n    int ok;\n    va_list ap;\n\n    va_start(ap, tag);\n    ok = TIFFVGetFieldDefaulted(tif, tag, ap);\n    va_end(ap);\n    return (ok);\n}",
+      "fn_code_pos": [
+        [
+          376,
+          0
+        ],
+        [
+          385,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFGetFieldDefaulted",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "float _TIFFClampDoubleToFloat(double val)\n{\n    if (val > FLT_MAX)\n        return FLT_MAX;\n    if (val < -FLT_MAX)\n        return -FLT_MAX;\n    return (float)val;\n}",
+      "fn_code_pos": [
+        [
+          387,
+          0
+        ],
+        [
+          394,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFClampDoubleToFloat",
+        "parameters": {
+          "val": "double"
+        },
+        "return_type": "float"
+      }
+    },
+    {
+      "fn_code": "uint32_t _TIFFClampDoubleToUInt32(double val)\n{\n    if (val < 0)\n        return 0;\n    if (val > 0xFFFFFFFFU || val != val)\n        return 0xFFFFFFFFU;\n    return (uint32_t)val;\n}",
+      "fn_code_pos": [
+        [
+          396,
+          0
+        ],
+        [
+          403,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFClampDoubleToUInt32",
+        "parameters": {
+          "val": "double"
+        },
+        "return_type": "uint32_t"
+      }
+    },
+    {
+      "fn_code": "int _TIFFSeekOK(TIFF *tif, toff_t off)\n{\n    /* Huge offsets, especially -1 / UINT64_MAX, can cause issues */\n    /* See http://bugzilla.maptools.org/show_bug.cgi?id=2726 */\n    return off <= (~(uint64_t)0) / 2 && TIFFSeekFile(tif, off, SEEK_SET) == off;\n}",
+      "fn_code_pos": [
+        [
+          405,
+          0
+        ],
+        [
+          410,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFSeekOK",
+        "parameters": {
+          "tif": "TIFF",
+          "off": "toff_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "_TIFFCheckRealloc(TIFF *tif, void *buffer, tmsize_t nmemb,\n                        tmsize_t elem_size, const char *what)",
+      "fn_dec_pos": [
+        [
+          96,
+          6
+        ],
+        [
+          97,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFCheckRealloc",
+        "parameters": {
+          "tif": "TIFF",
+          "buffer": "void",
+          "nmemb": "tmsize_t",
+          "elem_size": "tmsize_t",
+          "what": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_TIFFCheckMalloc(TIFF *tif, tmsize_t nmemb, tmsize_t elem_size,\n                       const char *what)",
+      "fn_dec_pos": [
+        [
+          121,
+          6
+        ],
+        [
+          122,
+          40
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFCheckMalloc",
+        "parameters": {
+          "tif": "TIFF",
+          "nmemb": "tmsize_t",
+          "elem_size": "tmsize_t",
+          "what": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "va_arg(ap, uint16_t *)",
+      "fn_dec_pos": [
+        [
+          269,
+          13
+        ],
+        [
+          269,
+          35
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "va_arg",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "va_arg(ap, uint16_t *)",
+      "fn_dec_pos": [
+        [
+          286,
+          17
+        ],
+        [
+          286,
+          39
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "va_arg",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "*va_arg(ap, uint16_t *) = (uint16_t)",
+      "fn_dec_pos": [
+        [
+          289,
+          12
+        ],
+        [
+          289,
+          48
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "va_arg(ap, uint16_t *)",
+      "fn_dec_pos": [
+        [
+          289,
+          13
+        ],
+        [
+          289,
+          35
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "va_arg",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "va_arg(ap, const float **)",
+      "fn_dec_pos": [
+        [
+          327,
+          13
+        ],
+        [
+          327,
+          39
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "va_arg",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "va_arg(ap, const float **)",
+      "fn_dec_pos": [
+        [
+          345,
+          13
+        ],
+        [
+          345,
+          39
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "va_arg",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "va_arg(ap, const uint16_t **)",
+      "fn_dec_pos": [
+        [
+          359,
+          17
+        ],
+        [
+          359,
+          46
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "va_arg",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "va_arg(ap, const uint16_t **)",
+      "fn_dec_pos": [
+        [
+          360,
+          17
+        ],
+        [
+          360,
+          46
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "va_arg",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tif_predict.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <float.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

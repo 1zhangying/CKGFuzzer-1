@@ -1,0 +1,1518 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int CMSEXPORT cmsGetEncodedCMMversion(void)\n{\n       return LCMS_VERSION;\n}",
+      "fn_code_pos": [
+        [
+          29,
+          0
+        ],
+        [
+          32,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetEncodedCMMversion",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int CMSEXPORT cmsstrcasecmp(const char* s1, const char* s2)\n{\n    CMSREGISTER const unsigned char *us1 = (const unsigned char *)s1,\n                                 *us2 = (const unsigned char *)s2;\n\n    while (toupper(*us1) == toupper(*us2++))\n        if (*us1++ == '\\0')\n            return 0;\n\n    return (toupper(*us1) - toupper(*--us2));\n}",
+      "fn_code_pos": [
+        [
+          38,
+          0
+        ],
+        [
+          48,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsstrcasecmp",
+        "parameters": {
+          "s1": "char",
+          "s2": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "long int CMSEXPORT cmsfilelength(FILE* f)\n{\n    long int p , n;\n\n    p = ftell(f); // register current file position\n    if (p == -1L) \n        return -1L;\n\n    if (fseek(f, 0, SEEK_END) != 0) {\n        return -1L;\n    }\n\n    n = ftell(f);\n    fseek(f, p, SEEK_SET); // file position restored\n\n    return n;\n}",
+      "fn_code_pos": [
+        [
+          51,
+          0
+        ],
+        [
+          67,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsfilelength",
+        "parameters": {
+          "f": "FILE"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static\nvoid* _cmsMallocDefaultFn(cmsContext ContextID, cmsUInt32Number size)\n{\n    if (size > MAX_MEMORY_FOR_ALLOC) return NULL;  // Never allow over maximum\n\n    return (void*) malloc(size);\n\n    cmsUNUSED_PARAMETER(ContextID);\n}",
+      "fn_code_pos": [
+        [
+          91,
+          0
+        ],
+        [
+          99,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsMallocDefaultFn",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* _cmsMallocZeroDefaultFn(cmsContext ContextID, cmsUInt32Number size)\n{\n    void *pt = _cmsMalloc(ContextID, size);\n    if (pt == NULL) return NULL;\n\n    memset(pt, 0, size);\n    return pt;\n}",
+      "fn_code_pos": [
+        [
+          102,
+          0
+        ],
+        [
+          110,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsMallocZeroDefaultFn",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid _cmsFreeDefaultFn(cmsContext ContextID, void *Ptr)\n{\n    // free(NULL) is defined a no-op by C99, therefore it is safe to\n    // avoid the check, but it is here just in case...\n\n    if (Ptr) free(Ptr);\n\n    cmsUNUSED_PARAMETER(ContextID);\n}",
+      "fn_code_pos": [
+        [
+          114,
+          0
+        ],
+        [
+          123,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsFreeDefaultFn",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Ptr": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* _cmsReallocDefaultFn(cmsContext ContextID, void* Ptr, cmsUInt32Number size)\n{\n\n    if (size > MAX_MEMORY_FOR_ALLOC) return NULL;  // Never realloc over 512Mb\n\n    return realloc(Ptr, size);\n\n    cmsUNUSED_PARAMETER(ContextID);\n}",
+      "fn_code_pos": [
+        [
+          127,
+          0
+        ],
+        [
+          136,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReallocDefaultFn",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Ptr": "void",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* _cmsCallocDefaultFn(cmsContext ContextID, cmsUInt32Number num, cmsUInt32Number size)\n{\n    cmsUInt32Number Total = num * size;\n\n    // Preserve calloc behaviour\n    if (Total == 0) return NULL;\n\n    // Safe check for overflow.\n    if (num >= UINT_MAX / size) return NULL;\n\n    // Check for overflow\n    if (Total < num || Total < size) {\n        return NULL;\n    }\n\n    if (Total > MAX_MEMORY_FOR_ALLOC) return NULL;  // Never alloc over 512Mb\n\n    return _cmsMallocZero(ContextID, Total);\n}",
+      "fn_code_pos": [
+        [
+          141,
+          0
+        ],
+        [
+          160,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCallocDefaultFn",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "num": "cmsUInt32Number",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* _cmsDupDefaultFn(cmsContext ContextID, const void* Org, cmsUInt32Number size)\n{\n    void* mem;\n\n    if (size > MAX_MEMORY_FOR_ALLOC) return NULL;  // Never dup over 512Mb\n\n    mem = _cmsMalloc(ContextID, size);\n\n    if (mem != NULL && Org != NULL)\n        memmove(mem, Org, size);\n\n    return mem;\n}",
+      "fn_code_pos": [
+        [
+          163,
+          0
+        ],
+        [
+          176,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsDupDefaultFn",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Org": "void",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _cmsAllocMemPluginChunk(struct _cmsContext_struct* ctx, const struct _cmsContext_struct* src)\n{\n    _cmsAssert(ctx != NULL);\n\n    if (src != NULL) {    \n\n        // Duplicate\n        ctx ->chunks[MemPlugin] = _cmsSubAllocDup(ctx ->MemPool, src ->chunks[MemPlugin], sizeof(_cmsMemPluginChunkType));  \n    }\n    else {\n\n        // To reset it, we use the default allocators, which cannot be overridden\n        ctx ->chunks[MemPlugin] = &ctx ->DefaultMemoryManager;\n    } \n}",
+      "fn_code_pos": [
+        [
+          186,
+          0
+        ],
+        [
+          200,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsAllocMemPluginChunk",
+        "parameters": {
+          "ctx": "struct _cmsContext_struct",
+          "src": "struct _cmsContext_struct"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _cmsInstallAllocFunctions(cmsPluginMemHandler* Plugin, _cmsMemPluginChunkType* ptr)\n{\n    if (Plugin == NULL) {\n\n        memcpy(ptr, &_cmsMemPluginChunk, sizeof(_cmsMemPluginChunk));\n    }\n    else {\n\n        ptr ->MallocPtr  = Plugin -> MallocPtr;\n        ptr ->FreePtr    = Plugin -> FreePtr;\n        ptr ->ReallocPtr = Plugin -> ReallocPtr;\n\n        // Make sure we revert to defaults\n        ptr ->MallocZeroPtr= _cmsMallocZeroDefaultFn;\n        ptr ->CallocPtr    = _cmsCallocDefaultFn;\n        ptr ->DupPtr       = _cmsDupDefaultFn;\n      \n        if (Plugin ->MallocZeroPtr != NULL) ptr ->MallocZeroPtr = Plugin -> MallocZeroPtr;\n        if (Plugin ->CallocPtr != NULL)     ptr ->CallocPtr     = Plugin -> CallocPtr;\n        if (Plugin ->DupPtr != NULL)        ptr ->DupPtr        = Plugin -> DupPtr;\n        \n    }\n}",
+      "fn_code_pos": [
+        [
+          203,
+          0
+        ],
+        [
+          225,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsInstallAllocFunctions",
+        "parameters": {
+          "Plugin": "cmsPluginMemHandler",
+          "ptr": "_cmsMemPluginChunkType"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool  _cmsRegisterMemHandlerPlugin(cmsContext ContextID, cmsPluginBase *Data)\n{\n    cmsPluginMemHandler* Plugin = (cmsPluginMemHandler*) Data;     \n    _cmsMemPluginChunkType* ptr;\n\n    // NULL forces to reset to defaults. In this special case, the defaults are stored in the context structure. \n    // Remaining plug-ins does NOT have any copy in the context structure, but this is somehow special as the\n    // context internal data should be malloce'd by using those functions. \n    if (Data == NULL) {\n\n       struct _cmsContext_struct* ctx = ( struct _cmsContext_struct*) ContextID;\n\n       // Return to the default allocators\n        if (ContextID != NULL) {\n            ctx->chunks[MemPlugin] = (void*) &ctx->DefaultMemoryManager;\n        }\n        return TRUE;\n    }\n\n    // Check for required callbacks\n    if (Plugin -> MallocPtr == NULL ||\n        Plugin -> FreePtr == NULL ||\n        Plugin -> ReallocPtr == NULL) return FALSE;\n\n    // Set replacement functions\n    ptr = (_cmsMemPluginChunkType*) _cmsContextGetClientChunk(ContextID, MemPlugin);\n    if (ptr == NULL) \n        return FALSE;\n\n    _cmsInstallAllocFunctions(Plugin, ptr);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          229,
+          0
+        ],
+        [
+          260,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsRegisterMemHandlerPlugin",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Data": "cmsPluginBase"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "void* CMSEXPORT _cmsMalloc(cmsContext ContextID, cmsUInt32Number size)\n{\n    _cmsMemPluginChunkType* ptr = (_cmsMemPluginChunkType*) _cmsContextGetClientChunk(ContextID, MemPlugin);\n    return ptr ->MallocPtr(ContextID, size);\n}",
+      "fn_code_pos": [
+        [
+          263,
+          0
+        ],
+        [
+          267,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsMalloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void* CMSEXPORT _cmsMallocZero(cmsContext ContextID, cmsUInt32Number size)\n{\n    _cmsMemPluginChunkType* ptr = (_cmsMemPluginChunkType*) _cmsContextGetClientChunk(ContextID, MemPlugin);\n    return ptr->MallocZeroPtr(ContextID, size);\n}",
+      "fn_code_pos": [
+        [
+          270,
+          0
+        ],
+        [
+          274,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsMallocZero",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void* CMSEXPORT _cmsCalloc(cmsContext ContextID, cmsUInt32Number num, cmsUInt32Number size)\n{\n    _cmsMemPluginChunkType* ptr = (_cmsMemPluginChunkType*) _cmsContextGetClientChunk(ContextID, MemPlugin);\n    return ptr->CallocPtr(ContextID, num, size);\n}",
+      "fn_code_pos": [
+        [
+          277,
+          0
+        ],
+        [
+          281,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCalloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "num": "cmsUInt32Number",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void* CMSEXPORT _cmsRealloc(cmsContext ContextID, void* Ptr, cmsUInt32Number size)\n{\n    _cmsMemPluginChunkType* ptr = (_cmsMemPluginChunkType*) _cmsContextGetClientChunk(ContextID, MemPlugin);\n    return ptr->ReallocPtr(ContextID, Ptr, size);\n}",
+      "fn_code_pos": [
+        [
+          284,
+          0
+        ],
+        [
+          288,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsRealloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Ptr": "void",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT _cmsFree(cmsContext ContextID, void* Ptr)\n{\n    if (Ptr != NULL) {\n        _cmsMemPluginChunkType* ptr = (_cmsMemPluginChunkType*) _cmsContextGetClientChunk(ContextID, MemPlugin);\n        ptr ->FreePtr(ContextID, Ptr);\n    }\n}",
+      "fn_code_pos": [
+        [
+          291,
+          0
+        ],
+        [
+          297,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsFree",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Ptr": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void* CMSEXPORT _cmsDupMem(cmsContext ContextID, const void* Org, cmsUInt32Number size)\n{\n    _cmsMemPluginChunkType* ptr = (_cmsMemPluginChunkType*) _cmsContextGetClientChunk(ContextID, MemPlugin);\n    return ptr ->DupPtr(ContextID, Org, size);\n}",
+      "fn_code_pos": [
+        [
+          300,
+          0
+        ],
+        [
+          304,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsDupMem",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Org": "void",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\n_cmsSubAllocator_chunk* _cmsCreateSubAllocChunk(cmsContext ContextID, cmsUInt32Number Initial)\n{\n    _cmsSubAllocator_chunk* chunk;\n\n    // 20K by default\n    if (Initial == 0)\n        Initial = 20*1024;\n\n    // Create the container\n    chunk = (_cmsSubAllocator_chunk*) _cmsMallocZero(ContextID, sizeof(_cmsSubAllocator_chunk));\n    if (chunk == NULL) return NULL;\n\n    // Initialize values\n    chunk ->Block     = (cmsUInt8Number*) _cmsMalloc(ContextID, Initial);\n    if (chunk ->Block == NULL) {\n\n        // Something went wrong\n        _cmsFree(ContextID, chunk);\n        return NULL;\n    }\n\n    chunk ->BlockSize = Initial;\n    chunk ->Used      = 0;\n    chunk ->next      = NULL;\n\n    return chunk;\n}",
+      "fn_code_pos": [
+        [
+          312,
+          0
+        ],
+        [
+          339,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCreateSubAllocChunk",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Initial": "cmsUInt32Number"
+        },
+        "return_type": "_cmsSubAllocator_chunk"
+      }
+    },
+    {
+      "fn_code": "_cmsSubAllocator* _cmsCreateSubAlloc(cmsContext ContextID, cmsUInt32Number Initial)\n{\n    _cmsSubAllocator* sub;\n\n    // Create the container\n    sub = (_cmsSubAllocator*) _cmsMallocZero(ContextID, sizeof(_cmsSubAllocator));\n    if (sub == NULL) return NULL;\n\n    sub ->ContextID = ContextID;\n\n    sub ->h = _cmsCreateSubAllocChunk(ContextID, Initial);\n    if (sub ->h == NULL) {\n        _cmsFree(ContextID, sub);\n        return NULL;\n    }\n\n    return sub;\n}",
+      "fn_code_pos": [
+        [
+          343,
+          0
+        ],
+        [
+          360,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCreateSubAlloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Initial": "cmsUInt32Number"
+        },
+        "return_type": "_cmsSubAllocator"
+      }
+    },
+    {
+      "fn_code": "void _cmsSubAllocDestroy(_cmsSubAllocator* sub)\n{\n    _cmsSubAllocator_chunk *chunk, *n;\n\n    for (chunk = sub ->h; chunk != NULL; chunk = n) {\n\n        n = chunk->next;\n        if (chunk->Block != NULL) _cmsFree(sub ->ContextID, chunk->Block);\n        _cmsFree(sub ->ContextID, chunk);\n    }\n\n    // Free the header\n    _cmsFree(sub ->ContextID, sub);\n}",
+      "fn_code_pos": [
+        [
+          364,
+          0
+        ],
+        [
+          377,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsSubAllocDestroy",
+        "parameters": {
+          "sub": "_cmsSubAllocator"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void*  _cmsSubAlloc(_cmsSubAllocator* sub, cmsUInt32Number size)\n{\n    cmsUInt32Number Free = sub -> h ->BlockSize - sub -> h -> Used;\n    cmsUInt8Number* ptr;\n\n    size = _cmsALIGNMEM(size);\n\n    // Check for memory. If there is no room, allocate a new chunk of double memory size.\n    if (size > Free) {\n\n        _cmsSubAllocator_chunk* chunk;\n        cmsUInt32Number newSize;\n\n        newSize = sub -> h ->BlockSize * 2;\n        if (newSize < size) newSize = size;\n\n        chunk = _cmsCreateSubAllocChunk(sub -> ContextID, newSize);\n        if (chunk == NULL) return NULL;\n\n        // Link list\n        chunk ->next = sub ->h;\n        sub ->h    = chunk;\n\n    }\n\n    ptr =  sub -> h ->Block + sub -> h ->Used;\n    sub -> h -> Used += size;\n\n    return (void*) ptr;\n}",
+      "fn_code_pos": [
+        [
+          381,
+          0
+        ],
+        [
+          410,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsSubAlloc",
+        "parameters": {
+          "sub": "_cmsSubAllocator",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void* _cmsSubAllocDup(_cmsSubAllocator* s, const void *ptr, cmsUInt32Number size)\n{\n    void *NewPtr;\n    \n    // Dup of null pointer is also NULL\n    if (ptr == NULL)\n        return NULL;\n\n    NewPtr = _cmsSubAlloc(s, size);\n\n    if (ptr != NULL && NewPtr != NULL) {\n        memcpy(NewPtr, ptr, size);\n    }\n\n    return NewPtr;\n}",
+      "fn_code_pos": [
+        [
+          413,
+          0
+        ],
+        [
+          428,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsSubAllocDup",
+        "parameters": {
+          "s": "_cmsSubAllocator",
+          "ptr": "void",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _cmsAllocLogErrorChunk(struct _cmsContext_struct* ctx, \n                            const struct _cmsContext_struct* src)\n{    \n    static _cmsLogErrorChunkType LogErrorChunk = { DefaultLogErrorHandlerFunction };\n    void* from;\n     \n     if (src != NULL) {\n        from = src ->chunks[Logger];       \n    }\n    else {\n       from = &LogErrorChunk;\n    }\n    \n    ctx ->chunks[Logger] = _cmsSubAllocDup(ctx ->MemPool, from, sizeof(_cmsLogErrorChunkType));   \n}",
+      "fn_code_pos": [
+        [
+          458,
+          0
+        ],
+        [
+          472,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsAllocLogErrorChunk",
+        "parameters": {
+          "ctx": "struct _cmsContext_struct",
+          "src": "struct _cmsContext_struct"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid DefaultLogErrorHandlerFunction(cmsContext ContextID, cmsUInt32Number ErrorCode, const char *Text)\n{\n    // fprintf(stderr, \"[lcms]: %s\\n\", Text);\n    // fflush(stderr);\n\n     cmsUNUSED_PARAMETER(ContextID);\n     cmsUNUSED_PARAMETER(ErrorCode);\n     cmsUNUSED_PARAMETER(Text);\n}",
+      "fn_code_pos": [
+        [
+          475,
+          0
+        ],
+        [
+          484,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DefaultLogErrorHandlerFunction",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "ErrorCode": "cmsUInt32Number",
+          "Text": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSetLogErrorHandlerTHR(cmsContext ContextID, cmsLogErrorHandlerFunction Fn)\n{\n    _cmsLogErrorChunkType* lhg = (_cmsLogErrorChunkType*) _cmsContextGetClientChunk(ContextID, Logger);\n\n    if (lhg != NULL) {\n\n        if (Fn == NULL)\n            lhg -> LogErrorHandler = DefaultLogErrorHandlerFunction;\n        else\n            lhg -> LogErrorHandler = Fn;\n    }\n}",
+      "fn_code_pos": [
+        [
+          487,
+          0
+        ],
+        [
+          498,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetLogErrorHandlerTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Fn": "cmsLogErrorHandlerFunction"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSetLogErrorHandler(cmsLogErrorHandlerFunction Fn)\n{\n    cmsSetLogErrorHandlerTHR(NULL, Fn);    \n}",
+      "fn_code_pos": [
+        [
+          501,
+          0
+        ],
+        [
+          504,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetLogErrorHandler",
+        "parameters": {
+          "Fn": "cmsLogErrorHandlerFunction"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSignalError(cmsContext ContextID, cmsUInt32Number ErrorCode, const char *ErrorText, ...)\n{\n    va_list args;\n    char Buffer[MAX_ERROR_MESSAGE_LEN];\n    _cmsLogErrorChunkType* lhg;\n\n\n    va_start(args, ErrorText);\n    vsnprintf(Buffer, MAX_ERROR_MESSAGE_LEN-1, ErrorText, args);\n    va_end(args);\n\n    // Check for the context, if specified go there. If not, go for the global\n    lhg = (_cmsLogErrorChunkType*) _cmsContextGetClientChunk(ContextID, Logger);\n    if (lhg ->LogErrorHandler) {\n        lhg ->LogErrorHandler(ContextID, ErrorCode, Buffer);\n    }   \n}",
+      "fn_code_pos": [
+        [
+          508,
+          0
+        ],
+        [
+          524,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSignalError",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "ErrorCode": "cmsUInt32Number",
+          "ErrorText": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _cmsTagSignature2String(char String[5], cmsTagSignature sig)\n{\n    cmsUInt32Number be;\n\n    // Convert to big endian\n    be = _cmsAdjustEndianess32((cmsUInt32Number) sig);\n\n    // Move chars\n    memmove(String, &be, 4);\n\n    // Make sure of terminator\n    String[4] = 0;\n}",
+      "fn_code_pos": [
+        [
+          527,
+          0
+        ],
+        [
+          539,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsTagSignature2String",
+        "parameters": {
+          "String": "char",
+          "sig": "cmsTagSignature"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* defMtxCreate(cmsContext id)\n{\n    _cmsMutex* ptr_mutex = (_cmsMutex*) _cmsMalloc(id, sizeof(_cmsMutex));\n    _cmsInitMutexPrimitive(ptr_mutex);\n    return (void*) ptr_mutex;   \n}",
+      "fn_code_pos": [
+        [
+          544,
+          0
+        ],
+        [
+          550,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "defMtxCreate",
+        "parameters": {
+          "id": "cmsContext"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid defMtxDestroy(cmsContext id, void* mtx)\n{\n    _cmsDestroyMutexPrimitive((_cmsMutex *) mtx); \n    _cmsFree(id, mtx);\n}",
+      "fn_code_pos": [
+        [
+          552,
+          0
+        ],
+        [
+          557,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "defMtxDestroy",
+        "parameters": {
+          "id": "cmsContext",
+          "mtx": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool defMtxLock(cmsContext id, void* mtx)\n{\n    cmsUNUSED_PARAMETER(id);\n    return _cmsLockPrimitive((_cmsMutex *) mtx) == 0;     \n}",
+      "fn_code_pos": [
+        [
+          559,
+          0
+        ],
+        [
+          564,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "defMtxLock",
+        "parameters": {
+          "id": "cmsContext",
+          "mtx": "void"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid defMtxUnlock(cmsContext id, void* mtx)\n{\n    cmsUNUSED_PARAMETER(id);\n    _cmsUnlockPrimitive((_cmsMutex *) mtx); \n}",
+      "fn_code_pos": [
+        [
+          566,
+          0
+        ],
+        [
+          571,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "defMtxUnlock",
+        "parameters": {
+          "id": "cmsContext",
+          "mtx": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _cmsAllocMutexPluginChunk(struct _cmsContext_struct* ctx, \n                                        const struct _cmsContext_struct* src)\n{\n    static _cmsMutexPluginChunkType MutexChunk = {defMtxCreate, defMtxDestroy, defMtxLock, defMtxUnlock };\n    void* from;\n     \n     if (src != NULL) {\n        from = src ->chunks[MutexPlugin];       \n    }\n    else {\n       from = &MutexChunk;\n    }\n    \n    ctx ->chunks[MutexPlugin] = _cmsSubAllocDup(ctx ->MemPool, from, sizeof(_cmsMutexPluginChunkType));   \n}",
+      "fn_code_pos": [
+        [
+          579,
+          0
+        ],
+        [
+          593,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsAllocMutexPluginChunk",
+        "parameters": {
+          "ctx": "struct _cmsContext_struct",
+          "src": "struct _cmsContext_struct"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool  _cmsRegisterMutexPlugin(cmsContext ContextID, cmsPluginBase* Data)\n{\n    cmsPluginMutex* Plugin = (cmsPluginMutex*) Data;\n    _cmsMutexPluginChunkType* ctx = ( _cmsMutexPluginChunkType*) _cmsContextGetClientChunk(ContextID, MutexPlugin);\n\n    if (Data == NULL) {\n\n        // No lock routines\n        ctx->CreateMutexPtr = NULL; \n        ctx->DestroyMutexPtr = NULL; \n        ctx->LockMutexPtr = NULL;\n        ctx ->UnlockMutexPtr = NULL;\n        return TRUE;\n    }\n\n    // Factory callback is required\n    if (Plugin ->CreateMutexPtr == NULL || Plugin ->DestroyMutexPtr == NULL || \n        Plugin ->LockMutexPtr == NULL || Plugin ->UnlockMutexPtr == NULL) return FALSE;\n\n    ctx->CreateMutexPtr  = Plugin->CreateMutexPtr;\n    ctx->DestroyMutexPtr = Plugin ->DestroyMutexPtr;\n    ctx ->LockMutexPtr   = Plugin ->LockMutexPtr;\n    ctx ->UnlockMutexPtr = Plugin ->UnlockMutexPtr;\n\n    // All is ok\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          596,
+          0
+        ],
+        [
+          622,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsRegisterMutexPlugin",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Data": "cmsPluginBase"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "void* CMSEXPORT _cmsCreateMutex(cmsContext ContextID)\n{\n    _cmsMutexPluginChunkType* ptr = (_cmsMutexPluginChunkType*) _cmsContextGetClientChunk(ContextID, MutexPlugin);\n\n    if (ptr ->CreateMutexPtr == NULL) return NULL;\n\n    return ptr ->CreateMutexPtr(ContextID);\n}",
+      "fn_code_pos": [
+        [
+          625,
+          0
+        ],
+        [
+          632,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCreateMutex",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT _cmsDestroyMutex(cmsContext ContextID, void* mtx)\n{\n    _cmsMutexPluginChunkType* ptr = (_cmsMutexPluginChunkType*) _cmsContextGetClientChunk(ContextID, MutexPlugin);\n\n    if (ptr ->DestroyMutexPtr != NULL) {\n\n        ptr ->DestroyMutexPtr(ContextID, mtx);\n    }\n}",
+      "fn_code_pos": [
+        [
+          634,
+          0
+        ],
+        [
+          642,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsDestroyMutex",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "mtx": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT _cmsLockMutex(cmsContext ContextID, void* mtx)\n{\n    _cmsMutexPluginChunkType* ptr = (_cmsMutexPluginChunkType*) _cmsContextGetClientChunk(ContextID, MutexPlugin);\n\n    if (ptr ->LockMutexPtr == NULL) return TRUE;\n\n    return ptr ->LockMutexPtr(ContextID, mtx);\n}",
+      "fn_code_pos": [
+        [
+          644,
+          0
+        ],
+        [
+          651,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsLockMutex",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "mtx": "void"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT _cmsUnlockMutex(cmsContext ContextID, void* mtx)\n{\n    _cmsMutexPluginChunkType* ptr = (_cmsMutexPluginChunkType*) _cmsContextGetClientChunk(ContextID, MutexPlugin);\n\n    if (ptr ->UnlockMutexPtr != NULL) {\n\n        ptr ->UnlockMutexPtr(ContextID, mtx);\n    }\n}",
+      "fn_code_pos": [
+        [
+          653,
+          0
+        ],
+        [
+          661,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsUnlockMutex",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "mtx": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _cmsAllocParallelizationPluginChunk(struct _cmsContext_struct* ctx,\n                                         const struct _cmsContext_struct* src)\n{    \n    if (src != NULL) {\n        void* from = src->chunks[ParallelizationPlugin];\n        ctx->chunks[ParallelizationPlugin] = _cmsSubAllocDup(ctx->MemPool, from, sizeof(_cmsParallelizationPluginChunkType));\n    }\n    else {        \n        _cmsParallelizationPluginChunkType ParallelizationPluginChunk = { 0 };\n        ctx->chunks[ParallelizationPlugin] = _cmsSubAllocDup(ctx->MemPool, &ParallelizationPluginChunk, sizeof(_cmsParallelizationPluginChunkType));\n    }         \n}",
+      "fn_code_pos": [
+        [
+          667,
+          0
+        ],
+        [
+          678,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsAllocParallelizationPluginChunk",
+        "parameters": {
+          "ctx": "struct _cmsContext_struct",
+          "src": "struct _cmsContext_struct"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool _cmsRegisterParallelizationPlugin(cmsContext ContextID, cmsPluginBase* Data)\n{\n    cmsPluginParalellization* Plugin = (cmsPluginParalellization*)Data;\n    _cmsParallelizationPluginChunkType* ctx = (_cmsParallelizationPluginChunkType*)_cmsContextGetClientChunk(ContextID, ParallelizationPlugin);\n\n    if (Data == NULL) {\n\n        // No parallelization routines\n        ctx->MaxWorkers = 0;\n        ctx->WorkerFlags = 0;\n        ctx->SchedulerFn = NULL;        \n        return TRUE;\n    }\n\n    // callback is required\n    if (Plugin->SchedulerFn == NULL) return FALSE;\n\n    ctx->MaxWorkers = Plugin->MaxWorkers;\n    ctx->WorkerFlags = Plugin->WorkerFlags;\n    ctx->SchedulerFn = Plugin->SchedulerFn;\n    \n    // All is ok\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          681,
+          0
+        ],
+        [
+          704,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsRegisterParallelizationPlugin",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Data": "cmsPluginBase"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "_cmsRegisterMemHandlerPlugin(cmsContext ContextID, cmsPluginBase* Plugin)",
+      "fn_dec_pos": [
+        [
+          85,
+          10
+        ],
+        [
+          85,
+          83
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsRegisterMemHandlerPlugin",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Plugin": "cmsPluginBase"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "_cmsMallocDefaultFn(cmsContext ContextID, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          92,
+          6
+        ],
+        [
+          92,
+          69
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsMallocDefaultFn",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsMallocZeroDefaultFn(cmsContext ContextID, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          103,
+          6
+        ],
+        [
+          103,
+          73
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsMallocZeroDefaultFn",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsReallocDefaultFn(cmsContext ContextID, void* Ptr, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          128,
+          6
+        ],
+        [
+          128,
+          81
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReallocDefaultFn",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Ptr": "void",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsCallocDefaultFn(cmsContext ContextID, cmsUInt32Number num, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          142,
+          6
+        ],
+        [
+          142,
+          90
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCallocDefaultFn",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "num": "cmsUInt32Number",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsDupDefaultFn(cmsContext ContextID, const void* Org, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          164,
+          6
+        ],
+        [
+          164,
+          83
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsDupDefaultFn",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Org": "void",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsMalloc(cmsContext ContextID, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          263,
+          16
+        ],
+        [
+          263,
+          70
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsMalloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsMallocZero(cmsContext ContextID, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          270,
+          16
+        ],
+        [
+          270,
+          74
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsMallocZero",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsCalloc(cmsContext ContextID, cmsUInt32Number num, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          277,
+          16
+        ],
+        [
+          277,
+          91
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCalloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "num": "cmsUInt32Number",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsRealloc(cmsContext ContextID, void* Ptr, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          284,
+          16
+        ],
+        [
+          284,
+          82
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsRealloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Ptr": "void",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsDupMem(cmsContext ContextID, const void* Org, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          300,
+          16
+        ],
+        [
+          300,
+          87
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsDupMem",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Org": "void",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsCreateSubAllocChunk(cmsContext ContextID, cmsUInt32Number Initial)",
+      "fn_dec_pos": [
+        [
+          313,
+          24
+        ],
+        [
+          313,
+          94
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCreateSubAllocChunk",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Initial": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsCreateSubAlloc(cmsContext ContextID, cmsUInt32Number Initial)",
+      "fn_dec_pos": [
+        [
+          343,
+          18
+        ],
+        [
+          343,
+          83
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCreateSubAlloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Initial": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsSubAlloc(_cmsSubAllocator* sub, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          381,
+          7
+        ],
+        [
+          381,
+          64
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsSubAlloc",
+        "parameters": {
+          "sub": "_cmsSubAllocator",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsSubAllocDup(_cmsSubAllocator* s, const void *ptr, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          413,
+          6
+        ],
+        [
+          413,
+          81
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsSubAllocDup",
+        "parameters": {
+          "s": "_cmsSubAllocator",
+          "ptr": "void",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "DefaultLogErrorHandlerFunction(cmsContext ContextID, cmsUInt32Number ErrorCode, const char *Text)",
+      "fn_dec_pos": [
+        [
+          451,
+          12
+        ],
+        [
+          451,
+          109
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DefaultLogErrorHandlerFunction",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "ErrorCode": "cmsUInt32Number",
+          "Text": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "defMtxCreate(cmsContext id)",
+      "fn_dec_pos": [
+        [
+          545,
+          6
+        ],
+        [
+          545,
+          33
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "defMtxCreate",
+        "parameters": {
+          "id": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsCreateMutex(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          625,
+          16
+        ],
+        [
+          625,
+          53
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCreateMutex",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        186,
+        29
+      ],
+      [
+        186,
+        54
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        186,
+        67
+      ],
+      [
+        186,
+        92
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        239,
+        7
+      ],
+      [
+        239,
+        32
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        239,
+        42
+      ],
+      [
+        239,
+        67
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        458,
+        28
+      ],
+      [
+        458,
+        53
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        459,
+        34
+      ],
+      [
+        459,
+        59
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        579,
+        31
+      ],
+      [
+        579,
+        56
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        580,
+        46
+      ],
+      [
+        580,
+        71
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        667,
+        41
+      ],
+      [
+        667,
+        66
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        668,
+        47
+      ],
+      [
+        668,
+        72
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"lcms2_internal.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

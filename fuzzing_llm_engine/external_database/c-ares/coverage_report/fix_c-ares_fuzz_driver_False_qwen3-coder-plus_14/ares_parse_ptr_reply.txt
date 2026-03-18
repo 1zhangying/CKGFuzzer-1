@@ -1,0 +1,231 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17		#include "ares_setup.h"	
+18			
+19		#ifdef HAVE_NETINET_IN_H	
+20		#  include <netinet/in.h>	
+21		#endif	
+22		#ifdef HAVE_NETDB_H	
+23		#  include <netdb.h>	
+24		#endif	
+25			
+26		#include "ares_nameser.h"	
+27			
+28		#ifdef HAVE_STRINGS_H	
+29		#  include <strings.h>	
+30		#endif	
+31			
+32		#include "ares.h"	
+33		#include "ares_dns.h"	
+34		#include "ares_nowarn.h"	
+35		#include "ares_private.h"	
+36			
+37		int ares_parse_ptr_reply(const unsigned char *abuf, int alen, const void *addr,	
+38		int addrlen, int family, struct hostent **host)	
+39	0	{	
+40	0	unsigned int qdcount, ancount;	
+41	0	int status, i, rr_type, rr_class, rr_len;	
+42	0	long len;	
+43	0	const unsigned char *aptr;	
+44	0	char *ptrname, *hostname, *rr_name, *rr_data;	
+45	0	struct hostent *hostent =NULL;	
+46	0	int aliascnt = 0;	
+47	0	int alias_alloc = 8;	
+48	0	char ** aliases;	
+49	0	size_t rr_data_len;	
+50			
+51		/* Set *host to NULL for all failure cases. */	
+52	0	*host =NULL;	
+53			
+54		/* Give up if abuf doesn't have room for a header. */	
+55	0	if (alen <HFIXEDSZ)	
+56	0	returnARES_EBADRESP;	
+57			
+58		/* Fetch the question and answer count from the header. */	
+59	0	qdcount =DNS_HEADER_QDCOUNT(abuf);	
+60	0	ancount =DNS_HEADER_ANCOUNT(abuf);	
+61	0	if (qdcount != 1)	
+62	0	returnARES_EBADRESP;	
+63			
+64		/* Expand the name from the question, and skip past the question. */	
+65	0	aptr = abuf +HFIXEDSZ;	
+66	0	status = ares__expand_name_for_response(aptr, abuf, alen, &ptrname, &len, 0);	
+67	0	if (status !=ARES_SUCCESS)	
+68	0	return status;	
+69	0	if (aptr + len +QFIXEDSZ > abuf + alen)	
+70	0	{	
+71	0	ares_free(ptrname);	
+72	0	returnARES_EBADRESP;	
+73	0	}	
+74	0	aptr += len +QFIXEDSZ;	
+75			
+76		/* Examine each answer resource record (RR) in turn. */	
+77	0	hostname =NULL;	
+78	0	aliases = ares_malloc(alias_alloc * sizeof(char *));	
+79	0	if (!aliases)	
+80	0	{	
+81	0	ares_free(ptrname);	
+82	0	returnARES_ENOMEM;	
+83	0	}	
+84	0	for (i = 0;i < (int)ancount;i++)	
+85	0	{	
+86		/* Decode the RR up to the data field. */	
+87	0	status = ares__expand_name_for_response(aptr, abuf, alen, &rr_name, &len, 0);	
+88	0	if (status !=ARES_SUCCESS)	
+89	0	break;	
+90	0	aptr += len;	
+91	0	if (aptr +RRFIXEDSZ > abuf + alen)	
+92	0	{	
+93	0	ares_free(rr_name);	
+94	0	status =ARES_EBADRESP;	
+95	0	break;	
+96	0	}	
+97	0	rr_type =DNS_RR_TYPE(aptr);	
+98	0	rr_class =DNS_RR_CLASS(aptr);	
+99	0	rr_len =DNS_RR_LEN(aptr);	
+100	0	aptr +=RRFIXEDSZ;	
+101	0	if (aptr + rr_len > abuf + alen)	
+102	0	{	
+103	0	ares_free(rr_name);	
+104	0	status =ARES_EBADRESP;	
+105	0	break;	
+106	0	}	
+107			
+108	0	if (rr_class ==C_IN&&rr_type ==T_PTR	
+109	0	&&strcasecmp(rr_name, ptrname) == 0)	
+110	0	{	
+111		/* Decode the RR data and set hostname to it. */	
+112	0	status = ares__expand_name_for_response(aptr, abuf, alen, &rr_data,	
+113	0	&len, 1);	
+114	0	if (status !=ARES_SUCCESS)	
+115	0	{	
+116	0	ares_free(rr_name);	
+117	0	break;	
+118	0	}	
+119	0	if (hostname)	
+120	0	ares_free(hostname);	
+121	0	hostname = rr_data;	
+122	0	rr_data_len = strlen(rr_data)+1;	
+123	0	aliases[aliascnt] = ares_malloc(rr_data_len * sizeof(char));	
+124	0	if (!aliases[aliascnt])	
+125	0	{	
+126	0	ares_free(rr_name);	
+127	0	status =ARES_ENOMEM;	
+128	0	break;	
+129	0	}	
+130	0	strncpy(aliases[aliascnt], rr_data, rr_data_len);	
+131	0	aliascnt++;	
+132	0	if (aliascnt >= alias_alloc){	
+133	0	char **ptr;	
+134	0	alias_alloc *= 2;	
+135	0	ptr = ares_realloc(aliases, alias_alloc * sizeof(char *));	
+136	0	if(!ptr){	
+137	0	ares_free(rr_name);	
+138	0	status =ARES_ENOMEM;	
+139	0	break;	
+140	0	}	
+141	0	aliases = ptr;	
+142	0	}	
+143	0	}	
+144			
+145	0	if (rr_class ==C_IN&&rr_type ==T_CNAME)	
+146	0	{	
+147		/* Decode the RR data and replace ptrname with it. */	
+148	0	status = ares__expand_name_for_response(aptr, abuf, alen, &rr_data,	
+149	0	&len, 1);	
+150	0	if (status !=ARES_SUCCESS)	
+151	0	{	
+152	0	ares_free(rr_name);	
+153	0	break;	
+154	0	}	
+155	0	ares_free(ptrname);	
+156	0	ptrname = rr_data;	
+157	0	}	
+158			
+159	0	ares_free(rr_name);	
+160	0	aptr += rr_len;	
+161	0	if (aptr > abuf + alen)	
+162	0	{  /* LCOV_EXCL_START: already checked above */	
+163	0	status =ARES_EBADRESP;	
+164	0	break;	
+165	0	}  /* LCOV_EXCL_STOP */	
+166	0	}	
+167			
+168	0	if (status ==ARES_SUCCESS&&!hostname)	
+169	0	status =ARES_ENODATA;	
+170	0	if (status ==ARES_SUCCESS)	
+171	0	{	
+172		/* If we don't reach the end, we must have failed due to out of memory */	
+173	0	status =ARES_ENOMEM;	
+174			
+175		/* We got our answer.  Allocate memory to build the host entry. */	
+176	0	hostent = ares_malloc(sizeof(*hostent));	
+177	0	if (!hostent)	
+178	0	goto fail;	
+179			
+180		/* If we don't memset here, cleanups may fail */	
+181	0	memset(hostent, 0, sizeof(*hostent));	
+182			
+183	0	hostent->h_addr_list = ares_malloc(2 * sizeof(char *));	
+184	0	if (!hostent->h_addr_list)	
+185	0	goto fail;	
+186			
+187			
+188	0	if (addr&&addrlen){	
+189	0	hostent->h_addr_list[0] = ares_malloc(addrlen);	
+190	0	if (!hostent->h_addr_list[0])	
+191	0	goto fail;	
+192	0	} else{	
+193	0	hostent->h_addr_list[0] =NULL;	
+194	0	}	
+195			
+196	0	hostent->h_aliases = ares_malloc((aliascnt+1) * sizeof (char *));	
+197	0	if (!hostent->h_aliases)	
+198	0	goto fail;	
+199			
+200		/* Fill in the hostent and return successfully. */	
+201	0	hostent->h_name = hostname;	
+202	0	for (i=0 ;i<aliascnt;i++)	
+203	0	hostent->h_aliases[i] = aliases[i];	
+204	0	hostent->h_aliases[aliascnt] =NULL;	
+205	0	hostent->h_addrtype = aresx_sitoss(family);	
+206	0	hostent->h_length = aresx_sitoss(addrlen);	
+207	0	if (addr&&addrlen)	
+208	0	memcpy(hostent->h_addr_list[0], addr, addrlen);	
+209	0	hostent->h_addr_list[1] =NULL;	
+210	0	*host = hostent;	
+211	0	ares_free(aliases);	
+212	0	ares_free(ptrname);	
+213			
+214	0	returnARES_SUCCESS;	
+215	0	}	
+216			
+217	0	fail:	
+218	0	ares_free_hostent(hostent);	
+219			
+220	0	for (i=0 ;i<aliascnt;i++)	
+221	0	if (aliases[i])	
+222	0	ares_free(aliases[i]);	
+223	0	ares_free(aliases);	
+224	0	if (hostname)	
+225	0	ares_free(hostname);	
+226	0	ares_free(ptrname);	
+227	0	return status;	
+228	0	}	
+
+

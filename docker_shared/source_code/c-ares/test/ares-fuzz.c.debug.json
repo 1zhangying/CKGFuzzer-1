@@ -1,0 +1,157 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void ProcessFile(int fd) {\n  int count = read(fd, afl_buffer, kMaxAflInputSize);\n  /*\n   * Make a copy of the data so that it's not part of a larger\n   * buffer (where buffer overflows would go unnoticed).\n   */\n  unsigned char *copied_data = (unsigned char *)malloc(count);\n  memcpy(copied_data, afl_buffer, count);\n  LLVMFuzzerTestOneInput(copied_data, count);\n  free(copied_data);\n}",
+      "fn_code_pos": [
+        [
+          30,
+          0
+        ],
+        [
+          40,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ProcessFile",
+        "parameters": {
+          "fd": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[]) {\n  if (argc == 1) {\n    int count = 0;\n    while (KEEP_FUZZING(count)) {\n      ProcessFile(fileno(stdin));\n      count++;\n    }\n  } else {\n    int ii;\n    for (ii = 1; ii < argc; ++ii) {\n      int fd = open(argv[ii], O_RDONLY);\n      if (fd < 0) {\n        fprintf(stderr, \"Failed to open '%s'\\n\", argv[ii]);\n        continue;\n      }\n      ProcessFile(fd);\n      close(fd);\n    }\n  }\n  return 0;\n}",
+      "fn_code_pos": [
+        [
+          42,
+          0
+        ],
+        [
+          62,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "LLVMFuzzerTestOneInput(const unsigned char *data, unsigned long size)",
+      "fn_dec_pos": [
+        [
+          28,
+          4
+        ],
+        [
+          28,
+          73
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LLVMFuzzerTestOneInput",
+        "parameters": {
+          "data": "unsigned char",
+          "size": "unsigned long"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <sys/types.h>\n",
+      [
+        5,
+        0
+      ],
+      [
+        6,
+        0
+      ]
+    ],
+    [
+      "#include <fcntl.h>\n",
+      [
+        6,
+        0
+      ],
+      [
+        7,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        7,
+        0
+      ],
+      [
+        8,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        8,
+        0
+      ],
+      [
+        9,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        9,
+        0
+      ],
+      [
+        10,
+        0
+      ]
+    ],
+    [
+      "#include <io.h>\n",
+      [
+        11,
+        0
+      ],
+      [
+        12,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        13,
+        0
+      ],
+      [
+        14,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

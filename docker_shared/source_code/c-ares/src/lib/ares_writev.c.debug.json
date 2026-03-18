@@ -1,0 +1,93 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "ares_ssize_t ares_writev(ares_socket_t s, const struct iovec *iov, int iovcnt)\n{\n  char *buffer, *bp;\n  int i;\n  size_t bytes = 0;\n  ares_ssize_t result;\n\n  /* Validate iovcnt */\n  if (iovcnt <= 0)\n  {\n    SET_ERRNO(EINVAL);\n    return (-1);\n  }\n\n  /* Validate and find the sum of the iov_len values in the iov array */\n  for (i = 0; i < iovcnt; i++)\n  {\n    if (iov[i].iov_len > INT_MAX - bytes)\n    {\n      SET_ERRNO(EINVAL);\n      return (-1);\n    }\n    bytes += iov[i].iov_len;\n  }\n\n  if (bytes == 0)\n    return (0);\n\n  /* Allocate a temporary buffer to hold the data */\n  buffer = ares_malloc(bytes);\n  if (!buffer)\n  {\n    SET_ERRNO(ENOMEM);\n    return (-1);\n  }\n\n  /* Copy the data into buffer */\n  for (bp = buffer, i = 0; i < iovcnt; ++i)\n  {\n    memcpy (bp, iov[i].iov_base, iov[i].iov_len);\n    bp += iov[i].iov_len;\n  }\n\n  /* Send buffer contents */\n  result = swrite(s, buffer, bytes);\n\n  ares_free(buffer);\n\n  return (result);\n}",
+      "fn_code_pos": [
+        [
+          27,
+          0
+        ],
+        [
+          76,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_writev",
+        "parameters": {
+          "s": "ares_socket_t",
+          "iov": "struct iovec",
+          "iovcnt": "int"
+        },
+        "return_type": "ares_ssize_t"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct iovec",
+      {},
+      "",
+      [
+        27,
+        48
+      ],
+      [
+        27,
+        60
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        0
+      ]
+    ],
+    [
+      "#  include <limits.h>\n",
+      [
+        20,
+        0
+      ],
+      [
+        21,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

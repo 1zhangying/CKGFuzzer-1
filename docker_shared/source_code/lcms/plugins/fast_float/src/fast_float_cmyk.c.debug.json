@@ -1,0 +1,240 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nFloatCMYKData* FloatCMYKAlloc(cmsContext ContextID, const cmsInterpParams* p)\n{\n    FloatCMYKData* fd;\n\n    fd = (FloatCMYKData*) _cmsMallocZero(ContextID, sizeof(FloatCMYKData));\n    if (fd == NULL) return NULL;\n    \n    fd ->ContextID = ContextID;\n    fd ->p = p;\n    return fd;\n}",
+      "fn_code_pos": [
+        [
+          34,
+          0
+        ],
+        [
+          45,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FloatCMYKAlloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "p": "cmsInterpParams"
+        },
+        "return_type": "FloatCMYKData"
+      }
+    },
+    {
+      "fn_code": "static\nint XFormSampler(CMSREGISTER const cmsFloat32Number In[], CMSREGISTER cmsFloat32Number Out[], CMSREGISTER void* Cargo)\n{\n    // Evaluate in 16 bits\n    cmsPipelineEvalFloat(In, Out, (cmsPipeline*) Cargo);\n\n    // Always succeed\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          48,
+          0
+        ],
+        [
+          56,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "XFormSampler",
+        "parameters": {
+          "In": "CMSREGISTER",
+          "Out": "CMSREGISTER",
+          "void": "CMSREGISTER"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cmsINLINE cmsFloat32Number LinearInterpInt(cmsFloat32Number a, cmsFloat32Number l, cmsFloat32Number h)\n{\n       return (h - l) * a + l;       \n}",
+      "fn_code_pos": [
+        [
+          58,
+          0
+        ],
+        [
+          61,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsFloat32Number LinearInterpInt",
+        "parameters": {
+          "a": "cmsFloat32Number",
+          "l": "cmsFloat32Number",
+          "h": "cmsFloat32Number"
+        },
+        "return_type": "cmsINLINE"
+      }
+    },
+    {
+      "fn_code": "cmsINLINE cmsFloat32Number fclamp100(cmsFloat32Number v)\n{\n       return ((v < 1.0e-9f) || isnan(v)) ? 0.0f : (v > 100.0f ? 100.0f : v);       \n}",
+      "fn_code_pos": [
+        [
+          64,
+          0
+        ],
+        [
+          67,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsFloat32Number fclamp100",
+        "parameters": {
+          "v": "cmsFloat32Number"
+        },
+        "return_type": "cmsINLINE"
+      }
+    },
+    {
+      "fn_code": "static\nvoid FloatCMYKCLUTEval(struct _cmstransform_struct *CMMcargo,\n                      const void* Input,\n                      void* Output,\n                      cmsUInt32Number PixelsPerLine,\n                      cmsUInt32Number LineCount,\n                      const cmsStride* Stride)\n{\n    \n    cmsFloat32Number        c, m, y, k;\n    cmsFloat32Number        px, py, pz, pk;\n    int                     x0, y0, z0, k0;\n    int                     X0, Y0, Z0, K0, X1, Y1, Z1, K1;\n    cmsFloat32Number        rx, ry, rz, rk;\n    cmsFloat32Number        c0, c1 = 0, c2 = 0, c3 = 0;\n\n    cmsUInt32Number         OutChan;\n    FloatCMYKData*          pcmyk = (FloatCMYKData*) _cmsGetTransformUserData(CMMcargo);\n\n    const cmsInterpParams*  p = pcmyk ->p;\n    cmsUInt32Number        TotalOut = p -> nOutputs;\n    cmsUInt32Number        TotalPlusAlpha;\n    const cmsFloat32Number* LutTable = (const cmsFloat32Number*)p->Table;\n    cmsUInt32Number        i, ii;\n    const cmsUInt8Number*  cin;\n    const cmsUInt8Number*  min;\n    const cmsUInt8Number*  yin;\n    const cmsUInt8Number*  kin;\n    const cmsUInt8Number*  ain = NULL;\n\n    cmsFloat32Number        Tmp1[cmsMAXCHANNELS], Tmp2[cmsMAXCHANNELS];\n\n    cmsUInt8Number* out[cmsMAXCHANNELS];\n    cmsUInt32Number SourceStartingOrder[cmsMAXCHANNELS];\n    cmsUInt32Number SourceIncrements[cmsMAXCHANNELS];\n    cmsUInt32Number DestStartingOrder[cmsMAXCHANNELS];\n    cmsUInt32Number DestIncrements[cmsMAXCHANNELS];\n\n    cmsUInt32Number InputFormat  = cmsGetTransformInputFormat((cmsHTRANSFORM) CMMcargo);\n    cmsUInt32Number OutputFormat = cmsGetTransformOutputFormat((cmsHTRANSFORM) CMMcargo);\n\n    cmsUInt32Number nchans, nalpha;\n    cmsUInt32Number strideIn, strideOut;\n\n    _cmsComputeComponentIncrements(InputFormat, Stride->BytesPerPlaneIn, &nchans, &nalpha, SourceStartingOrder, SourceIncrements);\n    _cmsComputeComponentIncrements(OutputFormat, Stride->BytesPerPlaneOut, &nchans, &nalpha, DestStartingOrder, DestIncrements);\n\n    if (!(_cmsGetTransformFlags((cmsHTRANSFORM)CMMcargo) & cmsFLAGS_COPY_ALPHA))\n        nalpha = 0;\n\n    strideIn = strideOut = 0;\n    for (i = 0; i < LineCount; i++) {\n\n        cin = (const cmsUInt8Number*)Input + SourceStartingOrder[0] + strideIn;\n        min = (const cmsUInt8Number*)Input + SourceStartingOrder[1] + strideIn;\n        yin = (const cmsUInt8Number*)Input + SourceStartingOrder[2] + strideIn;\n        kin = (const cmsUInt8Number*)Input + SourceStartingOrder[3] + strideIn;\n\n        if (nalpha)\n            ain = (const cmsUInt8Number*)Input + SourceStartingOrder[4] + strideIn;\n\n        TotalPlusAlpha = TotalOut;\n        if (ain) TotalPlusAlpha++;\n\n        for (ii = 0; ii < TotalPlusAlpha; ii++)\n            out[ii] = (cmsUInt8Number*)Output + DestStartingOrder[ii] + strideOut;\n\n        for (ii = 0; ii < PixelsPerLine; ii++) {\n\n            c = fclamp100(*(cmsFloat32Number*)cin) / 100.0f;\n            m = fclamp100(*(cmsFloat32Number*)min) / 100.0f;\n            y = fclamp100(*(cmsFloat32Number*)yin) / 100.0f;\n            k = fclamp100(*(cmsFloat32Number*)kin) / 100.0f;\n\n            cin += SourceIncrements[0];\n            min += SourceIncrements[1];\n            yin += SourceIncrements[2];\n            kin += SourceIncrements[3];\n\n            pk = c * p->Domain[0];  // C\n            px = m * p->Domain[1];  // M \n            py = y * p->Domain[2];  // Y \n            pz = k * p->Domain[3];  // K\n\n\n            k0 = (int)_cmsQuickFloor(pk); rk = (pk - (cmsFloat32Number)k0);\n            x0 = (int)_cmsQuickFloor(px); rx = (px - (cmsFloat32Number)x0);\n            y0 = (int)_cmsQuickFloor(py); ry = (py - (cmsFloat32Number)y0);\n            z0 = (int)_cmsQuickFloor(pz); rz = (pz - (cmsFloat32Number)z0);\n\n\n            K0 = p->opta[3] * k0;\n            K1 = K0 + (c >= 1.0 ? 0 : p->opta[3]);\n\n            X0 = p->opta[2] * x0;\n            X1 = X0 + (m >= 1.0 ? 0 : p->opta[2]);\n\n            Y0 = p->opta[1] * y0;\n            Y1 = Y0 + (y >= 1.0 ? 0 : p->opta[1]);\n\n            Z0 = p->opta[0] * z0;\n            Z1 = Z0 + (k >= 1.0 ? 0 : p->opta[0]);\n\n            for (OutChan = 0; OutChan < TotalOut; OutChan++) {\n\n                c0 = DENS(X0, Y0, Z0);\n\n                if (rx >= ry && ry >= rz) {\n\n                    c1 = DENS(X1, Y0, Z0) - c0;\n                    c2 = DENS(X1, Y1, Z0) - DENS(X1, Y0, Z0);\n                    c3 = DENS(X1, Y1, Z1) - DENS(X1, Y1, Z0);\n\n                }\n                else\n                    if (rx >= rz && rz >= ry) {\n\n                        c1 = DENS(X1, Y0, Z0) - c0;\n                        c2 = DENS(X1, Y1, Z1) - DENS(X1, Y0, Z1);\n                        c3 = DENS(X1, Y0, Z1) - DENS(X1, Y0, Z0);\n\n                    }\n                    else\n                        if (rz >= rx && rx >= ry) {\n\n                            c1 = DENS(X1, Y0, Z1) - DENS(X0, Y0, Z1);\n                            c2 = DENS(X1, Y1, Z1) - DENS(X1, Y0, Z1);\n                            c3 = DENS(X0, Y0, Z1) - c0;\n\n                        }\n                        else\n                            if (ry >= rx && rx >= rz) {\n\n                                c1 = DENS(X1, Y1, Z0) - DENS(X0, Y1, Z0);\n                                c2 = DENS(X0, Y1, Z0) - c0;\n                                c3 = DENS(X1, Y1, Z1) - DENS(X1, Y1, Z0);\n\n                            }\n                            else\n                                if (ry >= rz && rz >= rx) {\n\n                                    c1 = DENS(X1, Y1, Z1) - DENS(X0, Y1, Z1);\n                                    c2 = DENS(X0, Y1, Z0) - c0;\n                                    c3 = DENS(X0, Y1, Z1) - DENS(X0, Y1, Z0);\n\n                                }\n                                else\n                                    if (rz >= ry && ry >= rx) {\n\n                                        c1 = DENS(X1, Y1, Z1) - DENS(X0, Y1, Z1);\n                                        c2 = DENS(X0, Y1, Z1) - DENS(X0, Y0, Z1);\n                                        c3 = DENS(X0, Y0, Z1) - c0;\n\n                                    }\n                                    else {\n                                        c1 = c2 = c3 = 0;\n                                    }\n\n\n                Tmp1[OutChan] = c0 + c1 * rx + c2 * ry + c3 * rz;\n\n            }\n\n\n            LutTable = (cmsFloat32Number*)p->Table;\n            LutTable += K1;\n\n            for (OutChan = 0; OutChan < p->nOutputs; OutChan++) {\n\n                c0 = DENS(X0, Y0, Z0);\n\n                if (rx >= ry && ry >= rz) {\n\n                    c1 = DENS(X1, Y0, Z0) - c0;\n                    c2 = DENS(X1, Y1, Z0) - DENS(X1, Y0, Z0);\n                    c3 = DENS(X1, Y1, Z1) - DENS(X1, Y1, Z0);\n\n                }\n                else\n                    if (rx >= rz && rz >= ry) {\n\n                        c1 = DENS(X1, Y0, Z0) - c0;\n                        c2 = DENS(X1, Y1, Z1) - DENS(X1, Y0, Z1);\n                        c3 = DENS(X1, Y0, Z1) - DENS(X1, Y0, Z0);\n\n                    }\n                    else\n                        if (rz >= rx && rx >= ry) {\n\n                            c1 = DENS(X1, Y0, Z1) - DENS(X0, Y0, Z1);\n                            c2 = DENS(X1, Y1, Z1) - DENS(X1, Y0, Z1);\n                            c3 = DENS(X0, Y0, Z1) - c0;\n\n                        }\n                        else\n                            if (ry >= rx && rx >= rz) {\n\n                                c1 = DENS(X1, Y1, Z0) - DENS(X0, Y1, Z0);\n                                c2 = DENS(X0, Y1, Z0) - c0;\n                                c3 = DENS(X1, Y1, Z1) - DENS(X1, Y1, Z0);\n\n                            }\n                            else\n                                if (ry >= rz && rz >= rx) {\n\n                                    c1 = DENS(X1, Y1, Z1) - DENS(X0, Y1, Z1);\n                                    c2 = DENS(X0, Y1, Z0) - c0;\n                                    c3 = DENS(X0, Y1, Z1) - DENS(X0, Y1, Z0);\n\n                                }\n                                else\n                                    if (rz >= ry && ry >= rx) {\n\n                                        c1 = DENS(X1, Y1, Z1) - DENS(X0, Y1, Z1);\n                                        c2 = DENS(X0, Y1, Z1) - DENS(X0, Y0, Z1);\n                                        c3 = DENS(X0, Y0, Z1) - c0;\n\n                                    }\n                                    else {\n                                        c1 = c2 = c3 = 0;\n                                    }\n\n                Tmp2[OutChan] = c0 + c1 * rx + c2 * ry + c3 * rz;\n            }\n\n\n            for (OutChan = 0; OutChan < p->nOutputs; OutChan++) {\n\n                *(cmsFloat32Number*)(out[OutChan]) = LinearInterpInt(rk, Tmp1[OutChan], Tmp2[OutChan]);\n                out[OutChan] += DestIncrements[OutChan];\n            }\n\n            if (ain) {\n                *(cmsFloat32Number*)(out[TotalOut]) = *(cmsFloat32Number*)ain;\n                ain += SourceIncrements[4];\n                out[TotalOut] += DestIncrements[TotalOut];\n            }\n        }\n\n        strideIn += Stride->BytesPerLineIn;\n        strideOut += Stride->BytesPerLineOut;\n    }\n}",
+      "fn_code_pos": [
+        [
+          73,
+          0
+        ],
+        [
+          315,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FloatCMYKCLUTEval",
+        "parameters": {
+          "CMMcargo": "struct _cmstransform_struct",
+          "Input": "void",
+          "Output": "void",
+          "PixelsPerLine": "cmsUInt32Number",
+          "LineCount": "cmsUInt32Number",
+          "Stride": "cmsStride"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool OptimizeCLUTCMYKTransform(_cmsTransform2Fn* TransformFn,\n                                  void** UserData,\n                                  _cmsFreeUserDataFn* FreeDataFn,\n                                  cmsPipeline** Lut, \n                                  cmsUInt32Number* InputFormat, \n                                  cmsUInt32Number* OutputFormat, \n                                  cmsUInt32Number* dwFlags)      \n{\n    cmsPipeline* OriginalLut;\n    int nGridPoints;    \n    cmsPipeline* OptimizedLUT = NULL;    \n    cmsStage* OptimizedCLUTmpe;\n    FloatCMYKData* pcmyk;\n    cmsContext ContextID;\n    _cmsStageCLutData* data;\n\n    // For empty transforms, do nothing\n    if (*Lut == NULL) return FALSE;\n\n    // This is a lossy optimization! does not apply in floating-point cases\n    if (!T_FLOAT(*InputFormat) || !T_FLOAT(*OutputFormat)) return FALSE;\n\n    // Only on 8-bit\n    if (T_BYTES(*InputFormat) != 4 || T_BYTES(*OutputFormat) != 4) return FALSE;\n\n    // Only on CMYK\n    if (T_COLORSPACE(*InputFormat)  != PT_CMYK) return FALSE;\n   \n    OriginalLut = *Lut;\n   \n    ContextID = cmsGetPipelineContextID(OriginalLut);\n    nGridPoints = _cmsReasonableGridpointsByColorspace(cmsSigRgbData, *dwFlags);\n             \n    // Create the result LUT\n    OptimizedLUT = cmsPipelineAlloc(cmsGetPipelineContextID(OriginalLut), 4, cmsPipelineOutputChannels(OriginalLut));\n    if (OptimizedLUT == NULL) goto Error;\n\n    \n    // Allocate the CLUT for result\n    OptimizedCLUTmpe = cmsStageAllocCLutFloat(ContextID, nGridPoints, 4, cmsPipelineOutputChannels(OriginalLut), NULL);\n\n    // Add the CLUT to the destination LUT\n    cmsPipelineInsertStage(OptimizedLUT, cmsAT_BEGIN, OptimizedCLUTmpe);\n\n    // Resample the LUT\n    if (!cmsStageSampleCLutFloat(OptimizedCLUTmpe, XFormSampler, (void*)OriginalLut, 0)) goto Error;\n\n    // Set the evaluator, copy parameters   \n    data = (_cmsStageCLutData*) cmsStageData(OptimizedCLUTmpe);\n\n    pcmyk = FloatCMYKAlloc(ContextID, data ->Params);\n    if (pcmyk == NULL) return FALSE;   \n\n    // And return the obtained LUT\n    cmsPipelineFree(OriginalLut);\n\n    *Lut = OptimizedLUT;\n    *TransformFn = FloatCMYKCLUTEval;\n    *UserData   = pcmyk;\n    *FreeDataFn = _cmsFree;\n    *dwFlags &= ~cmsFLAGS_CAN_CHANGE_FORMATTER;\n    return TRUE;\n\nError:\n      \n    if (OptimizedLUT != NULL) cmsPipelineFree(OptimizedLUT);\n\n    return FALSE;    \n}",
+      "fn_code_pos": [
+        [
+          323,
+          0
+        ],
+        [
+          391,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OptimizeCLUTCMYKTransform",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeDataFn": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "FloatCMYKAlloc(cmsContext ContextID, const cmsInterpParams* p)",
+      "fn_dec_pos": [
+        [
+          35,
+          15
+        ],
+        [
+          35,
+          77
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FloatCMYKAlloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "p": "cmsInterpParams"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n\n    cmsContext ContextID;\n    const cmsInterpParams* p;   // Tetrahedrical interpolation parameters. This is a not-owned pointer.\n\n} FloatCMYKData;",
+      {
+        "ContextID": "cmsContext",
+        "cmsInterpParams": "const"
+      },
+      "FloatCMYKData",
+      [
+        24,
+        0
+      ],
+      [
+        29,
+        16
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsContext ContextID;\n    const cmsInterpParams* p;   // Tetrahedrical interpolation parameters. This is a not-owned pointer.\n\n} FloatCMYKData;",
+      {
+        "ContextID": "cmsContext",
+        "cmsInterpParams": "const"
+      },
+      "FloatCMYKData",
+      [
+        24,
+        0
+      ],
+      [
+        29,
+        16
+      ]
+    ],
+    [
+      "struct _cmstransform_struct",
+      {},
+      "",
+      [
+        74,
+        23
+      ],
+      [
+        74,
+        50
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"fast_float_internal.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

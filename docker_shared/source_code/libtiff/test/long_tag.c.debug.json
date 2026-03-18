@@ -1,0 +1,134 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char **argv)\n{\n    TIFF *tif;\n    unsigned int i;\n    unsigned char buf[3] = {0, 127, 255};\n    (void)argc;\n    (void)argv;\n\n    /* Test whether we can write tags. */\n    tif = TIFFOpen(filename, \"w\");\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't create test TIFF file %s.\\n\", filename);\n        return 1;\n    }\n\n    if (!TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, width))\n    {\n        fprintf(stderr, \"Can't set ImageWidth tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_IMAGELENGTH, length))\n    {\n        fprintf(stderr, \"Can't set ImageLength tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8))\n    {\n        fprintf(stderr, \"Can't set BitsPerSample tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 3))\n    {\n        fprintf(stderr, \"Can't set SamplesPerPixel tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, rows_per_strip))\n    {\n        fprintf(stderr, \"Can't set SamplesPerPixel tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG))\n    {\n        fprintf(stderr, \"Can't set PlanarConfiguration tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB))\n    {\n        fprintf(stderr, \"Can't set PhotometricInterpretation tag.\\n\");\n        goto failure;\n    }\n\n    for (i = 0; i < NTAGS; i++)\n    {\n        if (!TIFFSetField(tif, long_tags[i].tag, long_tags[i].value))\n        {\n            fprintf(stderr, \"Can't set tag %d.\\n\", (int)long_tags[i].tag);\n            goto failure;\n        }\n    }\n\n    /* Write dummy pixel data. */\n    if (TIFFWriteScanline(tif, buf, 0, 0) == -1)\n    {\n        fprintf(stderr, \"Can't write image data.\\n\");\n        goto failure;\n    }\n\n    TIFFClose(tif);\n\n    /* Ok, now test whether we can read written values. */\n    tif = TIFFOpen(filename, \"r\");\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't open test TIFF file %s.\\n\", filename);\n        return 1;\n    }\n\n    if (CheckLongField(tif, TIFFTAG_IMAGEWIDTH, width) < 0)\n        goto failure;\n\n    if (CheckLongField(tif, TIFFTAG_IMAGELENGTH, length) < 0)\n        goto failure;\n\n    if (CheckLongField(tif, TIFFTAG_ROWSPERSTRIP, rows_per_strip) < 0)\n        goto failure;\n\n    for (i = 0; i < NTAGS; i++)\n    {\n        if (CheckLongField(tif, long_tags[i].tag, long_tags[i].value) < 0)\n            goto failure;\n    }\n\n    TIFFClose(tif);\n\n    /* All tests passed; delete file and exit with success status. */\n    unlink(filename);\n    return 0;\n\nfailure:\n    /* Something goes wrong; close file and return unsuccessful status. */\n    TIFFClose(tif);\n    unlink(filename);\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          56,
+          0
+        ],
+        [
+          160,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "CheckLongField(TIFF *, ttag_t, uint32_t)",
+      "fn_dec_pos": [
+        [
+          39,
+          11
+        ],
+        [
+          39,
+          51
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckLongField",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct Tags\n{\n    ttag_t tag;\n    short count;\n    uint32_t value;\n}",
+      {
+        "tag": "ttag_t",
+        "count": "short",
+        "value": "uint32_t"
+      },
+      "Tags",
+      [
+        43,
+        7
+      ],
+      [
+        48,
+        1
+      ]
+    ],
+    [
+      "struct Tags\n{\n    ttag_t tag;\n    short count;\n    uint32_t value;\n}",
+      {
+        "tag": "ttag_t",
+        "count": "short",
+        "value": "uint32_t"
+      },
+      "Tags",
+      [
+        43,
+        7
+      ],
+      [
+        48,
+        1
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

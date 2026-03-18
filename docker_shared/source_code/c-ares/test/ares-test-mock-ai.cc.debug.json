@@ -1,0 +1,1609 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "TEST_P(MockUDPChannelTestAI, GetAddrInfoParallelLookups) {\n  DNSPacket rsp1;\n  rsp1.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A))\n    .add_answer(new DNSARR(\"www.google.com\", 100, {2, 3, 4, 5}));\n  ON_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillByDefault(SetReply(&server_, &rsp1));\n  DNSPacket rsp2;\n  rsp2.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.example.com\", T_A))\n    .add_answer(new DNSARR(\"www.example.com\", 100, {1, 2, 3, 4}));\n  ON_CALL(server_, OnRequest(\"www.example.com\", T_A))\n    .WillByDefault(SetReply(&server_, &rsp2));\n\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  AddrInfoResult result1;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result1);\n  AddrInfoResult result2;\n  ares_getaddrinfo(channel_, \"www.example.com.\", NULL, &hints, AddrInfoCallback, &result2);\n  AddrInfoResult result3;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result3);\n  Process();\n\n  EXPECT_TRUE(result1.done_);\n  EXPECT_EQ(result1.status_, ARES_SUCCESS);\n  EXPECT_THAT(result1.ai_, IncludesNumAddresses(1));\n  EXPECT_THAT(result1.ai_, IncludesV4Address(\"2.3.4.5\"));\n\n  EXPECT_TRUE(result2.done_);\n  EXPECT_EQ(result2.status_, ARES_SUCCESS);\n  EXPECT_THAT(result2.ai_, IncludesNumAddresses(1));\n  EXPECT_THAT(result2.ai_, IncludesV4Address(\"1.2.3.4\"));\n\n  EXPECT_TRUE(result3.done_);\n  EXPECT_EQ(result3.status_, ARES_SUCCESS);\n  EXPECT_THAT(result3.ai_, IncludesNumAddresses(1));\n  EXPECT_THAT(result3.ai_, IncludesV4Address(\"2.3.4.5\"));\n}",
+      "fn_code_pos": [
+        [
+          60,
+          0
+        ],
+        [
+          99,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockUDPChannelTestAI, TruncationRetry) {\n  DNSPacket rsptruncated;\n  rsptruncated.set_response().set_aa().set_tc()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A));\n  DNSPacket rspok;\n  rspok.set_response()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A))\n    .add_answer(new DNSARR(\"www.google.com\", 100, {1, 2, 3, 4}));\n  EXPECT_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillOnce(SetReply(&server_, &rsptruncated))\n    .WillOnce(SetReply(&server_, &rspok));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_EQ(result.status_, ARES_SUCCESS);\n  EXPECT_THAT(result.ai_, IncludesNumAddresses(1));\n  EXPECT_THAT(result.ai_, IncludesV4Address(\"1.2.3.4\"));\n}",
+      "fn_code_pos": [
+        [
+          102,
+          0
+        ],
+        [
+          124,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockTCPChannelTestAI, MalformedResponse) {\n  std::vector<byte> one = {0x01};\n  EXPECT_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillOnce(SetReplyData(&server_, one));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_EQ(ARES_ETIMEOUT, result.status_);\n}",
+      "fn_code_pos": [
+        [
+          127,
+          0
+        ],
+        [
+          140,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockTCPChannelTestAI, FormErrResponse) {\n  DNSPacket rsp;\n  rsp.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A));\n  rsp.set_rcode(FORMERR);\n  EXPECT_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillOnce(SetReply(&server_, &rsp));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_EQ(ARES_EFORMERR, result.status_);\n}",
+      "fn_code_pos": [
+        [
+          142,
+          0
+        ],
+        [
+          158,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockTCPChannelTestAI, ServFailResponse) {\n  DNSPacket rsp;\n  rsp.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A));\n  rsp.set_rcode(SERVFAIL);\n  EXPECT_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillOnce(SetReply(&server_, &rsp));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  // ARES_FLAG_NOCHECKRESP not set, so SERVFAIL consumed\n  EXPECT_EQ(ARES_ECONNREFUSED, result.status_);\n}",
+      "fn_code_pos": [
+        [
+          160,
+          0
+        ],
+        [
+          177,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockTCPChannelTestAI, NotImplResponse) {\n  DNSPacket rsp;\n  rsp.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A));\n  rsp.set_rcode(NOTIMP);\n  EXPECT_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillOnce(SetReply(&server_, &rsp));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  // ARES_FLAG_NOCHECKRESP not set, so NOTIMP consumed\n  EXPECT_EQ(ARES_ECONNREFUSED, result.status_);\n}",
+      "fn_code_pos": [
+        [
+          179,
+          0
+        ],
+        [
+          196,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockTCPChannelTestAI, RefusedResponse) {\n  DNSPacket rsp;\n  rsp.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A));\n  rsp.set_rcode(REFUSED);\n  EXPECT_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillOnce(SetReply(&server_, &rsp));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  // ARES_FLAG_NOCHECKRESP not set, so REFUSED consumed\n  EXPECT_EQ(ARES_ECONNREFUSED, result.status_);\n}",
+      "fn_code_pos": [
+        [
+          198,
+          0
+        ],
+        [
+          215,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockTCPChannelTestAI, YXDomainResponse) {\n  DNSPacket rsp;\n  rsp.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A));\n  rsp.set_rcode(YXDOMAIN);\n  EXPECT_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillOnce(SetReply(&server_, &rsp));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_EQ(ARES_ENODATA, result.status_);\n}",
+      "fn_code_pos": [
+        [
+          217,
+          0
+        ],
+        [
+          233,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MockExtraOptsTestAI()\n    : MockChannelOptsTest(1, GetParam().first, GetParam().second,\n                          FillOptions(&opts_),\n                          ARES_OPT_SOCK_SNDBUF|ARES_OPT_SOCK_RCVBUF) {}",
+      "fn_code_pos": [
+        [
+          239,
+          2
+        ],
+        [
+          242,
+          71
+        ]
+      ],
+      "class_code": "c95b595af7352b9b702cef7886a1e35d2c8ec040f08a6f9b59688b57254dec0e",
+      "class_node_pos": [
+        [
+          235,
+          0
+        ],
+        [
+          252,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "MockExtraOptsTestAI",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static struct ares_options* FillOptions(struct ares_options * opts) {\n    memset(opts, 0, sizeof(struct ares_options));\n    // Set a few options that affect socket communications\n    opts->socket_send_buffer_size = 514;\n    opts->socket_receive_buffer_size = 514;\n    return opts;\n  }",
+      "fn_code_pos": [
+        [
+          243,
+          2
+        ],
+        [
+          249,
+          3
+        ]
+      ],
+      "class_code": "c95b595af7352b9b702cef7886a1e35d2c8ec040f08a6f9b59688b57254dec0e",
+      "class_node_pos": [
+        [
+          235,
+          0
+        ],
+        [
+          252,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "FillOptions",
+        "parameters": {
+          "opts": "struct ares_options"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockExtraOptsTestAI, SimpleQuery) {\n  ares_set_local_ip4(channel_, 0x7F000001);\n  byte addr6[16] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,\n                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};\n  ares_set_local_ip6(channel_, addr6);\n  ares_set_local_dev(channel_, \"dummy\");\n\n  DNSPacket rsp;\n  rsp.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A))\n    .add_answer(new DNSARR(\"www.google.com\", 100, {2, 3, 4, 5}));\n  ON_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillByDefault(SetReply(&server_, &rsp));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_EQ(ARES_SUCCESS, result.status_);\n  EXPECT_THAT(result.ai_, IncludesNumAddresses(1));\n  EXPECT_THAT(result.ai_, IncludesV4Address(\"2.3.4.5\"));\n}",
+      "fn_code_pos": [
+        [
+          254,
+          0
+        ],
+        [
+          278,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MockExtraOptsNDotsTestAI(int ndots)\n    : MockChannelOptsTest(1, GetParam().first, GetParam().second,\n                          FillOptions(&opts_, ndots),\n                          ARES_OPT_SOCK_SNDBUF|ARES_OPT_SOCK_RCVBUF|ARES_OPT_NDOTS) {}",
+      "fn_code_pos": [
+        [
+          284,
+          2
+        ],
+        [
+          287,
+          86
+        ]
+      ],
+      "class_code": "7e1042e3421fc4fc018ef6de7b3c455f0ccd92d1487578f934ed027a39ab4c40",
+      "class_node_pos": [
+        [
+          280,
+          0
+        ],
+        [
+          298,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "MockExtraOptsNDotsTestAI",
+        "parameters": {
+          "ndots": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static struct ares_options* FillOptions(struct ares_options * opts, int ndots) {\n    memset(opts, 0, sizeof(struct ares_options));\n    // Set a few options that affect socket communications\n    opts->socket_send_buffer_size = 514;\n    opts->socket_receive_buffer_size = 514;\n    opts->ndots = ndots;\n    return opts;\n  }",
+      "fn_code_pos": [
+        [
+          288,
+          2
+        ],
+        [
+          295,
+          3
+        ]
+      ],
+      "class_code": "7e1042e3421fc4fc018ef6de7b3c455f0ccd92d1487578f934ed027a39ab4c40",
+      "class_node_pos": [
+        [
+          280,
+          0
+        ],
+        [
+          298,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "FillOptions",
+        "parameters": {
+          "opts": "struct ares_options",
+          "ndots": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MockExtraOptsNDots5TestAI() : MockExtraOptsNDotsTestAI(5) {}",
+      "fn_code_pos": [
+        [
+          302,
+          2
+        ],
+        [
+          302,
+          62
+        ]
+      ],
+      "class_code": "329d50ae96af8d0ff6e553e3b3b64d42479f49c102234b0a78ed8afdf85f80f4",
+      "class_node_pos": [
+        [
+          300,
+          0
+        ],
+        [
+          303,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "MockExtraOptsNDots5TestAI",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockExtraOptsNDots5TestAI, SimpleQuery) {\n  ares_set_local_ip4(channel_, 0x7F000001);\n  byte addr6[16] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,\n                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};\n  ares_set_local_ip6(channel_, addr6);\n  ares_set_local_dev(channel_, \"dummy\");\n\n  DNSPacket rsp;\n  rsp.set_response().set_aa()\n    .add_question(new DNSQuestion(\"dynamodb.us-east-1.amazonaws.com\", T_A))\n    .add_answer(new DNSARR(\"dynamodb.us-east-1.amazonaws.com\", 100, {123, 45, 67, 8}));\n  ON_CALL(server_, OnRequest(\"dynamodb.us-east-1.amazonaws.com\", T_A))\n    .WillByDefault(SetReply(&server_, &rsp));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"dynamodb.us-east-1.amazonaws.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_EQ(ARES_SUCCESS, result.status_);\n  EXPECT_THAT(result.ai_, IncludesNumAddresses(1));\n  EXPECT_THAT(result.ai_, IncludesV4Address(\"123.45.67.8\"));\n}",
+      "fn_code_pos": [
+        [
+          305,
+          0
+        ],
+        [
+          329,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MockFlagsChannelOptsTestAI(int flags)\n    : MockChannelOptsTest(1, GetParam().first, GetParam().second,\n                          FillOptions(&opts_, flags), ARES_OPT_FLAGS) {}",
+      "fn_code_pos": [
+        [
+          335,
+          2
+        ],
+        [
+          337,
+          72
+        ]
+      ],
+      "class_code": "ac2e43b7f06ca718a2d6759e7697249791b1f9caec47d42d0cab97e841c9afa6",
+      "class_node_pos": [
+        [
+          331,
+          0
+        ],
+        [
+          345,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "MockFlagsChannelOptsTestAI",
+        "parameters": {
+          "flags": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static struct ares_options* FillOptions(struct ares_options * opts, int flags) {\n    memset(opts, 0, sizeof(struct ares_options));\n    opts->flags = flags;\n    return opts;\n  }",
+      "fn_code_pos": [
+        [
+          338,
+          2
+        ],
+        [
+          342,
+          3
+        ]
+      ],
+      "class_code": "ac2e43b7f06ca718a2d6759e7697249791b1f9caec47d42d0cab97e841c9afa6",
+      "class_node_pos": [
+        [
+          331,
+          0
+        ],
+        [
+          345,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "FillOptions",
+        "parameters": {
+          "opts": "struct ares_options",
+          "flags": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MockNoCheckRespChannelTestAI() : MockFlagsChannelOptsTestAI(ARES_FLAG_NOCHECKRESP) {}",
+      "fn_code_pos": [
+        [
+          349,
+          2
+        ],
+        [
+          349,
+          87
+        ]
+      ],
+      "class_code": "2a3d3b9a62c21d8309120421a56dd83b6785e6b9cedb19197b54580ef4c1264f",
+      "class_node_pos": [
+        [
+          347,
+          0
+        ],
+        [
+          350,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "MockNoCheckRespChannelTestAI",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockNoCheckRespChannelTestAI, ServFailResponse) {\n  DNSPacket rsp;\n  rsp.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A));\n  rsp.set_rcode(SERVFAIL);\n  ON_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillByDefault(SetReply(&server_, &rsp));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_EQ(ARES_ESERVFAIL, result.status_);\n}",
+      "fn_code_pos": [
+        [
+          352,
+          0
+        ],
+        [
+          368,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockNoCheckRespChannelTestAI, NotImplResponse) {\n  DNSPacket rsp;\n  rsp.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A));\n  rsp.set_rcode(NOTIMP);\n  ON_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillByDefault(SetReply(&server_, &rsp));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_EQ(ARES_ENOTIMP, result.status_);\n}",
+      "fn_code_pos": [
+        [
+          370,
+          0
+        ],
+        [
+          386,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockNoCheckRespChannelTestAI, RefusedResponse) {\n  DNSPacket rsp;\n  rsp.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A));\n  rsp.set_rcode(REFUSED);\n  ON_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillByDefault(SetReply(&server_, &rsp));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_EQ(ARES_EREFUSED, result.status_);\n}",
+      "fn_code_pos": [
+        [
+          388,
+          0
+        ],
+        [
+          404,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockChannelTestAI, FamilyV6) {\n  DNSPacket rsp6;\n  rsp6.set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com\", T_AAAA))\n    .add_answer(new DNSAaaaRR(\"example.com\", 100,\n                              {0x21, 0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,\n                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x03}));\n  ON_CALL(server_, OnRequest(\"example.com\", T_AAAA))\n    .WillByDefault(SetReply(&server_, &rsp6));\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET6;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"example.com.\", NULL, &hints,\n                   AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_THAT(result.ai_, IncludesNumAddresses(1));\n  EXPECT_THAT(result.ai_, IncludesV6Address(\"2121:0000:0000:0000:0000:0000:0000:0303\"));\n}",
+      "fn_code_pos": [
+        [
+          406,
+          0
+        ],
+        [
+          425,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockChannelTestAI, FamilyV4) {\n  DNSPacket rsp4;\n  rsp4.set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com\", T_A))\n    .add_answer(new DNSARR(\"example.com\", 100, {2, 3, 4, 5}));\n  ON_CALL(server_, OnRequest(\"example.com\", T_A))\n    .WillByDefault(SetReply(&server_, &rsp4));\n  AddrInfoResult result = {};\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"example.com.\", NULL, &hints,\n                   AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_THAT(result.ai_, IncludesNumAddresses(1));\n  EXPECT_THAT(result.ai_, IncludesV4Address(\"2.3.4.5\"));\n}",
+      "fn_code_pos": [
+        [
+          427,
+          0
+        ],
+        [
+          444,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockChannelTestAI, FamilyV4_MultipleAddresses) {\n  DNSPacket rsp4;\n  rsp4.set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com\", T_A))\n    .add_answer(new DNSARR(\"example.com\", 100, {2, 3, 4, 5}))\n    .add_answer(new DNSARR(\"example.com\", 100, {7, 8, 9, 0}));\n  ON_CALL(server_, OnRequest(\"example.com\", T_A))\n    .WillByDefault(SetReply(&server_, &rsp4));\n  AddrInfoResult result = {};\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"example.com.\", NULL, &hints,\n                   AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  std::stringstream ss;\n  ss << result.ai_;\n  EXPECT_EQ(\"{addr=[2.3.4.5], addr=[7.8.9.0]}\", ss.str());\n}",
+      "fn_code_pos": [
+        [
+          446,
+          0
+        ],
+        [
+          465,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockChannelTestAI, FamilyUnspecified) {\n  DNSPacket rsp6;\n  rsp6.set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com\", T_AAAA))\n    .add_answer(new DNSAaaaRR(\"example.com\", 100,\n                              {0x21, 0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,\n                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x03}));\n  ON_CALL(server_, OnRequest(\"example.com\", T_AAAA))\n    .WillByDefault(SetReply(&server_, &rsp6));\n  DNSPacket rsp4;\n  rsp4.set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com\", T_A))\n    .add_answer(new DNSARR(\"example.com\", 100, {2, 3, 4, 5}));\n  ON_CALL(server_, OnRequest(\"example.com\", T_A))\n    .WillByDefault(SetReply(&server_, &rsp4));\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_UNSPEC;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"example.com.\", NULL, &hints,\n                   AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_THAT(result.ai_, IncludesNumAddresses(2));\n  EXPECT_THAT(result.ai_, IncludesV4Address(\"2.3.4.5\"));\n  EXPECT_THAT(result.ai_, IncludesV6Address(\"2121:0000:0000:0000:0000:0000:0000:0303\"));\n}",
+      "fn_code_pos": [
+        [
+          467,
+          0
+        ],
+        [
+          493,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MockEDNSChannelTestAI() : MockFlagsChannelOptsTestAI(ARES_FLAG_EDNS) {}",
+      "fn_code_pos": [
+        [
+          497,
+          2
+        ],
+        [
+          497,
+          73
+        ]
+      ],
+      "class_code": "e78234b88eebc58a8d463346d9514abf0d13557809d28985d5c1a83738b610fe",
+      "class_node_pos": [
+        [
+          495,
+          0
+        ],
+        [
+          498,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "MockEDNSChannelTestAI",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockEDNSChannelTestAI, RetryWithoutEDNS) {\n  DNSPacket rspfail;\n  rspfail.set_response().set_aa().set_rcode(FORMERR)\n    .add_question(new DNSQuestion(\"www.google.com\", T_A));\n  DNSPacket rspok;\n  rspok.set_response()\n    .add_question(new DNSQuestion(\"www.google.com\", T_A))\n    .add_answer(new DNSARR(\"www.google.com\", 100, {1, 2, 3, 4}));\n  EXPECT_CALL(server_, OnRequest(\"www.google.com\", T_A))\n    .WillOnce(SetReply(&server_, &rspfail))\n    .WillOnce(SetReply(&server_, &rspok));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www.google.com.\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_THAT(result.ai_, IncludesNumAddresses(1));\n  EXPECT_THAT(result.ai_, IncludesV4Address(\"1.2.3.4\"));\n}",
+      "fn_code_pos": [
+        [
+          500,
+          0
+        ],
+        [
+          521,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockChannelTestAI, SearchDomains) {\n  DNSPacket nofirst;\n  nofirst.set_response().set_aa().set_rcode(NXDOMAIN)\n    .add_question(new DNSQuestion(\"www.first.com\", T_A));\n  ON_CALL(server_, OnRequest(\"www.first.com\", T_A))\n    .WillByDefault(SetReply(&server_, &nofirst));\n  DNSPacket nosecond;\n  nosecond.set_response().set_aa().set_rcode(NXDOMAIN)\n    .add_question(new DNSQuestion(\"www.second.org\", T_A));\n  ON_CALL(server_, OnRequest(\"www.second.org\", T_A))\n    .WillByDefault(SetReply(&server_, &nosecond));\n  DNSPacket yesthird;\n  yesthird.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.third.gov\", T_A))\n    .add_answer(new DNSARR(\"www.third.gov\", 0x0200, {2, 3, 4, 5}));\n  ON_CALL(server_, OnRequest(\"www.third.gov\", T_A))\n    .WillByDefault(SetReply(&server_, &yesthird));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_THAT(result.ai_, IncludesNumAddresses(1));\n  EXPECT_THAT(result.ai_, IncludesV4Address(\"2.3.4.5\"));\n}",
+      "fn_code_pos": [
+        [
+          523,
+          0
+        ],
+        [
+          550,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockChannelTestAI, SearchDomainsServFailOnAAAA) {\n  DNSPacket nofirst;\n  nofirst.set_response().set_aa().set_rcode(NXDOMAIN)\n    .add_question(new DNSQuestion(\"www.first.com\", T_AAAA));\n  ON_CALL(server_, OnRequest(\"www.first.com\", T_AAAA))\n    .WillByDefault(SetReply(&server_, &nofirst));\n  DNSPacket nofirst4;\n  nofirst4.set_response().set_aa().set_rcode(NXDOMAIN)\n    .add_question(new DNSQuestion(\"www.first.com\", T_A));\n  ON_CALL(server_, OnRequest(\"www.first.com\", T_A))\n    .WillByDefault(SetReply(&server_, &nofirst4));\n\n  DNSPacket nosecond;\n  nosecond.set_response().set_aa().set_rcode(NXDOMAIN)\n    .add_question(new DNSQuestion(\"www.second.org\", T_AAAA));\n  ON_CALL(server_, OnRequest(\"www.second.org\", T_AAAA))\n    .WillByDefault(SetReply(&server_, &nosecond));\n  DNSPacket yessecond4;\n  yessecond4.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.second.org\", T_A))\n    .add_answer(new DNSARR(\"www.second.org\", 0x0200, {2, 3, 4, 5}));\n  ON_CALL(server_, OnRequest(\"www.second.org\", T_A))\n    .WillByDefault(SetReply(&server_, &yessecond4));\n\n  DNSPacket failthird;\n  failthird.set_response().set_aa().set_rcode(SERVFAIL)\n    .add_question(new DNSQuestion(\"www.third.gov\", T_AAAA));\n  ON_CALL(server_, OnRequest(\"www.third.gov\", T_AAAA))\n    .WillByDefault(SetReply(&server_, &failthird));\n  DNSPacket failthird4;\n  failthird4.set_response().set_aa().set_rcode(SERVFAIL)\n    .add_question(new DNSQuestion(\"www.third.gov\", T_A));\n  ON_CALL(server_, OnRequest(\"www.third.gov\", T_A))\n    .WillByDefault(SetReply(&server_, &failthird4));\n\n  AddrInfoResult result;\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_UNSPEC;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"www\", NULL, &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  EXPECT_THAT(result.ai_, IncludesNumAddresses(1));\n  EXPECT_THAT(result.ai_, IncludesV4Address(\"2.3.4.5\"));\n}",
+      "fn_code_pos": [
+        [
+          552,
+          0
+        ],
+        [
+          596,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MockMultiServerChannelTestAI(bool rotate)\n    : MockChannelOptsTest(3, GetParam().first, GetParam().second, nullptr, rotate ? ARES_OPT_ROTATE : ARES_OPT_NOROTATE) {}",
+      "fn_code_pos": [
+        [
+          602,
+          2
+        ],
+        [
+          603,
+          123
+        ]
+      ],
+      "class_code": "46f67f2671ddc08791d5b3795fea2f0e5f52d9305c840f3f5ca548e74fd8b852",
+      "class_node_pos": [
+        [
+          598,
+          0
+        ],
+        [
+          616,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "MockMultiServerChannelTestAI",
+        "parameters": {
+          "rotate": "bool"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void CheckExample() {\n    AddrInfoResult result;\n    struct ares_addrinfo_hints hints = {};\n    hints.ai_family = AF_INET;\n    hints.ai_flags = ARES_AI_NOSORT;\n    ares_getaddrinfo(channel_, \"www.example.com.\", NULL, &hints, AddrInfoCallback, &result);\n    Process();\n    EXPECT_TRUE(result.done_);\n    EXPECT_EQ(result.status_, ARES_SUCCESS);\n    EXPECT_THAT(result.ai_, IncludesNumAddresses(1));\n    EXPECT_THAT(result.ai_, IncludesV4Address(\"2.3.4.5\"));\n  }",
+      "fn_code_pos": [
+        [
+          604,
+          2
+        ],
+        [
+          615,
+          3
+        ]
+      ],
+      "class_code": "46f67f2671ddc08791d5b3795fea2f0e5f52d9305c840f3f5ca548e74fd8b852",
+      "class_node_pos": [
+        [
+          598,
+          0
+        ],
+        [
+          616,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "CheckExample",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "RotateMultiMockTestAI() : MockMultiServerChannelTestAI(true) {}",
+      "fn_code_pos": [
+        [
+          620,
+          2
+        ],
+        [
+          620,
+          65
+        ]
+      ],
+      "class_code": "4d89f1e3072f8dd6e612b96521c36df29bff0e7104db6feae44d145a83a8c24c",
+      "class_node_pos": [
+        [
+          618,
+          0
+        ],
+        [
+          621,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "RotateMultiMockTestAI",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "NoRotateMultiMockTestAI() : MockMultiServerChannelTestAI(false) {}",
+      "fn_code_pos": [
+        [
+          625,
+          2
+        ],
+        [
+          625,
+          68
+        ]
+      ],
+      "class_code": "6e4e0cdf90b39d8be4402e7ec1d0c7ebe6cb488e5e8625f73b85506228b88803",
+      "class_node_pos": [
+        [
+          623,
+          0
+        ],
+        [
+          626,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "NoRotateMultiMockTestAI",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(RotateMultiMockTestAI, ThirdServer) {\n  struct ares_options opts = {0};\n  int optmask = 0;\n  EXPECT_EQ(ARES_SUCCESS, ares_save_options(channel_, &opts, &optmask));\n  EXPECT_EQ(0, (optmask & ARES_OPT_NOROTATE));\n  ares_destroy_options(&opts);\n\n  DNSPacket servfailrsp;\n  servfailrsp.set_response().set_aa().set_rcode(SERVFAIL)\n    .add_question(new DNSQuestion(\"www.example.com\", T_A));\n  DNSPacket notimplrsp;\n  notimplrsp.set_response().set_aa().set_rcode(NOTIMP)\n    .add_question(new DNSQuestion(\"www.example.com\", T_A));\n  DNSPacket okrsp;\n  okrsp.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.example.com\", T_A))\n    .add_answer(new DNSARR(\"www.example.com\", 100, {2,3,4,5}));\n\n  EXPECT_CALL(*servers_[0], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[0].get(), &servfailrsp));\n  EXPECT_CALL(*servers_[1], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[1].get(), &notimplrsp));\n  EXPECT_CALL(*servers_[2], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[2].get(), &okrsp));\n  CheckExample();\n\n  // Second time around, starts from server [1].\n  EXPECT_CALL(*servers_[1], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[1].get(), &servfailrsp));\n  EXPECT_CALL(*servers_[2], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[2].get(), &notimplrsp));\n  EXPECT_CALL(*servers_[0], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[0].get(), &okrsp));\n  CheckExample();\n\n  // Third time around, starts from server [2].\n  EXPECT_CALL(*servers_[2], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[2].get(), &servfailrsp));\n  EXPECT_CALL(*servers_[0], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[0].get(), &notimplrsp));\n  EXPECT_CALL(*servers_[1], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[1].get(), &okrsp));\n  CheckExample();\n}",
+      "fn_code_pos": [
+        [
+          629,
+          0
+        ],
+        [
+          672,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(NoRotateMultiMockTestAI, ThirdServer) {\n  struct ares_options opts = {0};\n  int optmask = 0;\n  EXPECT_EQ(ARES_SUCCESS, ares_save_options(channel_, &opts, &optmask));\n  EXPECT_EQ(ARES_OPT_NOROTATE, (optmask & ARES_OPT_NOROTATE));\n  ares_destroy_options(&opts);\n\n  DNSPacket servfailrsp;\n  servfailrsp.set_response().set_aa().set_rcode(SERVFAIL)\n    .add_question(new DNSQuestion(\"www.example.com\", T_A));\n  DNSPacket notimplrsp;\n  notimplrsp.set_response().set_aa().set_rcode(NOTIMP)\n    .add_question(new DNSQuestion(\"www.example.com\", T_A));\n  DNSPacket okrsp;\n  okrsp.set_response().set_aa()\n    .add_question(new DNSQuestion(\"www.example.com\", T_A))\n    .add_answer(new DNSARR(\"www.example.com\", 100, {2,3,4,5}));\n\n  EXPECT_CALL(*servers_[0], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[0].get(), &servfailrsp));\n  EXPECT_CALL(*servers_[1], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[1].get(), &notimplrsp));\n  EXPECT_CALL(*servers_[2], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[2].get(), &okrsp));\n  CheckExample();\n\n  // Second time around, still starts from server [0].\n  EXPECT_CALL(*servers_[0], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[0].get(), &servfailrsp));\n  EXPECT_CALL(*servers_[1], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[1].get(), &notimplrsp));\n  EXPECT_CALL(*servers_[2], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[2].get(), &okrsp));\n  CheckExample();\n\n  // Third time around, still starts from server [0].\n  EXPECT_CALL(*servers_[0], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[0].get(), &servfailrsp));\n  EXPECT_CALL(*servers_[1], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[1].get(), &notimplrsp));\n  EXPECT_CALL(*servers_[2], OnRequest(\"www.example.com\", T_A))\n    .WillOnce(SetReply(servers_[2].get(), &okrsp));\n  CheckExample();\n}",
+      "fn_code_pos": [
+        [
+          674,
+          0
+        ],
+        [
+          717,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_P(MockChannelTestAI, FamilyV4ServiceName) {\n  DNSPacket rsp4;\n  rsp4.set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com\", T_A))\n    .add_answer(new DNSARR(\"example.com\", 100, {1, 1, 1, 1}))\n    .add_answer(new DNSARR(\"example.com\", 100, {2, 2, 2, 2}));\n  ON_CALL(server_, OnRequest(\"example.com\", T_A))\n    .WillByDefault(SetReply(&server_, &rsp4));\n  AddrInfoResult result = {};\n  struct ares_addrinfo_hints hints = {};\n  hints.ai_family = AF_INET;\n  hints.ai_flags = ARES_AI_NOSORT;\n  ares_getaddrinfo(channel_, \"example.com\", \"http\", &hints, AddrInfoCallback, &result);\n  Process();\n  EXPECT_TRUE(result.done_);\n  std::stringstream ss;\n  ss << result.ai_;\n  EXPECT_EQ(\"{addr=[1.1.1.1:80], addr=[2.2.2.2:80]}\", ss.str());\n}",
+      "fn_code_pos": [
+        [
+          719,
+          0
+        ],
+        [
+          737,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_P",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "FillOptions(struct ares_options * opts)",
+      "fn_dec_pos": [
+        [
+          243,
+          30
+        ],
+        [
+          243,
+          69
+        ]
+      ],
+      "class_code": "c95b595af7352b9b702cef7886a1e35d2c8ec040f08a6f9b59688b57254dec0e",
+      "class_node_pos": [
+        [
+          235,
+          0
+        ],
+        [
+          252,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "FillOptions",
+        "parameters": {
+          "opts": "struct ares_options"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "FillOptions(struct ares_options * opts, int ndots)",
+      "fn_dec_pos": [
+        [
+          288,
+          30
+        ],
+        [
+          288,
+          80
+        ]
+      ],
+      "class_code": "7e1042e3421fc4fc018ef6de7b3c455f0ccd92d1487578f934ed027a39ab4c40",
+      "class_node_pos": [
+        [
+          280,
+          0
+        ],
+        [
+          298,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "FillOptions",
+        "parameters": {
+          "opts": "struct ares_options",
+          "ndots": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "FillOptions(struct ares_options * opts, int flags)",
+      "fn_dec_pos": [
+        [
+          338,
+          30
+        ],
+        [
+          338,
+          80
+        ]
+      ],
+      "class_code": "ac2e43b7f06ca718a2d6759e7697249791b1f9caec47d42d0cab97e841c9afa6",
+      "class_node_pos": [
+        [
+          331,
+          0
+        ],
+        [
+          345,
+          1
+        ]
+      ],
+      "fn_meta": {
+        "identifier": "FillOptions",
+        "parameters": {
+          "opts": "struct ares_options",
+          "flags": "int"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {
+    "c95b595af7352b9b702cef7886a1e35d2c8ec040f08a6f9b59688b57254dec0e": {
+      "class_code": "class MockExtraOptsTestAI\n    : public MockChannelOptsTest,\n      public ::testing::WithParamInterface< std::pair<int, bool> > {\n public:\n  MockExtraOptsTestAI()\n    : MockChannelOptsTest(1, GetParam().first, GetParam().second,\n                          FillOptions(&opts_),\n                          ARES_OPT_SOCK_SNDBUF|ARES_OPT_SOCK_RCVBUF) {}\n  static struct ares_options* FillOptions(struct ares_options * opts) {\n    memset(opts, 0, sizeof(struct ares_options));\n    // Set a few options that affect socket communications\n    opts->socket_send_buffer_size = 514;\n    opts->socket_receive_buffer_size = 514;\n    return opts;\n  }\n private:\n  struct ares_options opts_;\n}",
+      "class_name": "MockExtraOptsTestAI",
+      "class_pos": [
+        [
+          235,
+          0
+        ],
+        [
+          252,
+          1
+        ]
+      ]
+    },
+    "7e1042e3421fc4fc018ef6de7b3c455f0ccd92d1487578f934ed027a39ab4c40": {
+      "class_code": "class MockExtraOptsNDotsTestAI\n    : public MockChannelOptsTest,\n      public ::testing::WithParamInterface< std::pair<int, bool> > {\n public:\n  MockExtraOptsNDotsTestAI(int ndots)\n    : MockChannelOptsTest(1, GetParam().first, GetParam().second,\n                          FillOptions(&opts_, ndots),\n                          ARES_OPT_SOCK_SNDBUF|ARES_OPT_SOCK_RCVBUF|ARES_OPT_NDOTS) {}\n  static struct ares_options* FillOptions(struct ares_options * opts, int ndots) {\n    memset(opts, 0, sizeof(struct ares_options));\n    // Set a few options that affect socket communications\n    opts->socket_send_buffer_size = 514;\n    opts->socket_receive_buffer_size = 514;\n    opts->ndots = ndots;\n    return opts;\n  }\n private:\n  struct ares_options opts_;\n}",
+      "class_name": "MockExtraOptsNDotsTestAI",
+      "class_pos": [
+        [
+          280,
+          0
+        ],
+        [
+          298,
+          1
+        ]
+      ]
+    },
+    "329d50ae96af8d0ff6e553e3b3b64d42479f49c102234b0a78ed8afdf85f80f4": {
+      "class_code": "class MockExtraOptsNDots5TestAI : public MockExtraOptsNDotsTestAI {\n public:\n  MockExtraOptsNDots5TestAI() : MockExtraOptsNDotsTestAI(5) {}\n}",
+      "class_name": "MockExtraOptsNDots5TestAI",
+      "class_pos": [
+        [
+          300,
+          0
+        ],
+        [
+          303,
+          1
+        ]
+      ]
+    },
+    "ac2e43b7f06ca718a2d6759e7697249791b1f9caec47d42d0cab97e841c9afa6": {
+      "class_code": "class MockFlagsChannelOptsTestAI\n    : public MockChannelOptsTest,\n      public ::testing::WithParamInterface< std::pair<int, bool> > {\n public:\n  MockFlagsChannelOptsTestAI(int flags)\n    : MockChannelOptsTest(1, GetParam().first, GetParam().second,\n                          FillOptions(&opts_, flags), ARES_OPT_FLAGS) {}\n  static struct ares_options* FillOptions(struct ares_options * opts, int flags) {\n    memset(opts, 0, sizeof(struct ares_options));\n    opts->flags = flags;\n    return opts;\n  }\n private:\n  struct ares_options opts_;\n}",
+      "class_name": "MockFlagsChannelOptsTestAI",
+      "class_pos": [
+        [
+          331,
+          0
+        ],
+        [
+          345,
+          1
+        ]
+      ]
+    },
+    "2a3d3b9a62c21d8309120421a56dd83b6785e6b9cedb19197b54580ef4c1264f": {
+      "class_code": "class MockNoCheckRespChannelTestAI : public MockFlagsChannelOptsTestAI {\n public:\n  MockNoCheckRespChannelTestAI() : MockFlagsChannelOptsTestAI(ARES_FLAG_NOCHECKRESP) {}\n}",
+      "class_name": "MockNoCheckRespChannelTestAI",
+      "class_pos": [
+        [
+          347,
+          0
+        ],
+        [
+          350,
+          1
+        ]
+      ]
+    },
+    "e78234b88eebc58a8d463346d9514abf0d13557809d28985d5c1a83738b610fe": {
+      "class_code": "class MockEDNSChannelTestAI : public MockFlagsChannelOptsTestAI {\n public:\n  MockEDNSChannelTestAI() : MockFlagsChannelOptsTestAI(ARES_FLAG_EDNS) {}\n}",
+      "class_name": "MockEDNSChannelTestAI",
+      "class_pos": [
+        [
+          495,
+          0
+        ],
+        [
+          498,
+          1
+        ]
+      ]
+    },
+    "46f67f2671ddc08791d5b3795fea2f0e5f52d9305c840f3f5ca548e74fd8b852": {
+      "class_code": "class MockMultiServerChannelTestAI\n  : public MockChannelOptsTest,\n    public ::testing::WithParamInterface< std::pair<int, bool> > {\n public:\n  MockMultiServerChannelTestAI(bool rotate)\n    : MockChannelOptsTest(3, GetParam().first, GetParam().second, nullptr, rotate ? ARES_OPT_ROTATE : ARES_OPT_NOROTATE) {}\n  void CheckExample() {\n    AddrInfoResult result;\n    struct ares_addrinfo_hints hints = {};\n    hints.ai_family = AF_INET;\n    hints.ai_flags = ARES_AI_NOSORT;\n    ares_getaddrinfo(channel_, \"www.example.com.\", NULL, &hints, AddrInfoCallback, &result);\n    Process();\n    EXPECT_TRUE(result.done_);\n    EXPECT_EQ(result.status_, ARES_SUCCESS);\n    EXPECT_THAT(result.ai_, IncludesNumAddresses(1));\n    EXPECT_THAT(result.ai_, IncludesV4Address(\"2.3.4.5\"));\n  }\n}",
+      "class_name": "MockMultiServerChannelTestAI",
+      "class_pos": [
+        [
+          598,
+          0
+        ],
+        [
+          616,
+          1
+        ]
+      ]
+    },
+    "4d89f1e3072f8dd6e612b96521c36df29bff0e7104db6feae44d145a83a8c24c": {
+      "class_code": "class RotateMultiMockTestAI : public MockMultiServerChannelTestAI {\n public:\n  RotateMultiMockTestAI() : MockMultiServerChannelTestAI(true) {}\n}",
+      "class_name": "RotateMultiMockTestAI",
+      "class_pos": [
+        [
+          618,
+          0
+        ],
+        [
+          621,
+          1
+        ]
+      ]
+    },
+    "6e4e0cdf90b39d8be4402e7ec1d0c7ebe6cb488e5e8625f73b85506228b88803": {
+      "class_code": "class NoRotateMultiMockTestAI : public MockMultiServerChannelTestAI {\n public:\n  NoRotateMultiMockTestAI() : MockMultiServerChannelTestAI(false) {}\n}",
+      "class_name": "NoRotateMultiMockTestAI",
+      "class_pos": [
+        [
+          623,
+          0
+        ],
+        [
+          626,
+          1
+        ]
+      ]
+    }
+  },
+  "struct_node_list": [
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        74,
+        2
+      ],
+      [
+        74,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        115,
+        2
+      ],
+      [
+        115,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        133,
+        2
+      ],
+      [
+        133,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        151,
+        2
+      ],
+      [
+        151,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        169,
+        2
+      ],
+      [
+        169,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        188,
+        2
+      ],
+      [
+        188,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        207,
+        2
+      ],
+      [
+        207,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        226,
+        2
+      ],
+      [
+        226,
+        28
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        243,
+        9
+      ],
+      [
+        243,
+        28
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        243,
+        42
+      ],
+      [
+        243,
+        61
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        244,
+        27
+      ],
+      [
+        244,
+        46
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        251,
+        2
+      ],
+      [
+        251,
+        21
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        269,
+        2
+      ],
+      [
+        269,
+        28
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        288,
+        9
+      ],
+      [
+        288,
+        28
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        288,
+        42
+      ],
+      [
+        288,
+        61
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        289,
+        27
+      ],
+      [
+        289,
+        46
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        297,
+        2
+      ],
+      [
+        297,
+        21
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        320,
+        2
+      ],
+      [
+        320,
+        28
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        338,
+        9
+      ],
+      [
+        338,
+        28
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        338,
+        42
+      ],
+      [
+        338,
+        61
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        339,
+        27
+      ],
+      [
+        339,
+        46
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        344,
+        2
+      ],
+      [
+        344,
+        21
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        361,
+        2
+      ],
+      [
+        361,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        379,
+        2
+      ],
+      [
+        379,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        397,
+        2
+      ],
+      [
+        397,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        416,
+        2
+      ],
+      [
+        416,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        435,
+        2
+      ],
+      [
+        435,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        455,
+        2
+      ],
+      [
+        455,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        483,
+        2
+      ],
+      [
+        483,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        513,
+        2
+      ],
+      [
+        513,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        542,
+        2
+      ],
+      [
+        542,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        588,
+        2
+      ],
+      [
+        588,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        606,
+        4
+      ],
+      [
+        606,
+        30
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        630,
+        2
+      ],
+      [
+        630,
+        21
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        675,
+        2
+      ],
+      [
+        675,
+        21
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        728,
+        2
+      ],
+      [
+        728,
+        28
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares-test-ai.h\"\n",
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    [
+      "#include \"dns-proto.h\"\n",
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    [
+      "#include <netinet/in.h>\n",
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        0
+      ]
+    ],
+    [
+      "#include <sstream>\n",
+      [
+        7,
+        0
+      ],
+      [
+        8,
+        0
+      ]
+    ],
+    [
+      "#include <vector>\n",
+      [
+        8,
+        0
+      ],
+      [
+        9,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

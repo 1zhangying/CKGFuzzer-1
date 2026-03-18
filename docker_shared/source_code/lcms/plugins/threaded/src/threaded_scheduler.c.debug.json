@@ -1,0 +1,63 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void  _cmsThrScheduler(struct _cmstransform_struct* CMMcargo,\n                       const void* InputBuffer,\n                       void* OutputBuffer,\n                       cmsUInt32Number PixelsPerLine,\n                       cmsUInt32Number LineCount,\n                       const cmsStride* Stride)\n{\n    cmsContext ContextID = cmsGetTransformContextID(CMMcargo);\n    _cmsTransform2Fn worker = _cmsGetTransformWorker(CMMcargo);\n    cmsInt32Number   MaxWorkers = _cmsGetTransformMaxWorkers(CMMcargo);\n\n    // flags are not actually being used\n    // cmsUInt32Number  flags = _cmsGetTransformWorkerFlags(CMMcargo);\n\n    _cmsWorkSlice master;\n    _cmsWorkSlice* slices;\n    cmsStride FixedStride = *Stride;\n    cmsHANDLE* handles;\n\n    //  Count the number of threads needed for this job. MaxWorkers is the upper limit or -1 to auto\n    cmsUInt32Number nSlices = _cmsThrCountSlices(CMMcargo, MaxWorkers, PixelsPerLine, LineCount, &FixedStride);\n    \n    // Abort early if no threaded code\n    if (nSlices <= 1) {\n\n        worker(CMMcargo, InputBuffer, OutputBuffer, PixelsPerLine, LineCount, Stride);\n        return;\n    }\n\n    // Setup master thread\n    master.CMMcargo = CMMcargo;\n    master.InputBuffer = InputBuffer;\n    master.OutputBuffer = OutputBuffer;\n    master.PixelsPerLine = PixelsPerLine;\n    master.LineCount = LineCount;\n    master.Stride = &FixedStride;\n\n    // Create memory for the slices\n    slices  = (_cmsWorkSlice*)_cmsCalloc(ContextID, nSlices, sizeof(_cmsWorkSlice));\n    handles = (cmsHANDLE*) _cmsCalloc(ContextID, nSlices, sizeof(cmsHANDLE));\n\n    if (slices == NULL || handles == NULL)\n    {\n        if (slices)  _cmsFree(ContextID, slices);\n        if (handles) _cmsFree(ContextID, handles);\n\n        // Out of memory in this case only can come from a corruption, but we do the work anyway\n        worker(CMMcargo, InputBuffer, OutputBuffer, PixelsPerLine, LineCount, Stride);\n        return;\n    }\n\n    // All seems ok so far\n    if (_cmsThrSplitWork(&master, nSlices, slices))\n    {\n        // Work is splitted. Create threads\n        cmsUInt32Number i;\n\n        for (i = 1; i < nSlices; i++)\n        {\n            handles[i] = _cmsThrCreateWorker(ContextID, worker, &slices[i]);\n        }\n\n        // Do our portion of work \n        worker(CMMcargo, slices[0].InputBuffer, slices[0].OutputBuffer, \n            slices[0].PixelsPerLine, slices[0].LineCount, slices[0].Stride);\n\n        // Wait until all threads are finished\n        for (i = 1; i < nSlices; i++)\n        {\n            _cmsThrJoinWorker(ContextID, handles[i]);\n        }\n    }\n    else\n    {\n        // Not able to split the work, so don't thread\n        worker(CMMcargo, InputBuffer, OutputBuffer, PixelsPerLine, LineCount, Stride);\n    }\n\n    _cmsFree(ContextID, slices);\n    _cmsFree(ContextID, handles);\n}",
+      "fn_code_pos": [
+        [
+          26,
+          0
+        ],
+        [
+          106,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsThrScheduler",
+        "parameters": {
+          "CMMcargo": "struct _cmstransform_struct",
+          "InputBuffer": "void",
+          "OutputBuffer": "void",
+          "PixelsPerLine": "cmsUInt32Number",
+          "LineCount": "cmsUInt32Number",
+          "Stride": "cmsStride"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct _cmstransform_struct",
+      {},
+      "",
+      [
+        26,
+        23
+      ],
+      [
+        26,
+        50
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"threaded_internal.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

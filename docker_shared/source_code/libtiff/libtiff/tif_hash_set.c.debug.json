@@ -1,0 +1,697 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static unsigned long TIFFHashSetHashPointer(const void *elt)\n{\n    return (unsigned long)(uintptr_t)((void *)(elt));\n}",
+      "fn_code_pos": [
+        [
+          89,
+          0
+        ],
+        [
+          92,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetHashPointer",
+        "parameters": {
+          "elt": "void"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static bool TIFFHashSetEqualPointer(const void *elt1, const void *elt2)\n{\n    return elt1 == elt2;\n}",
+      "fn_code_pos": [
+        [
+          107,
+          0
+        ],
+        [
+          110,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetEqualPointer",
+        "parameters": {
+          "elt1": "void",
+          "elt2": "void"
+        },
+        "return_type": "bool"
+      }
+    },
+    {
+      "fn_code": "TIFFHashSet *TIFFHashSetNew(TIFFHashSetHashFunc fnHashFunc,\n                            TIFFHashSetEqualFunc fnEqualFunc,\n                            TIFFHashSetFreeEltFunc fnFreeEltFunc)\n{\n    TIFFHashSet *set = (TIFFHashSet *)malloc(sizeof(TIFFHashSet));\n    if (set == NULL)\n        return NULL;\n    set->fnHashFunc = fnHashFunc ? fnHashFunc : TIFFHashSetHashPointer;\n    set->fnEqualFunc = fnEqualFunc ? fnEqualFunc : TIFFHashSetEqualPointer;\n    set->fnFreeEltFunc = fnFreeEltFunc;\n    set->nSize = 0;\n    set->tabList = (TIFFList **)(calloc(53, sizeof(TIFFList *)));\n    if (set->tabList == NULL)\n    {\n        free(set);\n        return NULL;\n    }\n    set->nIndiceAllocatedSize = 0;\n    set->nAllocatedSize = 53;\n    set->psRecyclingList = NULL;\n    set->nRecyclingListSize = 0;\n    set->bRehash = false;\n#ifdef HASH_DEBUG\n    set->nCollisions = 0;\n#endif\n    return set;\n}",
+      "fn_code_pos": [
+        [
+          137,
+          0
+        ],
+        [
+          163,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetNew",
+        "parameters": {
+          "fnHashFunc": "TIFFHashSetHashFunc",
+          "fnEqualFunc": "TIFFHashSetEqualFunc",
+          "fnFreeEltFunc": "TIFFHashSetFreeEltFunc"
+        },
+        "return_type": "TIFFHashSet"
+      }
+    },
+    {
+      "fn_code": "int TIFFHashSetSize(const TIFFHashSet *set)\n{\n    assert(set != NULL);\n    return set->nSize;\n}",
+      "fn_code_pos": [
+        [
+          179,
+          0
+        ],
+        [
+          183,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetSize",
+        "parameters": {
+          "set": "TIFFHashSet"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static TIFFList *TIFFHashSetGetNewListElt(TIFFHashSet *set)\n{\n    if (set->psRecyclingList)\n    {\n        TIFFList *psRet = set->psRecyclingList;\n        psRet->pData = NULL;\n        set->nRecyclingListSize--;\n        set->psRecyclingList = psRet->psNext;\n        return psRet;\n    }\n\n    return (TIFFList *)malloc(sizeof(TIFFList));\n}",
+      "fn_code_pos": [
+        [
+          189,
+          0
+        ],
+        [
+          201,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetGetNewListElt",
+        "parameters": {
+          "set": "TIFFHashSet"
+        },
+        "return_type": "TIFFList"
+      }
+    },
+    {
+      "fn_code": "static void TIFFHashSetReturnListElt(TIFFHashSet *set, TIFFList *psList)\n{\n    if (set->nRecyclingListSize < 128)\n    {\n        psList->psNext = set->psRecyclingList;\n        set->psRecyclingList = psList;\n        set->nRecyclingListSize++;\n    }\n    else\n    {\n        free(psList);\n    }\n}",
+      "fn_code_pos": [
+        [
+          207,
+          0
+        ],
+        [
+          219,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetReturnListElt",
+        "parameters": {
+          "set": "TIFFHashSet",
+          "psList": "TIFFList"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void TIFFHashSetClearInternal(TIFFHashSet *set, bool bFinalize)\n{\n    assert(set != NULL);\n    for (int i = 0; i < set->nAllocatedSize; i++)\n    {\n        TIFFList *cur = set->tabList[i];\n        while (cur)\n        {\n            if (set->fnFreeEltFunc)\n                set->fnFreeEltFunc(cur->pData);\n            TIFFList *psNext = cur->psNext;\n            if (bFinalize)\n                free(cur);\n            else\n                TIFFHashSetReturnListElt(set, cur);\n            cur = psNext;\n        }\n        set->tabList[i] = NULL;\n    }\n    set->bRehash = false;\n}",
+      "fn_code_pos": [
+        [
+          225,
+          0
+        ],
+        [
+          245,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetClearInternal",
+        "parameters": {
+          "set": "TIFFHashSet",
+          "bFinalize": "bool"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void TIFFListDestroy(TIFFList *psList)\n{\n    TIFFList *psCurrent = psList;\n\n    while (psCurrent)\n    {\n        TIFFList *const psNext = psCurrent->psNext;\n        free(psCurrent);\n        psCurrent = psNext;\n    }\n}",
+      "fn_code_pos": [
+        [
+          259,
+          0
+        ],
+        [
+          269,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFListDestroy",
+        "parameters": {
+          "psList": "TIFFList"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void TIFFHashSetDestroy(TIFFHashSet *set)\n{\n    if (set)\n    {\n        TIFFHashSetClearInternal(set, true);\n        free(set->tabList);\n        TIFFListDestroy(set->psRecyclingList);\n        free(set);\n    }\n}",
+      "fn_code_pos": [
+        [
+          284,
+          0
+        ],
+        [
+          293,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetDestroy",
+        "parameters": {
+          "set": "TIFFHashSet"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void TIFFHashSetClear(TIFFHashSet *set)\n{\n    TIFFHashSetClearInternal(set, false);\n    set->nIndiceAllocatedSize = 0;\n    set->nAllocatedSize = 53;\n#ifdef HASH_DEBUG\n    set->nCollisions = 0;\n#endif\n    set->nSize = 0;\n}",
+      "fn_code_pos": [
+        [
+          309,
+          0
+        ],
+        [
+          318,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetClear",
+        "parameters": {
+          "set": "TIFFHashSet"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void TIFFHashSetForeach(TIFFHashSet *set, TIFFHashSetIterEltFunc fnIterFunc,\n                        void *user_data)\n{\n    assert(set != NULL);\n    if (!fnIterFunc)\n        return;\n\n    for (int i = 0; i < set->nAllocatedSize; i++)\n    {\n        TIFFList *cur = set->tabList[i];\n        while (cur)\n        {\n            if (!fnIterFunc(cur->pData, user_data))\n                return;\n\n            cur = cur->psNext;\n        }\n    }\n}",
+      "fn_code_pos": [
+        [
+          340,
+          0
+        ],
+        [
+          358,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetForeach",
+        "parameters": {
+          "set": "TIFFHashSet",
+          "fnIterFunc": "TIFFHashSetIterEltFunc",
+          "user_data": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static bool TIFFHashSetRehash(TIFFHashSet *set)\n{\n    int nNewAllocatedSize = anPrimes[set->nIndiceAllocatedSize];\n    TIFFList **newTabList =\n        (TIFFList **)(calloc(nNewAllocatedSize, sizeof(TIFFList *)));\n    if (newTabList == NULL)\n        return false;\n#ifdef HASH_DEBUG\n    TIFFDebug(\"TIFFHASH\",\n              \"hashSet=%p, nSize=%d, nCollisions=%d, \"\n              \"fCollisionRate=%.02f\",\n              set, set->nSize, set->nCollisions,\n              set->nCollisions * 100.0 / set->nSize);\n    set->nCollisions = 0;\n#endif\n    for (int i = 0; i < set->nAllocatedSize; i++)\n    {\n        TIFFList *cur = set->tabList[i];\n        while (cur)\n        {\n            const unsigned long nNewHashVal =\n                set->fnHashFunc(cur->pData) % nNewAllocatedSize;\n#ifdef HASH_DEBUG\n            if (newTabList[nNewHashVal])\n                set->nCollisions++;\n#endif\n            TIFFList *psNext = cur->psNext;\n            cur->psNext = newTabList[nNewHashVal];\n            newTabList[nNewHashVal] = cur;\n            cur = psNext;\n        }\n    }\n    free(set->tabList);\n    set->tabList = newTabList;\n    set->nAllocatedSize = nNewAllocatedSize;\n    set->bRehash = false;\n    return true;\n}",
+      "fn_code_pos": [
+        [
+          365,
+          0
+        ],
+        [
+          402,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetRehash",
+        "parameters": {
+          "set": "TIFFHashSet"
+        },
+        "return_type": "bool"
+      }
+    },
+    {
+      "fn_code": "static void **TIFFHashSetFindPtr(TIFFHashSet *set, const void *elt)\n{\n    const unsigned long nHashVal = set->fnHashFunc(elt) % set->nAllocatedSize;\n    TIFFList *cur = set->tabList[nHashVal];\n    while (cur)\n    {\n        if (set->fnEqualFunc(cur->pData, elt))\n            return &cur->pData;\n        cur = cur->psNext;\n    }\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          408,
+          0
+        ],
+        [
+          419,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "bool TIFFHashSetInsert(TIFFHashSet *set, void *elt)\n{\n    assert(set != NULL);\n    void **pElt = TIFFHashSetFindPtr(set, elt);\n    if (pElt)\n    {\n        if (set->fnFreeEltFunc)\n            set->fnFreeEltFunc(*pElt);\n\n        *pElt = elt;\n        return true;\n    }\n\n    if (set->nSize >= 2 * set->nAllocatedSize / 3 ||\n        (set->bRehash && set->nIndiceAllocatedSize > 0 &&\n         set->nSize <= set->nAllocatedSize / 2))\n    {\n        set->nIndiceAllocatedSize++;\n        if (!TIFFHashSetRehash(set))\n        {\n            set->nIndiceAllocatedSize--;\n            if (set->fnFreeEltFunc)\n                set->fnFreeEltFunc(elt);\n            return false;\n        }\n    }\n\n    const unsigned long nHashVal = set->fnHashFunc(elt) % set->nAllocatedSize;\n#ifdef HASH_DEBUG\n    if (set->tabList[nHashVal])\n        set->nCollisions++;\n#endif\n\n    TIFFList *new_elt = TIFFHashSetGetNewListElt(set);\n    if (new_elt == NULL)\n    {\n        if (set->fnFreeEltFunc)\n            set->fnFreeEltFunc(elt);\n        return false;\n    }\n    new_elt->pData = elt;\n    new_elt->psNext = set->tabList[nHashVal];\n    set->tabList[nHashVal] = new_elt;\n    set->nSize++;\n\n    return true;\n}",
+      "fn_code_pos": [
+        [
+          439,
+          0
+        ],
+        [
+          485,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetInsert",
+        "parameters": {
+          "set": "TIFFHashSet",
+          "elt": "void"
+        },
+        "return_type": "bool"
+      }
+    },
+    {
+      "fn_code": "void *TIFFHashSetLookup(TIFFHashSet *set, const void *elt)\n{\n    assert(set != NULL);\n    void **pElt = TIFFHashSetFindPtr(set, elt);\n    if (pElt)\n        return *pElt;\n\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          501,
+          0
+        ],
+        [
+          509,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetLookup",
+        "parameters": {
+          "set": "TIFFHashSet",
+          "elt": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static bool TIFFHashSetRemoveInternal(TIFFHashSet *set, const void *elt,\n                                      bool bDeferRehash)\n{\n    assert(set != NULL);\n    if (set->nIndiceAllocatedSize > 0 && set->nSize <= set->nAllocatedSize / 2)\n    {\n        set->nIndiceAllocatedSize--;\n        if (bDeferRehash)\n            set->bRehash = true;\n        else\n        {\n            if (!TIFFHashSetRehash(set))\n            {\n                set->nIndiceAllocatedSize++;\n                return false;\n            }\n        }\n    }\n\n    int nHashVal = (int)(set->fnHashFunc(elt) % set->nAllocatedSize);\n    TIFFList *cur = set->tabList[nHashVal];\n    TIFFList *prev = NULL;\n    while (cur)\n    {\n        if (set->fnEqualFunc(cur->pData, elt))\n        {\n            if (prev)\n                prev->psNext = cur->psNext;\n            else\n                set->tabList[nHashVal] = cur->psNext;\n\n            if (set->fnFreeEltFunc)\n                set->fnFreeEltFunc(cur->pData);\n\n            TIFFHashSetReturnListElt(set, cur);\n#ifdef HASH_DEBUG\n            if (set->tabList[nHashVal])\n                set->nCollisions--;\n#endif\n            set->nSize--;\n            return true;\n        }\n        prev = cur;\n        cur = cur->psNext;\n    }\n    return false;\n}",
+      "fn_code_pos": [
+        [
+          515,
+          0
+        ],
+        [
+          561,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetRemoveInternal",
+        "parameters": {
+          "set": "TIFFHashSet",
+          "elt": "void",
+          "bDeferRehash": "bool"
+        },
+        "return_type": "bool"
+      }
+    },
+    {
+      "fn_code": "bool TIFFHashSetRemove(TIFFHashSet *set, const void *elt)\n{\n    return TIFFHashSetRemoveInternal(set, elt, false);\n}",
+      "fn_code_pos": [
+        [
+          576,
+          0
+        ],
+        [
+          579,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetRemove",
+        "parameters": {
+          "set": "TIFFHashSet",
+          "elt": "void"
+        },
+        "return_type": "bool"
+      }
+    },
+    {
+      "fn_code": "bool TIFFHashSetRemoveDeferRehash(TIFFHashSet *set, const void *elt)\n{\n    return TIFFHashSetRemoveInternal(set, elt, true);\n}",
+      "fn_code_pos": [
+        [
+          598,
+          0
+        ],
+        [
+          601,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetRemoveDeferRehash",
+        "parameters": {
+          "set": "TIFFHashSet",
+          "elt": "void"
+        },
+        "return_type": "bool"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "TIFFHashSetNew(TIFFHashSetHashFunc fnHashFunc,\n                            TIFFHashSetEqualFunc fnEqualFunc,\n                            TIFFHashSetFreeEltFunc fnFreeEltFunc)",
+      "fn_dec_pos": [
+        [
+          137,
+          13
+        ],
+        [
+          139,
+          65
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetNew",
+        "parameters": {
+          "fnHashFunc": "TIFFHashSetHashFunc",
+          "fnEqualFunc": "TIFFHashSetEqualFunc",
+          "fnFreeEltFunc": "TIFFHashSetFreeEltFunc"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFHashSetGetNewListElt(TIFFHashSet *set)",
+      "fn_dec_pos": [
+        [
+          189,
+          17
+        ],
+        [
+          189,
+          59
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetGetNewListElt",
+        "parameters": {
+          "set": "TIFFHashSet"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFHashSetFindPtr(TIFFHashSet *set, const void *elt)",
+      "fn_dec_pos": [
+        [
+          408,
+          14
+        ],
+        [
+          408,
+          67
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetFindPtr",
+        "parameters": {
+          "set": "TIFFHashSet",
+          "elt": "void"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFHashSetLookup(TIFFHashSet *set, const void *elt)",
+      "fn_dec_pos": [
+        [
+          501,
+          6
+        ],
+        [
+          501,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFHashSetLookup",
+        "parameters": {
+          "set": "TIFFHashSet",
+          "elt": "void"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct _TIFFList\n{\n    /*! Pointer to the data object. Should be allocated and freed by the\n     * caller.\n     * */\n    void *pData;\n    /*! Pointer to the next element in list. NULL, if current element is the\n     * last one.\n     */\n    struct _TIFFList *psNext;\n}",
+      {
+        "*pData": "void",
+        "*psNext": "struct _TIFFList"
+      },
+      "_TIFFList",
+      [
+        42,
+        0
+      ],
+      [
+        52,
+        1
+      ]
+    ],
+    [
+      "struct _TIFFHashSet\n{\n    TIFFHashSetHashFunc fnHashFunc;\n    TIFFHashSetEqualFunc fnEqualFunc;\n    TIFFHashSetFreeEltFunc fnFreeEltFunc;\n    TIFFList **tabList;\n    int nSize;\n    int nIndiceAllocatedSize;\n    int nAllocatedSize;\n    TIFFList *psRecyclingList;\n    int nRecyclingListSize;\n    bool bRehash;\n#ifdef HASH_DEBUG\n    int nCollisions;\n#endif\n}",
+      {
+        "fnHashFunc": "TIFFHashSetHashFunc",
+        "fnEqualFunc": "TIFFHashSetEqualFunc",
+        "fnFreeEltFunc": "TIFFHashSetFreeEltFunc",
+        "**tabList": "TIFFList",
+        "nSize": "int",
+        "nIndiceAllocatedSize": "int",
+        "nAllocatedSize": "int",
+        "*psRecyclingList": "TIFFList",
+        "nRecyclingListSize": "int",
+        "bRehash": "bool",
+        "nCollisions": "int"
+      },
+      "_TIFFHashSet",
+      [
+        54,
+        0
+      ],
+      [
+        69,
+        1
+      ]
+    ],
+    [
+      "typedef struct _TIFFList TIFFList;",
+      {},
+      "TIFFList",
+      [
+        39,
+        0
+      ],
+      [
+        39,
+        34
+      ]
+    ],
+    [
+      "struct _TIFFList\n{\n    /*! Pointer to the data object. Should be allocated and freed by the\n     * caller.\n     * */\n    void *pData;\n    /*! Pointer to the next element in list. NULL, if current element is the\n     * last one.\n     */\n    struct _TIFFList *psNext;\n}",
+      {
+        "*pData": "void",
+        "*psNext": "struct _TIFFList"
+      },
+      "_TIFFList",
+      [
+        42,
+        0
+      ],
+      [
+        52,
+        1
+      ]
+    ],
+    [
+      "struct _TIFFList",
+      {},
+      "",
+      [
+        51,
+        4
+      ],
+      [
+        51,
+        20
+      ]
+    ],
+    [
+      "struct _TIFFHashSet\n{\n    TIFFHashSetHashFunc fnHashFunc;\n    TIFFHashSetEqualFunc fnEqualFunc;\n    TIFFHashSetFreeEltFunc fnFreeEltFunc;\n    TIFFList **tabList;\n    int nSize;\n    int nIndiceAllocatedSize;\n    int nAllocatedSize;\n    TIFFList *psRecyclingList;\n    int nRecyclingListSize;\n    bool bRehash;\n#ifdef HASH_DEBUG\n    int nCollisions;\n#endif\n}",
+      {
+        "fnHashFunc": "TIFFHashSetHashFunc",
+        "fnEqualFunc": "TIFFHashSetEqualFunc",
+        "fnFreeEltFunc": "TIFFHashSetFreeEltFunc",
+        "**tabList": "TIFFList",
+        "nSize": "int",
+        "nIndiceAllocatedSize": "int",
+        "nAllocatedSize": "int",
+        "*psRecyclingList": "TIFFList",
+        "nRecyclingListSize": "int",
+        "bRehash": "bool",
+        "nCollisions": "int"
+      },
+      "_TIFFHashSet",
+      [
+        54,
+        0
+      ],
+      [
+        69,
+        1
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_hash_set.h\"\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <assert.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include <stdbool.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include <stdint.h>\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

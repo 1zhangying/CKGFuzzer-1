@@ -1,0 +1,195 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int check_cluster(int cluster, unsigned char *buffer,\n                         unsigned char *expected_cluster)\n{\n    unsigned char *target = buffer + cluster * 6;\n\n    if (memcmp(target, expected_cluster, 6) == 0)\n    {\n        return 0;\n    }\n\n    fprintf(stderr, \"Cluster %d did not match expected results.\\n\", cluster);\n    fprintf(stderr,\n            \"Expect: %3d %3d   %3d   %3d\\n\"\n            \"        %3d %3d\\n\",\n            expected_cluster[0], expected_cluster[1], expected_cluster[4],\n            expected_cluster[5], expected_cluster[2], expected_cluster[3]);\n    fprintf(stderr,\n            \"   Got: %3d %3d   %3d   %3d\\n\"\n            \"        %3d %3d\\n\",\n            target[0], target[1], target[4], target[5], target[2], target[3]);\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          48,
+          0
+        ],
+        [
+          69,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "check_cluster",
+        "parameters": {
+          "cluster": "int",
+          "buffer": "unsigned char",
+          "expected_cluster": "unsigned char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int check_rgb_pixel(int pixel, int min_red, int max_red, int min_green,\n                           int max_green, int min_blue, int max_blue,\n                           unsigned char *buffer)\n{\n    unsigned char *rgb = buffer + 3 * pixel;\n\n    if (rgb[0] >= min_red && rgb[0] <= max_red && rgb[1] >= min_green &&\n        rgb[1] <= max_green && rgb[2] >= min_blue && rgb[2] <= max_blue)\n    {\n        return 0;\n    }\n\n    fprintf(stderr, \"Pixel %d did not match expected results.\\n\", pixel);\n    fprintf(stderr,\n            \"Got R=%d (expected %d..%d), G=%d (expected %d..%d), B=%d \"\n            \"(expected %d..%d)\\n\",\n            rgb[0], min_red, max_red, rgb[1], min_green, max_green, rgb[2],\n            min_blue, max_blue);\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          71,
+          0
+        ],
+        [
+          90,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "check_rgb_pixel",
+        "parameters": {
+          "pixel": "int",
+          "min_red": "int",
+          "max_red": "int",
+          "min_green": "int",
+          "max_green": "int",
+          "min_blue": "int",
+          "max_blue": "int",
+          "buffer": "unsigned char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int check_rgba_pixel(int pixel, int min_red, int max_red, int min_green,\n                            int max_green, int min_blue, int max_blue,\n                            int min_alpha, int max_alpha, uint32_t *buffer)\n{\n    /* RGBA images are upside down - adjust for normal ordering */\n    int adjusted_pixel = pixel % 128 + (127 - (pixel / 128)) * 128;\n    uint32_t rgba = buffer[adjusted_pixel];\n\n    if (TIFFGetR(rgba) >= (uint32_t)min_red &&\n        TIFFGetR(rgba) <= (uint32_t)max_red &&\n        TIFFGetG(rgba) >= (uint32_t)min_green &&\n        TIFFGetG(rgba) <= (uint32_t)max_green &&\n        TIFFGetB(rgba) >= (uint32_t)min_blue &&\n        TIFFGetB(rgba) <= (uint32_t)max_blue &&\n        TIFFGetA(rgba) >= (uint32_t)min_alpha &&\n        TIFFGetA(rgba) <= (uint32_t)max_alpha)\n    {\n        return 0;\n    }\n\n    fprintf(stderr, \"Pixel %d did not match expected results.\\n\", pixel);\n    fprintf(stderr,\n            \"Got R=%d (expected %d..%d), G=%d (expected %d..%d), B=%d \"\n            \"(expected %d..%d), A=%d (expected %d..%d)\\n\",\n            TIFFGetR(rgba), min_red, max_red, TIFFGetG(rgba), min_green,\n            max_green, TIFFGetB(rgba), min_blue, max_blue, TIFFGetA(rgba),\n            min_alpha, max_alpha);\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          92,
+          0
+        ],
+        [
+          120,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "check_rgba_pixel",
+        "parameters": {
+          "pixel": "int",
+          "min_red": "int",
+          "max_red": "int",
+          "min_green": "int",
+          "max_green": "int",
+          "min_blue": "int",
+          "max_blue": "int",
+          "min_alpha": "int",
+          "max_alpha": "int",
+          "buffer": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char **argv)\n{\n    TIFF *tif;\n    static const char *srcfilerel = \"images/quad-tile.jpg.tiff\";\n    char *srcdir = NULL;\n    char srcfile[1024];\n    unsigned short h, v;\n    int status;\n    unsigned char *buffer;\n    uint32_t *rgba_buffer;\n    tsize_t sz, szout;\n    unsigned int pixel_status = 0;\n\n    (void)argc;\n    (void)argv;\n\n    if ((srcdir = getenv(\"srcdir\")) == NULL)\n    {\n        srcdir = \".\";\n    }\n    if ((strlen(srcdir) + 1 + strlen(srcfilerel)) >= sizeof(srcfile))\n    {\n        fprintf(stderr, \"srcdir too long %s\\n\", srcdir);\n        exit(1);\n    }\n    strcpy(srcfile, srcdir);\n    strcat(srcfile, \"/\");\n    strcat(srcfile, srcfilerel);\n\n    tif = TIFFOpen(srcfile, \"r\");\n    if (tif == NULL)\n    {\n        fprintf(stderr, \"Could not open %s\\n\", srcfile);\n        exit(1);\n    }\n\n    status = TIFFGetField(tif, TIFFTAG_YCBCRSUBSAMPLING, &h, &v);\n    if (status == 0 || h != 2 || v != 2)\n    {\n        fprintf(stderr, \"Could not retrieve subsampling tag.\\n\");\n        exit(1);\n    }\n\n    /*\n     * What is the appropriate size of a YCbCr encoded tile?\n     */\n    sz = TIFFTileSize(tif);\n    if (sz != 24576)\n    {\n        fprintf(stderr, \"tiles are %d bytes\\n\", (int)sz);\n        exit(1);\n    }\n\n    buffer = (unsigned char *)malloc(sz);\n\n    /*\n     * Read a tile in decompressed form, but still YCbCr subsampled.\n     */\n    szout = TIFFReadEncodedTile(tif, 9, buffer, sz);\n    if (szout != sz)\n    {\n        fprintf(stderr,\n                \"Did not get expected result code from \"\n                \"TIFFReadEncodedTile()(%d instead of %d)\\n\",\n                (int)szout, (int)sz);\n        return 1;\n    }\n\n    if (check_cluster(0, buffer, cluster_0) ||\n        check_cluster(64, buffer, cluster_64) ||\n        check_cluster(128, buffer, cluster_128))\n    {\n        exit(1);\n    }\n    free(buffer);\n\n    /*\n     * Read a tile using the built-in conversion to RGB format provided by the\n     * JPEG library.\n     */\n    TIFFSetField(tif, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB);\n\n    sz = TIFFTileSize(tif);\n    if (sz != 128 * 128 * 3)\n    {\n        fprintf(stderr, \"tiles are %d bytes\\n\", (int)sz);\n        exit(1);\n    }\n\n    buffer = (unsigned char *)malloc(sz);\n\n    szout = TIFFReadEncodedTile(tif, 9, buffer, sz);\n    if (szout != sz)\n    {\n        fprintf(stderr,\n                \"Did not get expected result code from \"\n                \"TIFFReadEncodedTile()(%d instead of %d)\\n\",\n                (int)szout, (int)sz);\n        return 1;\n    }\n\n    /*\n     * JPEG decoding is inherently inexact, so we can't test for exact\n     * pixel values.  (Well, if we knew exactly which libjpeg version\n     * we were using, and with what settings, we could expect specific\n     * values ... but it's not worth the trouble to keep track of.)\n     * Hence, use ranges of expected values.  The ranges may need to be\n     * widened over time as more versions of libjpeg appear.\n     */\n    pixel_status |= check_rgb_pixel(0, 15, 18, 0, 0, 18, 41, buffer);\n    pixel_status |= check_rgb_pixel(64, 0, 0, 0, 0, 0, 2, buffer);\n    pixel_status |= check_rgb_pixel(512, 5, 6, 34, 36, 182, 196, buffer);\n\n    free(buffer);\n\n    TIFFClose(tif);\n\n    /*\n     * Reopen and test reading using the RGBA interface.\n     */\n    tif = TIFFOpen(srcfile, \"r\");\n\n    sz = 128 * 128 * sizeof(uint32_t);\n    rgba_buffer = (uint32_t *)malloc(sz);\n\n    if (!TIFFReadRGBATile(tif, 1 * 128, 2 * 128, rgba_buffer))\n    {\n        fprintf(stderr, \"TIFFReadRGBATile() returned failure code.\\n\");\n        return 1;\n    }\n\n    /*\n     * Currently TIFFReadRGBATile() just uses JPEGCOLORMODE_RGB so this\n     * trivially matches the last results.  Eventually we should actually\n     * accomplish it from the YCbCr subsampled buffer ourselves in which\n     * case the results may be subtly different but similar.\n     */\n    pixel_status |=\n        check_rgba_pixel(0, 15, 18, 0, 0, 18, 41, 255, 255, rgba_buffer);\n    pixel_status |=\n        check_rgba_pixel(64, 0, 0, 0, 0, 0, 2, 255, 255, rgba_buffer);\n    pixel_status |=\n        check_rgba_pixel(512, 5, 6, 34, 36, 182, 196, 255, 255, rgba_buffer);\n\n    free(rgba_buffer);\n    TIFFClose(tif);\n\n    if (pixel_status)\n    {\n        exit(1);\n    }\n\n    exit(0);\n}",
+      "fn_code_pos": [
+        [
+          122,
+          0
+        ],
+        [
+          275,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        40,
+        0
+      ],
+      [
+        41,
+        0
+      ]
+    ],
+    [
+      "#include \"jpeglib.h\" /* Needed for JPEG_LIB_VERSION */\n",
+      [
+        42,
+        0
+      ],
+      [
+        43,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

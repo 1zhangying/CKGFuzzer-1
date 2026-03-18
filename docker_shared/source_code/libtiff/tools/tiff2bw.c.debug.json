@@ -1,0 +1,443 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void compresscontig(unsigned char *out, unsigned char *rgb, uint32_t n)\n{\n    register int v, red = RED, green = GREEN, blue = BLUE;\n\n    while (n-- > 0)\n    {\n        v = red * (*rgb++);\n        v += green * (*rgb++);\n        v += blue * (*rgb++);\n        *out++ = v >> 8;\n    }\n}",
+      "fn_code_pos": [
+        [
+          55,
+          0
+        ],
+        [
+          66,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "compresscontig",
+        "parameters": {
+          "out": "unsigned char",
+          "rgb": "unsigned char",
+          "n": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void compresssep(unsigned char *out, unsigned char *r, unsigned char *g,\n                        unsigned char *b, uint32_t n)\n{\n    register uint32_t red = RED, green = GREEN, blue = BLUE;\n\n    while (n-- > 0)\n        *out++ =\n            (unsigned char)((red * (*r++) + green * (*g++) + blue * (*b++)) >>\n                            8);\n}",
+      "fn_code_pos": [
+        [
+          68,
+          0
+        ],
+        [
+          77,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "compresssep",
+        "parameters": {
+          "out": "unsigned char",
+          "r": "unsigned char",
+          "g": "unsigned char",
+          "b": "unsigned char",
+          "n": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int checkcmap(TIFF *tif, int n, uint16_t *r, uint16_t *g, uint16_t *b)\n{\n    while (n-- > 0)\n        if (*r++ >= 256 || *g++ >= 256 || *b++ >= 256)\n            return (16);\n    TIFFWarning(TIFFFileName(tif), \"Assuming 8-bit colormap\");\n    return (8);\n}",
+      "fn_code_pos": [
+        [
+          79,
+          0
+        ],
+        [
+          86,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "checkcmap",
+        "parameters": {
+          "tif": "TIFF",
+          "n": "int",
+          "r": "uint16_t",
+          "g": "uint16_t",
+          "b": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void compresspalette(unsigned char *out, unsigned char *data, uint32_t n,\n                            uint16_t *rmap, uint16_t *gmap, uint16_t *bmap)\n{\n    register int v, red = RED, green = GREEN, blue = BLUE;\n\n    while (n-- > 0)\n    {\n        unsigned int ix = *data++;\n        v = red * rmap[ix];\n        v += green * gmap[ix];\n        v += blue * bmap[ix];\n        *out++ = v >> 8;\n    }\n}",
+      "fn_code_pos": [
+        [
+          88,
+          0
+        ],
+        [
+          101,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "compresspalette",
+        "parameters": {
+          "out": "unsigned char",
+          "data": "unsigned char",
+          "n": "uint32_t",
+          "rmap": "uint16_t",
+          "gmap": "uint16_t",
+          "bmap": "uint16_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    uint32_t rowsperstrip = (uint32_t)-1;\n    TIFF *in, *out;\n    uint32_t w, h;\n    uint16_t samplesperpixel;\n    uint16_t bitspersample;\n    uint16_t config;\n    uint16_t photometric;\n    uint16_t *red;\n    uint16_t *green;\n    uint16_t *blue;\n    tsize_t rowsize;\n    register uint32_t row;\n    register tsample_t s;\n    unsigned char *inbuf, *outbuf;\n    char thing[1024];\n    int c;\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n\n    in = (TIFF *)NULL;\n    out = (TIFF *)NULL;\n    inbuf = (unsigned char *)NULL;\n    outbuf = (unsigned char *)NULL;\n\n    while ((c = getopt(argc, argv, \"c:r:R:G:B:h\")) != -1)\n        switch (c)\n        {\n            case 'c': /* compression scheme */\n                if (!processCompressOptions(optarg))\n                    usage(EXIT_FAILURE);\n                break;\n            case 'r': /* rows/strip */\n                rowsperstrip = atoi(optarg);\n                break;\n            case 'R':\n                RED = PCT(atoi(optarg));\n                break;\n            case 'G':\n                GREEN = PCT(atoi(optarg));\n                break;\n            case 'B':\n                BLUE = PCT(atoi(optarg));\n                break;\n            case 'h':\n                usage(EXIT_SUCCESS);\n                /*NOTREACHED*/\n                break;\n            case '?':\n                usage(EXIT_FAILURE);\n                /*NOTREACHED*/\n                break;\n        }\n    if (argc - optind < 2)\n        usage(EXIT_FAILURE);\n    in = TIFFOpen(argv[optind], \"r\");\n    if (in == NULL)\n        return (EXIT_FAILURE);\n    photometric = 0;\n    TIFFGetField(in, TIFFTAG_PHOTOMETRIC, &photometric);\n    if (photometric != PHOTOMETRIC_RGB && photometric != PHOTOMETRIC_PALETTE)\n    {\n        fprintf(\n            stderr,\n            \"%s: Bad photometric; can only handle RGB and Palette images.\\n\",\n            argv[optind]);\n        goto tiff2bw_error;\n    }\n    TIFFGetField(in, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);\n    if (samplesperpixel != 1 && samplesperpixel != 3)\n    {\n        fprintf(stderr, \"%s: Bad samples/pixel %u.\\n\", argv[optind],\n                samplesperpixel);\n        goto tiff2bw_error;\n    }\n    if (photometric == PHOTOMETRIC_RGB && samplesperpixel != 3)\n    {\n        fprintf(stderr, \"%s: Bad samples/pixel %u for PHOTOMETRIC_RGB.\\n\",\n                argv[optind], samplesperpixel);\n        goto tiff2bw_error;\n    }\n    TIFFGetField(in, TIFFTAG_BITSPERSAMPLE, &bitspersample);\n    if (bitspersample != 8)\n    {\n        fprintf(stderr, \" %s: Sorry, only handle 8-bit samples.\\n\",\n                argv[optind]);\n        goto tiff2bw_error;\n    }\n    TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &w);\n    TIFFGetField(in, TIFFTAG_IMAGELENGTH, &h);\n    TIFFGetField(in, TIFFTAG_PLANARCONFIG, &config);\n\n    out = TIFFOpen(argv[optind + 1], \"w\");\n    if (out == NULL)\n    {\n        goto tiff2bw_error;\n    }\n    TIFFSetField(out, TIFFTAG_IMAGEWIDTH, w);\n    TIFFSetField(out, TIFFTAG_IMAGELENGTH, h);\n    TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, 8);\n    TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, 1);\n    TIFFSetField(out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);\n    cpTags(in, out);\n    if (compression != (uint16_t)-1)\n    {\n        TIFFSetField(out, TIFFTAG_COMPRESSION, compression);\n        switch (compression)\n        {\n            case COMPRESSION_JPEG:\n                TIFFSetField(out, TIFFTAG_JPEGQUALITY, quality);\n                TIFFSetField(out, TIFFTAG_JPEGCOLORMODE, jpegcolormode);\n                break;\n            case COMPRESSION_LZW:\n            case COMPRESSION_ADOBE_DEFLATE:\n            case COMPRESSION_DEFLATE:\n                if (predictor != 0)\n                    TIFFSetField(out, TIFFTAG_PREDICTOR, predictor);\n                break;\n        }\n    }\n    TIFFSetField(out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);\n    snprintf(thing, sizeof(thing), \"B&W version of %s\", argv[optind]);\n    TIFFSetField(out, TIFFTAG_IMAGEDESCRIPTION, thing);\n    TIFFSetField(out, TIFFTAG_SOFTWARE, \"tiff2bw\");\n    outbuf = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(out));\n    if (!outbuf)\n    {\n        fprintf(stderr, \"Out of memory\\n\");\n        goto tiff2bw_error;\n    }\n    TIFFSetField(out, TIFFTAG_ROWSPERSTRIP,\n                 TIFFDefaultStripSize(out, rowsperstrip));\n\n#define pack(a, b) ((a) << 8 | (b))\n    switch (pack(photometric, config))\n    {\n        case pack(PHOTOMETRIC_PALETTE, PLANARCONFIG_CONTIG):\n        case pack(PHOTOMETRIC_PALETTE, PLANARCONFIG_SEPARATE):\n            TIFFGetField(in, TIFFTAG_COLORMAP, &red, &green, &blue);\n            /*\n             * Convert 16-bit colormap to 8-bit (unless it looks\n             * like an old-style 8-bit colormap).\n             */\n            if (checkcmap(in, 1 << bitspersample, red, green, blue) == 16)\n            {\n                int i;\n#define CVT(x) (((x)*255L) / ((1L << 16) - 1))\n                for (i = (1 << bitspersample) - 1; i >= 0; i--)\n                {\n                    red[i] = CVT(red[i]);\n                    green[i] = CVT(green[i]);\n                    blue[i] = CVT(blue[i]);\n                }\n#undef CVT\n            }\n            inbuf = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(in));\n            if (!inbuf)\n            {\n                fprintf(stderr, \"Out of memory\\n\");\n                goto tiff2bw_error;\n            }\n            for (row = 0; row < h; row++)\n            {\n                if (TIFFReadScanline(in, inbuf, row, 0) < 0)\n                    break;\n                compresspalette(outbuf, inbuf, w, red, green, blue);\n                if (TIFFWriteScanline(out, outbuf, row, 0) < 0)\n                    break;\n            }\n            break;\n        case pack(PHOTOMETRIC_RGB, PLANARCONFIG_CONTIG):\n            inbuf = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(in));\n            if (!inbuf)\n            {\n                fprintf(stderr, \"Out of memory\\n\");\n                goto tiff2bw_error;\n            }\n            for (row = 0; row < h; row++)\n            {\n                if (TIFFReadScanline(in, inbuf, row, 0) < 0)\n                    break;\n                compresscontig(outbuf, inbuf, w);\n                if (TIFFWriteScanline(out, outbuf, row, 0) < 0)\n                    break;\n            }\n            break;\n        case pack(PHOTOMETRIC_RGB, PLANARCONFIG_SEPARATE):\n        {\n            tmsize_t inbufsize;\n            rowsize = TIFFScanlineSize(in);\n            inbufsize = TIFFSafeMultiply(tmsize_t, 3, rowsize);\n            inbuf = (unsigned char *)_TIFFmalloc(inbufsize);\n            if (!inbuf)\n            {\n                fprintf(stderr, \"Out of memory\\n\");\n                goto tiff2bw_error;\n            }\n            for (row = 0; row < h; row++)\n            {\n                for (s = 0; s < 3; s++)\n                    if (TIFFReadScanline(in, inbuf + s * rowsize, row, s) < 0)\n                        goto tiff2bw_error;\n                compresssep(outbuf, inbuf, inbuf + rowsize, inbuf + 2 * rowsize,\n                            w);\n                if (TIFFWriteScanline(out, outbuf, row, 0) < 0)\n                    break;\n            }\n            break;\n        }\n    }\n#undef pack\n    if (inbuf)\n        _TIFFfree(inbuf);\n    if (outbuf)\n        _TIFFfree(outbuf);\n    TIFFClose(in);\n    TIFFClose(out);\n    return (EXIT_SUCCESS);\n\ntiff2bw_error:\n    if (inbuf)\n        _TIFFfree(inbuf);\n    if (outbuf)\n        _TIFFfree(outbuf);\n    if (out)\n        TIFFClose(out);\n    if (in)\n        TIFFClose(in);\n    return (EXIT_FAILURE);\n}",
+      "fn_code_pos": [
+        [
+          110,
+          0
+        ],
+        [
+          342,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int processCompressOptions(char *opt)\n{\n    if (streq(opt, \"none\"))\n        compression = COMPRESSION_NONE;\n    else if (streq(opt, \"packbits\"))\n        compression = COMPRESSION_PACKBITS;\n    else if (strneq(opt, \"jpeg\", 4))\n    {\n        char *cp = strchr(opt, ':');\n\n        compression = COMPRESSION_JPEG;\n        while (cp)\n        {\n            if (isdigit((int)cp[1]))\n                quality = atoi(cp + 1);\n            else if (cp[1] == 'r')\n                jpegcolormode = JPEGCOLORMODE_RAW;\n            else\n                usage(EXIT_FAILURE);\n\n            cp = strchr(cp + 1, ':');\n        }\n    }\n    else if (strneq(opt, \"lzw\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_LZW;\n    }\n    else if (strneq(opt, \"zip\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_ADOBE_DEFLATE;\n    }\n    else\n        return (0);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          344,
+          0
+        ],
+        [
+          384,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {
+          "opt": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void cpTag(TIFF *in, TIFF *out, uint16_t tag, uint16_t count,\n                  TIFFDataType type)\n{\n    switch (type)\n    {\n        case TIFF_SHORT:\n            if (count == 1)\n            {\n                uint16_t shortv;\n                CopyField(tag, shortv);\n            }\n            else if (count == 2)\n            {\n                uint16_t shortv1, shortv2;\n                CopyField2(tag, shortv1, shortv2);\n            }\n            else if (count == 4)\n            {\n                uint16_t *tr, *tg, *tb, *ta;\n                CopyField4(tag, tr, tg, tb, ta);\n            }\n            else if (count == (uint16_t)-1)\n            {\n                uint16_t shortv1;\n                uint16_t *shortav;\n                CopyField2(tag, shortv1, shortav);\n            }\n            break;\n        case TIFF_LONG:\n        {\n            uint32_t longv;\n            CopyField(tag, longv);\n        }\n        break;\n        case TIFF_RATIONAL:\n            if (count == 1)\n            {\n                float floatv;\n                CopyField(tag, floatv);\n            }\n            else if (count == (uint16_t)-1)\n            {\n                float *floatav;\n                CopyField(tag, floatav);\n            }\n            break;\n        case TIFF_ASCII:\n        {\n            char *stringv;\n            CopyField(tag, stringv);\n        }\n        break;\n        case TIFF_DOUBLE:\n            if (count == 1)\n            {\n                double doublev;\n                CopyField(tag, doublev);\n            }\n            else if (count == (uint16_t)-1)\n            {\n                double *doubleav;\n                CopyField(tag, doubleav);\n            }\n            break;\n        default:\n            TIFFError(TIFFFileName(in),\n                      \"Data type %d is not supported, tag %d skipped.\", tag,\n                      type);\n    }\n}",
+      "fn_code_pos": [
+        [
+          399,
+          0
+        ],
+        [
+          468,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpTag",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF",
+          "tag": "uint16_t",
+          "count": "uint16_t",
+          "type": "TIFFDataType"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void cpTags(TIFF *in, TIFF *out)\n{\n    const struct cpTag *p;\n    for (p = tags; p < &tags[NTAGS]; p++)\n    {\n        if (p->tag == TIFFTAG_GROUP3OPTIONS)\n        {\n            uint16_t compression;\n            if (!TIFFGetField(in, TIFFTAG_COMPRESSION, &compression) ||\n                compression != COMPRESSION_CCITTFAX3)\n                continue;\n        }\n        if (p->tag == TIFFTAG_GROUP4OPTIONS)\n        {\n            uint16_t compression;\n            if (!TIFFGetField(in, TIFFTAG_COMPRESSION, &compression) ||\n                compression != COMPRESSION_CCITTFAX4)\n                continue;\n        }\n        cpTag(in, out, p->tag, p->count, p->type);\n    }\n}",
+      "fn_code_pos": [
+        [
+          517,
+          0
+        ],
+        [
+          538,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpTags",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"%s\\n\\n\", TIFFGetVersion());\n    fprintf(out, \"%s\", usage_info);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          576,
+          0
+        ],
+        [
+          583,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "usage(int code)",
+      "fn_dec_pos": [
+        [
+          52,
+          12
+        ],
+        [
+          52,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "processCompressOptions(char *)",
+      "fn_dec_pos": [
+        [
+          53,
+          11
+        ],
+        [
+          53,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cpTags(TIFF *in, TIFF *out)",
+      "fn_dec_pos": [
+        [
+          108,
+          12
+        ],
+        [
+          108,
+          39
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpTags",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct cpTag\n{\n    uint16_t tag;\n    uint16_t count;\n    TIFFDataType type;\n}",
+      {
+        "tag": "uint16_t",
+        "count": "uint16_t",
+        "type": "TIFFDataType"
+      },
+      "cpTag",
+      [
+        475,
+        13
+      ],
+      [
+        480,
+        1
+      ]
+    ],
+    [
+      "struct cpTag\n{\n    uint16_t tag;\n    uint16_t count;\n    TIFFDataType type;\n}",
+      {
+        "tag": "uint16_t",
+        "count": "uint16_t",
+        "type": "TIFFDataType"
+      },
+      "cpTag",
+      [
+        475,
+        13
+      ],
+      [
+        480,
+        1
+      ]
+    ],
+    [
+      "struct cpTag",
+      {},
+      "",
+      [
+        519,
+        10
+      ],
+      [
+        519,
+        22
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <ctype.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -1,0 +1,167 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		* Copyright (C) 2010 Jeremy Lal <kapouer@melix.org>	
+4		*	
+5		* Permission to use, copy, modify, and distribute this	
+6		* software and its documentation for any purpose and without	
+7		* fee is hereby granted, provided that the above copyright	
+8		* notice appear in all copies and that both that copyright	
+9		* notice and this permission notice appear in supporting	
+10		* documentation, and that the name of M.I.T. not be used in	
+11		* advertising or publicity pertaining to distribution of the	
+12		* software without specific, written prior permission.	
+13		* M.I.T. makes no representations about the suitability of	
+14		* this software for any purpose.  It is provided "as is"	
+15		* without express or implied warranty.	
+16		*/	
+17			
+18		#include "ares_setup.h"	
+19			
+20		#ifdef HAVE_NETINET_IN_H	
+21		#  include <netinet/in.h>	
+22		#endif	
+23		#ifdef HAVE_NETDB_H	
+24		#  include <netdb.h>	
+25		#endif	
+26		#ifdef HAVE_ARPA_INET_H	
+27		#  include <arpa/inet.h>	
+28		#endif	
+29			
+30		#include "ares_nameser.h"	
+31			
+32		#include "ares.h"	
+33		#include "ares_dns.h"	
+34		#include "ares_data.h"	
+35		#include "ares_private.h"	
+36			
+37		int	
+38		ares_parse_mx_reply (const unsigned char *abuf, int alen,	
+39		struct ares_mx_reply **mx_out)	
+40	243	{	
+41	243	unsigned int qdcount, ancount, i;	
+42	243	const unsigned char *aptr, *vptr;	
+43	243	int status, rr_type, rr_class, rr_len;	
+44	243	long len;	
+45	243	char *hostname = NULL, *rr_name = NULL;	
+46	243	struct ares_mx_reply *mx_head = NULL;	
+47	243	struct ares_mx_reply *mx_last = NULL;	
+48	243	struct ares_mx_reply *mx_curr;	
+49			
+50		/* Set *mx_out to NULL for all failure cases. */	
+51	243	*mx_out = NULL;	
+52			
+53		/* Give up if abuf doesn't have room for a header. */	
+54	243	if (alen < HFIXEDSZ)	
+55	0	returnARES_EBADRESP;	
+56			
+57		/* Fetch the question and answer count from the header. */	
+58	243	qdcount = DNS_HEADER_QDCOUNT (abuf);	
+59	243	ancount = DNS_HEADER_ANCOUNT (abuf);	
+60	243	if (qdcount != 1)	
+61	11	return ARES_EBADRESP;	
+62	232	if (ancount == 0)	
+63	25	return ARES_ENODATA;	
+64			
+65		/* Expand the name from the question, and skip past the question. */	
+66	207	aptr = abuf + HFIXEDSZ;	
+67	207	status = ares_expand_name (aptr, abuf, alen, &hostname, &len);	
+68	207	if (status != ARES_SUCCESS)	
+69	13	return status;	
+70			
+71	194	if (aptr + len + QFIXEDSZ > abuf + alen)	
+72	34	{	
+73	34	ares_free (hostname);	
+74	34	return ARES_EBADRESP;	
+75	34	}	
+76	160	aptr += len + QFIXEDSZ;	
+77			
+78		/* Examine each answer resource record (RR) in turn. */	
+79	648	for (i = 0; i < ancount; i++)	
+80	642	{	
+81		/* Decode the RR up to the data field. */	
+82	642	status = ares_expand_name (aptr, abuf, alen, &rr_name, &len);	
+83	642	if (status != ARES_SUCCESS)	
+84	85	{	
+85	85	break;	
+86	85	}	
+87	557	aptr += len;	
+88	557	if (aptr + RRFIXEDSZ > abuf + alen)	
+89	36	{	
+90	36	status = ARES_EBADRESP;	
+91	36	break;	
+92	36	}	
+93	521	rr_type = DNS_RR_TYPE (aptr);	
+94	521	rr_class = DNS_RR_CLASS (aptr);	
+95	521	rr_len = DNS_RR_LEN (aptr);	
+96	521	aptr += RRFIXEDSZ;	
+97	521	if (aptr + rr_len > abuf + alen)	
+98	33	{	
+99	33	status = ARES_EBADRESP;	
+100	33	break;	
+101	33	}	
+102			
+103		/* Check if we are really looking at a MX record */	
+104	488	if (rr_class == C_IN && rr_type == T_MX)	
+105	0	{	
+106		/* parse the MX record itself */	
+107	0	if (rr_len < 2)	
+108	0	{	
+109	0	status =ARES_EBADRESP;	
+110	0	break;	
+111	0	}	
+112			
+113		/* Allocate storage for this MX answer appending it to the list */	
+114	0	mx_curr = ares_malloc_data(ARES_DATATYPE_MX_REPLY);	
+115	0	if (!mx_curr)	
+116	0	{	
+117	0	status =ARES_ENOMEM;	
+118	0	break;	
+119	0	}	
+120	0	if (mx_last)	
+121	0	{	
+122	0	mx_last->next = mx_curr;	
+123	0	}	
+124	0	else	
+125	0	{	
+126	0	mx_head = mx_curr;	
+127	0	}	
+128	0	mx_last = mx_curr;	
+129			
+130	0	vptr = aptr;	
+131	0	mx_curr->priority =DNS__16BIT(vptr);	
+132	0	vptr += sizeof(unsigned short);	
+133			
+134	0	status = ares_expand_name (vptr, abuf, alen, &mx_curr->host, &len);	
+135	0	if (status !=ARES_SUCCESS)	
+136	0	break;	
+137	0	}	
+138			
+139		/* Don't lose memory in the next iteration */	
+140	488	ares_free (rr_name);	
+141	488	rr_name = NULL;	
+142			
+143		/* Move on to the next record */	
+144	488	aptr += rr_len;	
+145	488	}	
+146			
+147	160	if (hostname)	
+148	160	ares_free (hostname);	
+149	160	if (rr_name)	
+150	69	ares_free (rr_name);	
+151			
+152		/* clean up on error */	
+153	160	if (status != ARES_SUCCESS)	
+154	154	{	
+155	154	if (mx_head)	
+156	0	ares_free_data (mx_head);	
+157	154	return status;	
+158	154	}	
+159			
+160		/* everything looks fine, return the data */	
+161	6	*mx_out = mx_head;	
+162			
+163	6	return ARES_SUCCESS;	
+164	160	}	
+
+

@@ -1,0 +1,70 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17		#include "ares_setup.h"	
+18			
+19		#ifdef HAVE_NETINET_IN_H	
+20		#  include <netinet/in.h>	
+21		#endif	
+22			
+23		#include "ares_nameser.h"	
+24			
+25		#include "ares.h"	
+26		#include "ares_private.h" /* for the memdebug */	
+27			
+28		/* Simply decodes a length-encoded character string. The first byte of the	
+29		* input is the length of the string to be returned and the bytes thereafter	
+30		* are the characters of the string. The returned result will be NULL	
+31		* terminated.	
+32		*/	
+33		int ares_expand_string(const unsigned char *encoded,	
+34		const unsigned char *abuf,	
+35		int alen,	
+36		unsigned char **s,	
+37		long *enclen)	
+38	387	{	
+39	387	unsigned char *q;	
+40	387	union {	
+41	387	ares_ssize_t sig;	
+42	387	size_t uns;	
+43	387	} elen;	
+44			
+45	387	if (encoded == abuf+alen)	
+46	0	returnARES_EBADSTR;	
+47			
+48	387	elen.uns = *encoded;	
+49	387	if (encoded+elen.sig+1 > abuf+alen)	
+50	52	return ARES_EBADSTR;	
+51			
+52	335	encoded++;	
+53			
+54	335	*s = ares_malloc(elen.uns+1);	
+55	335	if (*s == NULL)	
+56	0	returnARES_ENOMEM;	
+57	335	q = *s;	
+58	335	strncpy((char *)q, (char *)encoded, elen.uns);	
+59	335	q[elen.uns] = '\0';	
+60			
+61	335	*s = q;	
+62			
+63	335	*enclen = (long)(elen.sig+1);	
+64			
+65	335	return ARES_SUCCESS;	
+66	335	}	
+67			
+
+

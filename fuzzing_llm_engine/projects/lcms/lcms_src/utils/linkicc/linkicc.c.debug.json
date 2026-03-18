@@ -1,0 +1,112 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nint Help(int level)\n{\n    UTILS_UNUSED_PARAMETER(level);\n\n    fprintf(stderr, \"\\nlinkicc: Links profiles into a single devicelink.\\n\");\n\n    fprintf(stderr, \"\\n\");\n    fprintf(stderr, \"usage: linkicc [flags] <profiles>\\n\\n\");\n    fprintf(stderr, \"flags:\\n\\n\");\n    fprintf(stderr, \"-o<profile> - Output devicelink profile. [defaults to 'devicelink.icc']\\n\");\n\n    PrintRenderingIntents();\n\n    fprintf(stderr, \"-c<0,1,2> - Precision (0=LowRes, 1=Normal, 2=Hi-res) [defaults to 1]\\n\");\n    fprintf(stderr, \"-n<gridpoints> - Alternate way to set precision, number of CLUT points\\n\");\n    fprintf(stderr, \"-d<description> - description text (quotes can be used)\\n\");\n    fprintf(stderr, \"-y<copyright> - copyright notice (quotes can be used)\\n\");\n\n    fprintf(stderr, \"\\n-k<0..400> - Ink-limiting in %% (CMYK only)\\n\");\n    fprintf(stderr, \"-8 - Creates 8-bit devicelink\\n\");\n    fprintf(stderr, \"-x - Creatively, guess deviceclass of resulting profile.\\n\");\n    fprintf(stderr, \"-b - Black point compensation\\n\");\n    fprintf(stderr, \"-a<0..1> - Observer adaptation state (abs.col. only)\\n\\n\");\n    fprintf(stderr, \"-l - Use linearization curves (may affect accuracy)\\n\");\n    fprintf(stderr, \"-r<v.r> - Profile version. (CAUTION: may change the profile implementation)\\n\");\n    fprintf(stderr, \"\\n\");\n    fprintf(stderr, \"Colorspaces must be paired except Lab/XYZ, that can be interchanged.\\n\\n\");\n\n    PrintBuiltins();\n\n    fprintf(stderr, \"\\nExamples:\\n\\n\"\n        \"To create 'devicelink.icm' from a.icc to b.icc:\\n\"\n        \"\\tlinkicc a.icc b.icc\\n\\n\"\n        \"To create 'out.icc' from sRGB to cmyk.icc:\\n\"\n        \"\\tlinkicc -o out.icc *sRGB cmyk.icc\\n\\n\"\n        \"To create a sRGB input profile working in Lab:\\n\"\n        \"\\tlinkicc -x -o sRGBLab.icc *sRGB *Lab\\n\\n\"\n        \"To create a XYZ -> sRGB output profile:\\n\"\n        \"\\tlinkicc -x -o sRGBLab.icc *XYZ *sRGB\\n\\n\"\n        \"To create a abstract profile doing softproof for cmyk.icc:\\n\"\n        \"\\tlinkicc -t1 -x -o softproof.icc *Lab cmyk.icc cmyk.icc *Lab\\n\\n\"\n        \"To create a 'grayer' sRGB input profile:\\n\"\n        \"\\tlinkicc -x -o grayer.icc *sRGB gray.icc gray.icc *Lab\\n\\n\"\n        \"To embed ink limiting into a cmyk output profile:\\n\"\n        \"\\tlinkicc -x -o cmyklimited.icc -k 250 cmyk.icc *Lab\\n\\n\");\n\n    fprintf(stderr, \"This program is intended to be a demo of the Little CMS\\n\"\n                    \"color engine. Both lcms and this program are open source.\\n\"\n                    \"You can obtain both in source code at https://www.littlecms.com\\n\"\n                    \"For suggestions, comments, bug reports etc. send mail to\\n\"\n                    \"info@littlecms.com\\n\\n\");\n\n    exit(0);\n}",
+      "fn_code_pos": [
+        [
+          48,
+          0
+        ],
+        [
+          102,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Help",
+        "parameters": {
+          "level": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nvoid HandleSwitches(int argc, char *argv[])\n{\n    int s;\n\n    while ((s = xgetopt(argc,argv,\"a:A:BbC:c:D:d:h:H:k:K:lLn:N:O:o:r:R:T:t:V:v:xX8y:Y:-:\")) != EOF) {\n\n    switch (s) {\n\n    case '-':\n        if (strcmp(xoptarg, \"help\") == 0)\n        {\n            Help(0);\n        }\n        else\n        {\n            FatalError(\"Unknown option - run without args to see valid ones.\\n\");\n        }\n        break;\n\n    case 'a':\n    case 'A':\n        ObserverAdaptationState = atof(xoptarg);\n        if (ObserverAdaptationState < 0 ||\n            ObserverAdaptationState > 1.0)\n            FatalError(\"Adaptation state should be 0..1\");\n        break;\n\n    case 'b':\n    case 'B':\n        BlackPointCompensation = TRUE;\n        break;\n\n    case 'c':\n    case 'C':\n        PrecalcMode = atoi(xoptarg);\n        if (PrecalcMode < 0 || PrecalcMode > 2) {\n            FatalError(\"Unknown precalc mode '%d'\", PrecalcMode);\n        }\n        break;\n\n    case 'd':\n    case 'D':\n        // Doing that is correct and safe: Description points to memory allocated in the command line.\n        // same for Copyright and output devicelink.\n        Description = xoptarg;\n        break;\n\n    case 'h':\n    case 'H':\n        Help(atoi(xoptarg));\n        return;\n\n    case 'k':\n    case 'K':\n        InkLimit = atof(xoptarg);\n        if (InkLimit < 0.0 || InkLimit > 400.0) {\n            FatalError(\"Ink limit must be 0%%..400%%\");\n        }\n        break;\n\n\n    case 'l':\n    case 'L': KeepLinearization = TRUE;\n        break;\n\n    case 'n':\n    case 'N':\n        if (PrecalcMode != 1) {\n            FatalError(\"Precalc mode already specified\");\n        }\n        NumOfGridPoints = atoi(xoptarg);\n        break;\n\n    case 'o':\n    case 'O':\n        cOutProf = xoptarg;\n        break;\n\n\n    case 'r':\n    case 'R':\n        Version = atof(xoptarg);\n        if (Version < 2.0 || Version > 4.3) {\n            fprintf(stderr, \"WARNING: lcms was not aware of this version, tag types may be wrong!\\n\");\n        }\n        break;\n\n    case 't':\n    case 'T':\n        Intent = atoi(xoptarg);  // Will be validated latter on\n        break;\n\n    case 'V':\n    case 'v':\n        Verbose = atoi(xoptarg);\n        if (Verbose < 0 || Verbose > 3) {\n            FatalError(\"Unknown verbosity level '%d'\", Verbose);\n        }\n        break;\n\n    case '8':\n        lUse8bits = TRUE;\n        break;\n\n\n\n    case 'y':\n    case 'Y':\n        Copyright = xoptarg;\n        break;\n\n\n\n    case 'x':\n    case 'X': TagResult = TRUE;\n        break;\n\n\n    default:\n\n        FatalError(\"Unknown option - run without args to see valid ones.\\n\");\n    }\n    }\n}",
+      "fn_code_pos": [
+        [
+          105,
+          0
+        ],
+        [
+          229,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "HandleSwitches",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool SetTextTags(cmsHPROFILE hProfile)\n{\n    cmsMLU *DescriptionMLU, *CopyrightMLU;\n    cmsBool  rc = FALSE;\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n\n    DescriptionMLU  = cmsMLUalloc(ContextID, 1);\n    CopyrightMLU    = cmsMLUalloc(ContextID, 1);\n\n    if (DescriptionMLU == NULL || CopyrightMLU == NULL) goto Error;\n\n    if (!cmsMLUsetASCII(DescriptionMLU,  \"en\", \"US\", Description)) goto Error;\n    if (!cmsMLUsetASCII(CopyrightMLU,    \"en\", \"US\", Copyright)) goto Error;\n\n    if (!cmsWriteTag(hProfile, cmsSigProfileDescriptionTag,  DescriptionMLU)) goto Error;\n    if (!cmsWriteTag(hProfile, cmsSigCopyrightTag,           CopyrightMLU)) goto Error;     \n\n    rc = TRUE;\n\nError:\n\n    if (DescriptionMLU)\n        cmsMLUfree(DescriptionMLU);\n    if (CopyrightMLU)\n        cmsMLUfree(CopyrightMLU);\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          232,
+          0
+        ],
+        [
+          259,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetTextTags",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    int i, nargs, rc;\n    cmsHPROFILE Profiles[257];\n    cmsHPROFILE hProfile;\n    cmsUInt32Number dwFlags;\n    cmsHTRANSFORM hTransform = NULL;\n\n    // Here we are\n    fprintf(stderr, \"Little CMS ICC device link generator - v3.2 [LittleCMS %2.2f]\\n\", cmsGetEncodedCMMversion() / 1000.0);\n    fprintf(stderr, \"Copyright (c) 1998-2023 Marti Maria Saguer. See COPYING file for details.\\n\");\n    fflush(stderr);\n\n    // Initialize\n    InitUtils(\"linkicc\");\n    rc = 0;\n    \n    // Get the options\n    HandleSwitches(argc, argv);\n\n    // How many profiles to link?\n    nargs = (argc - xoptind);\n    if (nargs < 1)\n        return Help(0); \n\n    if (nargs > 255) {\n        FatalError(\"Holy profile! what are you trying to do with so many profiles!?\");\n        goto Cleanup;\n    }\n\n    // Open all profiles\n    memset(Profiles, 0, sizeof(Profiles));\n    for (i=0; i < nargs; i++) {\n\n        Profiles[i] = OpenStockProfile(0, argv[i + xoptind]);\n        if (Profiles[i] == NULL) goto Cleanup;      \n\n        if (Verbose >= 1) {\n            PrintProfileInformation(Profiles[i]);\n        }\n    }\n\n    // Ink limiting\n    if (InkLimit != 400.0) {        \n        cmsColorSpaceSignature EndingColorSpace = cmsGetColorSpace(Profiles[nargs-1]);\n        Profiles[nargs++] = cmsCreateInkLimitingDeviceLink(EndingColorSpace, InkLimit);\n    }\n\n    // Set the flags\n    dwFlags = cmsFLAGS_KEEP_SEQUENCE;\n    switch (PrecalcMode) {\n\n        case 0: dwFlags |= cmsFLAGS_LOWRESPRECALC; break;\n        case 2: dwFlags |= cmsFLAGS_HIGHRESPRECALC; break;\n        case 1: \n            if (NumOfGridPoints > 0)\n                dwFlags |= cmsFLAGS_GRIDPOINTS(NumOfGridPoints);\n            break;\n\n        default: \n            {\n                FatalError(\"Unknown precalculation mode '%d'\", PrecalcMode);\n                goto Cleanup;\n            }\n    }\n\n    if (BlackPointCompensation)\n        dwFlags |= cmsFLAGS_BLACKPOINTCOMPENSATION;\n\n    if (TagResult)\n        dwFlags |= cmsFLAGS_GUESSDEVICECLASS;\n\n    if (KeepLinearization)\n        dwFlags |= cmsFLAGS_CLUT_PRE_LINEARIZATION|cmsFLAGS_CLUT_POST_LINEARIZATION;\n\n    if (lUse8bits) dwFlags |= cmsFLAGS_8BITS_DEVICELINK;\n\n     cmsSetAdaptationState(ObserverAdaptationState);\n     \n    // Create the color transform. Specify 0 for the format is safe as the transform \n    // is intended to be used only for the devicelink.\n    hTransform = cmsCreateMultiprofileTransform(Profiles, nargs, 0, 0, Intent, dwFlags|cmsFLAGS_NOOPTIMIZE);\n    if (hTransform == NULL) {\n        FatalError(\"Transform creation failed\");\n        goto Cleanup;\n    }\n\n    hProfile =  cmsTransform2DeviceLink(hTransform, Version, dwFlags);\n    if (hProfile == NULL) {\n        FatalError(\"Devicelink creation failed\");\n        goto Cleanup;\n    }\n\n    SetTextTags(hProfile);\n    cmsSetHeaderRenderingIntent(hProfile, Intent);\n\n    if (cmsSaveProfileToFile(hProfile, cOutProf)) {\n\n        if (Verbose > 0) \n            fprintf(stderr, \"Ok\");\n    }\n    else \n        FatalError(\"Error saving file!\");\n\n    cmsCloseProfile(hProfile);\n\n\nCleanup:\n\n    if (hTransform != NULL) cmsDeleteTransform(hTransform);\n    for (i=0; i < nargs; i++) {\n\n        if (Profiles[i] != NULL) cmsCloseProfile(Profiles[i]);\n    }\n\n    return rc;     \n}",
+      "fn_code_pos": [
+        [
+          263,
+          0
+        ],
+        [
+          379,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"utils.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

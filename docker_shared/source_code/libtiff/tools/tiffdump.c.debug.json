@@ -1,0 +1,636 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void usage()\n{\n    fprintf(stderr, \"\\nDisplay directory information from TIFF files\\n\\n\");\n    fprintf(stderr, \"usage: %s [-h] [-o offset] [-m maxitems] file.tif ...\\n\",\n            appname);\n    exit(EXIT_FAILURE);\n}",
+      "fn_code_pos": [
+        [
+          103,
+          0
+        ],
+        [
+          109,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    int one = 1, fd;\n    int multiplefiles = (argc > 1);\n    int c;\n    uint64_t diroff = 0;\n    hex_mode = 0;\n    bigendian = (*(char *)&one == 0);\n\n    appname = argv[0];\n    while ((c = getopt(argc, argv, \"m:o:h\")) != -1)\n    {\n        switch (c)\n        {\n            case 'h': /* print values in hex */\n                hex_mode = 1;\n                break;\n            case 'o':\n                diroff = (uint64_t)strtoul(optarg, NULL, 0);\n                break;\n            case 'm':\n                maxitems = strtoul(optarg, NULL, 0);\n                break;\n            default:\n                usage();\n        }\n    }\n    if (optind >= argc)\n        usage();\n    for (; optind < argc; optind++)\n    {\n        fd = open(argv[optind], O_RDONLY | O_BINARY, 0);\n        if (fd < 0)\n        {\n            perror(argv[0]);\n            return (EXIT_FAILURE);\n        }\n        if (multiplefiles)\n            printf(\"%s:\\n\", argv[optind]);\n        curfile = argv[optind];\n        swabflag = 0;\n        bigtiff = 0;\n        dump(fd, diroff);\n        close(fd);\n    }\n    return (EXIT_SUCCESS);\n}",
+      "fn_code_pos": [
+        [
+          111,
+          0
+        ],
+        [
+          157,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void dump(int fd, uint64_t diroff)\n{\n    unsigned i, j;\n    uint64_t *visited_diroff = NULL;\n    unsigned int count_visited_dir = 0;\n\n    _TIFF_lseek_f(fd, (_TIFF_off_t)0, 0);\n    if (read(fd, (char *)&hdr, sizeof(TIFFHeaderCommon)) !=\n        sizeof(TIFFHeaderCommon))\n        ReadError(\"TIFF header\");\n    if (hdr.common.tiff_magic != TIFF_BIGENDIAN &&\n        hdr.common.tiff_magic != TIFF_LITTLEENDIAN &&\n#if HOST_BIGENDIAN\n        /* MDI is sensitive to the host byte order, unlike TIFF */\n        MDI_BIGENDIAN != hdr.common.tiff_magic\n#else\n        MDI_LITTLEENDIAN != hdr.common.tiff_magic\n#endif\n    )\n    {\n        Fatal(\"Not a TIFF or MDI file, bad magic number %u (%#x)\",\n              hdr.common.tiff_magic, hdr.common.tiff_magic);\n    }\n    if (hdr.common.tiff_magic == TIFF_BIGENDIAN ||\n        hdr.common.tiff_magic == MDI_BIGENDIAN)\n        swabflag = !bigendian;\n    else\n        swabflag = bigendian;\n    if (swabflag)\n        TIFFSwabShort(&hdr.common.tiff_version);\n    if (hdr.common.tiff_version == 42)\n    {\n        if (read(fd,\n                 ((char *)&hdr.classic) +\n                     offsetof(TIFFHeaderClassic, tiff_diroff),\n                 4) != 4)\n            ReadError(\"TIFF header\");\n        if (swabflag)\n            TIFFSwabLong(&hdr.classic.tiff_diroff);\n        printf(\"Magic: %#x <%s-endian> Version: %#x <%s>\\n\",\n               hdr.classic.tiff_magic,\n               hdr.classic.tiff_magic == TIFF_BIGENDIAN ? \"big\" : \"little\", 42,\n               \"ClassicTIFF\");\n        if (diroff == 0)\n            diroff = hdr.classic.tiff_diroff;\n    }\n    else if (hdr.common.tiff_version == 43)\n    {\n        if (read(fd,\n                 ((char *)&hdr.big) + offsetof(TIFFHeaderBig, tiff_offsetsize),\n                 12) != 12)\n            ReadError(\"TIFF header\");\n        if (swabflag)\n        {\n            TIFFSwabShort(&hdr.big.tiff_offsetsize);\n            TIFFSwabShort(&hdr.big.tiff_unused);\n            TIFFSwabLong8(&hdr.big.tiff_diroff);\n        }\n        printf(\"Magic: %#x <%s-endian> Version: %#x <%s>\\n\", hdr.big.tiff_magic,\n               hdr.big.tiff_magic == TIFF_BIGENDIAN ? \"big\" : \"little\", 43,\n               \"BigTIFF\");\n        printf(\"OffsetSize: %#x Unused: %#x\\n\", hdr.big.tiff_offsetsize,\n               hdr.big.tiff_unused);\n        if (diroff == 0)\n            diroff = hdr.big.tiff_diroff;\n        bigtiff = 1;\n    }\n    else\n        Fatal(\"Not a TIFF file, bad version number %u (%#x)\",\n              hdr.common.tiff_version, hdr.common.tiff_version);\n    for (i = 0; diroff != 0; i++)\n    {\n        for (j = 0; j < count_visited_dir; j++)\n        {\n            if (visited_diroff[j] == diroff)\n            {\n                free(visited_diroff);\n                Fatal(\"Cycle detected in chaining of TIFF directories!\");\n            }\n        }\n        {\n            size_t alloc_size;\n            alloc_size = TIFFSafeMultiply(tmsize_t, (count_visited_dir + 1),\n                                          sizeof(uint64_t));\n            if (alloc_size == 0)\n            {\n                if (visited_diroff)\n                    free(visited_diroff);\n                visited_diroff = 0;\n            }\n            else\n            {\n                visited_diroff =\n                    (uint64_t *)realloc(visited_diroff, alloc_size);\n            }\n        }\n        if (!visited_diroff)\n            Fatal(\"Out of memory\");\n        visited_diroff[count_visited_dir] = diroff;\n        count_visited_dir++;\n\n        if (i > 0)\n            putchar('\\n');\n        diroff = ReadDirectory(fd, i, diroff);\n    }\n    if (visited_diroff)\n        free(visited_diroff);\n}",
+      "fn_code_pos": [
+        [
+          166,
+          0
+        ],
+        [
+          273,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "dump",
+        "parameters": {
+          "fd": "int",
+          "diroff": "uint64_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static uint64_t ReadDirectory(int fd, unsigned int ix, uint64_t off)\n{\n    uint16_t dircount;\n    uint32_t direntrysize;\n    void *dirmem = NULL;\n    uint64_t nextdiroff = 0;\n    uint32_t n;\n    uint8_t *dp;\n\n    if (off == 0) /* no more directories */\n        goto done;\n    if (_TIFF_lseek_f(fd, (_TIFF_off_t)off, SEEK_SET) != (_TIFF_off_t)off)\n    {\n        Fatal(\"Seek error accessing TIFF directory\");\n        goto done;\n    }\n    if (!bigtiff)\n    {\n        if (read(fd, (char *)&dircount, sizeof(uint16_t)) != sizeof(uint16_t))\n        {\n            ReadError(\"directory count\");\n            goto done;\n        }\n        if (swabflag)\n            TIFFSwabShort(&dircount);\n        direntrysize = 12;\n    }\n    else\n    {\n        uint64_t dircount64 = 0;\n        if (read(fd, (char *)&dircount64, sizeof(uint64_t)) != sizeof(uint64_t))\n        {\n            ReadError(\"directory count\");\n            goto done;\n        }\n        if (swabflag)\n            TIFFSwabLong8(&dircount64);\n        if (dircount64 > 0xFFFF)\n        {\n            Error(\"Sanity check on directory count failed\");\n            goto done;\n        }\n        dircount = (uint16_t)dircount64;\n        direntrysize = 20;\n    }\n    dirmem = _TIFFmalloc(TIFFSafeMultiply(tmsize_t, dircount, direntrysize));\n    if (dirmem == NULL)\n    {\n        Fatal(\"No space for TIFF directory\");\n        goto done;\n    }\n    n = read(fd, (char *)dirmem, dircount * direntrysize);\n    if (n != dircount * direntrysize)\n    {\n        n /= direntrysize;\n        Error(\"Could only read %\" PRIu32 \" of %\" PRIu16\n              \" entries in directory at offset %\" PRIu64,\n              n, dircount, off);\n        dircount = n;\n        nextdiroff = 0;\n    }\n    else\n    {\n        if (!bigtiff)\n        {\n            uint32_t nextdiroff32;\n            if (read(fd, (char *)&nextdiroff32, sizeof(uint32_t)) !=\n                sizeof(uint32_t))\n                nextdiroff32 = 0;\n            if (swabflag)\n                TIFFSwabLong(&nextdiroff32);\n            nextdiroff = nextdiroff32;\n        }\n        else\n        {\n            if (read(fd, (char *)&nextdiroff, sizeof(uint64_t)) !=\n                sizeof(uint64_t))\n                nextdiroff = 0;\n            if (swabflag)\n                TIFFSwabLong8(&nextdiroff);\n        }\n    }\n    printf(\"Directory %u: offset %\" PRIu64 \" (%#\" PRIx64 \") next %\" PRIu64\n           \" (%#\" PRIx64 \")\\n\",\n           ix, off, off, nextdiroff, nextdiroff);\n    for (dp = (uint8_t *)dirmem, n = dircount; n > 0; n--)\n    {\n        uint16_t tag;\n        uint16_t type;\n        uint16_t typewidth;\n        uint64_t count;\n        uint64_t datasize;\n        int datafits;\n        void *datamem;\n        uint64_t dataoffset;\n        int datatruncated;\n        int datasizeoverflow;\n\n        tag = *(uint16_t *)dp;\n        if (swabflag)\n            TIFFSwabShort(&tag);\n        dp += sizeof(uint16_t);\n        type = *(uint16_t *)dp;\n        dp += sizeof(uint16_t);\n        if (swabflag)\n            TIFFSwabShort(&type);\n        PrintTag(stdout, tag);\n        putchar(' ');\n        PrintType(stdout, type);\n        putchar(' ');\n        if (!bigtiff)\n        {\n            uint32_t count32;\n            count32 = *(uint32_t *)dp;\n            if (swabflag)\n                TIFFSwabLong(&count32);\n            dp += sizeof(uint32_t);\n            count = count32;\n        }\n        else\n        {\n            memcpy(&count, dp, sizeof(uint64_t));\n            if (swabflag)\n                TIFFSwabLong8(&count);\n            dp += sizeof(uint64_t);\n        }\n        printf(\"%\" PRIu64 \"<\", count);\n        if (type >= NWIDTHS)\n            typewidth = 0;\n        else\n            typewidth = datawidth[type];\n        datasize = TIFFSafeMultiply(tmsize_t, count, typewidth);\n        datasizeoverflow = (typewidth > 0 && datasize / typewidth != count);\n        datafits = 1;\n        datamem = dp;\n        dataoffset = 0;\n        datatruncated = 0;\n        if (!bigtiff)\n        {\n            if (datasizeoverflow || datasize > 4)\n            {\n                uint32_t dataoffset32;\n                datafits = 0;\n                datamem = NULL;\n                dataoffset32 = *(uint32_t *)dp;\n                if (swabflag)\n                    TIFFSwabLong(&dataoffset32);\n                dataoffset = dataoffset32;\n            }\n            dp += sizeof(uint32_t);\n        }\n        else\n        {\n            if (datasizeoverflow || datasize > 8)\n            {\n                datafits = 0;\n                datamem = NULL;\n                memcpy(&dataoffset, dp, sizeof(uint64_t));\n                if (swabflag)\n                    TIFFSwabLong8(&dataoffset);\n            }\n            dp += sizeof(uint64_t);\n        }\n        if (datasizeoverflow || datasize > 0x10000)\n        {\n            datatruncated = 1;\n            count = 0x10000 / typewidth;\n            datasize = TIFFSafeMultiply(tmsize_t, count, typewidth);\n        }\n        if (count > maxitems)\n        {\n            datatruncated = 1;\n            count = maxitems;\n            datasize = TIFFSafeMultiply(tmsize_t, count, typewidth);\n        }\n        if (!datafits)\n        {\n            datamem = _TIFFmalloc(datasize);\n            if (datamem)\n            {\n                if (_TIFF_lseek_f(fd, (_TIFF_off_t)dataoffset, 0) !=\n                    (_TIFF_off_t)dataoffset)\n                {\n                    Error(\"Seek error accessing tag %u value\", tag);\n                    _TIFFfree(datamem);\n                    datamem = NULL;\n                }\n                else if (read(fd, datamem, (size_t)datasize) !=\n                         (tmsize_t)datasize)\n                {\n                    Error(\"Read error accessing tag %u value\", tag);\n                    _TIFFfree(datamem);\n                    datamem = NULL;\n                }\n            }\n            else\n                Error(\"No space for data for tag %u\", tag);\n        }\n        if (datamem)\n        {\n            if (swabflag)\n            {\n                switch (type)\n                {\n                    case TIFF_BYTE:\n                    case TIFF_ASCII:\n                    case TIFF_SBYTE:\n                    case TIFF_UNDEFINED:\n                        break;\n                    case TIFF_SHORT:\n                    case TIFF_SSHORT:\n                        TIFFSwabArrayOfShort((uint16_t *)datamem,\n                                             (tmsize_t)count);\n                        break;\n                    case TIFF_LONG:\n                    case TIFF_SLONG:\n                    case TIFF_FLOAT:\n                    case TIFF_IFD:\n                        TIFFSwabArrayOfLong((uint32_t *)datamem,\n                                            (tmsize_t)count);\n                        break;\n                    case TIFF_RATIONAL:\n                    case TIFF_SRATIONAL:\n                        TIFFSwabArrayOfLong((uint32_t *)datamem,\n                                            (tmsize_t)count * 2);\n                        break;\n                    case TIFF_DOUBLE:\n                    case TIFF_LONG8:\n                    case TIFF_SLONG8:\n                    case TIFF_IFD8:\n                        TIFFSwabArrayOfLong8((uint64_t *)datamem,\n                                             (tmsize_t)count);\n                        break;\n                }\n            }\n            PrintData(stdout, type, (uint32_t)count, datamem);\n            if (datatruncated)\n                printf(\" ...\");\n            if (!datafits)\n            {\n                _TIFFfree(datamem);\n                datamem = NULL;\n            }\n        }\n        printf(\">\\n\");\n    }\ndone:\n    if (dirmem)\n        _TIFFfree((char *)dirmem);\n    return (nextdiroff);\n}",
+      "fn_code_pos": [
+        [
+          306,
+          0
+        ],
+        [
+          556,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ReadDirectory",
+        "parameters": {
+          "fd": "int",
+          "ix": "unsigned int",
+          "off": "uint64_t"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "static void PrintTag(FILE *fd, uint16_t tag)\n{\n    const struct tagname *tp;\n\n    for (tp = tagnames; tp < &tagnames[NTAGS]; tp++)\n        if (tp->tag == tag)\n        {\n            fprintf(fd, \"%s (%u)\", tp->name, tag);\n            return;\n        }\n    fprintf(fd, \"%u (%#x)\", tag, tag);\n}",
+      "fn_code_pos": [
+        [
+          659,
+          0
+        ],
+        [
+          670,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintTag",
+        "parameters": {
+          "fd": "FILE",
+          "tag": "uint16_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void PrintType(FILE *fd, uint16_t type)\n{\n    static const char *typenames[] = {\n        \"0\",         \"BYTE\",  \"ASCII\",     \"SHORT\",  \"LONG\",\n        \"RATIONAL\",  \"SBYTE\", \"UNDEFINED\", \"SSHORT\", \"SLONG\",\n        \"SRATIONAL\", \"FLOAT\", \"DOUBLE\",    \"IFD\",    \"14\",\n        \"15\",        \"LONG8\", \"SLONG8\",    \"IFD8\"};\n#define NTYPES (sizeof(typenames) / sizeof(typenames[0]))\n\n    if (type < NTYPES)\n        fprintf(fd, \"%s (%u)\", typenames[type], type);\n    else\n        fprintf(fd, \"%u (%#x)\", type, type);\n}",
+      "fn_code_pos": [
+        [
+          672,
+          0
+        ],
+        [
+          685,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintType",
+        "parameters": {
+          "fd": "FILE",
+          "type": "uint16_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void PrintASCII(FILE *fd, uint32_t cc, const unsigned char *cp)\n{\n    for (; cc > 0; cc--, cp++)\n    {\n        const char *tp;\n\n        if (isprint(*cp))\n        {\n            fputc(*cp, fd);\n            continue;\n        }\n        for (tp = \"\\tt\\bb\\rr\\nn\\vv\"; *tp; tp++)\n            if (*tp++ == *cp)\n                break;\n        if (*tp)\n            fprintf(fd, \"\\\\%c\", *tp);\n        else if (*cp)\n            fprintf(fd, \"\\\\%03o\", *cp);\n        else\n            fprintf(fd, \"\\\\0\");\n    }\n}",
+      "fn_code_pos": [
+        [
+          690,
+          0
+        ],
+        [
+          711,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintASCII",
+        "parameters": {
+          "fd": "FILE",
+          "cc": "uint32_t",
+          "cp": "unsigned char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void PrintData(FILE *fd, uint16_t type, uint32_t count,\n                      unsigned char *data)\n{\n    char *sep = \"\";\n\n    switch (type)\n    {\n        case TIFF_BYTE:\n            while (count-- > 0)\n                fprintf(fd, bytefmt, sep, *data++), sep = \" \";\n            break;\n        case TIFF_SBYTE:\n            while (count-- > 0)\n                fprintf(fd, sbytefmt, sep, *(char *)data++), sep = \" \";\n            break;\n        case TIFF_UNDEFINED:\n            while (count-- > 0)\n                fprintf(fd, bytefmt, sep, *data++), sep = \" \";\n            break;\n        case TIFF_ASCII:\n            PrintASCII(fd, count, data);\n            break;\n        case TIFF_SHORT:\n        {\n            uint16_t *wp = (uint16_t *)data;\n            while (count-- > 0)\n                fprintf(fd, hex_mode ? shortfmth : shortfmtd, sep, *wp++),\n                    sep = \" \";\n            break;\n        }\n        case TIFF_SSHORT:\n        {\n            int16_t *wp = (int16_t *)data;\n            while (count-- > 0)\n                fprintf(fd, hex_mode ? sshortfmth : sshortfmtd, sep, *wp++),\n                    sep = \" \";\n            break;\n        }\n        case TIFF_LONG:\n        {\n            uint32_t *lp = (uint32_t *)data;\n            while (count-- > 0)\n            {\n                fprintf(fd, hex_mode ? longfmth : longfmtd, sep, *lp++);\n                sep = \" \";\n            }\n            break;\n        }\n        case TIFF_SLONG:\n        {\n            int32_t *lp = (int32_t *)data;\n            while (count-- > 0)\n                fprintf(fd, hex_mode ? slongfmth : slongfmtd, sep, *lp++),\n                    sep = \" \";\n            break;\n        }\n        case TIFF_LONG8:\n        {\n            uint64_t *llp = (uint64_t *)data;\n            while (count-- > 0)\n            {\n                uint64_t val;\n                memcpy(&val, llp, sizeof(uint64_t));\n                llp++;\n                fprintf(fd, long8fmt, sep, val);\n                sep = \" \";\n            }\n            break;\n        }\n        case TIFF_SLONG8:\n        {\n            int64_t *llp = (int64_t *)data;\n            while (count-- > 0)\n            {\n                int64_t val;\n                memcpy(&val, llp, sizeof(int64_t));\n                llp++;\n                fprintf(fd, slong8fmt, sep, val);\n                sep = \" \";\n            }\n            break;\n        }\n        case TIFF_RATIONAL:\n        {\n            uint32_t *lp = (uint32_t *)data;\n            while (count-- > 0)\n            {\n                if (lp[1] == 0)\n                    fprintf(fd, \"%sNan (%\" PRIu32 \"/%\" PRIu32 \")\", sep, lp[0],\n                            lp[1]);\n                else\n                    fprintf(fd, rationalfmt, sep,\n                            (double)lp[0] / (double)lp[1]);\n                sep = \" \";\n                lp += 2;\n            }\n            break;\n        }\n        case TIFF_SRATIONAL:\n        {\n            int32_t *lp = (int32_t *)data;\n            while (count-- > 0)\n            {\n                if (lp[1] == 0)\n                    fprintf(fd, \"%sNan (%\" PRId32 \"/%\" PRId32 \")\", sep, lp[0],\n                            lp[1]);\n                else\n                    fprintf(fd, srationalfmt, sep,\n                            (double)lp[0] / (double)lp[1]);\n                sep = \" \";\n                lp += 2;\n            }\n            break;\n        }\n        case TIFF_FLOAT:\n        {\n            float *fp = (float *)data;\n            while (count-- > 0)\n                fprintf(fd, floatfmt, sep, *fp++), sep = \" \";\n            break;\n        }\n        case TIFF_DOUBLE:\n        {\n            double *dp = (double *)data;\n            while (count-- > 0)\n                fprintf(fd, doublefmt, sep, *dp++), sep = \" \";\n            break;\n        }\n        case TIFF_IFD:\n        {\n            uint32_t *lp = (uint32_t *)data;\n            while (count-- > 0)\n            {\n                fprintf(fd, ifdfmt, sep, *lp++);\n                sep = \" \";\n            }\n            break;\n        }\n        case TIFF_IFD8:\n        {\n            uint64_t *llp = (uint64_t *)data;\n            while (count-- > 0)\n            {\n                fprintf(fd, ifd8fmt, sep, *llp++);\n                sep = \" \";\n                sep = \" \";\n            }\n            break;\n        }\n    }\n}",
+      "fn_code_pos": [
+        [
+          713,
+          0
+        ],
+        [
+          863,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintData",
+        "parameters": {
+          "fd": "FILE",
+          "type": "uint16_t",
+          "count": "uint32_t",
+          "data": "unsigned char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void ReadError(char *what) { Fatal(\"Error while reading %s\", what); }",
+      "fn_code_pos": [
+        [
+          865,
+          0
+        ],
+        [
+          865,
+          76
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ReadError",
+        "parameters": {
+          "what": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void vError(FILE *fd, const char *fmt, va_list ap)\n{\n    fprintf(fd, \"%s: \", curfile);\n    vfprintf(fd, fmt, ap);\n    fprintf(fd, \".\\n\");\n}",
+      "fn_code_pos": [
+        [
+          869,
+          0
+        ],
+        [
+          874,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "vError",
+        "parameters": {
+          "fd": "FILE",
+          "fmt": "char",
+          "ap": "va_list"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void Error(const char *fmt, ...)\n{\n    va_list ap;\n    va_start(ap, fmt);\n    vError(stderr, fmt, ap);\n    va_end(ap);\n}",
+      "fn_code_pos": [
+        [
+          876,
+          0
+        ],
+        [
+          882,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Error",
+        "parameters": {
+          "fmt": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void Fatal(const char *fmt, ...)\n{\n    va_list ap;\n    va_start(ap, fmt);\n    vError(stderr, fmt, ap);\n    va_end(ap);\n    exit(EXIT_FAILURE);\n}",
+      "fn_code_pos": [
+        [
+          884,
+          0
+        ],
+        [
+          891,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Fatal",
+        "parameters": {
+          "fmt": "char"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "dump(int, uint64_t)",
+      "fn_dec_pos": [
+        [
+          96,
+          12
+        ],
+        [
+          96,
+          31
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "dump",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "ReadDirectory(int, unsigned, uint64_t)",
+      "fn_dec_pos": [
+        [
+          161,
+          16
+        ],
+        [
+          161,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ReadDirectory",
+        "parameters": {},
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "ReadError(char *)",
+      "fn_dec_pos": [
+        [
+          162,
+          12
+        ],
+        [
+          162,
+          29
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ReadError",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "Error(const char *, ...)",
+      "fn_dec_pos": [
+        [
+          163,
+          12
+        ],
+        [
+          163,
+          36
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Error",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "Fatal(const char *, ...)",
+      "fn_dec_pos": [
+        [
+          164,
+          12
+        ],
+        [
+          164,
+          36
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Fatal",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PrintTag(FILE *, uint16_t)",
+      "fn_dec_pos": [
+        [
+          297,
+          12
+        ],
+        [
+          297,
+          38
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintTag",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PrintType(FILE *, uint16_t)",
+      "fn_dec_pos": [
+        [
+          298,
+          12
+        ],
+        [
+          298,
+          39
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintType",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PrintData(FILE *, uint16_t, uint32_t, unsigned char *)",
+      "fn_dec_pos": [
+        [
+          299,
+          12
+        ],
+        [
+          299,
+          66
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintData",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct tagname\n{\n    uint16_t tag;\n    const char *name;\n}",
+      {
+        "tag": "uint16_t",
+        "char": "const"
+      },
+      "tagname",
+      [
+        558,
+        13
+      ],
+      [
+        562,
+        1
+      ]
+    ],
+    [
+      "struct tagname\n{\n    uint16_t tag;\n    const char *name;\n}",
+      {
+        "tag": "uint16_t",
+        "char": "const"
+      },
+      "tagname",
+      [
+        558,
+        13
+      ],
+      [
+        562,
+        1
+      ]
+    ],
+    [
+      "struct tagname",
+      {},
+      "",
+      [
+        661,
+        10
+      ],
+      [
+        661,
+        24
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include <fcntl.h>\n",
+      [
+        38,
+        0
+      ],
+      [
+        39,
+        0
+      ]
+    ],
+    [
+      "#include <sys/types.h>\n",
+      [
+        42,
+        0
+      ],
+      [
+        43,
+        0
+      ]
+    ],
+    [
+      "#include <io.h>\n",
+      [
+        46,
+        0
+      ],
+      [
+        47,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        49,
+        0
+      ],
+      [
+        50,
+        0
+      ]
+    ],
+    [
+      "#include <ctype.h>\n",
+      [
+        688,
+        0
+      ],
+      [
+        689,
+        0
+      ]
+    ],
+    [
+      "#include <stdarg.h>\n",
+      [
+        867,
+        0
+      ],
+      [
+        868,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

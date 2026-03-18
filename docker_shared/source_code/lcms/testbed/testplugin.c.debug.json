@@ -1,0 +1,1316 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\ncmsContext DupContext(cmsContext src, void* Data)\n{\n    cmsContext cpy = cmsDupContext(src, Data);\n\n    DebugMemDontCheckThis(cpy);\n\n    return cpy;\n}",
+      "fn_code_pos": [
+        [
+          33,
+          0
+        ],
+        [
+          41,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DupContext",
+        "parameters": {
+          "src": "cmsContext",
+          "Data": "void"
+        },
+        "return_type": "cmsContext"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckAllocContext(void)\n{\n     cmsContext c1, c2, c3, c4;\n\n\n     c1 = cmsCreateContext(NULL, NULL);                 // This creates a context by using the normal malloc\n     DebugMemDontCheckThis(c1);\n     cmsDeleteContext(c1); \n\n     c2 = cmsCreateContext(PluginMemHandler(), NULL);   // This creates a context by using the debug malloc\n     DebugMemDontCheckThis(c2);\n     cmsDeleteContext(c2); \n\n     c1 = cmsCreateContext(NULL, NULL); \n     DebugMemDontCheckThis(c1);\n\n     c2 = cmsCreateContext(PluginMemHandler(), NULL);  \n     DebugMemDontCheckThis(c2);\n\n     cmsPluginTHR(c1, PluginMemHandler()); // Now the context have custom allocators\n\n     c3 = DupContext(c1, NULL);     \n     c4 = DupContext(c2, NULL);\n     \n\n\n     cmsDeleteContext(c1);  // Should be deleted by using nomal malloc\n     cmsDeleteContext(c2);  // Should be deleted by using debug malloc\n     cmsDeleteContext(c3);  // Should be deleted by using nomal malloc\n     cmsDeleteContext(c4);  // Should be deleted by using debug malloc\n\n     return 1;\n}",
+      "fn_code_pos": [
+        [
+          48,
+          0
+        ],
+        [
+          80,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckAllocContext",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckSimpleContext(void)\n{\n    int a = 1;\n    int b = 32;\n    cmsInt32Number rc = 0;\n\n    cmsContext c1, c2, c3;\n\n    // This function creates a context with a special \n    // memory manager that check allocation\n    c1 = WatchDogContext(&a);\n    cmsDeleteContext(c1);\n\n    c1 = WatchDogContext(&a);\n    \n    // Let's check duplication\n    c2 = DupContext(c1, NULL);    \n    c3 = DupContext(c2, NULL);    \n\n    // User data should have been propagated\n    rc = (*(int*) cmsGetContextUserData(c3)) == 1 ;\n\n    // Free resources\n    cmsDeleteContext(c1);\n    cmsDeleteContext(c2);\n    cmsDeleteContext(c3);\n\n    if (!rc) {\n        Fail(\"Creation of user data failed\");\n        return 0;\n    }\n\n    // Back to create 3 levels of inherance\n    c1 = cmsCreateContext(NULL, &a);\n    DebugMemDontCheckThis(c1);\n\n    c2 = DupContext(c1, NULL);\n    c3 = DupContext(c2, &b);    \n\n    rc = (*(int*) cmsGetContextUserData(c3)) == 32 ;\n\n    cmsDeleteContext(c1);\n    cmsDeleteContext(c2);\n    cmsDeleteContext(c3);\n\n    if (!rc) {\n        Fail(\"Modification of user data failed\");\n        return 0;\n    }\n\n    // All seems ok\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          83,
+          0
+        ],
+        [
+          135,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckSimpleContext",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckAlarmColorsContext(void)\n{\n    cmsInt32Number rc = 0;\n    const cmsUInt16Number codes[] = {0x0000, 0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xaaaa, 0xbbbb, 0xcccc, 0xdddd, 0xeeee, 0xffff};\n    cmsUInt16Number out[16];\n    cmsContext c1, c2, c3;\n    int i;\n\n    c1 = WatchDogContext(NULL);\n\n    cmsSetAlarmCodesTHR(c1, codes);\n    c2 = DupContext(c1, NULL);\n    c3 = DupContext(c2, NULL);\n    \n    cmsGetAlarmCodesTHR(c3, out);\n\n    rc = 1;\n    for (i=0; i < 16; i++) {\n        if (out[i] != codes[i]) {\n            Fail(\"Bad alarm code %x != %x\", out[i], codes[i]);\n            rc = 0;\n            break;\n        }\n    }\n\n    cmsDeleteContext(c1);\n    cmsDeleteContext(c2);\n    cmsDeleteContext(c3);\n\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          145,
+          0
+        ],
+        [
+          175,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckAlarmColorsContext",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckAdaptationStateContext(void)\n{\n    cmsInt32Number rc = 0;\n    cmsContext c1, c2, c3;\n    cmsFloat64Number old1, old2;\n\n    old1 =  cmsSetAdaptationStateTHR(NULL, -1);\n\n    c1 = WatchDogContext(NULL);\n\n    cmsSetAdaptationStateTHR(c1, 0.7);\n\n    c2 = DupContext(c1, NULL);    \n    c3 = DupContext(c2, NULL);\n    \n    rc = IsGoodVal(\"Adaptation state\", cmsSetAdaptationStateTHR(c3, -1), 0.7, 0.001);\n\n    cmsDeleteContext(c1);\n    cmsDeleteContext(c2);\n    cmsDeleteContext(c3);\n   \n    old2 =  cmsSetAdaptationStateTHR(NULL, -1);\n\n    if (old1 != old2) {\n        Fail(\"Adaptation state has changed\");\n        return 0;\n    }\n\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          183,
+          0
+        ],
+        [
+          212,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckAdaptationStateContext",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid Fake1Dfloat(const cmsFloat32Number Value[], \n                    cmsFloat32Number Output[],  \n                    const cmsInterpParams* p)\n{\n       cmsFloat32Number val2;\n       int cell;\n       const cmsFloat32Number* LutTable = (const cmsFloat32Number*) p ->Table;\n\n       // Clip upper values\n       if (Value[0] >= 1.0) {\n           Output[0] = LutTable[p -> Domain[0]]; \n           return; \n       }\n\n       val2 = p -> Domain[0] * Value[0];\n       cell = (int) floor(val2);\n       Output[0] =  LutTable[cell] ;\n}",
+      "fn_code_pos": [
+        [
+          219,
+          0
+        ],
+        [
+          237,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Fake1Dfloat",
+        "parameters": {
+          "Value": "cmsFloat32Number",
+          "Output": "cmsFloat32Number",
+          "p": "cmsInterpParams"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid Fake3D16(CMSREGISTER const cmsUInt16Number Input[],\n              CMSREGISTER cmsUInt16Number Output[],\n              CMSREGISTER const struct _cms_interp_struc* p)\n{\n       Output[0] =  0xFFFF - Input[2];\n       Output[1] =  0xFFFF - Input[1];\n       Output[2] =  0xFFFF - Input[0];\n}",
+      "fn_code_pos": [
+        [
+          240,
+          0
+        ],
+        [
+          248,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Fake3D16",
+        "parameters": {
+          "Input": "CMSREGISTER",
+          "Output": "CMSREGISTER",
+          "struct": "CMSREGISTER"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsInterpFunction my_Interpolators_Factory(cmsUInt32Number nInputChannels, \n                                           cmsUInt32Number nOutputChannels, \n                                           cmsUInt32Number dwFlags)\n{\n    cmsInterpFunction Interpolation;\n    cmsBool  IsFloat = (dwFlags & CMS_LERP_FLAGS_FLOAT);\n\n    // Initialize the return to zero as a non-supported mark\n    memset(&Interpolation, 0, sizeof(Interpolation));\n\n    // For 1D to 1D and floating point\n    if (nInputChannels == 1 && nOutputChannels == 1 && IsFloat) {\n\n        Interpolation.LerpFloat = Fake1Dfloat;\n    }\n    else\n    if (nInputChannels == 3 && nOutputChannels == 3 && !IsFloat) {\n    \n        // For 3D to 3D and 16 bits\n        Interpolation.Lerp16 = Fake3D16;\n    }\n\n    // Here is the interpolation \n    return Interpolation;\n}",
+      "fn_code_pos": [
+        [
+          251,
+          0
+        ],
+        [
+          275,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "my_Interpolators_Factory",
+        "parameters": {
+          "nInputChannels": "cmsUInt32Number",
+          "nOutputChannels": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsInterpFunction"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckInterp1DPlugin(void)\n{\n    cmsToneCurve* Sampled1D = NULL;\n    cmsContext ctx = NULL;\n    cmsContext cpy = NULL;\n    const cmsFloat32Number tab[] = { 0.0f, 0.10f, 0.20f, 0.30f, 0.40f, 0.50f, 0.60f, 0.70f, 0.80f, 0.90f, 1.00f };  // A straight line\n\n    // 1st level context\n    ctx = WatchDogContext(NULL);\n    if (ctx == NULL) {\n        Fail(\"Cannot create context\");\n        goto Error;\n    }\n\n    cmsPluginTHR(ctx, &InterpPluginSample);\n\n    cpy = DupContext(ctx, NULL);    \n     if (cpy == NULL) {\n        Fail(\"Cannot create context (2)\");\n        goto Error;\n    }\n\n    Sampled1D = cmsBuildTabulatedToneCurveFloat(cpy, 11, tab);\n    if (Sampled1D == NULL) {\n        Fail(\"Cannot create tone curve (1)\");\n        goto Error;\n    }\n    \n    // Do some interpolations with the plugin\n    if (!IsGoodVal(\"0.10\", cmsEvalToneCurveFloat(Sampled1D, 0.10f), 0.10, 0.01)) goto Error;\n    if (!IsGoodVal(\"0.13\", cmsEvalToneCurveFloat(Sampled1D, 0.13f), 0.10, 0.01)) goto Error;\n    if (!IsGoodVal(\"0.55\", cmsEvalToneCurveFloat(Sampled1D, 0.55f), 0.50, 0.01)) goto Error;\n    if (!IsGoodVal(\"0.9999\", cmsEvalToneCurveFloat(Sampled1D, 0.9999f), 0.90, 0.01)) goto Error;\n\n    cmsFreeToneCurve(Sampled1D);\n    cmsDeleteContext(ctx);\n    cmsDeleteContext(cpy);\n   \n    // Now in global context\n    Sampled1D = cmsBuildTabulatedToneCurveFloat(NULL, 11, tab);\n    if (Sampled1D == NULL) {\n        Fail(\"Cannot create tone curve (2)\");\n        goto Error;\n    }\n    \n    // Now without the plug-in\n    if (!IsGoodVal(\"0.10\", cmsEvalToneCurveFloat(Sampled1D, 0.10f), 0.10, 0.001)) goto Error;\n    if (!IsGoodVal(\"0.13\", cmsEvalToneCurveFloat(Sampled1D, 0.13f), 0.13, 0.001)) goto Error;\n    if (!IsGoodVal(\"0.55\", cmsEvalToneCurveFloat(Sampled1D, 0.55f), 0.55, 0.001)) goto Error;\n    if (!IsGoodVal(\"0.9999\", cmsEvalToneCurveFloat(Sampled1D, 0.9999f), 0.9999, 0.001)) goto Error;\n\n    cmsFreeToneCurve(Sampled1D);\n    return 1;\n\nError:\n    if (ctx != NULL) cmsDeleteContext(ctx);\n     if (cpy != NULL) cmsDeleteContext(ctx);\n    if (Sampled1D != NULL) cmsFreeToneCurve(Sampled1D);\n    return 0;\n\n}",
+      "fn_code_pos": [
+        [
+          287,
+          0
+        ],
+        [
+          347,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckInterp1DPlugin",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckInterp3DPlugin(void)\n{\n\n    cmsPipeline* p;\n    cmsStage* clut;\n    cmsContext ctx;\n    cmsUInt16Number In[3], Out[3];\n    cmsUInt16Number identity[] = { \n\n       0,       0,       0,      \n       0,       0,       0xffff, \n       0,       0xffff,  0,      \n       0,       0xffff,  0xffff, \n       0xffff,  0,       0,      \n       0xffff,  0,       0xffff, \n       0xffff,  0xffff,  0,      \n       0xffff,  0xffff,  0xffff \n    };\n\n\n    ctx = WatchDogContext(NULL);\n    if (ctx == NULL) {\n        Fail(\"Cannot create context\");\n       return 0;\n    }\n\n\n    cmsPluginTHR(ctx, &InterpPluginSample);\n\n\n    p =  cmsPipelineAlloc(ctx, 3, 3);\n    clut = cmsStageAllocCLut16bit(ctx, 2, 3, 3, identity);\n    cmsPipelineInsertStage(p, cmsAT_BEGIN, clut);\n\n    // Do some interpolations with the plugin\n\n    In[0] = 0; In[1] = 0; In[2] = 0;\n    cmsPipelineEval16(In, Out, p);\n\n    if (!IsGoodWord(\"0\", Out[0], 0xFFFF - 0)) goto Error;\n    if (!IsGoodWord(\"1\", Out[1], 0xFFFF - 0)) goto Error;\n    if (!IsGoodWord(\"2\", Out[2], 0xFFFF - 0)) goto Error;\n\n    In[0] = 0x1234; In[1] = 0x5678; In[2] = 0x9ABC;\n    cmsPipelineEval16(In, Out, p);\n\n    if (!IsGoodWord(\"0\", 0xFFFF - 0x9ABC, Out[0])) goto Error;\n    if (!IsGoodWord(\"1\", 0xFFFF - 0x5678, Out[1])) goto Error;\n    if (!IsGoodWord(\"2\", 0xFFFF - 0x1234, Out[2])) goto Error;\n\n    cmsPipelineFree(p);\n    cmsDeleteContext(ctx);\n\n    // Now without the plug-in\n\n    p =  cmsPipelineAlloc(NULL, 3, 3);\n    clut = cmsStageAllocCLut16bit(NULL, 2, 3, 3, identity);\n    cmsPipelineInsertStage(p, cmsAT_BEGIN, clut);\n\n    In[0] = 0; In[1] = 0; In[2] = 0;\n    cmsPipelineEval16(In, Out, p);\n\n    if (!IsGoodWord(\"0\", 0, Out[0])) goto Error;\n    if (!IsGoodWord(\"1\", 0, Out[1])) goto Error;\n    if (!IsGoodWord(\"2\", 0, Out[2])) goto Error;\n\n    In[0] = 0x1234; In[1] = 0x5678; In[2] = 0x9ABC;\n    cmsPipelineEval16(In, Out, p);\n\n    if (!IsGoodWord(\"0\", 0x1234, Out[0])) goto Error;\n    if (!IsGoodWord(\"1\", 0x5678, Out[1])) goto Error;\n    if (!IsGoodWord(\"2\", 0x9ABC, Out[2])) goto Error;\n\n    cmsPipelineFree(p);\n    return 1;\n\nError:\n    cmsPipelineFree(p);\n    return 0;\n\n}",
+      "fn_code_pos": [
+        [
+          350,
+          0
+        ],
+        [
+          430,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckInterp3DPlugin",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static cmsFloat64Number my_fns(cmsInt32Number Type, \n                        const cmsFloat64Number Params[], \n                        cmsFloat64Number R)\n{\n    cmsFloat64Number Val;\n    switch (Type) {\n\n    case TYPE_SIN:     \n        Val = Params[0]* sin(R * M_PI);\n        break;\n\n    case -TYPE_SIN:\n        Val = asin(R) / (M_PI * Params[0]);\n        break;\n\n    case TYPE_COS:     \n        Val = Params[0]* cos(R * M_PI);\n        break;\n\n    case -TYPE_COS:\n        Val = acos(R) / (M_PI * Params[0]);\n        break;\n\n    default: return -1.0;\n\n     }\n\n   return Val;\n}",
+      "fn_code_pos": [
+        [
+          441,
+          0
+        ],
+        [
+          469,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "my_fns",
+        "parameters": {
+          "Type": "cmsInt32Number",
+          "Params": "cmsFloat64Number",
+          "R": "cmsFloat64Number"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "static \ncmsFloat64Number my_fns2(cmsInt32Number Type, \n                        const cmsFloat64Number Params[], \n                        cmsFloat64Number R)\n{\n    cmsFloat64Number Val;\n    switch (Type) {\n\n    case TYPE_TAN:     \n        Val = Params[0]* tan(R * M_PI);\n        break;\n\n    case -TYPE_TAN:\n        Val = atan(R) / (M_PI * Params[0]);\n        break;\n\n     default: return -1.0;\n     }\n\n   return Val;\n}",
+      "fn_code_pos": [
+        [
+          471,
+          0
+        ],
+        [
+          491,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "my_fns2",
+        "parameters": {
+          "Type": "cmsInt32Number",
+          "Params": "cmsFloat64Number",
+          "R": "cmsFloat64Number"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "static double Rec709Math(int Type, const double Params[], double R)\n{ \n    double Fun = 0;\n\n    switch (Type)\n    {\n    case 709:\n\n        if (R <= (Params[3]*Params[4])) Fun = R / Params[3];\n        else Fun = pow(((R - Params[2])/Params[1]), Params[0]);\n        break;\n\n    case -709:\n\n        if (R <= Params[4]) Fun = R * Params[3];\n        else Fun = Params[1] * pow(R, (1/Params[0])) + Params[2];\n        break;\n    }\n    return Fun;\n}",
+      "fn_code_pos": [
+        [
+          494,
+          0
+        ],
+        [
+          513,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Rec709Math",
+        "parameters": {
+          "Type": "int",
+          "Params": "double",
+          "R": "double"
+        },
+        "return_type": "double"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckParametricCurvePlugin(void)\n{\n    cmsContext ctx = NULL;\n    cmsContext cpy = NULL;\n    cmsContext cpy2 = NULL;\n    cmsToneCurve* sinus;\n    cmsToneCurve* cosinus;\n    cmsToneCurve* tangent;\n    cmsToneCurve* reverse_sinus;\n    cmsToneCurve* reverse_cosinus;\n    cmsFloat64Number scale = 1.0;\n\n\n    ctx = WatchDogContext(NULL);\n\n    cmsPluginTHR(ctx, &CurvePluginSample);\n\n    cpy = DupContext(ctx, NULL);\n    \n    cmsPluginTHR(cpy, &CurvePluginSample2);\n\n    cpy2 =  DupContext(cpy, NULL);\n    \n    cmsPluginTHR(cpy2, &Rec709Plugin);\n    \n\n    sinus = cmsBuildParametricToneCurve(cpy, TYPE_SIN, &scale);\n    cosinus = cmsBuildParametricToneCurve(cpy, TYPE_COS, &scale);\n    tangent = cmsBuildParametricToneCurve(cpy, TYPE_TAN, &scale);\n    reverse_sinus = cmsReverseToneCurve(sinus);\n    reverse_cosinus = cmsReverseToneCurve(cosinus);\n\n\n     if (!IsGoodVal(\"0.10\", cmsEvalToneCurveFloat(sinus, 0.10f), sin(0.10 * M_PI) , 0.001)) goto Error;\n     if (!IsGoodVal(\"0.60\", cmsEvalToneCurveFloat(sinus, 0.60f), sin(0.60* M_PI), 0.001)) goto Error;\n     if (!IsGoodVal(\"0.90\", cmsEvalToneCurveFloat(sinus, 0.90f), sin(0.90* M_PI), 0.001)) goto Error;\n\n     if (!IsGoodVal(\"0.10\", cmsEvalToneCurveFloat(cosinus, 0.10f), cos(0.10* M_PI), 0.001)) goto Error;\n     if (!IsGoodVal(\"0.60\", cmsEvalToneCurveFloat(cosinus, 0.60f), cos(0.60* M_PI), 0.001)) goto Error;\n     if (!IsGoodVal(\"0.90\", cmsEvalToneCurveFloat(cosinus, 0.90f), cos(0.90* M_PI), 0.001)) goto Error;\n\n     if (!IsGoodVal(\"0.10\", cmsEvalToneCurveFloat(tangent, 0.10f), tan(0.10* M_PI), 0.001)) goto Error;\n     if (!IsGoodVal(\"0.60\", cmsEvalToneCurveFloat(tangent, 0.60f), tan(0.60* M_PI), 0.001)) goto Error;\n     if (!IsGoodVal(\"0.90\", cmsEvalToneCurveFloat(tangent, 0.90f), tan(0.90* M_PI), 0.001)) goto Error;\n\n     \n     if (!IsGoodVal(\"0.10\", cmsEvalToneCurveFloat(reverse_sinus, 0.10f), asin(0.10)/M_PI, 0.001)) goto Error;\n     if (!IsGoodVal(\"0.60\", cmsEvalToneCurveFloat(reverse_sinus, 0.60f), asin(0.60)/M_PI, 0.001)) goto Error;\n     if (!IsGoodVal(\"0.90\", cmsEvalToneCurveFloat(reverse_sinus, 0.90f), asin(0.90)/M_PI, 0.001)) goto Error;\n\n     if (!IsGoodVal(\"0.10\", cmsEvalToneCurveFloat(reverse_cosinus, 0.10f), acos(0.10)/M_PI, 0.001)) goto Error;\n     if (!IsGoodVal(\"0.60\", cmsEvalToneCurveFloat(reverse_cosinus, 0.60f), acos(0.60)/M_PI, 0.001)) goto Error;\n     if (!IsGoodVal(\"0.90\", cmsEvalToneCurveFloat(reverse_cosinus, 0.90f), acos(0.90)/M_PI, 0.001)) goto Error;\n\n     cmsFreeToneCurve(sinus);\n     cmsFreeToneCurve(cosinus);\n     cmsFreeToneCurve(tangent);\n     cmsFreeToneCurve(reverse_sinus);\n     cmsFreeToneCurve(reverse_cosinus);\n\n     cmsDeleteContext(ctx);\n     cmsDeleteContext(cpy);\n     cmsDeleteContext(cpy2);\n\n     return 1;\n\nError:\n     \n     cmsFreeToneCurve(sinus);\n     cmsFreeToneCurve(reverse_sinus);\n     cmsFreeToneCurve(cosinus);\n     cmsFreeToneCurve(reverse_cosinus);\n\n     if (ctx != NULL) cmsDeleteContext(ctx);\n     if (cpy != NULL) cmsDeleteContext(cpy);\n     if (cpy2 != NULL) cmsDeleteContext(cpy2);\n     return 0;\n}",
+      "fn_code_pos": [
+        [
+          550,
+          0
+        ],
+        [
+          627,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckParametricCurvePlugin",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsUInt8Number* my_Unroll565(CMSREGISTER struct _cmstransform_struct* nfo, \n                            CMSREGISTER cmsUInt16Number wIn[], \n                            CMSREGISTER cmsUInt8Number* accum,\n                            CMSREGISTER cmsUInt32Number Stride)\n{\n    cmsUInt16Number pixel = *(cmsUInt16Number*) accum;  // Take whole pixel\n\n    double r = floor(((double) (pixel & 31) * 65535.0) / 31.0 + 0.5);\n    double g = floor((((pixel >> 5) & 63) * 65535.0) / 63.0 + 0.5);\n    double b = floor((((pixel >> 11) & 31) * 65535.0) / 31.0 + 0.5);\n    \n    wIn[2] = (cmsUInt16Number) r;\n    wIn[1] = (cmsUInt16Number) g;\n    wIn[0] = (cmsUInt16Number) b;\n    \n    return accum + 2;\n}",
+      "fn_code_pos": [
+        [
+          637,
+          0
+        ],
+        [
+          653,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "my_Unroll565",
+        "parameters": {
+          "struct": "CMSREGISTER",
+          "wIn": "CMSREGISTER",
+          "cmsUInt32Number": "CMSREGISTER"
+        },
+        "return_type": "cmsUInt8Number"
+      }
+    },
+    {
+      "fn_code": "cmsUInt8Number* my_Pack565(CMSREGISTER _cmsTRANSFORM* info, \n                           CMSREGISTER cmsUInt16Number wOut[],\n                           CMSREGISTER cmsUInt8Number* output,\n                           CMSREGISTER cmsUInt32Number Stride)\n{\n\n    CMSREGISTER cmsUInt16Number pixel;\n    int r, g, b;\n\n    r = (int) floor(( wOut[2] * 31) / 65535.0 + 0.5);\n    g = (int) floor(( wOut[1] * 63) / 65535.0 + 0.5);\n    b = (int) floor(( wOut[0] * 31) / 65535.0 + 0.5);\n\n\n    pixel = (r & 31)  | (( g & 63) << 5) | ((b & 31) << 11);\n\n    \n    *(cmsUInt16Number*) output = pixel;\n    return output + 2;\n}",
+      "fn_code_pos": [
+        [
+          655,
+          0
+        ],
+        [
+          674,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "my_Pack565",
+        "parameters": {
+          "wOut": "CMSREGISTER",
+          "cmsUInt32Number": "CMSREGISTER"
+        },
+        "return_type": "cmsUInt8Number"
+      }
+    },
+    {
+      "fn_code": "cmsFormatter my_FormatterFactory(cmsUInt32Number Type, \n                                  cmsFormatterDirection Dir, \n                                  cmsUInt32Number dwFlags)\n{\n    cmsFormatter Result = { NULL };\n\n    if ((Type == TYPE_RGB_565) && \n        !(dwFlags & CMS_PACK_FLAGS_FLOAT) &&\n        (Dir == cmsFormatterInput)) {\n            Result.Fmt16 = my_Unroll565;       \n    }\n    return Result;\n}",
+      "fn_code_pos": [
+        [
+          677,
+          0
+        ],
+        [
+          689,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "my_FormatterFactory",
+        "parameters": {
+          "Type": "cmsUInt32Number",
+          "Dir": "cmsFormatterDirection",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsFormatter"
+      }
+    },
+    {
+      "fn_code": "cmsFormatter my_FormatterFactory2(cmsUInt32Number Type, \n                                  cmsFormatterDirection Dir, \n                                  cmsUInt32Number dwFlags)\n{\n    cmsFormatter Result = { NULL };\n\n    if ((Type == TYPE_RGB_565) && \n        !(dwFlags & CMS_PACK_FLAGS_FLOAT) &&\n        (Dir == cmsFormatterOutput)) {\n            Result.Fmt16 = my_Pack565;       \n    }\n    return Result;\n}",
+      "fn_code_pos": [
+        [
+          692,
+          0
+        ],
+        [
+          704,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "my_FormatterFactory2",
+        "parameters": {
+          "Type": "cmsUInt32Number",
+          "Dir": "cmsFormatterDirection",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsFormatter"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckFormattersPlugin(void)\n{\n    cmsContext ctx = WatchDogContext(NULL);\n    cmsContext cpy;\n    cmsContext cpy2;\n    cmsHTRANSFORM xform;\n    cmsUInt16Number stream[]= { 0xffffU, 0x1234U, 0x0000U, 0x33ddU };\n    cmsUInt16Number result[4];\n    int i;\n\n    \n    cmsPluginTHR(ctx, &FormattersPluginSample);\n\n    cpy = DupContext(ctx, NULL);\n    \n    cmsPluginTHR(cpy, &FormattersPluginSample2);\n\n    cpy2 = DupContext(cpy, NULL);\n    \n    xform = cmsCreateTransformTHR(cpy2, NULL, TYPE_RGB_565, NULL, TYPE_RGB_565, INTENT_PERCEPTUAL, cmsFLAGS_NULLTRANSFORM);\n\n    cmsDoTransform(xform, stream, result, 4);\n\n    cmsDeleteTransform(xform);\n    cmsDeleteContext(ctx);\n    cmsDeleteContext(cpy);\n    cmsDeleteContext(cpy2);\n\n    for (i=0; i < 4; i++)\n        if (stream[i] != result[i]) return 0;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          723,
+          0
+        ],
+        [
+          755,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckFormattersPlugin",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid *Type_int_Read(struct _cms_typehandler_struct* self,\n \t\t\t    cmsIOHANDLER* io, \n               cmsUInt32Number* nItems, \n               cmsUInt32Number SizeOfTag)\n{\n    cmsUInt32Number* Ptr = (cmsUInt32Number*) _cmsMalloc(self ->ContextID, sizeof(cmsUInt32Number));\n    if (Ptr == NULL) return NULL;\n    if (!_cmsReadUInt32Number(io, Ptr)) return NULL;\n    *nItems = 1;\n    return Ptr;\n}",
+      "fn_code_pos": [
+        [
+          764,
+          0
+        ],
+        [
+          775,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Type_int_Read",
+        "parameters": {
+          "self": "struct _cms_typehandler_struct",
+          "io": "cmsIOHANDLER",
+          "nItems": "cmsUInt32Number",
+          "SizeOfTag": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool Type_int_Write(struct _cms_typehandler_struct* self,\n                        cmsIOHANDLER* io, \n                        void* Ptr, cmsUInt32Number nItems)\n{\n    return _cmsWriteUInt32Number(io, *(cmsUInt32Number*) Ptr);\n}",
+      "fn_code_pos": [
+        [
+          777,
+          0
+        ],
+        [
+          783,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Type_int_Write",
+        "parameters": {
+          "self": "struct _cms_typehandler_struct",
+          "io": "cmsIOHANDLER",
+          "Ptr": "void",
+          "nItems": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* Type_int_Dup(struct _cms_typehandler_struct* self, \n                   const void *Ptr, cmsUInt32Number n)\n{\n    return _cmsDupMem(self ->ContextID, Ptr, n * sizeof(cmsUInt32Number));\n}",
+      "fn_code_pos": [
+        [
+          785,
+          0
+        ],
+        [
+          790,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Type_int_Dup",
+        "parameters": {
+          "self": "struct _cms_typehandler_struct",
+          "Ptr": "void",
+          "n": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void Type_int_Free(struct _cms_typehandler_struct* self, \n                   void* Ptr)\n{\n    _cmsFree(self ->ContextID, Ptr);\n}",
+      "fn_code_pos": [
+        [
+          792,
+          0
+        ],
+        [
+          796,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Type_int_Free",
+        "parameters": {
+          "self": "struct _cms_typehandler_struct",
+          "Ptr": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckTagTypePlugin(void)\n{\n    cmsContext ctx = NULL;\n    cmsContext cpy = NULL;\n    cmsContext cpy2 = NULL;\n    cmsHPROFILE h = NULL;\n    cmsUInt32Number myTag = 1234;\n    cmsUInt32Number rc = 0;\n    char* data = NULL;\n    cmsUInt32Number *ptr = NULL;\n    cmsUInt32Number clen = 0;\n\n\n    ctx = WatchDogContext(NULL);\n    cmsPluginTHR(ctx, &TagTypePluginSample);\n\n    cpy = DupContext(ctx, NULL);    \n    cpy2 = DupContext(cpy, NULL);\n    \n    cmsDeleteContext(ctx);\n    cmsDeleteContext(cpy);\n    \n    h = cmsCreateProfilePlaceholder(cpy2);\n    if (h == NULL) {\n        Fail(\"Create placeholder failed\");\n        goto Error;\n    }\n\n\n    if (!cmsWriteTag(h, SigInt, &myTag)) {\n        Fail(\"Plug-in failed\");\n        goto Error;\n    }\n\n    rc = cmsSaveProfileToMem(h, NULL, &clen);\n    if (!rc) {\n        Fail(\"Fetch mem size failed\");\n        goto Error;        \n    }\n\n\n    data = (char*) malloc(clen);\n    if (data == NULL) {\n        Fail(\"malloc failed ?!?\");\n        goto Error;\n    }\n\n\n    rc = cmsSaveProfileToMem(h, data, &clen);\n    if (!rc) {\n        Fail(\"Save to mem failed\");\n        goto Error;\n    }\n\n    cmsCloseProfile(h);\n\n    cmsSetLogErrorHandler(NULL);\n    h = cmsOpenProfileFromMem(data, clen);    \n    if (h == NULL) {\n        Fail(\"Open profile failed\");\n        goto Error;\n    }\n\n    ptr = (cmsUInt32Number*) cmsReadTag(h, SigInt);\n    if (ptr != NULL) {\n\n        Fail(\"read tag/context switching failed\");\n        goto Error;\n    }\n\n    cmsCloseProfile(h);\n    ResetFatalError();\n\n    h = cmsOpenProfileFromMemTHR(cpy2, data, clen);    \n    if (h == NULL) {\n        Fail(\"Open profile from mem failed\");\n        goto Error;\n    }\n\n    // Get rid of data\n    free(data); data = NULL;\n\n    ptr = (cmsUInt32Number*) cmsReadTag(h, SigInt);\n    if (ptr == NULL) {        \n        Fail(\"Read tag/context switching failed (2)\");\n        return 0;\n    }\n   \n    rc = (*ptr == 1234);\n\n    cmsCloseProfile(h);\n\n    cmsDeleteContext(cpy2);\n\n    return rc;\n\nError:\n\n    if (h != NULL) cmsCloseProfile(h);\n    if (ctx != NULL) cmsDeleteContext(ctx);\n    if (cpy != NULL) cmsDeleteContext(cpy);\n    if (cpy2 != NULL) cmsDeleteContext(cpy2);\n    if (data) free(data);\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          812,
+          0
+        ],
+        [
+          917,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckTagTypePlugin",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid EvaluateNegate(const cmsFloat32Number In[], \n                     cmsFloat32Number Out[], \n                     const cmsStage *mpe)\n{\n    Out[0] = 1.0f - In[0];\n    Out[1] = 1.0f - In[1];\n    Out[2] = 1.0f - In[2];\n}",
+      "fn_code_pos": [
+        [
+          924,
+          0
+        ],
+        [
+          932,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EvaluateNegate",
+        "parameters": {
+          "In": "cmsFloat32Number",
+          "Out": "cmsFloat32Number",
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsStage* StageAllocNegate(cmsContext ContextID)\n{\n    return _cmsStageAllocPlaceholder(ContextID,\n                 SigNegateType, 3, 3, EvaluateNegate, \n                 NULL, NULL, NULL);\n}",
+      "fn_code_pos": [
+        [
+          934,
+          0
+        ],
+        [
+          940,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "StageAllocNegate",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsStage"
+      }
+    },
+    {
+      "fn_code": "static\nvoid *Type_negate_Read(struct _cms_typehandler_struct* self,\n \t\t\t    cmsIOHANDLER* io, \n                cmsUInt32Number* nItems, \n                cmsUInt32Number SizeOfTag)\n{\n    cmsUInt16Number   Chans;\n    if (!_cmsReadUInt16Number(io, &Chans)) return NULL;\n    if (Chans != 3) return NULL;\n\n    *nItems = 1;\n    return StageAllocNegate(self -> ContextID);\n}",
+      "fn_code_pos": [
+        [
+          942,
+          0
+        ],
+        [
+          954,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Type_negate_Read",
+        "parameters": {
+          "self": "struct _cms_typehandler_struct",
+          "io": "cmsIOHANDLER",
+          "nItems": "cmsUInt32Number",
+          "SizeOfTag": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool Type_negate_Write(struct _cms_typehandler_struct* self,\n                        cmsIOHANDLER* io, \n                        void* Ptr, cmsUInt32Number nItems)\n{\n\n    if (!_cmsWriteUInt16Number(io, 3)) return FALSE;    \n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          956,
+          0
+        ],
+        [
+          964,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Type_negate_Write",
+        "parameters": {
+          "self": "struct _cms_typehandler_struct",
+          "io": "cmsIOHANDLER",
+          "Ptr": "void",
+          "nItems": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckMPEPlugin(void)\n{\n    cmsContext ctx = NULL;\n    cmsContext cpy = NULL;\n    cmsContext cpy2 = NULL;\n    cmsHPROFILE h = NULL;\n    cmsUInt32Number rc = 0;\n    char* data = NULL;\n    cmsUInt32Number clen = 0;\n    cmsFloat32Number In[3], Out[3];\n    cmsPipeline* pipe;\n\n    ctx = WatchDogContext(NULL);\n    cmsPluginTHR(ctx, &MPEPluginSample);\n\n    cpy =  DupContext(ctx, NULL);    \n    cpy2 = DupContext(cpy, NULL);\n    \n    cmsDeleteContext(ctx);\n    cmsDeleteContext(cpy);\n    \n    h = cmsCreateProfilePlaceholder(cpy2);\n    if (h == NULL) {\n        Fail(\"Create placeholder failed\");\n        goto Error;\n    }\n    \n    pipe = cmsPipelineAlloc(cpy2, 3, 3);\n    cmsPipelineInsertStage(pipe, cmsAT_BEGIN, StageAllocNegate(cpy2));\n\n\n    In[0] = 0.3f; In[1] = 0.2f; In[2] = 0.9f;\n    cmsPipelineEvalFloat(In, Out, pipe);\n\n    rc = (IsGoodVal(\"0\", Out[0], 1.0-In[0], 0.001) && \n           IsGoodVal(\"1\", Out[1], 1.0-In[1], 0.001) && \n           IsGoodVal(\"2\", Out[2], 1.0-In[2], 0.001));\n\n    if (!rc) {\n        Fail(\"Pipeline failed\");\n        goto Error;    \n    }\n\n    if (!cmsWriteTag(h, cmsSigDToB3Tag, pipe)) {\n        Fail(\"Plug-in failed\");\n        goto Error;\n    }\n\n    // This cleans the stage as well\n    cmsPipelineFree(pipe);\n\n    rc = cmsSaveProfileToMem(h, NULL, &clen);\n    if (!rc) {\n        Fail(\"Fetch mem size failed\");\n        goto Error;        \n    }\n\n\n    data = (char*) malloc(clen);\n    if (data == NULL) {\n        Fail(\"malloc failed ?!?\");\n        goto Error;\n    }\n\n\n    rc = cmsSaveProfileToMem(h, data, &clen);\n    if (!rc) {\n        Fail(\"Save to mem failed\");\n        goto Error;\n    }\n\n    cmsCloseProfile(h);\n\n\n    cmsSetLogErrorHandler(NULL);\n    h = cmsOpenProfileFromMem(data, clen);    \n    if (h == NULL) {\n        Fail(\"Open profile failed\");\n        goto Error;\n    } \n\n    pipe = (cmsPipeline*) cmsReadTag(h, cmsSigDToB3Tag);\n    if (pipe != NULL) {\n\n        // Unsupported stage, should fail\n        Fail(\"read tag/context switching failed\");\n        goto Error;\n    }\n\n    cmsCloseProfile(h);\n\n    ResetFatalError();\n\n    h = cmsOpenProfileFromMemTHR(cpy2, data, clen);    \n    if (h == NULL) {\n        Fail(\"Open profile from mem failed\");\n        goto Error;\n    }\n\n    // Get rid of data\n    free(data); data = NULL;\n\n    pipe = (cmsPipeline*) cmsReadTag(h, cmsSigDToB3Tag);\n    if (pipe == NULL) {        \n        Fail(\"Read tag/context switching failed (2)\");\n        return 0;\n    }\n   \n    // Evaluate for negation\n    In[0] = 0.3f; In[1] = 0.2f; In[2] = 0.9f;\n    cmsPipelineEvalFloat(In, Out, pipe);\n\n     rc = (IsGoodVal(\"0\", Out[0], 1.0-In[0], 0.001) && \n           IsGoodVal(\"1\", Out[1], 1.0-In[1], 0.001) && \n           IsGoodVal(\"2\", Out[2], 1.0-In[2], 0.001));\n        \n    cmsCloseProfile(h);\n\n    cmsDeleteContext(cpy2);\n\n    return rc;\n\nError:\n\n    if (h != NULL) cmsCloseProfile(h);\n    if (ctx != NULL) cmsDeleteContext(ctx);\n    if (cpy != NULL) cmsDeleteContext(cpy);\n    if (cpy2 != NULL) cmsDeleteContext(cpy2);\n    if (data) free(data);\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          975,
+          0
+        ],
+        [
+          1106,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckMPEPlugin",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid FastEvaluateCurves(CMSREGISTER const cmsUInt16Number In[],\n                        CMSREGISTER cmsUInt16Number Out[],\n                        CMSREGISTER const void* Data)\n{\n    Out[0] = In[0];\n}",
+      "fn_code_pos": [
+        [
+          1113,
+          0
+        ],
+        [
+          1119,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FastEvaluateCurves",
+        "parameters": {
+          "In": "CMSREGISTER",
+          "Out": "CMSREGISTER",
+          "void": "CMSREGISTER"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool MyOptimize(cmsPipeline** Lut, \n                   cmsUInt32Number  Intent, \n                   cmsUInt32Number* InputFormat, \n                   cmsUInt32Number* OutputFormat, \n                   cmsUInt32Number* dwFlags)\n{\n    cmsStage* mpe;\n     _cmsStageToneCurvesData* Data;\n\n    //  Only curves in this LUT? All are identities?\n    for (mpe = cmsPipelineGetPtrToFirstStage(*Lut);\n         mpe != NULL;\n         mpe = cmsStageNext(mpe)) {\n\n            if (cmsStageType(mpe) != cmsSigCurveSetElemType) return FALSE;\n\n            // Check for identity\n            Data = (_cmsStageToneCurvesData*) cmsStageData(mpe);\n            if (Data ->nCurves != 1) return FALSE;\n            if (cmsEstimateGamma(Data->TheCurves[0], 0.1) > 1.0) return FALSE;\n          \n    }\n\n    *dwFlags |= cmsFLAGS_NOCACHE;\n    _cmsPipelineSetOptimizationParameters(*Lut, FastEvaluateCurves, NULL, NULL, NULL);\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1121,
+          0
+        ],
+        [
+          1149,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyOptimize",
+        "parameters": {
+          "Lut": "cmsPipeline",
+          "Intent": "cmsUInt32Number",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckOptimizationPlugin(void)\n{\n    cmsContext ctx = WatchDogContext(NULL);\n    cmsContext cpy;\n    cmsContext cpy2;\n    cmsHTRANSFORM xform;\n    cmsUInt8Number In[]= { 10, 20, 30, 40 };\n    cmsUInt8Number Out[4];\n    cmsToneCurve* Linear[1];\n    cmsHPROFILE h;\n    int i;\n    \n    cmsPluginTHR(ctx, &OptimizationPluginSample);\n\n    cpy = DupContext(ctx, NULL);\n    cpy2 = DupContext(cpy, NULL);\n    \n    Linear[0] = cmsBuildGamma(cpy2, 1.0);\n    h = cmsCreateLinearizationDeviceLinkTHR(cpy2, cmsSigGrayData, Linear);\n    cmsFreeToneCurve(Linear[0]);\n\n    xform = cmsCreateTransformTHR(cpy2, h, TYPE_GRAY_8, h, TYPE_GRAY_8, INTENT_PERCEPTUAL, 0);\n    cmsCloseProfile(h);\n\n    cmsDoTransform(xform, In, Out, 4);\n\n    cmsDeleteTransform(xform);\n    cmsDeleteContext(ctx);\n    cmsDeleteContext(cpy);\n    cmsDeleteContext(cpy2);\n\n    for (i=0; i < 4; i++)\n        if (In[i] != Out[i]) return 0;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          1158,
+          0
+        ],
+        [
+          1193,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckOptimizationPlugin",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsPipeline*  MyNewIntent(cmsContext      ContextID, \n                          cmsUInt32Number nProfiles,\n                          cmsUInt32Number TheIntents[], \n                          cmsHPROFILE     hProfiles[], \n                          cmsBool         BPC[],\n                          cmsFloat64Number AdaptationStates[],\n                          cmsUInt32Number dwFlags)\n{\n    cmsPipeline*    Result;\n    cmsUInt32Number ICCIntents[256];\n    cmsUInt32Number i;\n\n for (i=0; i < nProfiles; i++) \n        ICCIntents[i] = (TheIntents[i] == INTENT_DECEPTIVE) ? INTENT_PERCEPTUAL : \n                                                 TheIntents[i];\n\n if (cmsGetColorSpace(hProfiles[0]) != cmsSigGrayData ||\n     cmsGetColorSpace(hProfiles[nProfiles-1]) != cmsSigGrayData) \n           return _cmsDefaultICCintents(ContextID, nProfiles, \n                                   ICCIntents, hProfiles, \n                                   BPC, AdaptationStates, \n                                   dwFlags);\n\n    Result = cmsPipelineAlloc(ContextID, 1, 1);\n    if (Result == NULL) return NULL;\n\n    cmsPipelineInsertStage(Result, cmsAT_BEGIN,\n                            cmsStageAllocIdentity(ContextID, 1));\n\n    return Result;\n}",
+      "fn_code_pos": [
+        [
+          1209,
+          0
+        ],
+        [
+          1240,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyNewIntent",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "TheIntents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckIntentPlugin(void)\n{\n    cmsContext ctx = WatchDogContext(NULL);\n    cmsContext cpy;\n    cmsContext cpy2;\n    cmsHTRANSFORM xform;\n    cmsHPROFILE h1, h2;\n    cmsToneCurve* Linear1;\n    cmsToneCurve* Linear2;\n    cmsUInt8Number In[]= { 10, 20, 30, 40 };\n    cmsUInt8Number Out[4];\n    int i;\n    \n    cmsPluginTHR(ctx, &IntentPluginSample);\n\n    cpy  = DupContext(ctx, NULL);    \n    cpy2 = DupContext(cpy, NULL);\n    \n    Linear1 = cmsBuildGamma(cpy2, 3.0);\n    Linear2 = cmsBuildGamma(cpy2, 0.1);\n    h1 = cmsCreateLinearizationDeviceLinkTHR(cpy2, cmsSigGrayData, &Linear1);\n    h2 = cmsCreateLinearizationDeviceLinkTHR(cpy2, cmsSigGrayData, &Linear2);\n\n    cmsFreeToneCurve(Linear1);\n    cmsFreeToneCurve(Linear2);\n\n    xform = cmsCreateTransformTHR(cpy2, h1, TYPE_GRAY_8, h2, TYPE_GRAY_8, INTENT_DECEPTIVE, 0);\n    cmsCloseProfile(h1); cmsCloseProfile(h2);\n\n    cmsDoTransform(xform, In, Out, 4);\n\n    cmsDeleteTransform(xform);\n    cmsDeleteContext(ctx);\n    cmsDeleteContext(cpy);\n    cmsDeleteContext(cpy2);\n\n    for (i=0; i < 4; i++)\n        if (Out[i] != In[i]) return 0;\n\n    return 1;    \n}",
+      "fn_code_pos": [
+        [
+          1249,
+          0
+        ],
+        [
+          1289,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckIntentPlugin",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid TrancendentalTransform(struct _cmstransform_struct * CMM,\n                              const void* InputBuffer,\n                              void* OutputBuffer,\n                              cmsUInt32Number Size,\n                              cmsUInt32Number Stride)\n{\n    cmsUInt32Number i;\n\n    for (i=0; i < Size; i++)\n    {\n        ((cmsUInt8Number*) OutputBuffer)[i] = 0x42;\n    }\n\n}",
+      "fn_code_pos": [
+        [
+          1297,
+          0
+        ],
+        [
+          1311,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TrancendentalTransform",
+        "parameters": {
+          "CMM": "struct _cmstransform_struct",
+          "InputBuffer": "void",
+          "OutputBuffer": "void",
+          "Size": "cmsUInt32Number",
+          "Stride": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool  TransformFactory(_cmsTransformFn* xformPtr,\n                          void** UserData,\n                           _cmsFreeUserDataFn* FreePrivateDataFn,\n                           cmsPipeline** Lut,\n                           cmsUInt32Number* InputFormat,\n                           cmsUInt32Number* OutputFormat,\n                           cmsUInt32Number* dwFlags)\n\n{\n    if (*OutputFormat == TYPE_GRAY_8)\n    {\n        // *Lut holds the pipeline to be applied\n        *xformPtr = TrancendentalTransform;\n        return TRUE;\n    }\n\n    return FALSE;\n}",
+      "fn_code_pos": [
+        [
+          1314,
+          0
+        ],
+        [
+          1331,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TransformFactory",
+        "parameters": {
+          "xformPtr": "_cmsTransformFn",
+          "UserData": "void",
+          "FreePrivateDataFn": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckTransformPlugin(void)\n{\n    cmsContext ctx = WatchDogContext(NULL);\n    cmsContext cpy;\n    cmsContext cpy2;\n    cmsHTRANSFORM xform;\n    cmsUInt8Number In[]= { 10, 20, 30, 40 };\n    cmsUInt8Number Out[4];\n    cmsToneCurve* Linear;\n    cmsHPROFILE h;\n    int i;\n\n    \n    cmsPluginTHR(ctx, &FullTransformPluginSample);\n\n    cpy  = DupContext(ctx, NULL);\n    cpy2 = DupContext(cpy, NULL);\n    \n    Linear = cmsBuildGamma(cpy2, 1.0);\n    h = cmsCreateLinearizationDeviceLinkTHR(cpy2, cmsSigGrayData, &Linear);\n    cmsFreeToneCurve(Linear);\n\n    xform = cmsCreateTransformTHR(cpy2, h, TYPE_GRAY_8, h, TYPE_GRAY_8, INTENT_PERCEPTUAL, 0);\n    cmsCloseProfile(h);\n\n    cmsDoTransform(xform, In, Out, 4);\n\n\n    cmsDeleteTransform(xform);\n    cmsDeleteContext(ctx);\n    cmsDeleteContext(cpy);\n    cmsDeleteContext(cpy2);\n\n    for (i=0; i < 4; i++)\n        if (Out[i] != 0x42) return 0;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          1342,
+          0
+        ],
+        [
+          1379,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckTransformPlugin",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* MyMtxCreate(cmsContext id)\n{\n   MyMtx* mtx = (MyMtx*) _cmsMalloc(id, sizeof(MyMtx));\n   mtx ->nlocks = 0;\n   return mtx;\n}",
+      "fn_code_pos": [
+        [
+          1391,
+          0
+        ],
+        [
+          1397,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyMtxCreate",
+        "parameters": {
+          "id": "cmsContext"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid MyMtxDestroy(cmsContext id, void* mtx)\n{\n    MyMtx* mtx_ = (MyMtx*) mtx;\n\n    if (mtx_->nlocks != 0)\n        Die(\"Locks != 0 when setting free a mutex\");\n\n    _cmsFree(id, mtx);\n\n}",
+      "fn_code_pos": [
+        [
+          1399,
+          0
+        ],
+        [
+          1409,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyMtxDestroy",
+        "parameters": {
+          "id": "cmsContext",
+          "mtx": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool MyMtxLock(cmsContext id, void* mtx)\n{\n    MyMtx* mtx_ = (MyMtx*) mtx;\n    mtx_->nlocks++;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1411,
+          0
+        ],
+        [
+          1418,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyMtxLock",
+        "parameters": {
+          "id": "cmsContext",
+          "mtx": "void"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid MyMtxUnlock(cmsContext id, void* mtx)\n{\n    MyMtx* mtx_ = (MyMtx*) mtx;\n    mtx_->nlocks--;\n\n}",
+      "fn_code_pos": [
+        [
+          1420,
+          0
+        ],
+        [
+          1426,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyMtxUnlock",
+        "parameters": {
+          "id": "cmsContext",
+          "mtx": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckMutexPlugin(void)\n{\n    cmsContext ctx = WatchDogContext(NULL);\n    cmsContext cpy;\n    cmsContext cpy2;\n    cmsHTRANSFORM xform;\n    cmsUInt8Number In[]= { 10, 20, 30, 40 };\n    cmsUInt8Number Out[4];\n    cmsToneCurve* Linear;\n    cmsHPROFILE h;\n    int i;\n\n    \n    cmsPluginTHR(ctx, &MutexPluginSample);\n\n    cpy  = DupContext(ctx, NULL);\n    cpy2 = DupContext(cpy, NULL);\n    \n    Linear = cmsBuildGamma(cpy2, 1.0);\n    h = cmsCreateLinearizationDeviceLinkTHR(cpy2, cmsSigGrayData, &Linear);\n    cmsFreeToneCurve(Linear);\n\n    xform = cmsCreateTransformTHR(cpy2, h, TYPE_GRAY_8, h, TYPE_GRAY_8, INTENT_PERCEPTUAL, 0);\n    cmsCloseProfile(h);\n\n    cmsDoTransform(xform, In, Out, 4);\n\n\n    cmsDeleteTransform(xform);\n    cmsDeleteContext(ctx);\n    cmsDeleteContext(cpy);\n    cmsDeleteContext(cpy2);\n\n    for (i=0; i < 4; i++)\n        if (Out[i] != In[i]) return 0;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          1437,
+          0
+        ],
+        [
+          1474,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckMutexPlugin",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CheckMethodPackDoublesFromFloat(void)\n{\n\n    cmsContext ctx = WatchDogContext(NULL);\n\n    cmsHTRANSFORM xform; \n    cmsHTRANSFORM l_pFakeProfileLAB;\n\n    cmsFloat64Number l_D_OutputColorArrayBlack[8];\n    cmsFloat64Number l_D_OutputColorArrayBlue[8];\n\n    cmsCIELab LabInBlack; \n    cmsCIELab LabInBlue;\n\n    cmsUInt16Number Lab_UI16_Black[3];\n    cmsUInt16Number Lab_UI16_Blue[3];\n\n    cmsHPROFILE OutputCMYKProfile;\n    cmsUInt32Number l_UI32_OutputFormat;\n\n\n    cmsPluginTHR(ctx, &FullTransformPluginSample);\n\n\n    l_pFakeProfileLAB = cmsCreateLab2ProfileTHR(ctx, NULL);\n\n    if (l_pFakeProfileLAB == NULL)\n        return 0;\n\n    OutputCMYKProfile = cmsOpenProfileFromFileTHR(ctx, \"TestCLT.icc\", \"r\");\n\n    if (OutputCMYKProfile == NULL)\n        return 0;\n\n    l_UI32_OutputFormat = 0;\n    l_UI32_OutputFormat |= COLORSPACE_SH(PT_CMYK);\n    l_UI32_OutputFormat |= PLANAR_SH(1);\n    l_UI32_OutputFormat |= CHANNELS_SH(4);\n    l_UI32_OutputFormat |= BYTES_SH(0);\n    l_UI32_OutputFormat |= FLOAT_SH(1);\n\n\n    xform = cmsCreateTransformTHR(ctx, l_pFakeProfileLAB, TYPE_Lab_DBL, OutputCMYKProfile, l_UI32_OutputFormat, INTENT_PERCEPTUAL, 0);\n    cmsCloseProfile(OutputCMYKProfile);\n    cmsCloseProfile(l_pFakeProfileLAB);\n\n    Lab_UI16_Black[0] = 0;\n    Lab_UI16_Black[1] = 32768;\n    Lab_UI16_Black[2] = 32768;\n\n    Lab_UI16_Blue[0] = 0;\n    Lab_UI16_Blue[1] = 8192;\n    Lab_UI16_Blue[2] = 8192;\n\n    cmsLabEncoded2Float(&LabInBlack, Lab_UI16_Black);\n    cmsLabEncoded2Float(&LabInBlue, Lab_UI16_Blue);\n\n    memset(l_D_OutputColorArrayBlack, 0, sizeof(l_D_OutputColorArrayBlack));\n    memset(l_D_OutputColorArrayBlue, 0, sizeof(l_D_OutputColorArrayBlue));\n\n    cmsDoTransform(xform, &LabInBlack, l_D_OutputColorArrayBlack, 1);\n    cmsDoTransform(xform, &LabInBlue, l_D_OutputColorArrayBlue, 1);\n\n\n    cmsDeleteTransform(xform);\n    cmsDeleteContext(ctx);\n    \n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          1477,
+          0
+        ],
+        [
+          1545,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckMethodPackDoublesFromFloat",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "my_Unroll565(CMSREGISTER struct _cmstransform_struct* nfo, \n                            CMSREGISTER cmsUInt16Number wIn[], \n                            CMSREGISTER cmsUInt8Number* accum,\n                            CMSREGISTER cmsUInt32Number Stride)",
+      "fn_dec_pos": [
+        [
+          637,
+          16
+        ],
+        [
+          640,
+          63
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "my_Unroll565",
+        "parameters": {
+          "struct": "CMSREGISTER",
+          "wIn": "CMSREGISTER",
+          "cmsUInt32Number": "CMSREGISTER"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "my_Pack565(CMSREGISTER _cmsTRANSFORM* info, \n                           CMSREGISTER cmsUInt16Number wOut[],\n                           CMSREGISTER cmsUInt8Number* output,\n                           CMSREGISTER cmsUInt32Number Stride)",
+      "fn_dec_pos": [
+        [
+          655,
+          16
+        ],
+        [
+          658,
+          62
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "my_Pack565",
+        "parameters": {
+          "wOut": "CMSREGISTER",
+          "cmsUInt32Number": "CMSREGISTER"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "Type_int_Read(struct _cms_typehandler_struct* self,\n \t\t\t    cmsIOHANDLER* io, \n               cmsUInt32Number* nItems, \n               cmsUInt32Number SizeOfTag)",
+      "fn_dec_pos": [
+        [
+          765,
+          6
+        ],
+        [
+          768,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Type_int_Read",
+        "parameters": {
+          "self": "struct _cms_typehandler_struct",
+          "io": "cmsIOHANDLER",
+          "nItems": "cmsUInt32Number",
+          "SizeOfTag": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "Type_int_Dup(struct _cms_typehandler_struct* self, \n                   const void *Ptr, cmsUInt32Number n)",
+      "fn_dec_pos": [
+        [
+          786,
+          6
+        ],
+        [
+          787,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Type_int_Dup",
+        "parameters": {
+          "self": "struct _cms_typehandler_struct",
+          "Ptr": "void",
+          "n": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "StageAllocNegate(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          935,
+          10
+        ],
+        [
+          935,
+          48
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "StageAllocNegate",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "Type_negate_Read(struct _cms_typehandler_struct* self,\n \t\t\t    cmsIOHANDLER* io, \n                cmsUInt32Number* nItems, \n                cmsUInt32Number SizeOfTag)",
+      "fn_dec_pos": [
+        [
+          943,
+          6
+        ],
+        [
+          946,
+          42
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Type_negate_Read",
+        "parameters": {
+          "self": "struct _cms_typehandler_struct",
+          "io": "cmsIOHANDLER",
+          "nItems": "cmsUInt32Number",
+          "SizeOfTag": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MyNewIntent(cmsContext      ContextID, \n                          cmsUInt32Number nProfiles,\n                          cmsUInt32Number TheIntents[], \n                          cmsHPROFILE     hProfiles[], \n                          cmsBool         BPC[],\n                          cmsFloat64Number AdaptationStates[],\n                          cmsUInt32Number dwFlags)",
+      "fn_dec_pos": [
+        [
+          1210,
+          14
+        ],
+        [
+          1216,
+          50
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyNewIntent",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "TheIntents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MyMtxCreate(cmsContext id)",
+      "fn_dec_pos": [
+        [
+          1392,
+          6
+        ],
+        [
+          1392,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyMtxCreate",
+        "parameters": {
+          "id": "cmsContext"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n    int nlocks;\n} MyMtx;",
+      {
+        "nlocks": "int"
+      },
+      "MyMtx",
+      [
+        1386,
+        0
+      ],
+      [
+        1388,
+        8
+      ]
+    ],
+    [
+      "struct _cms_typehandler_struct",
+      {},
+      "",
+      [
+        765,
+        20
+      ],
+      [
+        765,
+        50
+      ]
+    ],
+    [
+      "struct _cms_typehandler_struct",
+      {},
+      "",
+      [
+        778,
+        23
+      ],
+      [
+        778,
+        53
+      ]
+    ],
+    [
+      "struct _cms_typehandler_struct",
+      {},
+      "",
+      [
+        786,
+        19
+      ],
+      [
+        786,
+        49
+      ]
+    ],
+    [
+      "struct _cms_typehandler_struct",
+      {},
+      "",
+      [
+        792,
+        19
+      ],
+      [
+        792,
+        49
+      ]
+    ],
+    [
+      "struct _cms_typehandler_struct",
+      {},
+      "",
+      [
+        943,
+        23
+      ],
+      [
+        943,
+        53
+      ]
+    ],
+    [
+      "struct _cms_typehandler_struct",
+      {},
+      "",
+      [
+        957,
+        26
+      ],
+      [
+        957,
+        56
+      ]
+    ],
+    [
+      "struct _cmstransform_struct",
+      {},
+      "",
+      [
+        1298,
+        28
+      ],
+      [
+        1298,
+        55
+      ]
+    ],
+    [
+      "typedef struct {\n    int nlocks;\n} MyMtx;",
+      {
+        "nlocks": "int"
+      },
+      "MyMtx",
+      [
+        1386,
+        0
+      ],
+      [
+        1388,
+        8
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"testcms2.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

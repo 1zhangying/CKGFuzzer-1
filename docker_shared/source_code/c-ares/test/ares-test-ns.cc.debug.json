@@ -1,0 +1,270 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int EnterContainer(void *data) {\n  ContainerInfo *container = (ContainerInfo*)data;\n\n  if (verbose) {\n    std::cerr << \"Running function in container {chroot='\"\n              << container->fs_->root() << \"', hostname='\" << container->hostname_\n              << \"', domainname='\" << container->domainname_ << \"'}\"\n              << std::endl;\n  }\n\n  // Ensure we are apparently root before continuing.\n  int count = 10;\n  while (getuid() != 0 && count > 0) {\n    usleep(100000);\n    count--;\n  }\n  if (getuid() != 0) {\n    std::cerr << \"Child in user namespace has uid \" << getuid() << std::endl;\n    return -1;\n  }\n  if (!container->fs_->mountpt().empty()) {\n    // We want to bind mount this inside the specified directory.\n    std::string innerdir = container->fs_->root() + container->fs_->mountpt();\n    if (verbose) std::cerr << \" mount --bind \" << container->fs_->mountpt()\n                           << \" \" << innerdir << std::endl;\n    int rc = mount(container->fs_->mountpt().c_str(), innerdir.c_str(),\n                   \"none\", MS_BIND, 0);\n    if (rc != 0) {\n      std::cerr << \"Warning: failed to bind mount \" << container->fs_->mountpt() << \" at \"\n                << innerdir << \", errno=\" << errno << std::endl;\n    }\n  }\n\n  // Move into the specified directory.\n  if (chdir(container->fs_->root().c_str()) != 0) {\n    std::cerr << \"Failed to chdir('\" << container->fs_->root()\n              << \"'), errno=\" << errno << std::endl;\n    return -1;\n  }\n  // And make it the new root directory;\n  char buffer[PATH_MAX + 1];\n  if (getcwd(buffer, PATH_MAX) == NULL) {\n    std::cerr << \"failed to retrieve cwd, errno=\" << errno << std::endl;\n    return -1;\n  }\n  buffer[PATH_MAX] = '\\0';\n  if (chroot(buffer) != 0) {\n    std::cerr << \"chroot('\" << buffer << \"') failed, errno=\" << errno << std::endl;\n    return -1;\n  }\n\n  // Set host/domainnames if specified\n  if (!container->hostname_.empty()) {\n    if (sethostname(container->hostname_.c_str(),\n                    container->hostname_.size()) != 0) {\n      std::cerr << \"Failed to sethostname('\" << container->hostname_\n                << \"'), errno=\" << errno << std::endl;\n      return -1;\n    }\n  }\n  if (!container->domainname_.empty()) {\n    if (setdomainname(container->domainname_.c_str(),\n                      container->domainname_.size()) != 0) {\n      std::cerr << \"Failed to setdomainname('\" << container->domainname_\n                << \"'), errno=\" << errno << std::endl;\n      return -1;\n    }\n  }\n\n  return container->fn_();\n}",
+      "fn_code_pos": [
+        [
+          27,
+          0
+        ],
+        [
+          97,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EnterContainer",
+        "parameters": {
+          "data": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int RunInContainer(ContainerFilesystem* fs, const std::string& hostname,\n                   const std::string& domainname, VoidToIntFn fn) {\n  const int stack_size = 1024 * 1024;\n  std::vector<byte> stack(stack_size, 0);\n  ContainerInfo container = {fs, hostname, domainname, fn};\n\n  // Start a child process in a new user and UTS namespace\n  pid_t child = clone(EnterContainer, stack.data() + stack_size,\n                      CLONE_VM|CLONE_NEWNS|CLONE_NEWUSER|CLONE_NEWUTS|SIGCHLD,\n                      (void *)&container);\n  if (child < 0) {\n    std::cerr << \"Failed to clone(), errno=\" << errno << std::endl;\n    return -1;\n  }\n\n  // Build the UID map that makes us look like root inside the namespace.\n  std::stringstream mapfiless;\n  mapfiless << \"/proc/\" << child << \"/uid_map\";\n  std::string mapfile = mapfiless.str();\n  int fd = open(mapfile.c_str(), O_CREAT|O_WRONLY|O_TRUNC, 0644);\n  if (fd < 0) {\n    std::cerr << \"Failed to create '\" << mapfile << \"'\" << std::endl;\n    return -1;\n  }\n  std::stringstream contentss;\n  contentss << \"0 \" << getuid() << \" 1\" << std::endl;\n  std::string content = contentss.str();\n  int rc = write(fd, content.c_str(), content.size());\n  if (rc != (int)content.size()) {\n    std::cerr << \"Failed to write uid map to '\" << mapfile << \"'\" << std::endl;\n  }\n  close(fd);\n\n  // Wait for the child process and retrieve its status.\n  int status;\n  waitpid(child, &status, 0);\n  if (rc <= 0) {\n    std::cerr << \"Failed to waitpid(\" << child << \")\" << std::endl;\n    return -1;\n  }\n  if (!WIFEXITED(status)) {\n    std::cerr << \"Child \" << child << \" did not exit normally\" << std::endl;\n    return -1;\n  }\n  return status;\n}",
+      "fn_code_pos": [
+        [
+          105,
+          0
+        ],
+        [
+          150,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "RunInContainer",
+        "parameters": {
+          "fs": "ContainerFilesystem",
+          "hostname": "std::string",
+          "domainname": "std::string",
+          "fn": "VoidToIntFn"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "ContainerFilesystem::ContainerFilesystem(NameContentList files, const std::string& mountpt) {\n  rootdir_ = TempNam(nullptr, \"ares-chroot\");\n  mkdir(rootdir_.c_str(), 0755);\n  dirs_.push_front(rootdir_);\n  for (const auto& nc : files) {\n    std::string fullpath = rootdir_ + nc.first;\n    int idx = fullpath.rfind('/');\n    std::string dir = fullpath.substr(0, idx);\n    EnsureDirExists(dir);\n    files_.push_back(std::unique_ptr<TransientFile>(\n        new TransientFile(fullpath, nc.second)));\n  }\n  if (!mountpt.empty()) {\n    char buffer[PATH_MAX + 1];\n    if (realpath(mountpt.c_str(), buffer)) {\n      mountpt_ = buffer;\n      std::string fullpath = rootdir_ + mountpt_;\n      EnsureDirExists(fullpath);\n    }\n  }\n}",
+      "fn_code_pos": [
+        [
+          152,
+          0
+        ],
+        [
+          172,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ContainerFilesystem::ContainerFilesystem",
+        "parameters": {
+          "files": "NameContentList",
+          "mountpt": "std::string"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "ContainerFilesystem::~ContainerFilesystem() {\n  files_.clear();\n  for (const std::string& dir : dirs_) {\n    rmdir(dir.c_str());\n  }\n}",
+      "fn_code_pos": [
+        [
+          174,
+          0
+        ],
+        [
+          179,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ContainerFilesystem::~ContainerFilesystem",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void ContainerFilesystem::EnsureDirExists(const std::string& dir) {\n  if (std::find(dirs_.begin(), dirs_.end(), dir) != dirs_.end()) {\n    return;\n  }\n  size_t idx = dir.rfind('/');\n  if (idx != std::string::npos) {\n    std::string prevdir = dir.substr(0, idx);\n    EnsureDirExists(prevdir);\n  }\n  // Ensure this directory is in the list before its ancestors.\n  mkdir(dir.c_str(), 0755);\n  dirs_.push_front(dir);\n}",
+      "fn_code_pos": [
+        [
+          181,
+          0
+        ],
+        [
+          193,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ContainerFilesystem::EnsureDirExists",
+        "parameters": {
+          "dir": "std::string"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct ContainerInfo {\n  ContainerFilesystem* fs_;\n  std::string hostname_;\n  std::string domainname_;\n  VoidToIntFn fn_;\n}",
+      {
+        "* fs_": "ContainerFilesystem",
+        "hostname_": "std::string",
+        "domainname_": "std::string",
+        "fn_": "VoidToIntFn"
+      },
+      "ContainerInfo",
+      [
+        20,
+        0
+      ],
+      [
+        25,
+        1
+      ]
+    ],
+    [
+      "struct ContainerInfo {\n  ContainerFilesystem* fs_;\n  std::string hostname_;\n  std::string domainname_;\n  VoidToIntFn fn_;\n}",
+      {
+        "* fs_": "ContainerFilesystem",
+        "hostname_": "std::string",
+        "domainname_": "std::string",
+        "fn_": "VoidToIntFn"
+      },
+      "ContainerInfo",
+      [
+        20,
+        0
+      ],
+      [
+        25,
+        1
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares-test.h\"\n",
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    [
+      "#include <sys/mount.h>\n",
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        0
+      ]
+    ],
+    [
+      "#include <sys/types.h>\n",
+      [
+        5,
+        0
+      ],
+      [
+        6,
+        0
+      ]
+    ],
+    [
+      "#include <sys/stat.h>\n",
+      [
+        6,
+        0
+      ],
+      [
+        7,
+        0
+      ]
+    ],
+    [
+      "#include <fcntl.h>\n",
+      [
+        7,
+        0
+      ],
+      [
+        8,
+        0
+      ]
+    ],
+    [
+      "#include <iostream>\n",
+      [
+        9,
+        0
+      ],
+      [
+        10,
+        0
+      ]
+    ],
+    [
+      "#include <functional>\n",
+      [
+        10,
+        0
+      ],
+      [
+        11,
+        0
+      ]
+    ],
+    [
+      "#include <string>\n",
+      [
+        11,
+        0
+      ],
+      [
+        12,
+        0
+      ]
+    ],
+    [
+      "#include <sstream>\n",
+      [
+        12,
+        0
+      ],
+      [
+        13,
+        0
+      ]
+    ],
+    [
+      "#include <vector>\n",
+      [
+        13,
+        0
+      ],
+      [
+        14,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

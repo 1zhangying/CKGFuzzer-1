@@ -1,0 +1,64 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17		#include "ares_setup.h"	
+18			
+19		#include "ares.h"	
+20		#include "ares_private.h"	
+21			
+22		void ares__close_sockets(ares_channel channel, struct server_state *server)	
+23	0	{	
+24	0	struct send_request *sendreq;	
+25			
+26		/* Free all pending output buffers. */	
+27	0	while (server->qhead)	
+28	0	{	
+29		/* Advance server->qhead; pull out query as we go. */	
+30	0	sendreq = server->qhead;	
+31	0	server->qhead = sendreq->next;	
+32	0	if (sendreq->data_storage !=NULL)	
+33	0	ares_free(sendreq->data_storage);	
+34	0	ares_free(sendreq);	
+35	0	}	
+36	0	server->qtail =NULL;	
+37			
+38		/* Reset any existing input buffer. */	
+39	0	if (server->tcp_buffer)	
+40	0	ares_free(server->tcp_buffer);	
+41	0	server->tcp_buffer =NULL;	
+42	0	server->tcp_lenbuf_pos = 0;	
+43			
+44		/* Reset brokenness */	
+45	0	server->is_broken = 0;	
+46			
+47		/* Close the TCP and UDP sockets. */	
+48	0	if (server->tcp_socket !=ARES_SOCKET_BAD)	
+49	0	{	
+50	0	SOCK_STATE_CALLBACK(channel, server->tcp_socket, 0, 0);	
+51	0	ares__close_socket(channel, server->tcp_socket);	
+52	0	server->tcp_socket =ARES_SOCKET_BAD;	
+53	0	server->tcp_connection_generation = ++channel->tcp_connection_generation;	
+54	0	}	
+55	0	if (server->udp_socket !=ARES_SOCKET_BAD)	
+56	0	{	
+57	0	SOCK_STATE_CALLBACK(channel, server->udp_socket, 0, 0);	
+58	0	ares__close_socket(channel, server->udp_socket);	
+59	0	server->udp_socket =ARES_SOCKET_BAD;	
+60	0	}	
+61	0	}	
+
+

@@ -1,0 +1,354 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int checkcmap(int n, uint16_t *r, uint16_t *g, uint16_t *b)\n{\n    while (n-- > 0)\n        if (*r++ >= 256 || *g++ >= 256 || *b++ >= 256)\n            return (16);\n    fprintf(stderr, \"Warning, assuming 8-bit colormap.\\n\");\n    return (8);\n}",
+      "fn_code_pos": [
+        [
+          51,
+          0
+        ],
+        [
+          58,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "checkcmap",
+        "parameters": {
+          "n": "int",
+          "r": "uint16_t",
+          "g": "uint16_t",
+          "b": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    uint16_t bitspersample, shortv;\n    uint32_t imagewidth, imagelength;\n    uint16_t config = PLANARCONFIG_CONTIG;\n    uint32_t rowsperstrip = (uint32_t)-1;\n    uint16_t photometric = PHOTOMETRIC_RGB;\n    uint16_t *rmap, *gmap, *bmap;\n    uint32_t row;\n    int cmap = -1;\n    TIFF *in, *out;\n    int c;\n\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n\n    while ((c = getopt(argc, argv, \"C:c:p:r:h\")) != -1)\n        switch (c)\n        {\n            case 'C': /* force colormap interpretation */\n                cmap = atoi(optarg);\n                break;\n            case 'c': /* compression scheme */\n                if (!processCompressOptions(optarg))\n                    usage(EXIT_FAILURE);\n                break;\n            case 'p': /* planar configuration */\n                if (streq(optarg, \"separate\"))\n                    config = PLANARCONFIG_SEPARATE;\n                else if (streq(optarg, \"contig\"))\n                    config = PLANARCONFIG_CONTIG;\n                else\n                    usage(EXIT_FAILURE);\n                break;\n            case 'r': /* rows/strip */\n                rowsperstrip = atoi(optarg);\n                break;\n            case 'h':\n                usage(EXIT_SUCCESS);\n                break;\n            case '?':\n                usage(EXIT_FAILURE);\n                /*NOTREACHED*/\n        }\n    if (argc - optind != 2)\n        usage(EXIT_FAILURE);\n    in = TIFFOpen(argv[optind], \"r\");\n    if (in == NULL)\n        return (EXIT_FAILURE);\n    if (!TIFFGetField(in, TIFFTAG_PHOTOMETRIC, &shortv) ||\n        shortv != PHOTOMETRIC_PALETTE)\n    {\n        fprintf(stderr, \"%s: Expecting a palette image.\\n\", argv[optind]);\n        (void)TIFFClose(in);\n        return (EXIT_FAILURE);\n    }\n    if (!TIFFGetField(in, TIFFTAG_COLORMAP, &rmap, &gmap, &bmap))\n    {\n        fprintf(stderr, \"%s: No colormap (not a valid palette image).\\n\",\n                argv[optind]);\n        (void)TIFFClose(in);\n        return (EXIT_FAILURE);\n    }\n    bitspersample = 0;\n    TIFFGetField(in, TIFFTAG_BITSPERSAMPLE, &bitspersample);\n    if (bitspersample != 8)\n    {\n        fprintf(stderr, \"%s: Sorry, can only handle 8-bit images.\\n\",\n                argv[optind]);\n        (void)TIFFClose(in);\n        return (EXIT_FAILURE);\n    }\n    out = TIFFOpen(argv[optind + 1], \"w\");\n    if (out == NULL)\n    {\n        (void)TIFFClose(in);\n        return (EXIT_FAILURE);\n    }\n    cpTags(in, out);\n    TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &imagewidth);\n    TIFFGetField(in, TIFFTAG_IMAGELENGTH, &imagelength);\n    if (compression != (uint16_t)-1)\n        TIFFSetField(out, TIFFTAG_COMPRESSION, compression);\n    else\n        TIFFGetField(in, TIFFTAG_COMPRESSION, &compression);\n    switch (compression)\n    {\n        case COMPRESSION_JPEG:\n            if (jpegcolormode == JPEGCOLORMODE_RGB)\n                photometric = PHOTOMETRIC_YCBCR;\n            else\n                photometric = PHOTOMETRIC_RGB;\n            TIFFSetField(out, TIFFTAG_JPEGQUALITY, quality);\n            TIFFSetField(out, TIFFTAG_JPEGCOLORMODE, jpegcolormode);\n            break;\n        case COMPRESSION_LZW:\n        case COMPRESSION_ADOBE_DEFLATE:\n        case COMPRESSION_DEFLATE:\n            if (predictor != 0)\n                TIFFSetField(out, TIFFTAG_PREDICTOR, predictor);\n            break;\n    }\n    TIFFSetField(out, TIFFTAG_PHOTOMETRIC, photometric);\n    TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, 3);\n    TIFFSetField(out, TIFFTAG_PLANARCONFIG, config);\n    TIFFSetField(out, TIFFTAG_ROWSPERSTRIP,\n                 rowsperstrip = TIFFDefaultStripSize(out, rowsperstrip));\n    (void)TIFFGetField(in, TIFFTAG_PLANARCONFIG, &shortv);\n    if (cmap == -1)\n        cmap = checkcmap(1 << bitspersample, rmap, gmap, bmap);\n    if (cmap == 16)\n    {\n        /*\n         * Convert 16-bit colormap to 8-bit.\n         */\n        int i;\n\n        for (i = (1 << bitspersample) - 1; i >= 0; i--)\n        {\n#define CVT(x) (((x)*255) / ((1L << 16) - 1))\n            rmap[i] = CVT(rmap[i]);\n            gmap[i] = CVT(gmap[i]);\n            bmap[i] = CVT(bmap[i]);\n        }\n    }\n    {\n        unsigned char *ibuf, *obuf;\n        register unsigned char *pp;\n        register uint32_t x;\n        tmsize_t tss_in = TIFFScanlineSize(in);\n        tmsize_t tss_out = TIFFScanlineSize(out);\n        if (tss_out / tss_in < 3)\n        {\n            /*\n             * BUG 2750: The following code does not know about chroma\n             * subsampling of JPEG data. It assumes that the output buffer is 3x\n             * the length of the input buffer due to exploding the palette into\n             * RGB tuples. If this assumption is incorrect, it could lead to a\n             * buffer overflow. Go ahead and fail now to prevent that.\n             */\n            fprintf(stderr, \"Could not determine correct image size for \"\n                            \"output. Exiting.\\n\");\n            return EXIT_FAILURE;\n        }\n        ibuf = (unsigned char *)_TIFFmalloc(tss_in);\n        obuf = (unsigned char *)_TIFFmalloc(tss_out);\n        switch (config)\n        {\n            case PLANARCONFIG_CONTIG:\n                for (row = 0; row < imagelength; row++)\n                {\n                    if (!TIFFReadScanline(in, ibuf, row, 0))\n                        goto done;\n                    pp = obuf;\n                    for (x = 0; x < imagewidth; x++)\n                    {\n                        *pp++ = (unsigned char)rmap[ibuf[x]];\n                        *pp++ = (unsigned char)gmap[ibuf[x]];\n                        *pp++ = (unsigned char)bmap[ibuf[x]];\n                    }\n                    if (!TIFFWriteScanline(out, obuf, row, 0))\n                        goto done;\n                }\n                break;\n            case PLANARCONFIG_SEPARATE:\n                for (row = 0; row < imagelength; row++)\n                {\n                    if (!TIFFReadScanline(in, ibuf, row, 0))\n                        goto done;\n                    for (pp = obuf, x = 0; x < imagewidth; x++)\n                        *pp++ = (unsigned char)rmap[ibuf[x]];\n                    if (!TIFFWriteScanline(out, obuf, row, 0))\n                        goto done;\n                    for (pp = obuf, x = 0; x < imagewidth; x++)\n                        *pp++ = (unsigned char)gmap[ibuf[x]];\n                    if (!TIFFWriteScanline(out, obuf, row, 0))\n                        goto done;\n                    for (pp = obuf, x = 0; x < imagewidth; x++)\n                        *pp++ = (unsigned char)bmap[ibuf[x]];\n                    if (!TIFFWriteScanline(out, obuf, row, 0))\n                        goto done;\n                }\n                break;\n        }\n        _TIFFfree(ibuf);\n        _TIFFfree(obuf);\n    }\ndone:\n    (void)TIFFClose(in);\n    (void)TIFFClose(out);\n    return (EXIT_SUCCESS);\n}",
+      "fn_code_pos": [
+        [
+          73,
+          0
+        ],
+        [
+          266,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int processCompressOptions(char *opt)\n{\n    if (streq(opt, \"none\"))\n        compression = COMPRESSION_NONE;\n    else if (streq(opt, \"packbits\"))\n        compression = COMPRESSION_PACKBITS;\n    else if (strneq(opt, \"jpeg\", 4))\n    {\n        char *cp = strchr(opt, ':');\n\n        compression = COMPRESSION_JPEG;\n        while (cp)\n        {\n            if (isdigit((int)cp[1]))\n                quality = atoi(cp + 1);\n            else if (cp[1] == 'r')\n                jpegcolormode = JPEGCOLORMODE_RAW;\n            else\n                usage(EXIT_FAILURE);\n\n            cp = strchr(cp + 1, ':');\n        }\n    }\n    else if (strneq(opt, \"lzw\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_LZW;\n    }\n    else if (strneq(opt, \"zip\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_ADOBE_DEFLATE;\n    }\n    else\n        return (0);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          268,
+          0
+        ],
+        [
+          308,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {
+          "opt": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void cpTag(TIFF *in, TIFF *out, uint16_t tag, uint16_t count,\n                  TIFFDataType type)\n{\n    switch (type)\n    {\n        case TIFF_SHORT:\n            if (count == 1)\n            {\n                uint16_t shortv;\n                CopyField(tag, shortv);\n            }\n            else if (count == 2)\n            {\n                uint16_t shortv1, shortv2;\n                CopyField2(tag, shortv1, shortv2);\n            }\n            else if (count == 4)\n            {\n                uint16_t *tr, *tg, *tb, *ta;\n                CopyField4(tag, tr, tg, tb, ta);\n            }\n            else if (count == (uint16_t)-1)\n            {\n                uint16_t shortv1;\n                uint16_t *shortav;\n                CopyField2(tag, shortv1, shortav);\n            }\n            break;\n        case TIFF_LONG:\n        {\n            uint32_t longv;\n            CopyField(tag, longv);\n        }\n        break;\n        case TIFF_RATIONAL:\n            if (count == 1)\n            {\n                float floatv;\n                CopyField(tag, floatv);\n            }\n            else if (count == (uint16_t)-1)\n            {\n                float *floatav;\n                CopyField(tag, floatav);\n            }\n            break;\n        case TIFF_ASCII:\n        {\n            char *stringv;\n            CopyField(tag, stringv);\n        }\n        break;\n        case TIFF_DOUBLE:\n            if (count == 1)\n            {\n                double doublev;\n                CopyField(tag, doublev);\n            }\n            else if (count == (uint16_t)-1)\n            {\n                double *doubleav;\n                CopyField(tag, doubleav);\n            }\n            break;\n        default:\n            TIFFError(TIFFFileName(in),\n                      \"Data type %d is not supported, tag %d skipped.\", tag,\n                      type);\n    }\n}",
+      "fn_code_pos": [
+        [
+          323,
+          0
+        ],
+        [
+          392,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpTag",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF",
+          "tag": "uint16_t",
+          "count": "uint16_t",
+          "type": "TIFFDataType"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void cpTags(TIFF *in, TIFF *out)\n{\n    const struct cpTag *p;\n    for (p = tags; p < &tags[NTAGS]; p++)\n    {\n        if (p->tag == TIFFTAG_GROUP3OPTIONS)\n        {\n            uint16_t compression;\n            if (!TIFFGetField(in, TIFFTAG_COMPRESSION, &compression) ||\n                compression != COMPRESSION_CCITTFAX3)\n                continue;\n        }\n        if (p->tag == TIFFTAG_GROUP4OPTIONS)\n        {\n            uint16_t compression;\n            if (!TIFFGetField(in, TIFFTAG_COMPRESSION, &compression) ||\n                compression != COMPRESSION_CCITTFAX4)\n                continue;\n        }\n        cpTag(in, out, p->tag, p->count, p->type);\n    }\n}",
+      "fn_code_pos": [
+        [
+          455,
+          0
+        ],
+        [
+          476,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpTags",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"%s\\n\\n\", TIFFGetVersion());\n    fprintf(out, \"%s\", usage_info);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          509,
+          0
+        ],
+        [
+          516,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "usage(int code)",
+      "fn_dec_pos": [
+        [
+          48,
+          12
+        ],
+        [
+          48,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cpTags(TIFF *in, TIFF *out)",
+      "fn_dec_pos": [
+        [
+          49,
+          12
+        ],
+        [
+          49,
+          39
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpTags",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "processCompressOptions(char *)",
+      "fn_dec_pos": [
+        [
+          71,
+          11
+        ],
+        [
+          71,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct cpTag\n{\n    uint16_t tag;\n    uint16_t count;\n    TIFFDataType type;\n}",
+      {
+        "tag": "uint16_t",
+        "count": "uint16_t",
+        "type": "TIFFDataType"
+      },
+      "cpTag",
+      [
+        399,
+        13
+      ],
+      [
+        404,
+        1
+      ]
+    ],
+    [
+      "struct cpTag\n{\n    uint16_t tag;\n    uint16_t count;\n    TIFFDataType type;\n}",
+      {
+        "tag": "uint16_t",
+        "count": "uint16_t",
+        "type": "TIFFDataType"
+      },
+      "cpTag",
+      [
+        399,
+        13
+      ],
+      [
+        404,
+        1
+      ]
+    ],
+    [
+      "struct cpTag",
+      {},
+      "",
+      [
+        457,
+        10
+      ],
+      [
+        457,
+        22
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <ctype.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

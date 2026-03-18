@@ -1,0 +1,449 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "TiffStream::TiffStream()\n{\n    m_tif = NULL;\n\n    m_inStream = NULL;\n    m_outStream = NULL;\n    m_ioStream = NULL;\n\n    m_streamLength = 0;\n\n    m_this = reinterpret_cast<thandle_t>(this);\n}",
+      "fn_code_pos": [
+        [
+          6,
+          0
+        ],
+        [
+          17,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::TiffStream",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TiffStream::~TiffStream()\n{\n    if (m_tif != NULL)\n        TIFFClose(m_tif);\n}",
+      "fn_code_pos": [
+        [
+          19,
+          0
+        ],
+        [
+          23,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::~TiffStream",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFF *TiffStream::makeFileStream(istream *str)\n{\n    m_inStream = str;\n    m_outStream = NULL;\n    m_ioStream = NULL;\n    m_streamLength = getSize(m_this);\n\n    m_tif = TIFFClientOpen(m_name, \"r\", m_this, read, write, seek, close, size,\n                           map, unmap);\n    return m_tif;\n}",
+      "fn_code_pos": [
+        [
+          25,
+          0
+        ],
+        [
+          35,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::makeFileStream",
+        "parameters": {
+          "str": "istream"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TiffStream::makeFileStream(ostream *str)\n{\n    m_inStream = NULL;\n    m_outStream = str;\n    m_ioStream = NULL;\n    m_streamLength = getSize(m_this);\n\n    m_tif = TIFFClientOpen(m_name, \"w\", m_this, read, write, seek, close, size,\n                           map, unmap);\n    return m_tif;\n}",
+      "fn_code_pos": [
+        [
+          37,
+          0
+        ],
+        [
+          47,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::makeFileStream",
+        "parameters": {
+          "str": "ostream"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TiffStream::makeFileStream(iostream *str)\n{\n    m_inStream = NULL;\n    m_outStream = NULL;\n    m_ioStream = str;\n    m_streamLength = getSize(m_this);\n\n    m_tif = TIFFClientOpen(m_name, \"r+w\", m_this, read, write, seek, close,\n                           size, map, unmap);\n    return m_tif;\n}",
+      "fn_code_pos": [
+        [
+          49,
+          0
+        ],
+        [
+          59,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::makeFileStream",
+        "parameters": {
+          "str": "iostream"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "tsize_t TiffStream::read(thandle_t fd, tdata_t buf, tsize_t size)\n{\n    istream *istr;\n    TiffStream *ts = reinterpret_cast<TiffStream *>(fd);\n    if (ts->m_inStream != NULL)\n    {\n        istr = ts->m_inStream;\n    }\n    else if (ts->m_ioStream != NULL)\n    {\n        istr = ts->m_ioStream;\n    }\n\n    int remain = ts->m_streamLength - ts->tell(fd);\n    int actual = remain < size ? remain : size;\n    istr->read(reinterpret_cast<char *>(buf), actual);\n    return istr->gcount();\n}",
+      "fn_code_pos": [
+        [
+          61,
+          0
+        ],
+        [
+          78,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::read",
+        "parameters": {
+          "fd": "thandle_t",
+          "buf": "tdata_t",
+          "size": "tsize_t"
+        },
+        "return_type": "tsize_t"
+      }
+    },
+    {
+      "fn_code": "tsize_t TiffStream::write(thandle_t fd, tdata_t buf, tsize_t size)\n{\n    TiffStream *ts = reinterpret_cast<TiffStream *>(fd);\n    ostream *ostr;\n    if (ts->m_outStream != NULL)\n    {\n        ostr = ts->m_outStream;\n    }\n    else if (ts->m_ioStream != NULL)\n    {\n        ostr = ts->m_ioStream;\n    }\n\n    streampos start = ostr->tellp();\n    ostr->write(reinterpret_cast<const char *>(buf), size);\n    return ostr->tellp() - start;\n}",
+      "fn_code_pos": [
+        [
+          80,
+          0
+        ],
+        [
+          96,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::write",
+        "parameters": {
+          "fd": "thandle_t",
+          "buf": "tdata_t",
+          "size": "tsize_t"
+        },
+        "return_type": "tsize_t"
+      }
+    },
+    {
+      "fn_code": "toff_t TiffStream::seek(thandle_t fd, toff_t offset, int origin)\n{\n    TiffStream *ts = reinterpret_cast<TiffStream *>(fd);\n    if (ts->seekInt(fd, offset, origin) == true)\n        return offset;\n    else\n        return -1;\n}",
+      "fn_code_pos": [
+        [
+          98,
+          0
+        ],
+        [
+          105,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::seek",
+        "parameters": {
+          "fd": "thandle_t",
+          "offset": "toff_t",
+          "origin": "int"
+        },
+        "return_type": "toff_t"
+      }
+    },
+    {
+      "fn_code": "int TiffStream::close(thandle_t fd)\n{\n    TiffStream *ts = reinterpret_cast<TiffStream *>(fd);\n    if (ts->m_inStream != NULL)\n    {\n        ts->m_inStream = NULL;\n        return 0;\n    }\n    else if (ts->m_outStream != NULL)\n    {\n        ts->m_outStream = NULL;\n        return 0;\n    }\n    else if (ts->m_ioStream != NULL)\n    {\n        ts->m_ioStream = NULL;\n        return 0;\n    }\n    return -1;\n}",
+      "fn_code_pos": [
+        [
+          107,
+          0
+        ],
+        [
+          126,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::close",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "toff_t TiffStream::size(thandle_t fd)\n{\n    TiffStream *ts = reinterpret_cast<TiffStream *>(fd);\n    return ts->getSize(fd);\n}",
+      "fn_code_pos": [
+        [
+          128,
+          0
+        ],
+        [
+          132,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::size",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "toff_t"
+      }
+    },
+    {
+      "fn_code": "int TiffStream::map(thandle_t fd, tdata_t *phase, toff_t *psize) { return 0; }",
+      "fn_code_pos": [
+        [
+          134,
+          0
+        ],
+        [
+          134,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::map",
+        "parameters": {
+          "fd": "thandle_t",
+          "phase": "tdata_t",
+          "psize": "toff_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void TiffStream::unmap(thandle_t fd, tdata_t base, tsize_t size) {}",
+      "fn_code_pos": [
+        [
+          136,
+          0
+        ],
+        [
+          136,
+          67
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::unmap",
+        "parameters": {
+          "fd": "thandle_t",
+          "base": "tdata_t",
+          "size": "tsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "unsigned int TiffStream::getSize(thandle_t fd)\n{\n    if (!isOpen(fd))\n        return 0;\n\n    unsigned int pos = tell(fd);\n    seekInt(fd, 0, end);\n    unsigned int size = tell(fd);\n    seekInt(fd, pos, beg);\n\n    return size;\n}",
+      "fn_code_pos": [
+        [
+          138,
+          0
+        ],
+        [
+          149,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::getSize",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "unsigned int TiffStream::tell(thandle_t fd)\n{\n    TiffStream *ts = reinterpret_cast<TiffStream *>(fd);\n    if (ts->m_inStream != NULL)\n    {\n        return ts->m_inStream->tellg();\n    }\n    else if (ts->m_outStream != NULL)\n    {\n        return ts->m_outStream->tellp();\n    }\n    else if (ts->m_ioStream != NULL)\n    {\n        return ts->m_ioStream->tellg();\n    }\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          151,
+          0
+        ],
+        [
+          167,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::tell",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "bool TiffStream::seekInt(thandle_t fd, unsigned int offset, int origin)\n{\n    if (!isOpen(fd))\n        return false;\n\n    ios::seek_dir org;\n    switch (origin)\n    {\n        case beg:\n            org = ios::beg;\n            break;\n        case cur:\n            org = ios::cur;\n            break;\n        case end:\n            org = ios::end;\n            break;\n    }\n\n    TiffStream *ts = reinterpret_cast<TiffStream *>(fd);\n    if (ts->m_inStream != NULL)\n    {\n        ts->m_inStream->seekg(offset, org);\n        return true;\n    }\n    else if (ts->m_outStream != NULL)\n    {\n        ts->m_outStream->seekp(offset, org);\n        return true;\n    }\n    else if (ts->m_ioStream != NULL)\n    {\n        ts->m_ioStream->seekg(offset, org);\n        ts->m_ioStream->seekp(offset, org);\n        return true;\n    }\n    return false;\n}",
+      "fn_code_pos": [
+        [
+          169,
+          0
+        ],
+        [
+          206,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::seekInt",
+        "parameters": {
+          "fd": "thandle_t",
+          "offset": "unsigned int",
+          "origin": "int"
+        },
+        "return_type": "bool"
+      }
+    },
+    {
+      "fn_code": "bool TiffStream::isOpen(thandle_t fd)\n{\n    TiffStream *ts = reinterpret_cast<TiffStream *>(fd);\n    return (ts->m_inStream != NULL || ts->m_outStream != NULL ||\n            ts->m_ioStream != NULL);\n}",
+      "fn_code_pos": [
+        [
+          208,
+          0
+        ],
+        [
+          213,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::isOpen",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "bool"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "TiffStream::makeFileStream(istream *str)",
+      "fn_dec_pos": [
+        [
+          25,
+          6
+        ],
+        [
+          25,
+          46
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::makeFileStream",
+        "parameters": {
+          "str": "istream"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TiffStream::makeFileStream(ostream *str)",
+      "fn_dec_pos": [
+        [
+          37,
+          6
+        ],
+        [
+          37,
+          46
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::makeFileStream",
+        "parameters": {
+          "str": "ostream"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TiffStream::makeFileStream(iostream *str)",
+      "fn_dec_pos": [
+        [
+          49,
+          6
+        ],
+        [
+          49,
+          47
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TiffStream::makeFileStream",
+        "parameters": {
+          "str": "iostream"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tiffstream.h\"\n",
+      [
+        2,
+        0
+      ],
+      [
+        3,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

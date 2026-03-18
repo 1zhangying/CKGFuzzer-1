@@ -1,0 +1,182 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int write_strips(TIFF *tif, const tdata_t array, const tsize_t size)\n{\n    tstrip_t strip, nstrips;\n    tsize_t stripsize, offset;\n\n    stripsize = TIFFStripSize(tif);\n    if (!stripsize)\n    {\n        fprintf(stderr, \"Wrong size of strip.\\n\");\n        return -1;\n    }\n\n    nstrips = TIFFNumberOfStrips(tif);\n    for (offset = 0, strip = 0; offset < size && strip < nstrips;\n         offset += stripsize, strip++)\n    {\n        /*\n         * Properly write last strip.\n         */\n        tsize_t bufsize = size - offset;\n        if (bufsize > stripsize)\n            bufsize = stripsize;\n\n        if (TIFFWriteEncodedStrip(tif, strip, (char *)array + offset,\n                                  bufsize) != bufsize)\n        {\n            fprintf(stderr, \"Can't write strip %\" PRIu32 \".\\n\", strip);\n            return -1;\n        }\n    }\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          34,
+          0
+        ],
+        [
+          66,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "write_strips",
+        "parameters": {
+          "tif": "TIFF",
+          "array": "tdata_t",
+          "size": "tsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int read_strips(TIFF *tif, const tdata_t array, const tsize_t size)\n{\n    tstrip_t strip, nstrips;\n    tsize_t stripsize, offset;\n    tdata_t buf = NULL;\n\n    stripsize = TIFFStripSize(tif);\n    if (!stripsize)\n    {\n        fprintf(stderr, \"Wrong size of strip.\\n\");\n        return -1;\n    }\n\n    buf = _TIFFmalloc(stripsize);\n    if (!buf)\n    {\n        fprintf(stderr, \"Can't allocate space for strip buffer.\\n\");\n        return -1;\n    }\n\n    nstrips = TIFFNumberOfStrips(tif);\n    for (offset = 0, strip = 0; offset < size && strip < nstrips;\n         offset += stripsize, strip++)\n    {\n        /*\n         * Properly read last strip.\n         */\n        tsize_t bufsize = size - offset;\n        if (bufsize > stripsize)\n            bufsize = stripsize;\n\n        if (TIFFReadEncodedStrip(tif, strip, buf, -1) != bufsize)\n        {\n            fprintf(stderr, \"Can't read strip %\" PRIu32 \".\\n\", strip);\n            return -1;\n        }\n        if (memcmp(buf, (char *)array + offset, bufsize) != 0)\n        {\n            fprintf(stderr, \"Wrong data read for strip %\" PRIu32 \".\\n\", strip);\n            _TIFFfree(buf);\n            return -1;\n        }\n    }\n\n    _TIFFfree(buf);\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          68,
+          0
+        ],
+        [
+          115,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "read_strips",
+        "parameters": {
+          "tif": "TIFF",
+          "array": "tdata_t",
+          "size": "tsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int create_image_striped(const char *name, uint32_t width, uint32_t length,\n                         uint32_t rowsperstrip, uint16_t compression,\n                         uint16_t spp, uint16_t bps, uint16_t photometric,\n                         uint16_t sampleformat, uint16_t planarconfig,\n                         const tdata_t array, const tsize_t size)\n{\n    TIFF *tif;\n\n    /* Test whether we can write tags. */\n    tif = TIFFOpen(name, \"w\");\n    if (!tif)\n        goto openfailure;\n\n    if (!TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, width))\n    {\n        fprintf(stderr, \"Can't set ImageWidth tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_IMAGELENGTH, length))\n    {\n        fprintf(stderr, \"Can't set ImageLength tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, bps))\n    {\n        fprintf(stderr, \"Can't set BitsPerSample tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, spp))\n    {\n        fprintf(stderr, \"Can't set SamplesPerPixel tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, rowsperstrip))\n    {\n        fprintf(stderr, \"Can't set RowsPerStrip tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_PLANARCONFIG, planarconfig))\n    {\n        fprintf(stderr, \"Can't set PlanarConfiguration tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, photometric))\n    {\n        fprintf(stderr, \"Can't set PhotometricInterpretation tag.\\n\");\n        goto failure;\n    }\n\n    if (write_strips(tif, array, size) < 0)\n    {\n        fprintf(stderr, \"Can't write image data.\\n\");\n        goto failure;\n    }\n\n    TIFFClose(tif);\n    return 0;\n\nfailure:\n    TIFFClose(tif);\nopenfailure:\n    fprintf(stderr,\n            \"Can't create test TIFF file %s:\\n\"\n            \"    ImageWidth=%\" PRIu32 \", ImageLength=%\" PRIu32\n            \", RowsPerStrip=%\" PRIu32 \", Compression=%\" PRIu16 \",\\n\"\n            \"    BitsPerSample=%\" PRIu16 \", SamplesPerPixel=%\" PRIu16\n            \", SampleFormat=%\" PRIu16 \",\\n\"\n            \"    PlanarConfiguration=%\" PRIu16\n            \", PhotometricInterpretation=%\" PRIu16 \".\\n\",\n            name, width, length, rowsperstrip, compression, bps, spp,\n            sampleformat, planarconfig, photometric);\n    return -1;\n}",
+      "fn_code_pos": [
+        [
+          117,
+          0
+        ],
+        [
+          189,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "create_image_striped",
+        "parameters": {
+          "name": "char",
+          "width": "uint32_t",
+          "length": "uint32_t",
+          "rowsperstrip": "uint32_t",
+          "compression": "uint16_t",
+          "spp": "uint16_t",
+          "bps": "uint16_t",
+          "photometric": "uint16_t",
+          "sampleformat": "uint16_t",
+          "planarconfig": "uint16_t",
+          "array": "tdata_t",
+          "size": "tsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int read_image_striped(const char *name, uint32_t width, uint32_t length,\n                       uint32_t rowsperstrip, uint16_t compression,\n                       uint16_t spp, uint16_t bps, uint16_t photometric,\n                       uint16_t sampleformat, uint16_t planarconfig,\n                       const tdata_t array, const tsize_t size)\n{\n    TIFF *tif;\n    uint16_t value_u16;\n    uint32_t value_u32;\n\n    /* Test whether we can read written values. */\n    tif = TIFFOpen(name, \"r\");\n    if (!tif)\n        goto openfailure;\n\n    if (TIFFIsTiled(tif))\n    {\n        fprintf(stderr, \"Can't read image %s, it is tiled.\\n\", name);\n        goto failure;\n    }\n    if (!TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &value_u32) ||\n        value_u32 != width)\n    {\n        fprintf(stderr, \"Can't get tag %d.\\n\", TIFFTAG_IMAGEWIDTH);\n        goto failure;\n    }\n    if (!TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &value_u32) ||\n        value_u32 != length)\n    {\n        fprintf(stderr, \"Can't get tag %d.\\n\", TIFFTAG_IMAGELENGTH);\n        goto failure;\n    }\n    if (!TIFFGetField(tif, TIFFTAG_BITSPERSAMPLE, &value_u16) ||\n        value_u16 != bps)\n    {\n        fprintf(stderr, \"Can't get tag %d.\\n\", TIFFTAG_BITSPERSAMPLE);\n        goto failure;\n    }\n    if (!TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &value_u16) ||\n        value_u16 != photometric)\n    {\n        fprintf(stderr, \"Can't get tag %d.\\n\", TIFFTAG_PHOTOMETRIC);\n        goto failure;\n    }\n    if (!TIFFGetField(tif, TIFFTAG_SAMPLESPERPIXEL, &value_u16) ||\n        value_u16 != spp)\n    {\n        fprintf(stderr, \"Can't get tag %d.\\n\", TIFFTAG_SAMPLESPERPIXEL);\n        goto failure;\n    }\n    if (!TIFFGetField(tif, TIFFTAG_ROWSPERSTRIP, &value_u32) ||\n        value_u32 != rowsperstrip)\n    {\n        fprintf(stderr, \"Can't get tag %d.\\n\", TIFFTAG_ROWSPERSTRIP);\n        goto failure;\n    }\n    if (!TIFFGetField(tif, TIFFTAG_PLANARCONFIG, &value_u16) ||\n        value_u16 != planarconfig)\n    {\n        fprintf(stderr, \"Can't get tag %d.\\n\", TIFFTAG_PLANARCONFIG);\n        goto failure;\n    }\n\n    if (read_strips(tif, array, size) < 0)\n    {\n        fprintf(stderr, \"Can't read image data.\\n\");\n        goto failure;\n    }\n\n    TIFFClose(tif);\n    return 0;\n\nfailure:\n    TIFFClose(tif);\nopenfailure:\n    fprintf(stderr,\n            \"Can't read test TIFF file %s:\\n\"\n            \"    ImageWidth=%\" PRIu32 \", ImageLength=%\" PRIu32\n            \", RowsPerStrip=%\" PRIu32 \", Compression=%\" PRIu16 \",\\n\"\n            \"    BitsPerSample=%\" PRIu16 \", SamplesPerPixel=%\" PRIu16\n            \", SampleFormat=%\" PRIu16 \",\\n\"\n            \"    PlanarConfiguration=%\" PRIu16\n            \", PhotometricInterpretation=%\" PRIu16 \".\\n\",\n            name, width, length, rowsperstrip, compression, bps, spp,\n            sampleformat, planarconfig, photometric);\n    return -1;\n}",
+      "fn_code_pos": [
+        [
+          191,
+          0
+        ],
+        [
+          277,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "read_image_striped",
+        "parameters": {
+          "name": "char",
+          "width": "uint32_t",
+          "length": "uint32_t",
+          "rowsperstrip": "uint32_t",
+          "compression": "uint16_t",
+          "spp": "uint16_t",
+          "bps": "uint16_t",
+          "photometric": "uint16_t",
+          "sampleformat": "uint16_t",
+          "planarconfig": "uint16_t",
+          "array": "tdata_t",
+          "size": "tsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int write_scanlines(TIFF *tif, const tdata_t array, const tsize_t size)\n{\n    uint32_t length, row;\n    tsize_t scanlinesize, offset;\n    (void)size;\n\n    if (!TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &length))\n    {\n        fprintf(stderr, \"Can't get tag %d.\\n\", TIFFTAG_IMAGELENGTH);\n        return -1;\n    }\n\n    scanlinesize = TIFFScanlineSize(tif);\n    if (!scanlinesize)\n    {\n        fprintf(stderr, \"Wrong size of scanline.\\n\");\n        return -1;\n    }\n\n    for (offset = 0, row = 0; row < length; offset += scanlinesize, row++)\n    {\n        if (TIFFWriteScanline(tif, (char *)array + offset, row, 0) == -1)\n        {\n            fprintf(stderr, \"Can't write image data at row %\" PRIu32 \".\\n\",\n                    row);\n            return -1;\n        }\n    }\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          279,
+          0
+        ],
+        [
+          309,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "write_scanlines",
+        "parameters": {
+          "tif": "TIFF",
+          "array": "tdata_t",
+          "size": "tsize_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -1,0 +1,229 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "cmsINLINE cmsUInt32Number ComponentSize(cmsUInt32Number format)\n{\n    cmsUInt32Number BytesPerComponent = T_BYTES(format);\n\n    // For double, the T_BYTES field is zero\n    if (BytesPerComponent == 0)\n        BytesPerComponent = sizeof(cmsUInt64Number);\n\n    return BytesPerComponent;\n}",
+      "fn_code_pos": [
+        [
+          26,
+          0
+        ],
+        [
+          35,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsUInt32Number ComponentSize",
+        "parameters": {
+          "format": "cmsUInt32Number"
+        },
+        "return_type": "cmsINLINE"
+      }
+    },
+    {
+      "fn_code": "cmsINLINE cmsUInt32Number PixelSpacing(cmsUInt32Number format)\n{\n    if (T_PLANAR(format))\n        return ComponentSize(format);\n    else\n        return ComponentSize(format) * (T_CHANNELS(format) + T_EXTRA(format));\n}",
+      "fn_code_pos": [
+        [
+          38,
+          0
+        ],
+        [
+          44,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsUInt32Number PixelSpacing",
+        "parameters": {
+          "format": "cmsUInt32Number"
+        },
+        "return_type": "cmsINLINE"
+      }
+    },
+    {
+      "fn_code": "cmsINLINE cmsUInt32Number minimum(cmsUInt32Number a, cmsUInt32Number b)\n{\n    return a < b ? a : b;\n}",
+      "fn_code_pos": [
+        [
+          47,
+          0
+        ],
+        [
+          50,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsUInt32Number minimum",
+        "parameters": {
+          "a": "cmsUInt32Number",
+          "b": "cmsUInt32Number"
+        },
+        "return_type": "cmsINLINE"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number MemSize(cmsUInt32Number format, \n                        cmsUInt32Number PixelsPerLine, \n                        cmsUInt32Number LineCount, \n                        cmsUInt32Number* BytesPerLine,\n                        cmsUInt32Number BytesPerPlane)\n{\n    if (T_PLANAR(format)) {\n\n        if (*BytesPerLine == 0) {\n            \n            *BytesPerLine = ComponentSize(format) * PixelsPerLine;\n        }\n\n        return (T_CHANNELS(format) + T_EXTRA(format)) * BytesPerPlane;\n    }\n    else\n    {\n        if (*BytesPerLine == 0) {\n\n            *BytesPerLine = ComponentSize(format) * (T_CHANNELS(format) + T_EXTRA(format)) * PixelsPerLine;\n        }\n\n        return LineCount * *BytesPerLine;\n    }\n}",
+      "fn_code_pos": [
+        [
+          57,
+          0
+        ],
+        [
+          82,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MemSize",
+        "parameters": {
+          "format": "cmsUInt32Number",
+          "PixelsPerLine": "cmsUInt32Number",
+          "LineCount": "cmsUInt32Number",
+          "BytesPerLine": "cmsUInt32Number",
+          "BytesPerPlane": "cmsUInt32Number"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number _cmsThrCountSlices(struct _cmstransform_struct* CMMcargo, cmsInt32Number MaxWorkers,\n                                   cmsUInt32Number PixelsPerLine, cmsUInt32Number LineCount, \n                                   cmsStride* Stride)\n{\t    \n    cmsInt32Number MaxInputMem,  MaxOutputMem;\n    cmsInt32Number WorkerCount;\n\n    cmsInt32Number MaxCPUs = _cmsThrIdealThreadCount();\n\n    if (MaxWorkers == CMS_THREADED_GUESS_MAX_THREADS) {\n        MaxWorkers = MaxCPUs;\n    }\n    else\n    {\n        // We allow large number of threads, but this is not going to work well. Warn it. \n        if (MaxWorkers > MaxCPUs) {\n            cmsSignalError(NULL, cmsERROR_RANGE,\n                \"Warning: too many threads for actual processor (CPUs=%s, asked=%d)\", MaxCPUs, MaxWorkers);\n        }\n    }\n\n    MaxInputMem = MemSize(cmsGetTransformInputFormat((cmsHTRANSFORM)CMMcargo),\n                         PixelsPerLine, LineCount, &Stride->BytesPerLineIn, Stride->BytesPerPlaneIn);                         \n\n    MaxOutputMem = MemSize(cmsGetTransformOutputFormat((cmsHTRANSFORM)CMMcargo),\n                         PixelsPerLine, LineCount, &Stride->BytesPerLineOut, Stride->BytesPerPlaneOut);\n    \n    // Each thread takes 128K at least\n    WorkerCount = (MaxInputMem + MaxOutputMem) / (128 * 1024);\n\n    if (WorkerCount < 1)\n        WorkerCount = 1;\n    else\n        if (WorkerCount > MaxWorkers)\n            WorkerCount = MaxWorkers;\n\n    return WorkerCount;\n}",
+      "fn_code_pos": [
+        [
+          85,
+          0
+        ],
+        [
+          122,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsThrCountSlices",
+        "parameters": {
+          "CMMcargo": "struct _cmstransform_struct",
+          "MaxWorkers": "cmsInt32Number",
+          "PixelsPerLine": "cmsUInt32Number",
+          "LineCount": "cmsUInt32Number",
+          "Stride": "cmsStride"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid SlicePerLines(const _cmsWorkSlice* master, cmsInt32Number nslices, \n                            cmsInt32Number LinesPerSlice, _cmsWorkSlice slices[])\n{\n    cmsInt32Number i;\n    cmsInt32Number TotalLines = master ->LineCount;\n\n    for (i = 0; i < nslices; i++) {\n\n        const cmsUInt8Number* PtrInput = master->InputBuffer;\n        cmsUInt8Number* PtrOutput = master->OutputBuffer;\n\n        cmsInt32Number  lines = minimum(LinesPerSlice, TotalLines);\n\n        memcpy(&slices[i], master, sizeof(_cmsWorkSlice));\n\n        slices[i].InputBuffer  = PtrInput + i * LinesPerSlice * master->Stride->BytesPerLineIn;\n        slices[i].OutputBuffer = PtrOutput + i * LinesPerSlice * master->Stride->BytesPerLineOut;\n\n        slices[i].LineCount = lines;\n        TotalLines -= lines;\n    }\n\n    // Add left lines because rounding\n    if (slices > 0) slices[nslices - 1].LineCount += TotalLines;\n}",
+      "fn_code_pos": [
+        [
+          125,
+          0
+        ],
+        [
+          150,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SlicePerLines",
+        "parameters": {
+          "master": "_cmsWorkSlice",
+          "nslices": "cmsInt32Number",
+          "LinesPerSlice": "cmsInt32Number",
+          "slices": "_cmsWorkSlice"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid SlicePerPixels(const _cmsWorkSlice* master, cmsInt32Number nslices,\n                    cmsInt32Number PixelsPerSlice, _cmsWorkSlice slices[])\n{\n    cmsInt32Number i;\n    cmsInt32Number TotalPixels = master->PixelsPerLine; // As this works on one line only\n\n    cmsUInt32Number PixelSpacingIn = PixelSpacing(cmsGetTransformInputFormat((cmsHTRANSFORM)master->CMMcargo));\n    cmsUInt32Number PixelSpacingOut = PixelSpacing(cmsGetTransformOutputFormat((cmsHTRANSFORM)master->CMMcargo));\n\n    for (i = 0; i < nslices; i++) {\n\n        const cmsUInt8Number* PtrInput = master->InputBuffer;\n        cmsUInt8Number* PtrOutput = master->OutputBuffer;\n\n        cmsInt32Number pixels = minimum(PixelsPerSlice, TotalPixels);\n\n        memcpy(&slices[i], master, sizeof(_cmsWorkSlice));\n\n        slices[i].InputBuffer = PtrInput + i * PixelsPerSlice * PixelSpacingIn;\n        slices[i].OutputBuffer = PtrOutput + i * PixelsPerSlice * PixelSpacingOut;\n        slices[i].PixelsPerLine = pixels;\n\n        TotalPixels -= pixels;\n    }\n\n    // Add left pixels because rounding\n    if (slices > 0) slices[nslices - 1].PixelsPerLine += TotalPixels;\n}",
+      "fn_code_pos": [
+        [
+          153,
+          0
+        ],
+        [
+          181,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SlicePerPixels",
+        "parameters": {
+          "master": "_cmsWorkSlice",
+          "nslices": "cmsInt32Number",
+          "PixelsPerSlice": "cmsInt32Number",
+          "slices": "_cmsWorkSlice"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool _cmsThrSplitWork(const _cmsWorkSlice* master, cmsInt32Number nslices, _cmsWorkSlice slices[])\n{\n    \n    // Check parameters\n    if (master->PixelsPerLine == 0 ||\n        master->Stride->BytesPerLineIn == 0 ||\n        master->Stride->BytesPerLineOut == 0) return FALSE;\n\n    // Do the splitting depending on lines\n    if (master->LineCount <= 1) {\n\n        cmsInt32Number PixelsPerWorker = master->PixelsPerLine / nslices;\n\n        if (PixelsPerWorker <= 0) \n            return FALSE;\n        else\n            SlicePerPixels(master, nslices, PixelsPerWorker, slices);\n    }\n    else {\n        \n        cmsInt32Number LinesPerWorker = master->LineCount / nslices;\n        \n        if (LinesPerWorker <= 0)\n            return FALSE;\n        else\n            SlicePerLines(master, nslices, LinesPerWorker, slices);\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          186,
+          0
+        ],
+        [
+          215,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsThrSplitWork",
+        "parameters": {
+          "master": "_cmsWorkSlice",
+          "nslices": "cmsInt32Number",
+          "slices": "_cmsWorkSlice"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct _cmstransform_struct",
+      {},
+      "",
+      [
+        85,
+        35
+      ],
+      [
+        85,
+        62
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"threaded_internal.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

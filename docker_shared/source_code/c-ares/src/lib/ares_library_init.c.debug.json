@@ -1,0 +1,442 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void *default_malloc(size_t size) { if (size == 0) { return NULL; } return malloc(size); }",
+      "fn_code_pos": [
+        [
+          47,
+          0
+        ],
+        [
+          47,
+          97
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "default_malloc",
+        "parameters": {
+          "size": "size_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void *default_realloc(void *p, size_t size) { return realloc(p, size); }",
+      "fn_code_pos": [
+        [
+          51,
+          0
+        ],
+        [
+          51,
+          79
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "default_realloc",
+        "parameters": {
+          "p": "void",
+          "size": "size_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void default_free(void *p) { free(p); }",
+      "fn_code_pos": [
+        [
+          52,
+          0
+        ],
+        [
+          52,
+          46
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "default_free",
+        "parameters": {
+          "p": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int ares_win32_init(void)\n{\n#ifdef USE_WINSOCK\n\n  hnd_iphlpapi = 0;\n  hnd_iphlpapi = LoadLibraryW(L\"iphlpapi.dll\");\n  if (!hnd_iphlpapi)\n    return ARES_ELOADIPHLPAPI;\n\n  ares_fpGetNetworkParams = (fpGetNetworkParams_t)\n    GetProcAddress(hnd_iphlpapi, \"GetNetworkParams\");\n  if (!ares_fpGetNetworkParams)\n    {\n      FreeLibrary(hnd_iphlpapi);\n      return ARES_EADDRGETNETWORKPARAMS;\n    }\n\n  ares_fpGetAdaptersAddresses = (fpGetAdaptersAddresses_t)\n    GetProcAddress(hnd_iphlpapi, \"GetAdaptersAddresses\");\n  if (!ares_fpGetAdaptersAddresses)\n    {\n      /* This can happen on clients before WinXP, I don't\n         think it should be an error, unless we don't want to\n         support Windows 2000 anymore */\n    }\n\n  ares_fpGetBestRoute2 = (fpGetBestRoute2_t)\n    GetProcAddress(hnd_iphlpapi, \"GetBestRoute2\");\n  if (!ares_fpGetBestRoute2)\n    {\n      /* This can happen on clients before Vista, I don't\n         think it should be an error, unless we don't want to\n         support Windows XP anymore */\n    }\n\n  /*\n   * When advapi32.dll is unavailable or advapi32.dll has no SystemFunction036,\n   * also known as RtlGenRandom, which is the case for Windows versions prior\n   * to WinXP then c-ares uses portable rand() function. Then don't error here.\n   */\n\n  hnd_advapi32 = 0;\n  hnd_advapi32 = LoadLibraryW(L\"advapi32.dll\");\n  if (hnd_advapi32)\n    {\n      ares_fpSystemFunction036 = (fpSystemFunction036_t)\n        GetProcAddress(hnd_advapi32, \"SystemFunction036\");\n    }\n\n#endif\n  return ARES_SUCCESS;\n}",
+      "fn_code_pos": [
+        [
+          67,
+          0
+        ],
+        [
+          118,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_win32_init",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void ares_win32_cleanup(void)\n{\n#ifdef USE_WINSOCK\n  if (hnd_advapi32)\n    FreeLibrary(hnd_advapi32);\n  if (hnd_iphlpapi)\n    FreeLibrary(hnd_iphlpapi);\n#endif\n}",
+      "fn_code_pos": [
+        [
+          121,
+          0
+        ],
+        [
+          129,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_win32_cleanup",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int ares_library_init(int flags)\n{\n  int res;\n\n  if (ares_initialized)\n    {\n      ares_initialized++;\n      return ARES_SUCCESS;\n    }\n  ares_initialized++;\n\n  if (flags & ARES_LIB_INIT_WIN32)\n    {\n      res = ares_win32_init();\n      if (res != ARES_SUCCESS)\n        return res;  /* LCOV_EXCL_LINE: can't test Win32 init failure */\n    }\n\n  ares_init_flags = flags;\n\n  return ARES_SUCCESS;\n}",
+      "fn_code_pos": [
+        [
+          132,
+          0
+        ],
+        [
+          153,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_library_init",
+        "parameters": {
+          "flags": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ares_library_init_mem(int flags,\n                          void *(*amalloc)(size_t size),\n                          void (*afree)(void *ptr),\n                          void *(*arealloc)(void *ptr, size_t size))\n{\n  if (amalloc)\n    ares_malloc = amalloc;\n  if (arealloc)\n    ares_realloc = arealloc;\n  if (afree)\n    ares_free = afree;\n  return ares_library_init(flags);\n}",
+      "fn_code_pos": [
+        [
+          155,
+          0
+        ],
+        [
+          167,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_library_init_mem",
+        "parameters": {
+          "flags": "int",
+          "amalloc": "void",
+          "size": "size_t",
+          "afree": "void",
+          "ptr": "void",
+          "arealloc": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void ares_library_cleanup(void)\n{\n  if (!ares_initialized)\n    return;\n  ares_initialized--;\n  if (ares_initialized)\n    return;\n\n  if (ares_init_flags & ARES_LIB_INIT_WIN32)\n    ares_win32_cleanup();\n\n#if defined(ANDROID) || defined(__ANDROID__)\n  ares_library_cleanup_android();\n#endif\n\n  ares_init_flags = ARES_LIB_INIT_NONE;\n  ares_malloc = malloc;\n  ares_realloc = realloc;\n  ares_free = free;\n}",
+      "fn_code_pos": [
+        [
+          170,
+          0
+        ],
+        [
+          189,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_library_cleanup",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int ares_library_initialized(void)\n{\n#ifdef USE_WINSOCK\n  if (!ares_initialized)\n    return ARES_ENOTINITIALIZED;\n#endif\n  return ARES_SUCCESS;\n}",
+      "fn_code_pos": [
+        [
+          192,
+          0
+        ],
+        [
+          199,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_library_initialized",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "default_malloc(size_t size)",
+      "fn_dec_pos": [
+        [
+          47,
+          13
+        ],
+        [
+          47,
+          40
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "default_malloc",
+        "parameters": {
+          "size": "size_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "default_realloc(void *p, size_t size)",
+      "fn_dec_pos": [
+        [
+          51,
+          13
+        ],
+        [
+          51,
+          50
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "default_realloc",
+        "parameters": {
+          "p": "void",
+          "size": "size_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "(*ares_malloc)(size_t size)",
+      "fn_dec_pos": [
+        [
+          57,
+          6
+        ],
+        [
+          57,
+          33
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "size": "size_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "(*ares_realloc)(void *ptr, size_t size)",
+      "fn_dec_pos": [
+        [
+          58,
+          6
+        ],
+        [
+          58,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "ptr": "void",
+          "size": "size_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "(*ares_free)(void *ptr)",
+      "fn_dec_pos": [
+        [
+          59,
+          5
+        ],
+        [
+          59,
+          28
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "ptr": "void"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "(*amalloc)(size_t size)",
+      "fn_dec_pos": [
+        [
+          156,
+          32
+        ],
+        [
+          156,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "size": "size_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "(*afree)(void *ptr)",
+      "fn_dec_pos": [
+        [
+          157,
+          31
+        ],
+        [
+          157,
+          50
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "ptr": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "(*arealloc)(void *ptr, size_t size)",
+      "fn_dec_pos": [
+        [
+          158,
+          32
+        ],
+        [
+          158,
+          67
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "ptr": "void",
+          "size": "size_t"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_library_init.h\"\n",
+      [
+        20,
+        0
+      ],
+      [
+        21,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_android.h\"\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

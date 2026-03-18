@@ -1,0 +1,82 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int ares_getsock(ares_channel channel,\n                 ares_socket_t *socks,\n                 int numsocks) /* size of the 'socks' array */\n{\n  struct server_state *server;\n  int i;\n  int sockindex=0;\n  int bitmap = 0;\n  unsigned int setbits = 0xffffffff;\n\n  /* Are there any active queries? */\n  int active_queries = !ares__is_list_empty(&(channel->all_queries));\n\n  for (i = 0; i < channel->nservers; i++)\n    {\n      server = &channel->servers[i];\n      /* We only need to register interest in UDP sockets if we have\n       * outstanding queries.\n       */\n      if (active_queries && server->udp_socket != ARES_SOCKET_BAD)\n        {\n          if(sockindex >= numsocks || sockindex >= ARES_GETSOCK_MAXNUM)\n            break;\n          socks[sockindex] = server->udp_socket;\n          bitmap |= ARES_GETSOCK_READABLE(setbits, sockindex);\n          sockindex++;\n        }\n      /* We always register for TCP events, because we want to know\n       * when the other side closes the connection, so we don't waste\n       * time trying to use a broken connection.\n       */\n      if (server->tcp_socket != ARES_SOCKET_BAD)\n       {\n         if(sockindex >= numsocks || sockindex >= ARES_GETSOCK_MAXNUM)\n           break;\n         socks[sockindex] = server->tcp_socket;\n         bitmap |= ARES_GETSOCK_READABLE(setbits, sockindex);\n\n         if (server->qhead && active_queries)\n           /* then the tcp socket is also writable! */\n           bitmap |= ARES_GETSOCK_WRITABLE(setbits, sockindex);\n\n         sockindex++;\n       }\n    }\n  return bitmap;\n}",
+      "fn_code_pos": [
+        [
+          19,
+          0
+        ],
+        [
+          65,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_getsock",
+        "parameters": {
+          "channel": "ares_channel",
+          "socks": "ares_socket_t",
+          "numsocks": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct server_state",
+      {},
+      "",
+      [
+        23,
+        2
+      ],
+      [
+        23,
+        21
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        14,
+        0
+      ],
+      [
+        15,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -2,6 +2,7 @@
 from configs.llm_config import LLMConfig
 # from models.baseLLM import BaseLLM
 import os
+import gc
 from utils.check_gen_fuzzer import run
 from repo.coverage_postproc import *
 from .compilation_fix_agent import CompilationFixAgent, extract_code
@@ -109,6 +110,10 @@ class Fuzzer():
         self.crash_analyzer = crash_analyzer
         self.api_usage_count = api_usage_count
         self.failed_builds = []
+        self.completed_drivers = []  # 记录已完成的驱动
+        self.checkpoint_file = os.path.join(fuzz_project_dir, "fuzzing_checkpoint.json")
+        self.individual_reports_dir = os.path.join(report_dir, "individual_reports")
+        os.makedirs(self.individual_reports_dir, exist_ok=True)
 
         self.report_target_dir = report_target_dir
 
@@ -125,6 +130,74 @@ class Fuzzer():
     def set_fuzz_gen_code_output_dir(self, fuzz_gen_code_output_dir):
         self.fuzz_gen_code_output_dir = fuzz_gen_code_output_dir
 
+    def save_checkpoint(self, current_driver=None, status="in_progress"):
+        """保存当前进度到checkpoint文件"""
+        checkpoint = {
+            "timestamp": datetime.now().isoformat(),
+            "status": status,
+            "current_driver": current_driver,
+            "completed_drivers": self.completed_drivers,
+            "failed_drivers": self.failed_builds,
+            "covered_lines": self.covered_lines,
+            "covered_branches": self.covered_branches,
+            "api_usage_count": self.api_usage_count
+        }
+        try:
+            with open(self.checkpoint_file, 'w') as f:
+                json.dump(checkpoint, f, indent=2)
+            logger.info(f"Checkpoint saved: {len(self.completed_drivers)} completed, {len(self.failed_builds)} failed")
+        except Exception as e:
+            logger.error(f"Failed to save checkpoint: {e}")
+
+    def load_checkpoint(self):
+        """加载之前的checkpoint（如果存在）"""
+        if os.path.exists(self.checkpoint_file):
+            try:
+                with open(self.checkpoint_file, 'r') as f:
+                    checkpoint = json.load(f)
+                self.completed_drivers = checkpoint.get("completed_drivers", [])
+                self.failed_builds = checkpoint.get("failed_drivers", [])
+                self.covered_lines = checkpoint.get("covered_lines", 0)
+                self.covered_branches = checkpoint.get("covered_branches", 0)
+                self.api_usage_count = checkpoint.get("api_usage_count", self.api_usage_count)
+                logger.info(f"Checkpoint loaded: {len(self.completed_drivers)} completed, {len(self.failed_builds)} failed")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to load checkpoint: {e}")
+        return False
+
+    def backup_coverage_report(self, fuzzer_name):
+        """备份单个驱动的覆盖率报告（防止被OSS-Fuzz覆盖）"""
+        backup_dir = os.path.join(self.individual_reports_dir, fuzzer_name)
+        os.makedirs(backup_dir, exist_ok=True)
+        
+        # 备份各种覆盖率相关文件
+        sources = [
+            (f"{self.coverage_dir}dumps/{fuzzer_name}.profdata", f"{backup_dir}/{fuzzer_name}.profdata"),
+            (f"{self.coverage_dir}textcov_reports/{fuzzer_name}.covreport", f"{backup_dir}/{fuzzer_name}.covreport"),
+            (f"{self.coverage_dir}fuzzer_stats/{fuzzer_name}.json", f"{backup_dir}/{fuzzer_name}_stats.json"),
+            (f"{self.coverage_dir}logs/{fuzzer_name}.log", f"{backup_dir}/{fuzzer_name}.log"),
+        ]
+        
+        for src, dst in sources:
+            if os.path.exists(src):
+                try:
+                    shutil.copy2(src, dst)
+                except Exception as e:
+                    logger.warning(f"Failed to backup {src}: {e}")
+        
+        # 备份HTML报告目录
+        html_src = f"{self.coverage_dir}report_target/{fuzzer_name}"
+        html_dst = f"{backup_dir}/html_report"
+        if os.path.exists(html_src):
+            try:
+                if os.path.exists(html_dst):
+                    shutil.rmtree(html_dst)
+                shutil.copytree(html_src, html_dst)
+            except Exception as e:
+                logger.warning(f"Failed to backup HTML report: {e}")
+        
+        logger.info(f"Coverage report backed up to: {backup_dir}")
     
     def update_api_usage_count(self, api_combination):
         for api in api_combination:
@@ -191,7 +264,8 @@ class Fuzzer():
         logger.info(f"compile {fuzz_driver_file}, result {build_fuzzer_result}")
           
         # Check if the build was successful
-        if "ERROR" in build_fuzzer_result or "error" in build_fuzzer_result.lower():
+        # if "ERROR" in build_fuzzer_result or "error" in build_fuzzer_result.lower():
+        if "Compilation failed" in build_fuzzer_result or "Compilation succeeded" not in build_fuzzer_result:   
             logger.error(f"Failed to build fuzzer {fuzz_driver_file}. Skipping this file.")
             self.failed_builds.append(fuzz_driver_file)
             return
@@ -207,7 +281,12 @@ class Fuzzer():
             run_fuzzer_result =  run(run_args)  
             logger.info(f"run_fuzzer {fuzz_driver_file}, result {run_fuzzer_result}")
 
-            if "ERROR" in run_fuzzer_result:
+            # if "ERROR" in run_fuzzer_result:
+            if run_fuzzer_result is False:
+                logger.error(f"Failed to run fuzzer {fuzz_driver_file}. Fuzzer may not exist.")
+                self.failed_builds.append(fuzz_driver_file)
+                return
+            if isinstance(run_fuzzer_result, str) and "ERROR" in run_fuzzer_result:
                 logger.info("Crash detected. Analyzing...")
                 error_index = run_fuzzer_result.index("ERROR")
                 crash_info = run_fuzzer_result[error_index:]  # Extract only the error message
@@ -225,6 +304,9 @@ class Fuzzer():
             coverage_result =  run(run_args)  
             logger.info(f"coverage {fuzz_driver_file}, result {coverage_result}")
 
+            # 立即备份当前驱动的覆盖率报告（防止被后续运行覆盖）
+            self.backup_coverage_report(fuzzer_name)
+
             logger.info("Computing current coverage...")
             # collect coverage reports
             html2txt(f"{self.coverage_dir}{fuzzer_name}{self.report_target_dir}",f"{self.report_dir}{fuzzer_name}/")  
@@ -241,6 +323,11 @@ class Fuzzer():
                 logger.info(f"Current covered branches: {self.covered_branches}, Total branches: {total_branches}")
                   
                 self.update_api_usage_count(api_combine)
+                
+                # 标记驱动完成并保存checkpoint
+                self.completed_drivers.append(fuzz_driver_file)
+                self.save_checkpoint(fuzz_driver_file, "completed")
+                gc.collect()  # 释放内存
 
             else:
                 if update_successful:
@@ -250,6 +337,11 @@ class Fuzzer():
                     logger.info(f"Current covered branches: {self.covered_branches}, Total branches: {total_branches}")
                       
                     self.update_api_usage_count(api_combine)
+                    
+                    # 标记驱动完成并保存checkpoint
+                    self.completed_drivers.append(fuzz_driver_file)
+                    self.save_checkpoint(fuzz_driver_file, "completed")
+                    gc.collect()  # 释放内存
                 else:   
                     i=0
                     while not update_successful and i < self.max_itr_fuzz_loop:
@@ -348,24 +440,59 @@ class Fuzzer():
 
     
     
-    def build_and_fuzz(self):
+    def build_and_fuzz(self, resume=True):
         fix_fuzz_driver_dir = os.path.join(self.directory, f"fuzz_driver/{self.project}/compilation_pass_rag/")
         if not os.path.exists(fix_fuzz_driver_dir):
             logger.info(f"No folder {fix_fuzz_driver_dir}")
             return 
+        
+        # 尝试从checkpoint恢复
+        if resume and self.load_checkpoint():
+            logger.info(f"Resuming from checkpoint. Skipping {len(self.completed_drivers)} completed drivers.")
+        else:
+            # 仅在全新运行时清除merge_report
+            merge_report_path = f"{self.report_dir}merge_report"
+            if os.path.exists(merge_report_path):
+                logger.info(f"Removing existing merge_report directory: {merge_report_path}")
+                shutil.rmtree(merge_report_path)
+        
         # build_fuzzer_file
-        logger.info(os.listdir(fix_fuzz_driver_dir))
-        # Check and remove the merge_report directory if it exists
-        merge_report_path = f"{self.report_dir}merge_report"
-        if os.path.exists(merge_report_path):
-            logger.info(f"Removing existing merge_report directory: {merge_report_path}")
-            shutil.rmtree(merge_report_path)
-        for fuzz_driver_file in os.listdir(fix_fuzz_driver_dir):  
+        all_drivers = os.listdir(fix_fuzz_driver_dir)
+        logger.info(f"Total drivers: {len(all_drivers)}, Already completed: {len(self.completed_drivers)}, Already failed: {len(self.failed_builds)}")
+        
+        for fuzz_driver_file in all_drivers:
+            # 跳过已完成或已失败的驱动
+            if fuzz_driver_file in self.completed_drivers:
+                logger.info(f"Skipping already completed driver: {fuzz_driver_file}")
+                continue
+            if fuzz_driver_file in self.failed_builds:
+                logger.info(f"Skipping already failed driver: {fuzz_driver_file}")
+                continue
+                
             logger.info(f"Fuzz Driver File {fuzz_driver_file}")
+            self.save_checkpoint(fuzz_driver_file, "in_progress")
             self.build_and_fuzz_one_file(fuzz_driver_file, fix_fuzz_driver_dir=fix_fuzz_driver_dir)
              
-        logger.info(f"Failed builds: {self.failed_builds}")
-
-
-  
+        #logger.info(f"Failed builds: {self.failed_builds}")
+        # ← 添加这部分：检查成功数
+        total_files = len(os.listdir(fix_fuzz_driver_dir))
+        successful_builds = total_files - len(self.failed_builds)
+    
+        logger.info(f"Build Summary:")
+        logger.info(f"  Total drivers: {total_files}")
+        logger.info(f"  Successful: {successful_builds}")
+        logger.info(f"  Failed: {len(self.failed_builds)}")
+        logger.info(f"  Failed builds: {self.failed_builds}")
+    
+        # 关键检查：如果没有成功编译的驱动，直接退出
+        if successful_builds == 0:
+            logger.error(f"CRITICAL: No fuzzer was successfully built! All {total_files} drivers failed.")
+            logger.error(f"Please check the compilation errors above.")
+            logger.error(f"Failed drivers: {self.failed_builds}")
+            self.save_checkpoint(status="failed")
+            return  # 或者 sys.exit(1)
+        
+        # 保存最终checkpoint
+        self.save_checkpoint(status="completed")
+        logger.info(f"All fuzzing completed. Checkpoint saved.")
         

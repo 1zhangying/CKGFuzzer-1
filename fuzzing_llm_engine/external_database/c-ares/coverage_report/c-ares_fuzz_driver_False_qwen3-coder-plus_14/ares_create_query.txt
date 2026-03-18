@@ -1,0 +1,200 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17		#include "ares_setup.h"	
+18			
+19		#ifdef HAVE_NETINET_IN_H	
+20		#  include <netinet/in.h>	
+21		#endif	
+22			
+23		#include "ares_nameser.h"	
+24			
+25		#include "ares.h"	
+26		#include "ares_dns.h"	
+27		#include "ares_private.h"	
+28			
+29			
+30		/* Header format, from RFC 1035:	
+31		*                                  1  1  1  1  1  1	
+32		*    0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5	
+33		*  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+	
+34		*  |                      ID                       |	
+35		*  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+	
+36		*  |QR|   Opcode  |AA|TC|RD|RA|   Z    |   RCODE   |	
+37		*  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+	
+38		*  |                    QDCOUNT                    |	
+39		*  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+	
+40		*  |                    ANCOUNT                    |	
+41		*  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+	
+42		*  |                    NSCOUNT                    |	
+43		*  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+	
+44		*  |                    ARCOUNT                    |	
+45		*  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+	
+46		*	
+47		* AA, TC, RA, and RCODE are only set in responses.  Brief description	
+48		* of the remaining fields:	
+49		*      ID      Identifier to match responses with queries	
+50		*      QR      Query (0) or response (1)	
+51		*      Opcode  For our purposes, always O_QUERY	
+52		*      RD      Recursion desired	
+53		*      Z       Reserved (zero)	
+54		*      QDCOUNT Number of queries	
+55		*      ANCOUNT Number of answers	
+56		*      NSCOUNT Number of name server records	
+57		*      ARCOUNT Number of additional records	
+58		*	
+59		* Question format, from RFC 1035:	
+60		*                                  1  1  1  1  1  1	
+61		*    0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5	
+62		*  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+	
+63		*  |                                               |	
+64		*  /                     QNAME                     /	
+65		*  /                                               /	
+66		*  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+	
+67		*  |                     QTYPE                     |	
+68		*  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+	
+69		*  |                     QCLASS                    |	
+70		*  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+	
+71		*	
+72		* The query name is encoded as a series of labels, each represented	
+73		* as a one-byte length (maximum 63) followed by the text of the	
+74		* label.  The list is terminated by a label of length zero (which can	
+75		* be thought of as the root domain).	
+76		*/	
+77			
+78		int ares_create_query(const char *name, int dnsclass, int type,	
+79		unsigned short id, int rd, unsigned char **bufp,	
+80		int *buflenp, int max_udp_size)	
+81	408	{	
+82	408	size_t len;	
+83	408	unsigned char *q;	
+84	408	const char *p;	
+85	408	size_t buflen;	
+86	408	unsigned char *buf;	
+87			
+88		/* Set our results early, in case we bail out early with an error. */	
+89	408	*buflenp = 0;	
+90	408	*bufp = NULL;	
+91			
+92		/* Per RFC 7686, reject queries for ".onion" domain names with NXDOMAIN. */	
+93	408	if (ares__is_onion_domain(name))	
+94	1	return ARES_ENOTFOUND;	
+95			
+96		/* Allocate a memory area for the maximum size this packet might need. +2	
+97		* is for the length byte and zero termination if no dots or ecscaping is	
+98		* used.	
+99		*/	
+100	407	len = strlen(name) + 2 + HFIXEDSZ + QFIXEDSZ +	
+101	407	(max_udp_size ?EDNSFIXEDSZ: 0);	
+102	407	buf = ares_malloc(len);	
+103	407	if (!buf)	
+104	0	returnARES_ENOMEM;	
+105			
+106		/* Set up the header. */	
+107	407	q = buf;	
+108	407	memset(q, 0, HFIXEDSZ);	
+109	407	DNS_HEADER_SET_QID(q, id);	
+110	407	DNS_HEADER_SET_OPCODE(q, O_QUERY);	
+111	407	if (rd) {	
+112	407	DNS_HEADER_SET_RD(q, 1);	
+113	407	}	
+114	0	else{	
+115	0	DNS_HEADER_SET_RD(q, 0);	
+116	0	}	
+117	407	DNS_HEADER_SET_QDCOUNT(q, 1);	
+118			
+119	407	if (max_udp_size){	
+120	0	DNS_HEADER_SET_ARCOUNT(q, 1);	
+121	0	}	
+122			
+123		/* A name of "." is a screw case for the loop below, so adjust it. */	
+124	407	if (strcmp(name, ".") == 0)	
+125	0	name++;	
+126			
+127		/* Start writing out the name after the header. */	
+128	407	q += HFIXEDSZ;	
+129	778	while (*name)	
+130	778	{	
+131	778	if (*name == '.'){	
+132	0	ares_free (buf);	
+133	0	returnARES_EBADNAME;	
+134	0	}	
+135			
+136		/* Count the number of bytes in this label. */	
+137	778	len = 0;	
+138	5.09k	for (p = name; *p && *p != '.'; p++)	
+139	4.31k	{	
+140	4.31k	if (*p == '\\' &&*(p + 1) != 0)	
+141	0	p++;	
+142	4.31k	len++;	
+143	4.31k	}	
+144	778	if (len > MAXLABEL) {	
+145	13	ares_free (buf);	
+146	13	return ARES_EBADNAME;	
+147	13	}	
+148			
+149		/* Encode the length and copy the data. */	
+150	765	*q++ = (unsigned char)len;	
+151	3.63k	for (p = name; *p && *p != '.'; p++)	
+152	2.86k	{	
+153	2.86k	if (*p == '\\' &&*(p + 1) != 0)	
+154	0	p++;	
+155	2.86k	*q++ = *p;	
+156	2.86k	}	
+157			
+158		/* Go to the next label and repeat, unless we hit the end. */	
+159	765	if (!*p)	
+160	394	break;	
+161	371	name = p + 1;	
+162	371	}	
+163			
+164		/* Add the zero-length label at the end. */	
+165	394	*q++ = 0;	
+166			
+167		/* Finish off the question with the type and class. */	
+168	394	DNS_QUESTION_SET_TYPE(q, type);	
+169	394	DNS_QUESTION_SET_CLASS(q, dnsclass);	
+170			
+171	394	q += QFIXEDSZ;	
+172	394	if (max_udp_size)	
+173	0	{	
+174	0	memset(q, 0,EDNSFIXEDSZ);	
+175	0	q++;	
+176	0	DNS_RR_SET_TYPE(q, T_OPT);	
+177	0	DNS_RR_SET_CLASS(q, max_udp_size);	
+178	0	q += (EDNSFIXEDSZ-1);	
+179	0	}	
+180	394	buflen = (q - buf);	
+181			
+182		/* Reject names that are longer than the maximum of 255 bytes that's	
+183		* specified in RFC 1035 ("To simplify implementations, the total length of	
+184		* a domain name (i.e., label octets and label length octets) is restricted	
+185		* to 255 octets or less."). */	
+186	394	if (buflen > (size_t)(MAXCDNAME + HFIXEDSZ + QFIXEDSZ +	
+187	394	(max_udp_size ?EDNSFIXEDSZ: 0))) {	
+188	4	ares_free (buf);	
+189	4	return ARES_EBADNAME;	
+190	4	}	
+191			
+192		/* we know this fits in an int at this point */	
+193	390	*buflenp = (int) buflen;	
+194	390	*bufp = buf;	
+195			
+196	390	return ARES_SUCCESS;	
+197	394	}	
+
+

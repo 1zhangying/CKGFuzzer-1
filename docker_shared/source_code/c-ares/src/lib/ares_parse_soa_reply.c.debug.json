@@ -1,0 +1,161 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int\nares_parse_soa_reply(const unsigned char *abuf, int alen,\n\t\t     struct ares_soa_reply **soa_out)\n{\n  const unsigned char *aptr;\n  long len;\n  char *qname = NULL, *rr_name = NULL;\n  struct ares_soa_reply *soa = NULL;\n  int qdcount, ancount, qclass;\n  int status, i, rr_type, rr_class, rr_len;\n\n  if (alen < HFIXEDSZ)\n    return ARES_EBADRESP;\n\n  /* parse message header */\n  qdcount = DNS_HEADER_QDCOUNT(abuf);\n  ancount = DNS_HEADER_ANCOUNT(abuf);\n\n  if (qdcount != 1)\n    return ARES_EBADRESP;\n  if (ancount == 0)\n    return ARES_EBADRESP;\n\n  aptr = abuf + HFIXEDSZ;\n\n  /* query name */\n  status = ares__expand_name_for_response(aptr, abuf, alen, &qname, &len, 0);\n  if (status != ARES_SUCCESS)\n    goto failed_stat;\n\n  if (alen <= len + HFIXEDSZ + 1)\n    goto failed;\n  aptr += len;\n\n  qclass = DNS_QUESTION_TYPE(aptr);\n\n  /* skip qtype & qclass */\n  if (aptr + QFIXEDSZ > abuf + alen)\n    goto failed;\n  aptr += QFIXEDSZ;\n\n  /* qclass of SOA with multiple answers */\n  if (qclass == T_SOA && ancount > 1)\n    goto failed;\n\n  /* examine all the records, break and return if found soa */\n  for (i = 0; i < ancount; i++)\n  {\n    rr_name = NULL;\n    status  = ares__expand_name_for_response (aptr, abuf, alen, &rr_name, &len, 0);\n    if (status != ARES_SUCCESS)\n     {\n      ares_free(rr_name);\n      goto failed_stat;\n     }\n\n    aptr += len;\n    if ( aptr + RRFIXEDSZ > abuf + alen )\n    {\n      ares_free(rr_name);\n      status = ARES_EBADRESP;\n      goto failed_stat;\n    }\n    rr_type = DNS_RR_TYPE( aptr );\n    rr_class = DNS_RR_CLASS( aptr );\n    rr_len = DNS_RR_LEN( aptr );\n    aptr += RRFIXEDSZ;\n    if (aptr + rr_len > abuf + alen)\n      {\n        ares_free(rr_name);\n        status = ARES_EBADRESP;\n        goto failed_stat;\n      }\n    if ( rr_class == C_IN && rr_type == T_SOA )\n    {\n      /* allocate result struct */\n      soa = ares_malloc_data(ARES_DATATYPE_SOA_REPLY);\n      if (!soa)\n        {\n          ares_free(rr_name);\n          status = ARES_ENOMEM;\n          goto failed_stat;\n        }\n\n      /* nsname */\n      status = ares__expand_name_for_response(aptr, abuf, alen, &soa->nsname,\n                                               &len, 0);\n      if (status != ARES_SUCCESS)\n       {\n        ares_free(rr_name);\n        goto failed_stat;\n       }\n      aptr += len;\n\n      /* hostmaster */\n      status = ares__expand_name_for_response(aptr, abuf, alen,\n                                               &soa->hostmaster, &len, 0);\n      if (status != ARES_SUCCESS)\n       {\n        ares_free(rr_name);\n        goto failed_stat;\n       }\n      aptr += len;\n\n      /* integer fields */\n      if (aptr + 5 * 4 > abuf + alen)\n       {\n        ares_free(rr_name);\n        goto failed;\n       }\n      soa->serial = DNS__32BIT(aptr + 0 * 4);\n      soa->refresh = DNS__32BIT(aptr + 1 * 4);\n      soa->retry = DNS__32BIT(aptr + 2 * 4);\n      soa->expire = DNS__32BIT(aptr + 3 * 4);\n      soa->minttl = DNS__32BIT(aptr + 4 * 4);\n\n      ares_free(qname);\n      ares_free(rr_name);\n\n      *soa_out = soa;\n\n      return ARES_SUCCESS;\n    }\n    aptr += rr_len;\n\n    ares_free(rr_name);\n\n    if (aptr > abuf + alen)\n      goto failed_stat;\n  }\n  /* no SOA record found */\n  status = ARES_EBADRESP;\n  goto failed_stat;\nfailed:\n  status = ARES_EBADRESP;\n\nfailed_stat:\n  if (soa)\n    ares_free_data(soa);\n  if (qname)\n    ares_free(qname);\n  return status;\n}",
+      "fn_code_pos": [
+        [
+          36,
+          0
+        ],
+        [
+          178,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_parse_soa_reply",
+        "parameters": {
+          "abuf": "unsigned char",
+          "alen": "int",
+          "soa_out": "struct ares_soa_reply"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct ares_soa_reply",
+      {},
+      "",
+      [
+        38,
+        7
+      ],
+      [
+        38,
+        28
+      ]
+    ],
+    [
+      "struct ares_soa_reply",
+      {},
+      "",
+      [
+        43,
+        2
+      ],
+      [
+        43,
+        23
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        20,
+        0
+      ],
+      [
+        21,
+        0
+      ]
+    ],
+    [
+      "#  include <netdb.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_dns.h\"\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_data.h\"\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

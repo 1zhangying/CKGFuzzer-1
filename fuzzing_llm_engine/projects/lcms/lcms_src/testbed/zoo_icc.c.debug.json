@@ -1,0 +1,233 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nvoid ReadAllTags(cmsHPROFILE h)\n{\n    cmsInt32Number i, n;\n    cmsTagSignature sig;\n\n    n = cmsGetTagCount(h);\n    for (i=0; i < n; i++) {\n\n        sig = cmsGetTagSignature(h, i);\n        if (cmsReadTag(h, sig) == NULL) return;\n    }\n}",
+      "fn_code_pos": [
+        [
+          41,
+          0
+        ],
+        [
+          53,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ReadAllTags",
+        "parameters": {
+          "h": "cmsHPROFILE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ReadAllRAWTags(cmsHPROFILE h)\n{\n    cmsInt32Number i, n;\n    cmsTagSignature sig;\n    cmsInt32Number len;\n\n    n = cmsGetTagCount(h);\n    for (i=0; i < n; i++) {\n\n        sig = cmsGetTagSignature(h, i);\n        len = cmsReadRawTag(h, sig, NULL, 0);\n    }\n}",
+      "fn_code_pos": [
+        [
+          57,
+          0
+        ],
+        [
+          70,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ReadAllRAWTags",
+        "parameters": {
+          "h": "cmsHPROFILE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid PrintInfo(cmsHPROFILE h, cmsInfoType Info)\n{\n    wchar_t* text;\n    cmsInt32Number len;\n    cmsContext id = 0;\n\n    len = cmsGetProfileInfo(h, Info, \"en\", \"US\", NULL, 0);\n    if (len == 0) return;\n\n    text = (wchar_t*) _cmsMalloc(id, len);\n    cmsGetProfileInfo(h, Info, \"en\", \"US\", text, len);\n\n    wprintf(L\"%s\\n\", text);\n    _cmsFree(id, text);\n}",
+      "fn_code_pos": [
+        [
+          73,
+          0
+        ],
+        [
+          88,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintInfo",
+        "parameters": {
+          "h": "cmsHPROFILE",
+          "Info": "cmsInfoType"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid PrintAllInfos(cmsHPROFILE h)\n{\n     PrintInfo(h, cmsInfoDescription);\n     PrintInfo(h, cmsInfoManufacturer);\n     PrintInfo(h, cmsInfoModel);\n     PrintInfo(h, cmsInfoCopyright);\n     printf(\"\\n\\n\");\n}",
+      "fn_code_pos": [
+        [
+          91,
+          0
+        ],
+        [
+          99,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintAllInfos",
+        "parameters": {
+          "h": "cmsHPROFILE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ReadAllLUTS(cmsHPROFILE h)\n{\n    cmsPipeline* a;\n    cmsCIEXYZ Black;\n\n    a = _cmsReadInputLUT(h, INTENT_PERCEPTUAL);\n    if (a) cmsPipelineFree(a);\n\n    a = _cmsReadInputLUT(h, INTENT_RELATIVE_COLORIMETRIC);\n    if (a) cmsPipelineFree(a);\n\n    a = _cmsReadInputLUT(h, INTENT_SATURATION);\n    if (a) cmsPipelineFree(a);\n\n    a = _cmsReadInputLUT(h, INTENT_ABSOLUTE_COLORIMETRIC);\n    if (a) cmsPipelineFree(a);\n\n\n    a = _cmsReadOutputLUT(h, INTENT_PERCEPTUAL);\n    if (a) cmsPipelineFree(a);\n\n    a = _cmsReadOutputLUT(h, INTENT_RELATIVE_COLORIMETRIC);\n    if (a) cmsPipelineFree(a);\n\n    a = _cmsReadOutputLUT(h, INTENT_SATURATION);\n    if (a) cmsPipelineFree(a);\n\n    a = _cmsReadOutputLUT(h, INTENT_ABSOLUTE_COLORIMETRIC);\n    if (a) cmsPipelineFree(a);\n\n\n    a = _cmsReadDevicelinkLUT(h, INTENT_PERCEPTUAL);\n    if (a) cmsPipelineFree(a);\n\n    a = _cmsReadDevicelinkLUT(h, INTENT_RELATIVE_COLORIMETRIC);\n    if (a) cmsPipelineFree(a);\n\n    a = _cmsReadDevicelinkLUT(h, INTENT_SATURATION);\n    if (a) cmsPipelineFree(a);\n\n    a = _cmsReadDevicelinkLUT(h, INTENT_ABSOLUTE_COLORIMETRIC);\n    if (a) cmsPipelineFree(a);\n\n\n    cmsDetectDestinationBlackPoint(&Black, h, INTENT_PERCEPTUAL, 0);\n    cmsDetectDestinationBlackPoint(&Black, h, INTENT_RELATIVE_COLORIMETRIC, 0);\n    cmsDetectDestinationBlackPoint(&Black, h, INTENT_SATURATION, 0);\n    cmsDetectDestinationBlackPoint(&Black, h, INTENT_ABSOLUTE_COLORIMETRIC, 0);\n    cmsDetectTAC(h);\n}",
+      "fn_code_pos": [
+        [
+          101,
+          0
+        ],
+        [
+          151,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ReadAllLUTS",
+        "parameters": {
+          "h": "cmsHPROFILE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsInt32Number CheckSingleSpecimen(const char* Profile)\n{\n    char BuffSrc[256];\n    char BuffDst[256];\n    cmsHPROFILE h;\n\n    sprintf(BuffSrc, \"%s%s\", ZOOfolder, Profile);\n    sprintf(BuffDst, \"%s%s\", ZOOwrite,  Profile);\n\n    h = cmsOpenProfileFromFile(BuffSrc, \"r\");\n    if (h == NULL) return 0;\n\n    printf(\"%s\\n\", Profile);\n\n    PrintAllInfos(h);  \n    ReadAllTags(h);    \n    ReadAllLUTS(h);\n // ReadAllRAWTags(h);\n\n\n    cmsSaveProfileToFile(h, BuffDst);\n    cmsCloseProfile(h);\n\n    h = cmsOpenProfileFromFile(BuffDst, \"r\");\n    if (h == NULL) return 0;\n    ReadAllTags(h);\n\n\n    cmsCloseProfile(h);\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          155,
+          0
+        ],
+        [
+          187,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckSingleSpecimen",
+        "parameters": {
+          "Profile": "char"
+        },
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsInt32Number CheckRAWSpecimen(const char* Profile)\n{\n    char BuffSrc[256];\n    char BuffDst[256];\n    cmsHPROFILE h;\n\n    sprintf(BuffSrc, \"%s%s\", ZOOfolder, Profile);\n    sprintf(BuffDst, \"%s%s\", ZOORawWrite,  Profile);\n\n    h = cmsOpenProfileFromFile(BuffSrc, \"r\");\n    if (h == NULL) return 0;\n\n    ReadAllTags(h);\n    ReadAllRAWTags(h);\n    cmsSaveProfileToFile(h, BuffDst);\n    cmsCloseProfile(h);\n\n    h = cmsOpenProfileFromFile(BuffDst, \"r\");\n    if (h == NULL) return 0;\n    ReadAllTags(h);\n    cmsCloseProfile(h);\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          189,
+          0
+        ],
+        [
+          213,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckRAWSpecimen",
+        "parameters": {
+          "Profile": "char"
+        },
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nint count_stats(const char* Profile)\n{\n    char BuffSrc[256];\n    cmsHPROFILE h;\n    cmsCIEXYZ Black;\n\n    sprintf(BuffSrc, \"%s%s\", ZOOfolder, Profile);\n   \n    h = cmsOpenProfileFromFile(BuffSrc, \"r\");\n    if (h == NULL) return 0;\n\n  \n    switch (cmsGetDeviceClass(h)) { \n\n    case cmsSigInputClass        : input++; break;\n    case cmsSigDisplayClass      : disp++; break;\n    case cmsSigOutputClass       : output++; break;\n    case cmsSigLinkClass         : link++;  break;\n    case cmsSigAbstractClass     : abst++; break;\n    case cmsSigColorSpaceClass   : color++; break;\n    case cmsSigNamedColorClass   : named ++; break;\n    }\n\n\n    switch (cmsGetColorSpace(h)) {\n\n    case cmsSigRgbData: rgb++; break;\n    case cmsSigCmykData: cmyk++; break;\n    case cmsSigGrayData: gray++; break;\n    default: other++;\n    }\n\n    cmsDetectDestinationBlackPoint(&Black, h, INTENT_PERCEPTUAL, 0);\n    cmsDetectDestinationBlackPoint(&Black, h, INTENT_RELATIVE_COLORIMETRIC, 0);\n    cmsDetectDestinationBlackPoint(&Black, h, INTENT_SATURATION, 0);\n   \n    cmsCloseProfile(h);\n   \n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          231,
+          0
+        ],
+        [
+          271,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "count_stats",
+        "parameters": {
+          "Profile": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void CheckProfileZOO(void)\n{\n\n    struct _finddata_t c_file;\n    intptr_t hFile;\n\n    cmsSetLogErrorHandler(NULL);\n\n    if ( (hFile = _findfirst(\"c:\\\\colormaps\\\\*.*\", &c_file)) == -1L )\n        printf(\"No files in current directory\");\n    else\n    {\n        do\n        {\n            if (strcmp(c_file.name, \".\") != 0 &&\n                strcmp(c_file.name, \"..\") != 0) {\n\n                    CheckSingleSpecimen( c_file.name);\n                    CheckRAWSpecimen( c_file.name);\n\n                    count_stats(c_file.name);\n\n                    TestMemoryLeaks(FALSE);\n\n            }\n\n        } while ( _findnext(hFile, &c_file) == 0 );\n\n        _findclose(hFile);\n    }\n\n     ResetFatalError();\n}",
+      "fn_code_pos": [
+        [
+          275,
+          0
+        ],
+        [
+          307,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckProfileZOO",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct _finddata_t",
+      {},
+      "",
+      [
+        278,
+        4
+      ],
+      [
+        278,
+        22
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"testcms2.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

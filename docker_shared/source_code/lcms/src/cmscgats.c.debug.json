@@ -1,0 +1,3181 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nstring* StringAlloc(cmsIT8* it8, int max)\n{\n    string* s = (string*) AllocChunk(it8, sizeof(string));\n    if (s == NULL) return NULL;\n\n    s->it8 = it8;\n    s->max = max;\n    s->len = 0;\n    s->begin = (char*) AllocChunk(it8, s->max);\n\n    return s;\n}",
+      "fn_code_pos": [
+        [
+          365,
+          0
+        ],
+        [
+          377,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "StringAlloc",
+        "parameters": {
+          "it8": "cmsIT8",
+          "max": "int"
+        },
+        "return_type": "string"
+      }
+    },
+    {
+      "fn_code": "static\nvoid StringClear(string* s)\n{\n    s->len = 0;\n}",
+      "fn_code_pos": [
+        [
+          379,
+          0
+        ],
+        [
+          383,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "StringClear",
+        "parameters": {
+          "s": "string"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid StringAppend(string* s, char c)\n{\n    if (s->len + 1 >= s->max)\n    {\n        char* new_ptr;\n\n        s->max *= 10;\n        new_ptr = (char*) AllocChunk(s->it8, s->max);\n        if (new_ptr != NULL && s->begin != NULL)\n            memcpy(new_ptr, s->begin, s->len);\n\n        s->begin = new_ptr;\n    }\n\n    if (s->begin != NULL)\n    {\n        s->begin[s->len++] = c;\n        s->begin[s->len] = 0;\n    }\n}",
+      "fn_code_pos": [
+        [
+          385,
+          0
+        ],
+        [
+          405,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "StringAppend",
+        "parameters": {
+          "s": "string",
+          "c": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nchar* StringPtr(string* s)\n{\n    return s->begin;\n}",
+      "fn_code_pos": [
+        [
+          407,
+          0
+        ],
+        [
+          411,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "StringPtr",
+        "parameters": {
+          "s": "string"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static\nvoid StringCat(string* s, const char* c)\n{\n    while (*c)\n    {\n        StringAppend(s, *c);\n        c++;\n    }\n}",
+      "fn_code_pos": [
+        [
+          413,
+          0
+        ],
+        [
+          421,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "StringCat",
+        "parameters": {
+          "s": "string",
+          "c": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool isseparator(int c)\n{\n    return (c == ' ') || (c == '\\t') ; \n}",
+      "fn_code_pos": [
+        [
+          425,
+          0
+        ],
+        [
+          429,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "isseparator",
+        "parameters": {
+          "c": "int"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool ismiddle(int c)\n{\n   return (!isseparator(c) && (c != '#') && (c !='\\\"') && (c != '\\'') && (c > 32) && (c < 127));\n}",
+      "fn_code_pos": [
+        [
+          432,
+          0
+        ],
+        [
+          436,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ismiddle",
+        "parameters": {
+          "c": "int"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool isidchar(int c)\n{\n   return isalnum(c) || ismiddle(c);\n}",
+      "fn_code_pos": [
+        [
+          439,
+          0
+        ],
+        [
+          443,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "isidchar",
+        "parameters": {
+          "c": "int"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool isfirstidchar(int c)\n{\n     return !isdigit(c) && ismiddle(c);\n}",
+      "fn_code_pos": [
+        [
+          446,
+          0
+        ],
+        [
+          450,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "isfirstidchar",
+        "parameters": {
+          "c": "int"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool isabsolutepath(const char *path)\n{\n    char ThreeChars[4];\n\n    if(path == NULL)\n        return FALSE;\n    if (path[0] == 0)\n        return FALSE;\n\n    strncpy(ThreeChars, path, 3);\n    ThreeChars[3] = 0;\n\n    if(ThreeChars[0] == DIR_CHAR)\n        return TRUE;\n\n#ifdef  CMS_IS_WINDOWS_\n    if (isalpha((int) ThreeChars[0]) && ThreeChars[1] == ':')\n        return TRUE;\n#endif\n    return FALSE;\n}",
+      "fn_code_pos": [
+        [
+          453,
+          0
+        ],
+        [
+          474,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "isabsolutepath",
+        "parameters": {
+          "path": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool BuildAbsolutePath(const char *relPath, const char *basePath, char *buffer, cmsUInt32Number MaxLen)\n{\n    char *tail;\n    cmsUInt32Number len;\n\n    // Already absolute?\n    if (isabsolutepath(relPath)) {\n\n        strncpy(buffer, relPath, MaxLen);\n        buffer[MaxLen-1] = 0;\n        return TRUE;\n    }\n\n    // No, search for last\n    strncpy(buffer, basePath, MaxLen);\n    buffer[MaxLen-1] = 0;\n\n    tail = strrchr(buffer, DIR_CHAR);\n    if (tail == NULL) return FALSE;    // Is not absolute and has no separators??\n\n    len = (cmsUInt32Number) (tail - buffer);\n    if (len >= MaxLen) return FALSE;\n\n    // No need to assure zero terminator over here\n    strncpy(tail + 1, relPath, MaxLen - len);\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          479,
+          0
+        ],
+        [
+          507,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BuildAbsolutePath",
+        "parameters": {
+          "relPath": "char",
+          "basePath": "char",
+          "buffer": "char",
+          "MaxLen": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nconst char* NoMeta(const char* str)\n{\n    if (strchr(str, '%') != NULL)\n        return \"**** CORRUPTED FORMAT STRING ***\";\n\n    return str;\n}",
+      "fn_code_pos": [
+        [
+          511,
+          0
+        ],
+        [
+          518,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NoMeta",
+        "parameters": {
+          "str": "char"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool SynError(cmsIT8* it8, const char *Txt, ...)\n{\n    char Buffer[256], ErrMsg[1024];\n    va_list args;\n\n    va_start(args, Txt);\n    vsnprintf(Buffer, 255, Txt, args);\n    Buffer[255] = 0;\n    va_end(args);\n\n    snprintf(ErrMsg, 1023, \"%s: Line %d, %s\", it8->FileStack[it8 ->IncludeSP]->FileName, it8->lineno, Buffer);\n    ErrMsg[1023] = 0;\n    it8->sy = SSYNERROR;\n    cmsSignalError(it8 ->ContextID, cmsERROR_CORRUPTION_DETECTED, \"%s\", ErrMsg);\n    return FALSE;\n}",
+      "fn_code_pos": [
+        [
+          521,
+          0
+        ],
+        [
+          537,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SynError",
+        "parameters": {
+          "it8": "cmsIT8",
+          "Txt": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool Check(cmsIT8* it8, SYMBOL sy, const char* Err)\n{\n        if (it8 -> sy != sy)\n                return SynError(it8, NoMeta(Err));\n        return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          540,
+          0
+        ],
+        [
+          546,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Check",
+        "parameters": {
+          "it8": "cmsIT8",
+          "sy": "SYMBOL",
+          "Err": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid NextCh(cmsIT8* it8)\n{\n    if (it8 -> FileStack[it8 ->IncludeSP]->Stream) {\n\n        it8 ->ch = fgetc(it8 ->FileStack[it8 ->IncludeSP]->Stream);\n\n        if (feof(it8 -> FileStack[it8 ->IncludeSP]->Stream))  {\n\n            if (it8 ->IncludeSP > 0) {\n\n                fclose(it8 ->FileStack[it8->IncludeSP--]->Stream);\n                it8 -> ch = ' ';                            // Whitespace to be ignored\n\n            } else\n                it8 ->ch = 0;   // EOF\n        }\n    }\n    else {\n        it8->ch = *it8->Source;\n        if (it8->ch) it8->Source++;\n    }\n}",
+      "fn_code_pos": [
+        [
+          549,
+          0
+        ],
+        [
+          571,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NextCh",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nSYMBOL BinSrchKey(const char *id)\n{\n    int l = 1;\n    int r = NUMKEYS;\n    int x, res;\n\n    while (r >= l)\n    {\n        x = (l+r)/2;\n        res = cmsstrcasecmp(id, TabKeys[x-1].id);\n        if (res == 0) return TabKeys[x-1].sy;\n        if (res < 0) r = x - 1;\n        else l = x + 1;\n    }\n\n    return SUNDEFINED;\n}",
+      "fn_code_pos": [
+        [
+          575,
+          0
+        ],
+        [
+          592,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BinSrchKey",
+        "parameters": {
+          "id": "char"
+        },
+        "return_type": "SYMBOL"
+      }
+    },
+    {
+      "fn_code": "static\ncmsFloat64Number xpow10(int n)\n{\n    return pow(10, (cmsFloat64Number) n);\n}",
+      "fn_code_pos": [
+        [
+          596,
+          0
+        ],
+        [
+          600,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "xpow10",
+        "parameters": {
+          "n": "int"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ReadReal(cmsIT8* it8, cmsInt32Number inum)\n{\n    it8->dnum = (cmsFloat64Number)inum;\n\n    while (isdigit(it8->ch)) {\n\n        it8->dnum = (cmsFloat64Number)it8->dnum * 10.0 + (cmsFloat64Number)(it8->ch - '0');\n        NextCh(it8);\n    }\n\n    if (it8->ch == '.') {        // Decimal point\n\n        cmsFloat64Number frac = 0.0;      // fraction\n        int prec = 0;                     // precision\n\n        NextCh(it8);               // Eats dec. point\n\n        while (isdigit(it8->ch)) {\n\n            frac = frac * 10.0 + (cmsFloat64Number)(it8->ch - '0');\n            prec++;\n            NextCh(it8);\n        }\n\n        it8->dnum = it8->dnum + (frac / xpow10(prec));\n    }\n\n    // Exponent, example 34.00E+20\n    if (toupper(it8->ch) == 'E') {\n\n        cmsInt32Number e;\n        cmsInt32Number sgn;\n\n        NextCh(it8); sgn = 1;\n\n        if (it8->ch == '-') {\n\n            sgn = -1; NextCh(it8);\n        }\n        else\n            if (it8->ch == '+') {\n\n                sgn = +1;\n                NextCh(it8);\n            }\n\n        e = 0;\n        while (isdigit(it8->ch)) {\n\n            cmsInt32Number digit = (it8->ch - '0');\n\n            if ((cmsFloat64Number)e * 10.0 + (cmsFloat64Number)digit < (cmsFloat64Number)+2147483647.0)\n                e = e * 10 + digit;\n\n            NextCh(it8);\n        }\n\n        e = sgn*e;\n        it8->dnum = it8->dnum * xpow10(e);\n    }\n}",
+      "fn_code_pos": [
+        [
+          604,
+          0
+        ],
+        [
+          665,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ReadReal",
+        "parameters": {
+          "it8": "cmsIT8",
+          "inum": "cmsInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsFloat64Number ParseFloatNumber(const char *Buffer)\n{\n    cmsFloat64Number dnum = 0.0;\n    int sign = 1;\n\n    // keep safe\n    if (Buffer == NULL) return 0.0;\n\n    if (*Buffer == '-' || *Buffer == '+') {\n\n        sign = (*Buffer == '-') ? -1 : 1;\n        Buffer++;\n    }\n\n\n    while (*Buffer && isdigit((int)*Buffer)) {\n\n        dnum = dnum * 10.0 + (*Buffer - '0');\n        if (*Buffer) Buffer++;\n    }\n\n    if (*Buffer == '.') {\n\n        cmsFloat64Number frac = 0.0;      // fraction\n        int prec = 0;                     // precision\n\n        if (*Buffer) Buffer++;\n\n        while (*Buffer && isdigit((int)*Buffer)) {\n\n            frac = frac * 10.0 + (*Buffer - '0');\n            prec++;\n            if (*Buffer) Buffer++;\n        }\n\n        dnum = dnum + (frac / xpow10(prec));\n    }\n\n    // Exponent, example 34.00E+20\n    if (*Buffer && toupper(*Buffer) == 'E') {\n\n        int e;\n        int sgn;\n\n        if (*Buffer) Buffer++;\n        sgn = 1;\n\n        if (*Buffer == '-') {\n\n            sgn = -1;\n            if (*Buffer) Buffer++;\n        }\n        else\n            if (*Buffer == '+') {\n\n                sgn = +1;\n                if (*Buffer) Buffer++;\n            }\n\n        e = 0;\n        while (*Buffer && isdigit((int)*Buffer)) {\n\n            cmsInt32Number digit = (*Buffer - '0');\n\n            if ((cmsFloat64Number)e * 10.0 + digit < (cmsFloat64Number)+2147483647.0)\n                e = e * 10 + digit;\n\n            if (*Buffer) Buffer++;\n        }\n\n        e = sgn*e;\n        dnum = dnum * xpow10(e);\n    }\n\n    return sign * dnum;\n}",
+      "fn_code_pos": [
+        [
+          670,
+          0
+        ],
+        [
+          746,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ParseFloatNumber",
+        "parameters": {
+          "Buffer": "char"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid InStringSymbol(cmsIT8* it8)\n{\n    while (isseparator(it8->ch))\n        NextCh(it8);\n\n    if (it8->ch == '\\'' || it8->ch == '\\\"')\n    {\n        int sng;\n\n        sng = it8->ch;\n        StringClear(it8->str);\n\n        NextCh(it8);\n\n        while (it8->ch != sng) {\n\n            if (it8->ch == '\\n' || it8->ch == '\\r' || it8->ch == 0) break;\n            else {\n                StringAppend(it8->str, (char)it8->ch);\n                NextCh(it8);\n            }\n        }\n\n        it8->sy = SSTRING;\n        NextCh(it8);        \n    }\n    else\n        SynError(it8, \"String expected\");\n\n}",
+      "fn_code_pos": [
+        [
+          750,
+          0
+        ],
+        [
+          780,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "InStringSymbol",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid InSymbol(cmsIT8* it8)\n{\n    SYMBOL key;\n    \n    do {\n\n        while (isseparator(it8->ch))\n            NextCh(it8);\n\n        if (isfirstidchar(it8->ch)) {          // Identifier\n\n            StringClear(it8->id);\n\n            do {\n\n                StringAppend(it8->id, (char) it8->ch);\n\n                NextCh(it8);\n\n            } while (isidchar(it8->ch));\n\n\n            key = BinSrchKey(StringPtr(it8->id));\n            if (key == SUNDEFINED) it8->sy = SIDENT;\n            else it8->sy = key;\n\n        }\n        else                         // Is a number?\n            if (isdigit(it8->ch) || it8->ch == '.' || it8->ch == '-' || it8->ch == '+')\n            {\n                int sign = 1;\n\n                if (it8->ch == '-') {\n                    sign = -1;\n                    NextCh(it8);\n                }\n\n                it8->inum = 0;\n                it8->sy   = SINUM;\n\n                if (it8->ch == '0') {          // 0xnnnn (Hexa) or 0bnnnn (Binary)\n\n                    NextCh(it8);\n                    if (toupper(it8->ch) == 'X') {\n\n                        int j;\n\n                        NextCh(it8);\n                        while (isxdigit(it8->ch))\n                        {\n                            it8->ch = toupper(it8->ch);\n                            if (it8->ch >= 'A' && it8->ch <= 'F')  j = it8->ch -'A'+10;\n                            else j = it8->ch - '0';\n\n                            if ((cmsFloat64Number) it8->inum * 16.0 + (cmsFloat64Number) j > (cmsFloat64Number)+2147483647.0)\n                            {\n                                SynError(it8, \"Invalid hexadecimal number\");\n                                it8->sy = SEOF;\n                                return;\n                            }\n\n                            it8->inum = it8->inum * 16 + j;\n                            NextCh(it8);\n                        }\n                        return;\n                    }\n\n                    if (toupper(it8->ch) == 'B') {  // Binary\n\n                        int j;\n\n                        NextCh(it8);\n                        while (it8->ch == '0' || it8->ch == '1')\n                        {\n                            j = it8->ch - '0';\n\n                            if ((cmsFloat64Number) it8->inum * 2.0 + j > (cmsFloat64Number)+2147483647.0)\n                            {\n                                SynError(it8, \"Invalid binary number\");\n                                it8->sy = SEOF;\n                                return;\n                            }\n\n                            it8->inum = it8->inum * 2 + j;\n                            NextCh(it8);\n                        }\n                        return;\n                    }\n                }\n\n\n                while (isdigit(it8->ch)) {\n\n                    cmsInt32Number digit = (it8->ch - '0');\n\n                    if ((cmsFloat64Number) it8->inum * 10.0 + (cmsFloat64Number) digit > (cmsFloat64Number) +2147483647.0) {\n                        ReadReal(it8, it8->inum);\n                        it8->sy = SDNUM;\n                        it8->dnum *= sign;\n                        return;\n                    }\n\n                    it8->inum = it8->inum * 10 + digit;\n                    NextCh(it8);\n                }\n\n                if (it8->ch == '.') {\n\n                    ReadReal(it8, it8->inum);\n                    it8->sy = SDNUM;\n                    it8->dnum *= sign;\n                    return;\n                }\n\n                it8 -> inum *= sign;\n\n                // Special case. Numbers followed by letters are taken as identifiers\n\n                if (isidchar(it8 ->ch)) {\n\n                    char buffer[127];\n\n                    if (it8 ->sy == SINUM) {\n\n                        snprintf(buffer, sizeof(buffer), \"%d\", it8->inum);\n                    }\n                    else {\n\n                        snprintf(buffer, sizeof(buffer), it8 ->DoubleFormatter, it8->dnum);\n                    }\n\n                    StringCat(it8->id, buffer);\n\n                    do {\n\n                        StringAppend(it8->id, (char) it8->ch);\n\n                        NextCh(it8);\n\n                    } while (isidchar(it8->ch));\n\n                    it8->sy = SIDENT;\n                }\n                return;\n\n            }\n            else\n                switch ((int) it8->ch) {\n        \n        // Eof stream markers\n        case '\\x1a':\n        case 0:\n        case -1:\n            it8->sy = SEOF;\n            break;\n\n\n        // Next line\n        case '\\r':\n            NextCh(it8);\n            if (it8 ->ch == '\\n') \n                NextCh(it8);\n            it8->sy = SEOLN;\n            it8->lineno++;\n            break;\n\n        case '\\n':\n            NextCh(it8);\n            it8->sy = SEOLN;\n            it8->lineno++;\n            break;\n\n        // Comment\n        case '#':\n            NextCh(it8);\n            while (it8->ch && it8->ch != '\\n' && it8->ch != '\\r')\n                NextCh(it8);\n\n            it8->sy = SCOMMENT;\n            break;\n\n        // String.\n        case '\\'':\n        case '\\\"':\n            InStringSymbol(it8);\n            break;\n\n\n        default:\n            SynError(it8, \"Unrecognized character: 0x%x\", it8 ->ch);\n            it8->sy = SEOF;\n            return;\n            }\n\n    } while (it8->sy == SCOMMENT);\n\n    // Handle the include special token\n\n    if (it8 -> sy == SINCLUDE) {\n\n                FILECTX* FileNest;\n\n                if(it8 -> IncludeSP >= (MAXINCLUDE-1)) {\n\n                    SynError(it8, \"Too many recursion levels\");\n                    it8->sy = SEOF;\n                    return;\n                }\n\n                InStringSymbol(it8);\n                if (!Check(it8, SSTRING, \"Filename expected\"))\n                {\n                    it8->sy = SEOF;\n                    return;\n                }\n\n                FileNest = it8 -> FileStack[it8 -> IncludeSP + 1];\n                if(FileNest == NULL) {\n\n                    FileNest = it8 ->FileStack[it8 -> IncludeSP + 1] = (FILECTX*)AllocChunk(it8, sizeof(FILECTX));\n                    if (FileNest == NULL) {\n                        SynError(it8, \"Out of memory\");\n                        it8->sy = SEOF;\n                        return;\n                    }\n                }\n\n                if (BuildAbsolutePath(StringPtr(it8->str),\n                                      it8->FileStack[it8->IncludeSP]->FileName,\n                                      FileNest->FileName, cmsMAX_PATH-1) == FALSE) {\n                    SynError(it8, \"File path too long\");\n                    it8->sy = SEOF;\n                    return;\n                }\n\n                FileNest->Stream = fopen(FileNest->FileName, \"rt\");\n                if (FileNest->Stream == NULL) {\n\n                        SynError(it8, \"File %s not found\", FileNest->FileName);\n                        it8->sy = SEOF;\n                        return;\n                }\n                it8->IncludeSP++;\n\n                it8 ->ch = ' ';\n                InSymbol(it8);\n    }\n\n}",
+      "fn_code_pos": [
+        [
+          783,
+          0
+        ],
+        [
+          1032,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "InSymbol",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool CheckEOLN(cmsIT8* it8)\n{\n        if (!Check(it8, SEOLN, \"Expected separator\")) return FALSE;\n        while (it8 -> sy == SEOLN)\n                        InSymbol(it8);\n        return TRUE;\n\n}",
+      "fn_code_pos": [
+        [
+          1035,
+          0
+        ],
+        [
+          1043,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckEOLN",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid Skip(cmsIT8* it8, SYMBOL sy)\n{\n        if (it8->sy == sy && it8->sy != SEOF)\n                        InSymbol(it8);\n}",
+      "fn_code_pos": [
+        [
+          1047,
+          0
+        ],
+        [
+          1052,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Skip",
+        "parameters": {
+          "it8": "cmsIT8",
+          "sy": "SYMBOL"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid SkipEOLN(cmsIT8* it8)\n{\n    while (it8->sy == SEOLN) {\n             InSymbol(it8);\n    }\n}",
+      "fn_code_pos": [
+        [
+          1056,
+          0
+        ],
+        [
+          1062,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SkipEOLN",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool GetVal(cmsIT8* it8, char* Buffer, cmsUInt32Number max, const char* ErrorTitle)\n{\n    switch (it8->sy) {\n\n    case SEOLN:   // Empty value\n                  Buffer[0]=0;\n                  break;\n    case SIDENT:  strncpy(Buffer, StringPtr(it8->id), max);\n                  Buffer[max-1]=0;\n                  break;\n    case SINUM:   snprintf(Buffer, max, \"%d\", it8 -> inum); break;\n    case SDNUM:   snprintf(Buffer, max, it8->DoubleFormatter, it8 -> dnum); break;\n    case SSTRING: strncpy(Buffer, StringPtr(it8->str), max);\n                  Buffer[max-1] = 0;\n                  break;\n\n\n    default:\n         return SynError(it8, \"%s\", ErrorTitle);\n    }\n\n    Buffer[max] = 0;\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1066,
+          0
+        ],
+        [
+          1090,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetVal",
+        "parameters": {
+          "it8": "cmsIT8",
+          "Buffer": "char",
+          "max": "cmsUInt32Number",
+          "ErrorTitle": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nTABLE* GetTable(cmsIT8* it8)\n{\n   if ((it8 -> nTable >= it8 ->TablesCount)) {\n\n           SynError(it8, \"Table %d out of sequence\", it8 -> nTable);\n           return it8 -> Tab;\n   }\n\n   return it8 ->Tab + it8 ->nTable;\n}",
+      "fn_code_pos": [
+        [
+          1094,
+          0
+        ],
+        [
+          1104,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetTable",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "TABLE"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsIT8Free(cmsHANDLE hIT8)\n{\n   cmsIT8* it8 = (cmsIT8*) hIT8;\n\n    if (it8 == NULL)\n        return;\n\n    if (it8->MemorySink) {\n\n        OWNEDMEM* p;\n        OWNEDMEM* n;\n\n        for (p = it8->MemorySink; p != NULL; p = n) {\n\n            n = p->Next;\n            if (p->Ptr) _cmsFree(it8 ->ContextID, p->Ptr);\n            _cmsFree(it8 ->ContextID, p);\n        }\n    }\n\n    if (it8->MemoryBlock)\n        _cmsFree(it8 ->ContextID, it8->MemoryBlock);\n\n    _cmsFree(it8 ->ContextID, it8);\n}",
+      "fn_code_pos": [
+        [
+          1110,
+          0
+        ],
+        [
+          1134,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8Free",
+        "parameters": {
+          "hIT8": "cmsHANDLE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* AllocBigBlock(cmsIT8* it8, cmsUInt32Number size)\n{\n    OWNEDMEM* ptr1;\n    void* ptr = _cmsMallocZero(it8->ContextID, size);\n\n    if (ptr != NULL) {\n\n        ptr1 = (OWNEDMEM*) _cmsMallocZero(it8 ->ContextID, sizeof(OWNEDMEM));\n\n        if (ptr1 == NULL) {\n\n            _cmsFree(it8 ->ContextID, ptr);\n            return NULL;\n        }\n\n        ptr1-> Ptr        = ptr;\n        ptr1-> Next       = it8 -> MemorySink;\n        it8 -> MemorySink = ptr1;\n    }\n\n    return ptr;\n}",
+      "fn_code_pos": [
+        [
+          1138,
+          0
+        ],
+        [
+          1160,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllocBigBlock",
+        "parameters": {
+          "it8": "cmsIT8",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* AllocChunk(cmsIT8* it8, cmsUInt32Number size)\n{\n    cmsUInt32Number Free = it8 ->Allocator.BlockSize - it8 ->Allocator.Used;\n    cmsUInt8Number* ptr;\n\n    size = _cmsALIGNMEM(size);\n\n    if (size > Free) {\n\n        if (it8 -> Allocator.BlockSize == 0)\n\n                it8 -> Allocator.BlockSize = 20*1024;\n        else\n                it8 ->Allocator.BlockSize *= 2;\n\n        if (it8 ->Allocator.BlockSize < size)\n                it8 ->Allocator.BlockSize = size;\n\n        it8 ->Allocator.Used = 0;\n        it8 ->Allocator.Block = (cmsUInt8Number*) AllocBigBlock(it8, it8 ->Allocator.BlockSize);       \n    }\n\n    if (it8->Allocator.Block == NULL)\n        return NULL;\n\n    ptr = it8 ->Allocator.Block + it8 ->Allocator.Used;\n    it8 ->Allocator.Used += size;\n\n    return (void*) ptr;\n\n}",
+      "fn_code_pos": [
+        [
+          1164,
+          0
+        ],
+        [
+          1195,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllocChunk",
+        "parameters": {
+          "it8": "cmsIT8",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nchar *AllocString(cmsIT8* it8, const char* str)\n{\n    cmsUInt32Number Size = (cmsUInt32Number) strlen(str)+1;\n    char *ptr;\n\n\n    ptr = (char *) AllocChunk(it8, Size);\n    if (ptr) memcpy(ptr, str, Size-1);\n\n    return ptr;\n}",
+      "fn_code_pos": [
+        [
+          1199,
+          0
+        ],
+        [
+          1210,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllocString",
+        "parameters": {
+          "it8": "cmsIT8",
+          "str": "char"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool IsAvailableOnList(KEYVALUE* p, const char* Key, const char* Subkey, KEYVALUE** LastPtr)\n{\n    if (LastPtr) *LastPtr = p;\n\n    for (;  p != NULL; p = p->Next) {\n\n        if (LastPtr) *LastPtr = p;\n\n        if (*Key != '#') { // Comments are ignored\n\n            if (cmsstrcasecmp(Key, p->Keyword) == 0)\n                break;\n        }\n    }\n\n    if (p == NULL)\n        return FALSE;\n\n    if (Subkey == 0)\n        return TRUE;\n\n    for (; p != NULL; p = p->NextSubkey) {\n\n        if (p ->Subkey == NULL) continue;\n\n        if (LastPtr) *LastPtr = p;\n\n        if (cmsstrcasecmp(Subkey, p->Subkey) == 0)\n            return TRUE;\n    }\n\n    return FALSE;\n}",
+      "fn_code_pos": [
+        [
+          1214,
+          0
+        ],
+        [
+          1247,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "IsAvailableOnList",
+        "parameters": {
+          "p": "KEYVALUE",
+          "Key": "char",
+          "Subkey": "char",
+          "LastPtr": "KEYVALUE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nKEYVALUE* AddToList(cmsIT8* it8, KEYVALUE** Head, const char *Key, const char *Subkey, const char* xValue, WRITEMODE WriteAs)\n{\n    KEYVALUE* p;\n    KEYVALUE* last;\n\n\n    // Check if property is already in list\n\n    if (IsAvailableOnList(*Head, Key, Subkey, &p)) {\n\n        // This may work for editing properties\n\n        //     return SynError(it8, \"duplicate key <%s>\", Key);\n    }\n    else {\n\n        last = p;\n\n        // Allocate the container\n        p = (KEYVALUE*) AllocChunk(it8, sizeof(KEYVALUE));\n        if (p == NULL)\n        {\n            SynError(it8, \"AddToList: out of memory\");\n            return NULL;\n        }\n\n        // Store name and value\n        p->Keyword = AllocString(it8, Key);\n        p->Subkey = (Subkey == NULL) ? NULL : AllocString(it8, Subkey);\n\n        // Keep the container in our list\n        if (*Head == NULL) {\n            *Head = p;\n        }\n        else\n        {\n            if (Subkey != NULL && last != NULL) {\n\n                last->NextSubkey = p;\n\n                // If Subkey is not null, then last is the last property with the same key,\n                // but not necessarily is the last property in the list, so we need to move\n                // to the actual list end\n                while (last->Next != NULL)\n                         last = last->Next;\n            }\n\n            if (last != NULL) last->Next = p;\n        }\n\n        p->Next    = NULL;\n        p->NextSubkey = NULL;\n    }\n\n    p->WriteAs = WriteAs;\n\n    if (xValue != NULL) {\n\n        p->Value   = AllocString(it8, xValue);\n    }\n    else {\n        p->Value   = NULL;\n    }\n\n    return p;\n}",
+      "fn_code_pos": [
+        [
+          1252,
+          0
+        ],
+        [
+          1318,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AddToList",
+        "parameters": {
+          "it8": "cmsIT8",
+          "Head": "KEYVALUE",
+          "Key": "char",
+          "Subkey": "char",
+          "xValue": "char",
+          "WriteAs": "WRITEMODE"
+        },
+        "return_type": "KEYVALUE"
+      }
+    },
+    {
+      "fn_code": "static\nKEYVALUE* AddAvailableProperty(cmsIT8* it8, const char* Key, WRITEMODE as)\n{\n    return AddToList(it8, &it8->ValidKeywords, Key, NULL, NULL, as);\n}",
+      "fn_code_pos": [
+        [
+          1320,
+          0
+        ],
+        [
+          1324,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AddAvailableProperty",
+        "parameters": {
+          "it8": "cmsIT8",
+          "Key": "char",
+          "as": "WRITEMODE"
+        },
+        "return_type": "KEYVALUE"
+      }
+    },
+    {
+      "fn_code": "static\nKEYVALUE* AddAvailableSampleID(cmsIT8* it8, const char* Key)\n{\n    return AddToList(it8, &it8->ValidSampleID, Key, NULL, NULL, WRITE_UNCOOKED);\n}",
+      "fn_code_pos": [
+        [
+          1327,
+          0
+        ],
+        [
+          1331,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AddAvailableSampleID",
+        "parameters": {
+          "it8": "cmsIT8",
+          "Key": "char"
+        },
+        "return_type": "KEYVALUE"
+      }
+    },
+    {
+      "fn_code": "static\nvoid AllocTable(cmsIT8* it8)\n{\n    TABLE* t;\n\n    t = it8 ->Tab + it8 ->TablesCount;\n\n    t->HeaderList = NULL;\n    t->DataFormat = NULL;\n    t->Data       = NULL;\n\n    it8 ->TablesCount++;\n}",
+      "fn_code_pos": [
+        [
+          1334,
+          0
+        ],
+        [
+          1346,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllocTable",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CMSEXPORT cmsIT8SetTable(cmsHANDLE  IT8, cmsUInt32Number nTable)\n{\n     cmsIT8* it8 = (cmsIT8*) IT8;\n\n     if (nTable >= it8 ->TablesCount) {\n\n         if (nTable == it8 ->TablesCount) {\n\n             AllocTable(it8);\n         }\n         else {\n             SynError(it8, \"Table %d is out of sequence\", nTable);\n             return -1;\n         }\n     }\n\n     it8 ->nTable = nTable;\n\n     return (cmsInt32Number) nTable;\n}",
+      "fn_code_pos": [
+        [
+          1349,
+          0
+        ],
+        [
+          1368,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetTable",
+        "parameters": {
+          "IT8": "cmsHANDLE",
+          "nTable": "cmsUInt32Number"
+        },
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsHANDLE  CMSEXPORT cmsIT8Alloc(cmsContext ContextID)\n{\n    cmsIT8* it8;\n    cmsUInt32Number i;\n\n    it8 = (cmsIT8*) _cmsMallocZero(ContextID, sizeof(cmsIT8));\n    if (it8 == NULL) return NULL;\n\n    AllocTable(it8);\n\n    it8->MemoryBlock = NULL;\n    it8->MemorySink  = NULL;\n\n    it8 ->nTable = 0;\n\n    it8->ContextID = ContextID;\n    it8->Allocator.Used = 0;\n    it8->Allocator.Block = NULL;\n    it8->Allocator.BlockSize = 0;\n\n    it8->ValidKeywords = NULL;\n    it8->ValidSampleID = NULL;\n\n    it8 -> sy = SUNDEFINED;\n    it8 -> ch = ' ';\n    it8 -> Source = NULL;\n    it8 -> inum = 0;\n    it8 -> dnum = 0.0;\n\n    it8->FileStack[0] = (FILECTX*)AllocChunk(it8, sizeof(FILECTX));\n    it8->IncludeSP   = 0;\n    it8 -> lineno = 1;\n\n    it8->id = StringAlloc(it8, MAXSTR);\n    it8->str = StringAlloc(it8, MAXSTR);\n\n    strcpy(it8->DoubleFormatter, DEFAULT_DBL_FORMAT);\n    cmsIT8SetSheetType((cmsHANDLE) it8, \"CGATS.17\");\n\n    // Initialize predefined properties & data\n\n    for (i=0; i < NUMPREDEFINEDPROPS; i++)\n            AddAvailableProperty(it8, PredefinedProperties[i].id, PredefinedProperties[i].as);\n\n    for (i=0; i < NUMPREDEFINEDSAMPLEID; i++)\n            AddAvailableSampleID(it8, PredefinedSampleID[i]);\n\n\n   return (cmsHANDLE) it8;\n}",
+      "fn_code_pos": [
+        [
+          1373,
+          0
+        ],
+        [
+          1422,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8Alloc",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsHANDLE"
+      }
+    },
+    {
+      "fn_code": "const char* CMSEXPORT cmsIT8GetSheetType(cmsHANDLE hIT8)\n{\n        return GetTable((cmsIT8*) hIT8)->SheetType;\n}",
+      "fn_code_pos": [
+        [
+          1425,
+          0
+        ],
+        [
+          1428,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetSheetType",
+        "parameters": {
+          "hIT8": "cmsHANDLE"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetSheetType(cmsHANDLE hIT8, const char* Type)\n{\n        TABLE* t = GetTable((cmsIT8*) hIT8);\n\n        strncpy(t ->SheetType, Type, MAXSTR-1);\n        t ->SheetType[MAXSTR-1] = 0;\n        return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1430,
+          0
+        ],
+        [
+          1437,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetSheetType",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "Type": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetComment(cmsHANDLE hIT8, const char* Val)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n\n    if (!Val) return FALSE;\n    if (!*Val) return FALSE;\n\n    return AddToList(it8, &GetTable(it8)->HeaderList, \"# \", NULL, Val, WRITE_UNCOOKED) != NULL;\n}",
+      "fn_code_pos": [
+        [
+          1439,
+          0
+        ],
+        [
+          1447,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetComment",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "Val": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetPropertyStr(cmsHANDLE hIT8, const char* Key, const char *Val)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n\n    if (!Val) return FALSE;\n    if (!*Val) return FALSE;\n\n    return AddToList(it8, &GetTable(it8)->HeaderList, Key, NULL, Val, WRITE_STRINGIFY) != NULL;\n}",
+      "fn_code_pos": [
+        [
+          1450,
+          0
+        ],
+        [
+          1458,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetPropertyStr",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "Key": "char",
+          "Val": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetPropertyDbl(cmsHANDLE hIT8, const char* cProp, cmsFloat64Number Val)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    char Buffer[1024];\n\n    snprintf(Buffer, 1023, it8->DoubleFormatter, Val);\n\n    return AddToList(it8, &GetTable(it8)->HeaderList, cProp, NULL, Buffer, WRITE_UNCOOKED) != NULL;\n}",
+      "fn_code_pos": [
+        [
+          1460,
+          0
+        ],
+        [
+          1468,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetPropertyDbl",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cProp": "char",
+          "Val": "cmsFloat64Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetPropertyHex(cmsHANDLE hIT8, const char* cProp, cmsUInt32Number Val)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    char Buffer[1024];\n\n    snprintf(Buffer, 1023, \"%u\", Val);\n\n    return AddToList(it8, &GetTable(it8)->HeaderList, cProp, NULL, Buffer, WRITE_HEXADECIMAL) != NULL;\n}",
+      "fn_code_pos": [
+        [
+          1470,
+          0
+        ],
+        [
+          1478,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetPropertyHex",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cProp": "char",
+          "Val": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetPropertyUncooked(cmsHANDLE hIT8, const char* Key, const char* Buffer)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n\n    return AddToList(it8, &GetTable(it8)->HeaderList, Key, NULL, Buffer, WRITE_UNCOOKED) != NULL;\n}",
+      "fn_code_pos": [
+        [
+          1480,
+          0
+        ],
+        [
+          1485,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetPropertyUncooked",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "Key": "char",
+          "Buffer": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetPropertyMulti(cmsHANDLE hIT8, const char* Key, const char* SubKey, const char *Buffer)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n\n    return AddToList(it8, &GetTable(it8)->HeaderList, Key, SubKey, Buffer, WRITE_PAIR) != NULL;\n}",
+      "fn_code_pos": [
+        [
+          1487,
+          0
+        ],
+        [
+          1492,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetPropertyMulti",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "Key": "char",
+          "SubKey": "char",
+          "Buffer": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "const char* CMSEXPORT cmsIT8GetProperty(cmsHANDLE hIT8, const char* Key)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    KEYVALUE* p;\n\n    if (IsAvailableOnList(GetTable(it8) -> HeaderList, Key, NULL, &p))\n    {\n        return p -> Value;\n    }\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          1495,
+          0
+        ],
+        [
+          1505,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetProperty",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "Key": "char"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "cmsFloat64Number CMSEXPORT cmsIT8GetPropertyDbl(cmsHANDLE hIT8, const char* cProp)\n{\n    const char *v = cmsIT8GetProperty(hIT8, cProp);\n\n    if (v == NULL) return 0.0;\n\n    return ParseFloatNumber(v);\n}",
+      "fn_code_pos": [
+        [
+          1508,
+          0
+        ],
+        [
+          1515,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetPropertyDbl",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cProp": "char"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "const char* CMSEXPORT cmsIT8GetPropertyMulti(cmsHANDLE hIT8, const char* Key, const char *SubKey)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    KEYVALUE* p;\n\n    if (IsAvailableOnList(GetTable(it8) -> HeaderList, Key, SubKey, &p)) {\n        return p -> Value;\n    }\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          1517,
+          0
+        ],
+        [
+          1526,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetPropertyMulti",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "Key": "char",
+          "SubKey": "char"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static\ncmsInt32Number satoi(const char* b)\n{\n    int n;\n\n    if (b == NULL) return 0;\n\n    n = atoi(b);\n    if (n > 0x7fffffffL) return 0x7fffffffL;\n    if (n < -0x7ffffffeL) return -0x7ffffffeL;\n\n    return (cmsInt32Number)n;\n}",
+      "fn_code_pos": [
+        [
+          1531,
+          0
+        ],
+        [
+          1543,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "satoi",
+        "parameters": {
+          "b": "char"
+        },
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool AllocateDataFormat(cmsIT8* it8)\n{\n    TABLE* t = GetTable(it8);\n\n    if (t -> DataFormat) return TRUE;    // Already allocated\n\n    t -> nSamples  = satoi(cmsIT8GetProperty(it8, \"NUMBER_OF_FIELDS\"));\n\n    if (t -> nSamples <= 0) {\n\n        SynError(it8, \"AllocateDataFormat: Unknown NUMBER_OF_FIELDS\");\n        return FALSE;        \n        }\n\n    t -> DataFormat = (char**) AllocChunk (it8, ((cmsUInt32Number) t->nSamples + 1) * sizeof(char *));\n    if (t->DataFormat == NULL) {\n\n        SynError(it8, \"AllocateDataFormat: Unable to allocate dataFormat array\");\n        return FALSE;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1546,
+          0
+        ],
+        [
+          1569,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllocateDataFormat",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nconst char *GetDataFormat(cmsIT8* it8, int n)\n{\n    TABLE* t = GetTable(it8);\n\n    if (t->DataFormat)\n        return t->DataFormat[n];\n\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          1571,
+          0
+        ],
+        [
+          1580,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetDataFormat",
+        "parameters": {
+          "it8": "cmsIT8",
+          "n": "int"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool SetDataFormat(cmsIT8* it8, int n, const char *label)\n{\n    TABLE* t = GetTable(it8);\n\n    if (!t->DataFormat) {\n\n        if (!AllocateDataFormat(it8))\n            return FALSE;\n    }\n\n    if (n > t -> nSamples) {\n        SynError(it8, \"More than NUMBER_OF_FIELDS fields.\");\n        return FALSE;\n    }\n\n    if (t->DataFormat) {\n        t->DataFormat[n] = AllocString(it8, label);\n        if (t->DataFormat[n] == NULL) return FALSE;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1582,
+          0
+        ],
+        [
+          1604,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetDataFormat",
+        "parameters": {
+          "it8": "cmsIT8",
+          "n": "int",
+          "label": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetDataFormat(cmsHANDLE  h, int n, const char *Sample)\n{\n    cmsIT8* it8 = (cmsIT8*)h;\n    return SetDataFormat(it8, n, Sample);\n}",
+      "fn_code_pos": [
+        [
+          1607,
+          0
+        ],
+        [
+          1611,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetDataFormat",
+        "parameters": {
+          "h": "cmsHANDLE",
+          "n": "int",
+          "Sample": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nconst char* satob(const char* v)\n{\n    cmsUInt32Number x;\n    static char buf[33];\n    char *s = buf + 33;\n    \n    if (v == NULL) return \"0\";\n    \n    x = atoi(v);\n    *--s = 0;\n    if (!x) *--s = '0';\n    for (; x; x /= 2) *--s = '0' + x%2;\n    \n    return s;\n}",
+      "fn_code_pos": [
+        [
+          1614,
+          0
+        ],
+        [
+          1629,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "satob",
+        "parameters": {
+          "v": "char"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool AllocateDataSet(cmsIT8* it8)\n{\n    TABLE* t = GetTable(it8);\n\n    if (t -> Data) return TRUE;    // Already allocated\n\n    t-> nSamples   = satoi(cmsIT8GetProperty(it8, \"NUMBER_OF_FIELDS\"));\n    t-> nPatches   = satoi(cmsIT8GetProperty(it8, \"NUMBER_OF_SETS\"));\n\n    if (t -> nSamples < 0 || t->nSamples > 0x7ffe || t->nPatches < 0 || t->nPatches > 0x7ffe)\n    {\n        SynError(it8, \"AllocateDataSet: too much data\");\n        return FALSE;\n    }\n    else {\n        // Some dumb analizers warns of possible overflow here, just take a look couple of lines above.\n        t->Data = (char**)AllocChunk(it8, ((cmsUInt32Number)t->nSamples + 1) * ((cmsUInt32Number)t->nPatches + 1) * sizeof(char*));\n        if (t->Data == NULL) {\n\n            SynError(it8, \"AllocateDataSet: Unable to allocate data array\");\n            return FALSE;\n        }\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1632,
+          0
+        ],
+        [
+          1658,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllocateDataSet",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nchar* GetData(cmsIT8* it8, int nSet, int nField)\n{\n    TABLE* t = GetTable(it8);\n    int nSamples    = t -> nSamples;\n    int nPatches    = t -> nPatches;\n\n    if (nSet >= nPatches || nField >= nSamples)\n        return NULL;\n\n    if (!t->Data) return NULL;\n    return t->Data [nSet * nSamples + nField];\n}",
+      "fn_code_pos": [
+        [
+          1660,
+          0
+        ],
+        [
+          1672,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetData",
+        "parameters": {
+          "it8": "cmsIT8",
+          "nSet": "int",
+          "nField": "int"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool SetData(cmsIT8* it8, int nSet, int nField, const char *Val)\n{\n    TABLE* t = GetTable(it8);\n\n    if (!t->Data) {\n        if (!AllocateDataSet(it8)) return FALSE;\n    }\n\n    if (!t->Data) return FALSE;\n\n    if (nSet > t -> nPatches || nSet < 0) {\n\n            return SynError(it8, \"Patch %d out of range, there are %d patches\", nSet, t -> nPatches);\n    }\n\n    if (nField > t ->nSamples || nField < 0) {\n            return SynError(it8, \"Sample %d out of range, there are %d samples\", nField, t ->nSamples);\n\n    }\n\n    t->Data [nSet * t -> nSamples + nField] = AllocString(it8, Val);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1674,
+          0
+        ],
+        [
+          1697,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetData",
+        "parameters": {
+          "it8": "cmsIT8",
+          "nSet": "int",
+          "nField": "int",
+          "Val": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid WriteStr(SAVESTREAM* f, const char *str)\n{\n    cmsUInt32Number len;\n\n    if (str == NULL)\n        str = \" \";\n\n    // Length to write\n    len = (cmsUInt32Number) strlen(str);\n    f ->Used += len;\n\n\n    if (f ->stream) {   // Should I write it to a file?\n\n        if (fwrite(str, 1, len, f->stream) != len) {\n            cmsSignalError(0, cmsERROR_WRITE, \"Write to file error in CGATS parser\");\n            return;\n        }\n\n    }\n    else {  // Or to a memory block?\n\n        if (f ->Base) {   // Am I just counting the bytes?\n\n            if (f ->Used > f ->Max) {\n\n                 cmsSignalError(0, cmsERROR_WRITE, \"Write to memory overflows in CGATS parser\");\n                 return;\n            }\n\n            memmove(f ->Ptr, str, len);\n            f->Ptr += len;\n        }\n\n    }\n}",
+      "fn_code_pos": [
+        [
+          1704,
+          0
+        ],
+        [
+          1740,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "WriteStr",
+        "parameters": {
+          "f": "SAVESTREAM",
+          "str": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid Writef(SAVESTREAM* f, const char* frm, ...)\n{\n    char Buffer[4096];\n    va_list args;\n\n    va_start(args, frm);\n    vsnprintf(Buffer, 4095, frm, args);\n    Buffer[4095] = 0;\n    WriteStr(f, Buffer);\n    va_end(args);\n\n}",
+      "fn_code_pos": [
+        [
+          1745,
+          0
+        ],
+        [
+          1757,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Writef",
+        "parameters": {
+          "f": "SAVESTREAM",
+          "frm": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid WriteHeader(cmsIT8* it8, SAVESTREAM* fp)\n{\n    KEYVALUE* p;\n    TABLE* t = GetTable(it8);\n\n    // Writes the type\n    WriteStr(fp, t->SheetType);\n    WriteStr(fp, \"\\n\");\n\n    for (p = t->HeaderList; (p != NULL); p = p->Next)\n    {\n        if (*p ->Keyword == '#') {\n\n            char* Pt;\n\n            WriteStr(fp, \"#\\n# \");\n            for (Pt = p ->Value; *Pt; Pt++) {\n\n\n                Writef(fp, \"%c\", *Pt);\n\n                if (*Pt == '\\n') {\n                    WriteStr(fp, \"# \");\n                }\n            }\n\n            WriteStr(fp, \"\\n#\\n\");\n            continue;\n        }\n\n\n        if (!IsAvailableOnList(it8-> ValidKeywords, p->Keyword, NULL, NULL)) {\n\n#ifdef CMS_STRICT_CGATS\n            WriteStr(fp, \"KEYWORD\\t\\\"\");\n            WriteStr(fp, p->Keyword);\n            WriteStr(fp, \"\\\"\\n\");\n#endif\n\n            AddAvailableProperty(it8, p->Keyword, WRITE_UNCOOKED);\n        }\n\n        WriteStr(fp, p->Keyword);\n        if (p->Value) {\n\n            switch (p ->WriteAs) {\n\n            case WRITE_UNCOOKED:\n                    Writef(fp, \"\\t%s\", p ->Value);\n                    break;\n\n            case WRITE_STRINGIFY:\n                    Writef(fp, \"\\t\\\"%s\\\"\", p->Value );\n                    break;\n\n            case WRITE_HEXADECIMAL:\n                    Writef(fp, \"\\t0x%X\", satoi(p ->Value));\n                    break;\n\n            case WRITE_BINARY:\n                    Writef(fp, \"\\t0b%s\", satob(p ->Value));\n                    break;\n\n            case WRITE_PAIR:\n                    Writef(fp, \"\\t\\\"%s,%s\\\"\", p->Subkey, p->Value);\n                    break;\n\n            default: SynError(it8, \"Unknown write mode %d\", p ->WriteAs);\n                     return;\n            }\n        }\n\n        WriteStr (fp, \"\\n\");\n    }\n\n}",
+      "fn_code_pos": [
+        [
+          1760,
+          0
+        ],
+        [
+          1836,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "WriteHeader",
+        "parameters": {
+          "it8": "cmsIT8",
+          "fp": "SAVESTREAM"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid WriteDataFormat(SAVESTREAM* fp, cmsIT8* it8)\n{\n    int i, nSamples;\n    TABLE* t = GetTable(it8);\n\n    if (!t -> DataFormat) return;\n\n       WriteStr(fp, \"BEGIN_DATA_FORMAT\\n\");\n       WriteStr(fp, \" \");\n       nSamples = satoi(cmsIT8GetProperty(it8, \"NUMBER_OF_FIELDS\"));\n\n       for (i = 0; i < nSamples; i++) {\n\n              WriteStr(fp, t->DataFormat[i]);\n              WriteStr(fp, ((i == (nSamples-1)) ? \"\\n\" : \"\\t\"));\n          }\n\n       WriteStr (fp, \"END_DATA_FORMAT\\n\");\n}",
+      "fn_code_pos": [
+        [
+          1840,
+          0
+        ],
+        [
+          1859,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "WriteDataFormat",
+        "parameters": {
+          "fp": "SAVESTREAM",
+          "it8": "cmsIT8"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid WriteData(SAVESTREAM* fp, cmsIT8* it8)\n{\n       int  i, j;\n       TABLE* t = GetTable(it8);\n\n       if (!t->Data) return;\n\n       WriteStr (fp, \"BEGIN_DATA\\n\");\n\n       t->nPatches = satoi(cmsIT8GetProperty(it8, \"NUMBER_OF_SETS\"));\n\n       for (i = 0; i < t-> nPatches; i++) {\n\n              WriteStr(fp, \" \");\n\n              for (j = 0; j < t->nSamples; j++) {\n\n                     char *ptr = t->Data[i*t->nSamples+j];\n\n                     if (ptr == NULL) WriteStr(fp, \"\\\"\\\"\");\n                     else {\n                         // If value contains whitespace, enclose within quote\n\n                         if (strchr(ptr, ' ') != NULL) {\n\n                             WriteStr(fp, \"\\\"\");\n                             WriteStr(fp, ptr);\n                             WriteStr(fp, \"\\\"\");\n                         }\n                         else\n                            WriteStr(fp, ptr);\n                     }\n\n                     WriteStr(fp, ((j == (t->nSamples-1)) ? \"\\n\" : \"\\t\"));\n              }\n       }\n       WriteStr (fp, \"END_DATA\\n\");\n}",
+      "fn_code_pos": [
+        [
+          1863,
+          0
+        ],
+        [
+          1901,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "WriteData",
+        "parameters": {
+          "fp": "SAVESTREAM",
+          "it8": "cmsIT8"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SaveToFile(cmsHANDLE hIT8, const char* cFileName)\n{\n    SAVESTREAM sd;\n    cmsUInt32Number i;\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n\n    memset(&sd, 0, sizeof(sd));\n\n    sd.stream = fopen(cFileName, \"wt\");\n    if (!sd.stream) return FALSE;\n\n    for (i=0; i < it8 ->TablesCount; i++) {\n\n            cmsIT8SetTable(hIT8, i);\n            WriteHeader(it8, &sd);\n            WriteDataFormat(&sd, it8);\n            WriteData(&sd, it8);\n    }\n\n    if (fclose(sd.stream) != 0) return FALSE;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1906,
+          0
+        ],
+        [
+          1928,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SaveToFile",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cFileName": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SaveToMem(cmsHANDLE hIT8, void *MemPtr, cmsUInt32Number* BytesNeeded)\n{\n    SAVESTREAM sd;\n    cmsUInt32Number i;\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n\n    memset(&sd, 0, sizeof(sd));\n\n    sd.stream = NULL;\n    sd.Base   = (cmsUInt8Number*) MemPtr;\n    sd.Ptr    = sd.Base;\n\n    sd.Used = 0;\n\n    if (sd.Base && (*BytesNeeded > 0)) {\n\n        sd.Max = (*BytesNeeded) - 1;     // Write to memory?\n    }\n    else\n        sd.Max  = 0;                // Just counting the needed bytes\n\n    for (i=0; i < it8 ->TablesCount; i++) {\n\n        cmsIT8SetTable(hIT8, i);\n        WriteHeader(it8, &sd);\n        WriteDataFormat(&sd, it8);\n        WriteData(&sd, it8);\n    }\n\n    sd.Used++;  // The \\0 at the very end\n\n    if (sd.Base)\n        *sd.Ptr = 0;\n\n    *BytesNeeded = sd.Used;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1932,
+          0
+        ],
+        [
+          1969,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SaveToMem",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "MemPtr": "void",
+          "BytesNeeded": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool DataFormatSection(cmsIT8* it8)\n{\n    int iField = 0;\n    TABLE* t = GetTable(it8);\n\n    InSymbol(it8);   // Eats \"BEGIN_DATA_FORMAT\"\n    CheckEOLN(it8);\n\n    while (it8->sy != SEND_DATA_FORMAT &&\n        it8->sy != SEOLN &&\n        it8->sy != SEOF &&\n        it8->sy != SSYNERROR)  {\n\n            if (it8->sy != SIDENT) {\n\n                return SynError(it8, \"Sample type expected\");\n            }\n\n            if (!SetDataFormat(it8, iField, StringPtr(it8->id))) return FALSE;\n            iField++;\n\n            InSymbol(it8);\n            SkipEOLN(it8);\n       }\n\n       SkipEOLN(it8);\n       Skip(it8, SEND_DATA_FORMAT);\n       SkipEOLN(it8);\n\n       if (iField != t ->nSamples) {\n           SynError(it8, \"Count mismatch. NUMBER_OF_FIELDS was %d, found %d\\n\", t ->nSamples, iField);\n\n\n       }\n\n       return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1974,
+          0
+        ],
+        [
+          2011,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DataFormatSection",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool DataSection (cmsIT8* it8)\n{\n    int  iField = 0;\n    int  iSet   = 0;\n    char Buffer[256];\n    TABLE* t = GetTable(it8);\n\n    InSymbol(it8);   // Eats \"BEGIN_DATA\"\n    CheckEOLN(it8);\n\n    if (!t->Data) {\n        if (!AllocateDataSet(it8)) return FALSE;\n    }\n\n    while (it8->sy != SEND_DATA && it8->sy != SEOF)\n    {\n        if (iField >= t -> nSamples) {\n            iField = 0;\n            iSet++;\n\n        }\n\n        if (it8->sy != SEND_DATA && it8->sy != SEOF) {\n\n            switch (it8->sy)\n            {\n\n            // To keep very long data\n            case SIDENT:  \n                if (!SetData(it8, iSet, iField, StringPtr(it8->id)))\n                    return FALSE;\n                break;\n\n            case SSTRING:\n                if (!SetData(it8, iSet, iField, StringPtr(it8->str)))\n                    return FALSE;\n                break;\n\n            default:\n\n            if (!GetVal(it8, Buffer, 255, \"Sample data expected\"))\n                return FALSE;\n\n            if (!SetData(it8, iSet, iField, Buffer))\n                return FALSE;\n            }\n\n            iField++;\n\n            InSymbol(it8);\n            SkipEOLN(it8);\n        }\n    }\n\n    SkipEOLN(it8);\n    Skip(it8, SEND_DATA);\n    SkipEOLN(it8);\n\n    // Check for data completion.\n\n    if ((iSet+1) != t -> nPatches)\n        return SynError(it8, \"Count mismatch. NUMBER_OF_SETS was %d, found %d\\n\", t ->nPatches, iSet+1);\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          2015,
+          0
+        ],
+        [
+          2080,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DataSection",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool HeaderSection(cmsIT8* it8)\n{\n    char VarName[MAXID];\n    char Buffer[MAXSTR];\n    KEYVALUE* Key;\n\n        while (it8->sy != SEOF &&\n               it8->sy != SSYNERROR &&\n               it8->sy != SBEGIN_DATA_FORMAT &&\n               it8->sy != SBEGIN_DATA) {\n\n\n        switch (it8 -> sy) {\n\n        case SKEYWORD:\n                InSymbol(it8);\n                if (!GetVal(it8, Buffer, MAXSTR-1, \"Keyword expected\")) return FALSE;\n                if (!AddAvailableProperty(it8, Buffer, WRITE_UNCOOKED)) return FALSE;\n                InSymbol(it8);\n                break;\n\n\n        case SDATA_FORMAT_ID:\n                InSymbol(it8);\n                if (!GetVal(it8, Buffer, MAXSTR-1, \"Keyword expected\")) return FALSE;\n                if (!AddAvailableSampleID(it8, Buffer)) return FALSE;\n                InSymbol(it8);\n                break;\n\n\n        case SIDENT:\n            strncpy(VarName, StringPtr(it8->id), MAXID - 1);\n            VarName[MAXID - 1] = 0;\n\n            if (!IsAvailableOnList(it8->ValidKeywords, VarName, NULL, &Key)) {\n\n#ifdef CMS_STRICT_CGATS\n                return SynError(it8, \"Undefined keyword '%s'\", VarName);\n#else\n                Key = AddAvailableProperty(it8, VarName, WRITE_UNCOOKED);\n                if (Key == NULL) return FALSE;\n#endif\n            }\n\n            InSymbol(it8);\n            if (!GetVal(it8, Buffer, MAXSTR - 1, \"Property data expected\")) return FALSE;\n\n            if (Key->WriteAs != WRITE_PAIR) {\n                AddToList(it8, &GetTable(it8)->HeaderList, VarName, NULL, Buffer,\n                    (it8->sy == SSTRING) ? WRITE_STRINGIFY : WRITE_UNCOOKED);\n            }\n            else {\n                const char *Subkey;\n                char *Nextkey;\n                if (it8->sy != SSTRING)\n                    return SynError(it8, \"Invalid value '%s' for property '%s'.\", Buffer, VarName);\n\n                // chop the string as a list of \"subkey, value\" pairs, using ';' as a separator\n                for (Subkey = Buffer; Subkey != NULL; Subkey = Nextkey)\n                {\n                    char *Value, *temp;\n\n                    //  identify token pair boundary\n                    Nextkey = (char*)strchr(Subkey, ';');\n                    if (Nextkey)\n                        *Nextkey++ = '\\0';\n\n                    // for each pair, split the subkey and the value\n                    Value = (char*)strrchr(Subkey, ',');\n                    if (Value == NULL)\n                        return SynError(it8, \"Invalid value for property '%s'.\", VarName);\n\n                    // gobble the spaces before the coma, and the coma itself\n                    temp = Value++;\n                    do *temp-- = '\\0'; while (temp >= Subkey && *temp == ' ');\n\n                    // gobble any space at the right\n                    temp = Value + strlen(Value) - 1;\n                    while (*temp == ' ') *temp-- = '\\0';\n\n                    // trim the strings from the left\n                    Subkey += strspn(Subkey, \" \");\n                    Value += strspn(Value, \" \");\n\n                    if (Subkey[0] == 0 || Value[0] == 0)\n                        return SynError(it8, \"Invalid value for property '%s'.\", VarName);\n                    AddToList(it8, &GetTable(it8)->HeaderList, VarName, Subkey, Value, WRITE_PAIR);\n                }\n            }\n\n            InSymbol(it8);\n            break;\n\n\n        case SEOLN: break;\n\n        default:\n                return SynError(it8, \"expected keyword or identifier\");\n        }\n\n    SkipEOLN(it8);\n    }\n\n    return TRUE;\n\n}",
+      "fn_code_pos": [
+        [
+          2085,
+          0
+        ],
+        [
+          2191,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "HeaderSection",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ReadType(cmsIT8* it8, char* SheetTypePtr)\n{\n    cmsInt32Number cnt = 0;\n\n    // First line is a very special case.\n\n    while (isseparator(it8->ch))\n            NextCh(it8);\n\n    while (it8->ch != '\\r' && it8 ->ch != '\\n' && it8->ch != '\\t' && it8 -> ch != 0) {\n\n        if (cnt++ < MAXSTR) \n            *SheetTypePtr++= (char) it8 ->ch;\n        NextCh(it8);\n    }\n\n    *SheetTypePtr = 0;\n}",
+      "fn_code_pos": [
+        [
+          2194,
+          0
+        ],
+        [
+          2212,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ReadType",
+        "parameters": {
+          "it8": "cmsIT8",
+          "SheetTypePtr": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool ParseIT8(cmsIT8* it8, cmsBool nosheet)\n{\n    char* SheetTypePtr = it8 ->Tab[0].SheetType;\n\n    if (nosheet == 0) {\n        ReadType(it8, SheetTypePtr);\n    }\n\n    InSymbol(it8);\n\n    SkipEOLN(it8);\n\n    while (it8-> sy != SEOF &&\n           it8-> sy != SSYNERROR) {\n\n            switch (it8 -> sy) {\n\n            case SBEGIN_DATA_FORMAT:\n                    if (!DataFormatSection(it8)) return FALSE;\n                    break;\n\n            case SBEGIN_DATA:\n\n                    if (!DataSection(it8)) return FALSE;\n\n                    if (it8 -> sy != SEOF) {\n\n                            AllocTable(it8);\n                            it8 ->nTable = it8 ->TablesCount - 1;\n\n                            // Read sheet type if present. We only support identifier and string.\n                            // <ident> <eoln> is a type string\n                            // anything else, is not a type string\n                            if (nosheet == 0) {\n\n                                if (it8 ->sy == SIDENT) {\n\n                                    // May be a type sheet or may be a prop value statement. We cannot use insymbol in\n                                    // this special case...\n                                     while (isseparator(it8->ch))\n                                         NextCh(it8);\n\n                                     // If a newline is found, then this is a type string\n                                    if (it8 ->ch == '\\n' || it8->ch == '\\r') {\n\n                                         cmsIT8SetSheetType(it8, StringPtr(it8 ->id));\n                                         InSymbol(it8);\n                                    }\n                                    else\n                                    {\n                                        // It is not. Just continue\n                                        cmsIT8SetSheetType(it8, \"\");\n                                    }\n                                }\n                                else\n                                    // Validate quoted strings\n                                    if (it8 ->sy == SSTRING) {\n                                        cmsIT8SetSheetType(it8, StringPtr(it8 ->str));\n                                        InSymbol(it8);\n                                    }\n                           }\n\n                    }\n                    break;\n\n            case SEOLN:\n                    SkipEOLN(it8);\n                    break;\n\n            default:\n                    if (!HeaderSection(it8)) return FALSE;\n           }\n\n    }\n\n    return (it8 -> sy != SSYNERROR);\n}",
+      "fn_code_pos": [
+        [
+          2215,
+          0
+        ],
+        [
+          2292,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ParseIT8",
+        "parameters": {
+          "it8": "cmsIT8",
+          "nosheet": "cmsBool"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid CookPointers(cmsIT8* it8)\n{\n    int idField, i;\n    char* Fld;\n    cmsUInt32Number j;\n    cmsUInt32Number nOldTable = it8 ->nTable;\n\n    for (j=0; j < it8 ->TablesCount; j++) {\n\n    TABLE* t = it8 ->Tab + j;\n\n    t -> SampleID = 0;\n    it8 ->nTable = j;\n\n    for (idField = 0; idField < t -> nSamples; idField++)\n    {\n        if (t ->DataFormat == NULL){\n            SynError(it8, \"Undefined DATA_FORMAT\");\n            return;\n        }\n\n        Fld = t->DataFormat[idField];\n        if (!Fld) continue;\n\n\n        if (cmsstrcasecmp(Fld, \"SAMPLE_ID\") == 0) {\n\n            t -> SampleID = idField;            \n        }\n\n        // \"LABEL\" is an extension. It keeps references to forward tables\n\n        if ((cmsstrcasecmp(Fld, \"LABEL\") == 0) || Fld[0] == '$') {\n\n            // Search for table references...\n            for (i = 0; i < t->nPatches; i++) {\n\n                char* Label = GetData(it8, i, idField);\n\n                if (Label) {\n\n                    cmsUInt32Number k;\n\n                    // This is the label, search for a table containing\n                    // this property\n\n                    for (k = 0; k < it8->TablesCount; k++) {\n\n                        TABLE* Table = it8->Tab + k;\n                        KEYVALUE* p;\n\n                        if (IsAvailableOnList(Table->HeaderList, Label, NULL, &p)) {\n\n                            // Available, keep type and table\n                            char Buffer[256];\n\n                            char* Type = p->Value;\n                            int  nTable = (int)k;\n\n                            snprintf(Buffer, 255, \"%s %d %s\", Label, nTable, Type);\n\n                            SetData(it8, i, idField, Buffer);\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\n\n\t\t\t\t}\n\n\t\t\t}\n\n\n\t\t}\n\n\t}\n\t}\n\n    it8 ->nTable = nOldTable;\n}",
+      "fn_code_pos": [
+        [
+          2298,
+          0
+        ],
+        [
+          2376,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CookPointers",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nint IsMyBlock(const cmsUInt8Number* Buffer, cmsUInt32Number n)\n{\n    int words = 1, space = 0, quot = 0;\n    cmsUInt32Number i;\n\n    if (n < 10) return 0;   // Too small\n\n    if (n > 132)\n        n = 132;\n\n    for (i = 1; i < n; i++) {\n\n        switch(Buffer[i])\n        {\n        case '\\n':\n        case '\\r':\n            return ((quot == 1) || (words > 2)) ? 0 : words;\n        case '\\t':\n        case ' ':\n            if(!quot && !space)\n                space = 1;\n            break;\n        case '\\\"':\n            quot = !quot;\n            break;\n        default:\n            if (Buffer[i] < 32) return 0;\n            if (Buffer[i] > 127) return 0;\n            words += space;\n            space = 0;\n            break;\n        }\n    }\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          2381,
+          0
+        ],
+        [
+          2417,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "IsMyBlock",
+        "parameters": {
+          "Buffer": "cmsUInt8Number",
+          "n": "cmsUInt32Number"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool IsMyFile(const char* FileName)\n{\n   FILE *fp;\n   cmsUInt32Number Size;\n   cmsUInt8Number Ptr[133];\n\n   fp = fopen(FileName, \"rt\");\n   if (!fp) {\n       cmsSignalError(0, cmsERROR_FILE, \"File '%s' not found\", FileName);\n       return FALSE;\n   }\n\n   Size = (cmsUInt32Number) fread(Ptr, 1, 132, fp);\n\n   if (fclose(fp) != 0)\n       return FALSE;\n\n   Ptr[Size] = '\\0';\n\n   return IsMyBlock(Ptr, Size);\n}",
+      "fn_code_pos": [
+        [
+          2420,
+          0
+        ],
+        [
+          2441,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "IsMyFile",
+        "parameters": {
+          "FileName": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsHANDLE  CMSEXPORT cmsIT8LoadFromMem(cmsContext ContextID, const void *Ptr, cmsUInt32Number len)\n{\n    cmsHANDLE hIT8;\n    cmsIT8*  it8;\n    int type;\n\n    _cmsAssert(Ptr != NULL);\n    _cmsAssert(len != 0);\n\n    type = IsMyBlock((const cmsUInt8Number*)Ptr, len);\n    if (type == 0) return NULL;\n\n    hIT8 = cmsIT8Alloc(ContextID);\n    if (!hIT8) return NULL;\n\n    it8 = (cmsIT8*) hIT8;\n    it8 ->MemoryBlock = (char*) _cmsMalloc(ContextID, len + 1);\n    if (it8->MemoryBlock == NULL)\n    {\n        cmsIT8Free(hIT8);\n        return FALSE;\n    }\n\n    strncpy(it8 ->MemoryBlock, (const char*) Ptr, len);\n    it8 ->MemoryBlock[len] = 0;\n\n    strncpy(it8->FileStack[0]->FileName, \"\", cmsMAX_PATH-1);\n    it8-> Source = it8 -> MemoryBlock;\n\n    if (!ParseIT8(it8, type-1)) {\n\n        cmsIT8Free(hIT8);\n        return FALSE;\n    }\n\n    CookPointers(it8);\n    it8 ->nTable = 0;\n\n    _cmsFree(ContextID, it8->MemoryBlock);\n    it8 -> MemoryBlock = NULL;\n\n    return hIT8;\n\n\n}",
+      "fn_code_pos": [
+        [
+          2446,
+          0
+        ],
+        [
+          2490,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8LoadFromMem",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Ptr": "void",
+          "len": "cmsUInt32Number"
+        },
+        "return_type": "cmsHANDLE"
+      }
+    },
+    {
+      "fn_code": "cmsHANDLE  CMSEXPORT cmsIT8LoadFromFile(cmsContext ContextID, const char* cFileName)\n{\n\n     cmsHANDLE hIT8;\n     cmsIT8*  it8;\n     int type;\n\n     _cmsAssert(cFileName != NULL);\n\n     type = IsMyFile(cFileName);\n     if (type == 0) return NULL;\n\n     hIT8 = cmsIT8Alloc(ContextID);\n     it8 = (cmsIT8*) hIT8;\n     if (!hIT8) return NULL;\n\n\n     it8 ->FileStack[0]->Stream = fopen(cFileName, \"rt\");\n\n     if (!it8 ->FileStack[0]->Stream) {\n         cmsIT8Free(hIT8);\n         return NULL;\n     }\n\n\n    strncpy(it8->FileStack[0]->FileName, cFileName, cmsMAX_PATH-1);\n    it8->FileStack[0]->FileName[cmsMAX_PATH-1] = 0;\n\n    if (!ParseIT8(it8, type-1)) {\n\n            fclose(it8 ->FileStack[0]->Stream);\n            cmsIT8Free(hIT8);\n            return NULL;\n    }\n\n    CookPointers(it8);\n    it8 ->nTable = 0;\n\n    if (fclose(it8 ->FileStack[0]->Stream)!= 0) {\n            cmsIT8Free(hIT8);\n            return NULL;\n    }\n\n    return hIT8;\n\n}",
+      "fn_code_pos": [
+        [
+          2493,
+          0
+        ],
+        [
+          2538,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8LoadFromFile",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "cFileName": "char"
+        },
+        "return_type": "cmsHANDLE"
+      }
+    },
+    {
+      "fn_code": "int CMSEXPORT cmsIT8EnumDataFormat(cmsHANDLE hIT8, char ***SampleNames)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    TABLE* t;\n\n    _cmsAssert(hIT8 != NULL);\n\n    t = GetTable(it8);\n\n    if (SampleNames)\n        *SampleNames = t -> DataFormat;\n    return t -> nSamples;\n}",
+      "fn_code_pos": [
+        [
+          2540,
+          0
+        ],
+        [
+          2552,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8EnumDataFormat",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "SampleNames": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsIT8EnumProperties(cmsHANDLE hIT8, char ***PropertyNames)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    KEYVALUE* p;\n    cmsUInt32Number n;\n    char **Props;\n    TABLE* t;\n\n    _cmsAssert(hIT8 != NULL);\n\n    t = GetTable(it8);\n\n    // Pass#1 - count properties\n\n    n = 0;\n    for (p = t -> HeaderList;  p != NULL; p = p->Next) {\n        n++;\n    }\n\n\n\tProps = (char**)AllocChunk(it8, sizeof(char*) * n);\n\tif (Props != NULL) {\n\n\t\t// Pass#2 - Fill pointers\n\t\tn = 0;\n\t\tfor (p = t->HeaderList; p != NULL; p = p->Next) {\n\t\t\tProps[n++] = p->Keyword;\n\t\t}\n\n\t}\n\t*PropertyNames = Props;\n\n    return n;\n}",
+      "fn_code_pos": [
+        [
+          2555,
+          0
+        ],
+        [
+          2588,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8EnumProperties",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "PropertyNames": "char"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsIT8EnumPropertyMulti(cmsHANDLE hIT8, const char* cProp, const char ***SubpropertyNames)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    KEYVALUE *p, *tmp;\n    cmsUInt32Number n;\n    const char **Props;\n    TABLE* t;\n\n    _cmsAssert(hIT8 != NULL);\n\n\n    t = GetTable(it8);\n\n    if(!IsAvailableOnList(t->HeaderList, cProp, NULL, &p)) {\n        *SubpropertyNames = 0;\n        return 0;\n    }\n\n    // Pass#1 - count properties\n\n    n = 0;\n    for (tmp = p;  tmp != NULL; tmp = tmp->NextSubkey) {\n        if(tmp->Subkey != NULL)\n            n++;\n    }\n\n\n    Props = (const char **) AllocChunk(it8, sizeof(char *) * n);\n    if (Props != NULL) {\n\n        // Pass#2 - Fill pointers\n        n = 0;\n        for (tmp = p; tmp != NULL; tmp = tmp->NextSubkey) {\n            if (tmp->Subkey != NULL)\n                Props[n++] = p->Subkey;\n        }\n    }\n\n    *SubpropertyNames = Props;\n    return n;\n}",
+      "fn_code_pos": [
+        [
+          2590,
+          0
+        ],
+        [
+          2630,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8EnumPropertyMulti",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cProp": "char",
+          "SubpropertyNames": "char"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nint LocatePatch(cmsIT8* it8, const char* cPatch)\n{\n    int i;\n    const char *data;\n    TABLE* t = GetTable(it8);\n\n    for (i=0; i < t-> nPatches; i++) {\n\n        data = GetData(it8, i, t->SampleID);\n\n        if (data != NULL) {\n\n                if (cmsstrcasecmp(data, cPatch) == 0)\n                        return i;\n                }\n        }\n\n        // SynError(it8, \"Couldn't find patch '%s'\\n\", cPatch);\n        return -1;\n}",
+      "fn_code_pos": [
+        [
+          2632,
+          0
+        ],
+        [
+          2652,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LocatePatch",
+        "parameters": {
+          "it8": "cmsIT8",
+          "cPatch": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nint LocateEmptyPatch(cmsIT8* it8)\n{\n    int i;\n    const char *data;\n    TABLE* t = GetTable(it8);\n\n    for (i=0; i < t-> nPatches; i++) {\n\n        data = GetData(it8, i, t->SampleID);\n\n        if (data == NULL)\n            return i;\n\n    }\n\n    return -1;\n}",
+      "fn_code_pos": [
+        [
+          2655,
+          0
+        ],
+        [
+          2672,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LocateEmptyPatch",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nint LocateSample(cmsIT8* it8, const char* cSample)\n{\n    int i;\n    const char *fld;\n    TABLE* t = GetTable(it8);\n\n    for (i=0; i < t->nSamples; i++) {\n\n        fld = GetDataFormat(it8, i);\n        if (fld != NULL) {\n            if (cmsstrcasecmp(fld, cSample) == 0)\n                return i;\n        }\n    }\n\n    return -1;\n\n}",
+      "fn_code_pos": [
+        [
+          2674,
+          0
+        ],
+        [
+          2692,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LocateSample",
+        "parameters": {
+          "it8": "cmsIT8",
+          "cSample": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int CMSEXPORT cmsIT8FindDataFormat(cmsHANDLE hIT8, const char* cSample)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n\n    _cmsAssert(hIT8 != NULL);\n\n    return LocateSample(it8, cSample);\n}",
+      "fn_code_pos": [
+        [
+          2695,
+          0
+        ],
+        [
+          2702,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8FindDataFormat",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cSample": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "const char* CMSEXPORT cmsIT8GetDataRowCol(cmsHANDLE hIT8, int row, int col)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n\n    _cmsAssert(hIT8 != NULL);\n\n    return GetData(it8, row, col);\n}",
+      "fn_code_pos": [
+        [
+          2706,
+          0
+        ],
+        [
+          2713,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetDataRowCol",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "row": "int",
+          "col": "int"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "cmsFloat64Number CMSEXPORT cmsIT8GetDataRowColDbl(cmsHANDLE hIT8, int row, int col)\n{\n    const char* Buffer;\n\n    Buffer = cmsIT8GetDataRowCol(hIT8, row, col);\n\n    if (Buffer == NULL) return 0.0;\n\n    return ParseFloatNumber(Buffer);\n}",
+      "fn_code_pos": [
+        [
+          2716,
+          0
+        ],
+        [
+          2725,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetDataRowColDbl",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "row": "int",
+          "col": "int"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetDataRowCol(cmsHANDLE hIT8, int row, int col, const char* Val)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n\n    _cmsAssert(hIT8 != NULL);\n\n    return SetData(it8, row, col, Val);\n}",
+      "fn_code_pos": [
+        [
+          2728,
+          0
+        ],
+        [
+          2735,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetDataRowCol",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "row": "int",
+          "col": "int",
+          "Val": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetDataRowColDbl(cmsHANDLE hIT8, int row, int col, cmsFloat64Number Val)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    char Buff[256];\n\n    _cmsAssert(hIT8 != NULL);\n\n    snprintf(Buff, 255, it8->DoubleFormatter, Val);\n\n    return SetData(it8, row, col, Buff);\n}",
+      "fn_code_pos": [
+        [
+          2738,
+          0
+        ],
+        [
+          2748,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetDataRowColDbl",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "row": "int",
+          "col": "int",
+          "Val": "cmsFloat64Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "const char* CMSEXPORT cmsIT8GetData(cmsHANDLE hIT8, const char* cPatch, const char* cSample)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    int iField, iSet;\n\n    _cmsAssert(hIT8 != NULL);\n\n    iField = LocateSample(it8, cSample);\n    if (iField < 0) {\n        return NULL;\n    }\n\n    iSet = LocatePatch(it8, cPatch);\n    if (iSet < 0) {\n            return NULL;\n    }\n\n    return GetData(it8, iSet, iField);\n}",
+      "fn_code_pos": [
+        [
+          2752,
+          0
+        ],
+        [
+          2770,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetData",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cPatch": "char",
+          "cSample": "char"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "cmsFloat64Number CMSEXPORT cmsIT8GetDataDbl(cmsHANDLE  it8, const char* cPatch, const char* cSample)\n{\n    const char* Buffer;\n\n    Buffer = cmsIT8GetData(it8, cPatch, cSample);\n\n    return ParseFloatNumber(Buffer);\n}",
+      "fn_code_pos": [
+        [
+          2773,
+          0
+        ],
+        [
+          2780,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetDataDbl",
+        "parameters": {
+          "it8": "cmsHANDLE",
+          "cPatch": "char",
+          "cSample": "char"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetData(cmsHANDLE hIT8, const char* cPatch, const char* cSample, const char *Val)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    int iField, iSet;\n    TABLE* t;\n\n    _cmsAssert(hIT8 != NULL);\n\n    t = GetTable(it8);\n\n    iField = LocateSample(it8, cSample);\n\n    if (iField < 0)\n        return FALSE;\n\n    if (t-> nPatches == 0) {\n\n        if (!AllocateDataFormat(it8))\n            return FALSE;\n\n        if (!AllocateDataSet(it8))\n            return FALSE;\n\n        CookPointers(it8);\n    }\n\n    if (cmsstrcasecmp(cSample, \"SAMPLE_ID\") == 0) {\n\n        iSet   = LocateEmptyPatch(it8);\n        if (iSet < 0) {\n            return SynError(it8, \"Couldn't add more patches '%s'\\n\", cPatch);\n        }\n\n        iField = t -> SampleID;\n    }\n    else {\n        iSet = LocatePatch(it8, cPatch);\n        if (iSet < 0) {\n            return FALSE;\n        }\n    }\n\n    return SetData(it8, iSet, iField, Val);\n}",
+      "fn_code_pos": [
+        [
+          2784,
+          0
+        ],
+        [
+          2827,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetData",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cPatch": "char",
+          "cSample": "char",
+          "Val": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetDataDbl(cmsHANDLE hIT8, const char* cPatch,\n                                   const char* cSample,\n                                   cmsFloat64Number Val)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    char Buff[256];\n\n    _cmsAssert(hIT8 != NULL);\n\n    snprintf(Buff, 255, it8->DoubleFormatter, Val);\n    return cmsIT8SetData(hIT8, cPatch, cSample, Buff);\n}",
+      "fn_code_pos": [
+        [
+          2830,
+          0
+        ],
+        [
+          2841,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetDataDbl",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cPatch": "char",
+          "cSample": "char",
+          "Val": "cmsFloat64Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "const char* CMSEXPORT cmsIT8GetPatchName(cmsHANDLE hIT8, int nPatch, char* buffer)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    TABLE* t;\n    char* Data;\n\n    _cmsAssert(hIT8 != NULL);\n\n    t = GetTable(it8);\n    Data = GetData(it8, nPatch, t->SampleID);\n\n    if (!Data) return NULL;\n    if (!buffer) return Data;\n\n    strncpy(buffer, Data, MAXSTR-1);\n    buffer[MAXSTR-1] = 0;\n    return buffer;\n}",
+      "fn_code_pos": [
+        [
+          2845,
+          0
+        ],
+        [
+          2862,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetPatchName",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "nPatch": "int",
+          "buffer": "char"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "int CMSEXPORT cmsIT8GetPatchByName(cmsHANDLE hIT8, const char *cPatch)\n{\n    _cmsAssert(hIT8 != NULL);\n\n    return LocatePatch((cmsIT8*)hIT8, cPatch);\n}",
+      "fn_code_pos": [
+        [
+          2864,
+          0
+        ],
+        [
+          2869,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetPatchByName",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cPatch": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsIT8TableCount(cmsHANDLE hIT8)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n\n    _cmsAssert(hIT8 != NULL);\n\n    return it8 ->TablesCount;\n}",
+      "fn_code_pos": [
+        [
+          2871,
+          0
+        ],
+        [
+          2878,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8TableCount",
+        "parameters": {
+          "hIT8": "cmsHANDLE"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "int CMSEXPORT cmsIT8SetTableByLabel(cmsHANDLE hIT8, const char* cSet, const char* cField, const char* ExpectedType)\n{\n    const char* cLabelFld;\n    char Type[256], Label[256];\n    cmsUInt32Number nTable;\n\n    _cmsAssert(hIT8 != NULL);\n\n    if (cField != NULL && *cField == 0)\n            cField = \"LABEL\";\n\n    if (cField == NULL)\n            cField = \"LABEL\";\n\n    cLabelFld = cmsIT8GetData(hIT8, cSet, cField);\n    if (!cLabelFld) return -1;\n\n    if (sscanf(cLabelFld, \"%255s %u %255s\", Label, &nTable, Type) != 3)\n            return -1;\n\n    if (ExpectedType != NULL && *ExpectedType == 0)\n        ExpectedType = NULL;\n\n    if (ExpectedType) {\n\n        if (cmsstrcasecmp(Type, ExpectedType) != 0) return -1;\n    }\n\n    return cmsIT8SetTable(hIT8, nTable);\n}",
+      "fn_code_pos": [
+        [
+          2883,
+          0
+        ],
+        [
+          2912,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetTableByLabel",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cSet": "char",
+          "cField": "char",
+          "ExpectedType": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIT8SetIndexColumn(cmsHANDLE hIT8, const char* cSample)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n    int pos;\n\n    _cmsAssert(hIT8 != NULL);\n\n    pos = LocateSample(it8, cSample);\n    if(pos == -1)\n        return FALSE;\n\n    it8->Tab[it8->nTable].SampleID = pos;\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          2915,
+          0
+        ],
+        [
+          2928,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8SetIndexColumn",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cSample": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsIT8DefineDblFormat(cmsHANDLE hIT8, const char* Formatter)\n{\n    cmsIT8* it8 = (cmsIT8*) hIT8;\n\n    _cmsAssert(hIT8 != NULL);\n\n    if (Formatter == NULL)\n        strcpy(it8->DoubleFormatter, DEFAULT_DBL_FORMAT);\n    else\n        strncpy(it8->DoubleFormatter, Formatter, sizeof(it8->DoubleFormatter));\n\n    it8 ->DoubleFormatter[sizeof(it8 ->DoubleFormatter)-1] = 0;\n}",
+      "fn_code_pos": [
+        [
+          2931,
+          0
+        ],
+        [
+          2943,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8DefineDblFormat",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "Formatter": "char"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "AllocChunk(cmsIT8* it8, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          363,
+          13
+        ],
+        [
+          363,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllocChunk",
+        "parameters": {
+          "it8": "cmsIT8",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "StringAlloc(cmsIT8* it8, int max)",
+      "fn_dec_pos": [
+        [
+          366,
+          8
+        ],
+        [
+          366,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "StringAlloc",
+        "parameters": {
+          "it8": "cmsIT8",
+          "max": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "StringPtr(string* s)",
+      "fn_dec_pos": [
+        [
+          408,
+          6
+        ],
+        [
+          408,
+          26
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "StringPtr",
+        "parameters": {
+          "s": "string"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "NoMeta(const char* str)",
+      "fn_dec_pos": [
+        [
+          512,
+          12
+        ],
+        [
+          512,
+          35
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NoMeta",
+        "parameters": {
+          "str": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "GetTable(cmsIT8* it8)",
+      "fn_dec_pos": [
+        [
+          1095,
+          7
+        ],
+        [
+          1095,
+          28
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetTable",
+        "parameters": {
+          "it8": "cmsIT8"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "AllocBigBlock(cmsIT8* it8, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          1139,
+          6
+        ],
+        [
+          1139,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllocBigBlock",
+        "parameters": {
+          "it8": "cmsIT8",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "AllocChunk(cmsIT8* it8, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          1165,
+          6
+        ],
+        [
+          1165,
+          51
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllocChunk",
+        "parameters": {
+          "it8": "cmsIT8",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "AllocString(cmsIT8* it8, const char* str)",
+      "fn_dec_pos": [
+        [
+          1200,
+          6
+        ],
+        [
+          1200,
+          47
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllocString",
+        "parameters": {
+          "it8": "cmsIT8",
+          "str": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "AddToList(cmsIT8* it8, KEYVALUE** Head, const char *Key, const char *Subkey, const char* xValue, WRITEMODE WriteAs)",
+      "fn_dec_pos": [
+        [
+          1253,
+          10
+        ],
+        [
+          1253,
+          125
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AddToList",
+        "parameters": {
+          "it8": "cmsIT8",
+          "Head": "KEYVALUE",
+          "Key": "char",
+          "Subkey": "char",
+          "xValue": "char",
+          "WriteAs": "WRITEMODE"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "AddAvailableProperty(cmsIT8* it8, const char* Key, WRITEMODE as)",
+      "fn_dec_pos": [
+        [
+          1321,
+          10
+        ],
+        [
+          1321,
+          74
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AddAvailableProperty",
+        "parameters": {
+          "it8": "cmsIT8",
+          "Key": "char",
+          "as": "WRITEMODE"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "AddAvailableSampleID(cmsIT8* it8, const char* Key)",
+      "fn_dec_pos": [
+        [
+          1328,
+          10
+        ],
+        [
+          1328,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AddAvailableSampleID",
+        "parameters": {
+          "it8": "cmsIT8",
+          "Key": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "cmsIT8GetSheetType(cmsHANDLE hIT8)",
+      "fn_dec_pos": [
+        [
+          1425,
+          22
+        ],
+        [
+          1425,
+          56
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetSheetType",
+        "parameters": {
+          "hIT8": "cmsHANDLE"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "cmsIT8GetProperty(cmsHANDLE hIT8, const char* Key)",
+      "fn_dec_pos": [
+        [
+          1495,
+          22
+        ],
+        [
+          1495,
+          72
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetProperty",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "Key": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "cmsIT8GetPropertyMulti(cmsHANDLE hIT8, const char* Key, const char *SubKey)",
+      "fn_dec_pos": [
+        [
+          1517,
+          22
+        ],
+        [
+          1517,
+          97
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetPropertyMulti",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "Key": "char",
+          "SubKey": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "GetDataFormat(cmsIT8* it8, int n)",
+      "fn_dec_pos": [
+        [
+          1572,
+          12
+        ],
+        [
+          1572,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetDataFormat",
+        "parameters": {
+          "it8": "cmsIT8",
+          "n": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "satob(const char* v)",
+      "fn_dec_pos": [
+        [
+          1615,
+          12
+        ],
+        [
+          1615,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "satob",
+        "parameters": {
+          "v": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "GetData(cmsIT8* it8, int nSet, int nField)",
+      "fn_dec_pos": [
+        [
+          1661,
+          6
+        ],
+        [
+          1661,
+          48
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetData",
+        "parameters": {
+          "it8": "cmsIT8",
+          "nSet": "int",
+          "nField": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "cmsIT8GetDataRowCol(cmsHANDLE hIT8, int row, int col)",
+      "fn_dec_pos": [
+        [
+          2706,
+          22
+        ],
+        [
+          2706,
+          75
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetDataRowCol",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "row": "int",
+          "col": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "cmsIT8GetData(cmsHANDLE hIT8, const char* cPatch, const char* cSample)",
+      "fn_dec_pos": [
+        [
+          2752,
+          22
+        ],
+        [
+          2752,
+          92
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetData",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "cPatch": "char",
+          "cSample": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "cmsIT8GetPatchName(cmsHANDLE hIT8, int nPatch, char* buffer)",
+      "fn_dec_pos": [
+        [
+          2845,
+          22
+        ],
+        [
+          2845,
+          82
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIT8GetPatchName",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "nPatch": "int",
+          "buffer": "char"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct _KeyVal {\n\n        struct _KeyVal*  Next;\n        char*            Keyword;       // Name of variable\n        struct _KeyVal*  NextSubkey;    // If key is a dictionary, points to the next item\n        char*            Subkey;        // If key is a dictionary, points to the subkey name\n        char*            Value;         // Points to value\n        WRITEMODE        WriteAs;       // How to write the value\n\n   } KEYVALUE;",
+      {
+        "*  Next": "struct _KeyVal",
+        "*            Keyword": "char",
+        "*  NextSubkey": "struct _KeyVal",
+        "*            Subkey": "char",
+        "*            Value": "char",
+        "WriteAs": "WRITEMODE"
+      },
+      "KEYVALUE",
+      [
+        85,
+        0
+      ],
+      [
+        94,
+        14
+      ]
+    ],
+    [
+      "typedef struct _OwnedMem {\n\n        struct _OwnedMem* Next;\n        void *            Ptr;          // Point to value\n\n   } OWNEDMEM;",
+      {
+        "* Next": "struct _OwnedMem",
+        "*            Ptr": "void"
+      },
+      "OWNEDMEM",
+      [
+        98,
+        0
+      ],
+      [
+        103,
+        14
+      ]
+    ],
+    [
+      "typedef struct _SubAllocator {\n\n         cmsUInt8Number* Block;\n         cmsUInt32Number BlockSize;\n         cmsUInt32Number Used;\n\n    } SUBALLOCATOR;",
+      {
+        "* Block": "cmsUInt8Number",
+        "BlockSize": "cmsUInt32Number",
+        "Used": "cmsUInt32Number"
+      },
+      "SUBALLOCATOR",
+      [
+        106,
+        0
+      ],
+      [
+        112,
+        19
+      ]
+    ],
+    [
+      "typedef struct _Table {\n\n        char SheetType[MAXSTR];               // The first row of the IT8 (the type)\n\n        int            nSamples, nPatches;    // Cols, Rows\n        int            SampleID;              // Pos of ID\n\n        KEYVALUE*      HeaderList;            // The properties\n\n        char**         DataFormat;            // The binary stream descriptor\n        char**         Data;                  // The binary stream\n\n    } TABLE;",
+      {
+        "SheetType[MAXSTR]": "char",
+        "nSamples": "int",
+        "SampleID": "int",
+        "*      HeaderList": "KEYVALUE",
+        "**         DataFormat": "char",
+        "**         Data": "char"
+      },
+      "TABLE",
+      [
+        115,
+        0
+      ],
+      [
+        127,
+        12
+      ]
+    ],
+    [
+      "typedef struct _FileContext {\n        char           FileName[cmsMAX_PATH];    // File name if being read from file\n        FILE*          Stream;                   // File stream or NULL if holded in memory\n    } FILECTX;",
+      {
+        "FileName[cmsMAX_PATH]": "char",
+        "*          Stream": "FILE"
+      },
+      "FILECTX",
+      [
+        130,
+        0
+      ],
+      [
+        133,
+        14
+      ]
+    ],
+    [
+      "typedef struct {\n\n        struct struct_it8* it8;\n        cmsInt32Number max;\n        cmsInt32Number len;\n        char* begin;\n    } string;",
+      {
+        "* it8": "struct struct_it8",
+        "max": "cmsInt32Number",
+        "len": "cmsInt32Number",
+        "* begin": "char"
+      },
+      "string",
+      [
+        136,
+        0
+      ],
+      [
+        142,
+        13
+      ]
+    ],
+    [
+      "typedef struct struct_it8 {\n\n        cmsUInt32Number  TablesCount;                     // How many tables in this stream\n        cmsUInt32Number  nTable;                          // The actual table\n\n        TABLE Tab[MAXTABLES];\n\n        // Memory management\n        OWNEDMEM*      MemorySink;            // The storage backend\n        SUBALLOCATOR   Allocator;             // String suballocator -- just to keep it fast\n\n        // Parser state machine\n        SYMBOL             sy;                // Current symbol\n        int                ch;                // Current character\n\n        cmsInt32Number     inum;              // integer value\n        cmsFloat64Number   dnum;              // real value\n\n        string*        id;            // identifier\n        string*        str;           // string\n\n        // Allowed keywords & datasets. They have visibility on whole stream\n        KEYVALUE*      ValidKeywords;\n        KEYVALUE*      ValidSampleID;\n\n        char*          Source;                // Points to loc. being parsed\n        cmsInt32Number lineno;                // line counter for error reporting\n\n        FILECTX*       FileStack[MAXINCLUDE]; // Stack of files being parsed\n        cmsInt32Number IncludeSP;             // Include Stack Pointer\n\n        char*          MemoryBlock;           // The stream if holded in memory\n\n        char           DoubleFormatter[MAXID];// Printf-like 'cmsFloat64Number' formatter\n\n        cmsContext    ContextID;              // The threading context\n\n   } cmsIT8;",
+      {
+        "TablesCount": "cmsUInt32Number",
+        "nTable": "cmsUInt32Number",
+        "Tab[MAXTABLES]": "TABLE",
+        "*      MemorySink": "OWNEDMEM",
+        "Allocator": "SUBALLOCATOR",
+        "sy": "SYMBOL",
+        "ch": "int",
+        "inum": "cmsInt32Number",
+        "dnum": "cmsFloat64Number",
+        "*        id": "string",
+        "*        str": "string",
+        "*      ValidKeywords": "KEYVALUE",
+        "*      ValidSampleID": "KEYVALUE",
+        "*          Source": "char",
+        "lineno": "cmsInt32Number",
+        "*       FileStack[MAXINCLUDE]": "FILECTX",
+        "IncludeSP": "cmsInt32Number",
+        "*          MemoryBlock": "char",
+        "DoubleFormatter[MAXID]": "char",
+        "ContextID": "cmsContext"
+      },
+      "cmsIT8",
+      [
+        146,
+        0
+      ],
+      [
+        183,
+        12
+      ]
+    ],
+    [
+      "typedef struct {\n\n        FILE* stream;   // For save-to-file behaviour\n\n        cmsUInt8Number* Base;\n        cmsUInt8Number* Ptr;        // For save-to-mem behaviour\n        cmsUInt32Number Used;\n        cmsUInt32Number Max;\n\n    } SAVESTREAM;",
+      {
+        "* stream": "FILE",
+        "* Base": "cmsUInt8Number",
+        "* Ptr": "cmsUInt8Number",
+        "Used": "cmsUInt32Number",
+        "Max": "cmsUInt32Number"
+      },
+      "SAVESTREAM",
+      [
+        187,
+        0
+      ],
+      [
+        196,
+        17
+      ]
+    ],
+    [
+      "typedef struct {\n\n        const char *id;\n        SYMBOL sy;\n\n   } KEYWORD;",
+      {
+        "char": "const",
+        "sy": "SYMBOL"
+      },
+      "KEYWORD",
+      [
+        203,
+        0
+      ],
+      [
+        208,
+        13
+      ]
+    ],
+    [
+      "typedef struct {\n        const char *id;    // The identifier\n        WRITEMODE as;      // How is supposed to be written\n    } PROPERTY;",
+      {
+        "char": "const",
+        "as": "WRITEMODE"
+      },
+      "PROPERTY",
+      [
+        229,
+        0
+      ],
+      [
+        232,
+        15
+      ]
+    ],
+    [
+      "typedef struct _KeyVal {\n\n        struct _KeyVal*  Next;\n        char*            Keyword;       // Name of variable\n        struct _KeyVal*  NextSubkey;    // If key is a dictionary, points to the next item\n        char*            Subkey;        // If key is a dictionary, points to the subkey name\n        char*            Value;         // Points to value\n        WRITEMODE        WriteAs;       // How to write the value\n\n   } KEYVALUE;",
+      {
+        "*  Next": "struct _KeyVal",
+        "*            Keyword": "char",
+        "*  NextSubkey": "struct _KeyVal",
+        "*            Subkey": "char",
+        "*            Value": "char",
+        "WriteAs": "WRITEMODE"
+      },
+      "KEYVALUE",
+      [
+        85,
+        0
+      ],
+      [
+        94,
+        14
+      ]
+    ],
+    [
+      "struct _KeyVal",
+      {},
+      "",
+      [
+        87,
+        8
+      ],
+      [
+        87,
+        22
+      ]
+    ],
+    [
+      "struct _KeyVal",
+      {},
+      "",
+      [
+        89,
+        8
+      ],
+      [
+        89,
+        22
+      ]
+    ],
+    [
+      "typedef struct _OwnedMem {\n\n        struct _OwnedMem* Next;\n        void *            Ptr;          // Point to value\n\n   } OWNEDMEM;",
+      {
+        "* Next": "struct _OwnedMem",
+        "*            Ptr": "void"
+      },
+      "OWNEDMEM",
+      [
+        98,
+        0
+      ],
+      [
+        103,
+        14
+      ]
+    ],
+    [
+      "struct _OwnedMem",
+      {},
+      "",
+      [
+        100,
+        8
+      ],
+      [
+        100,
+        24
+      ]
+    ],
+    [
+      "typedef struct _SubAllocator {\n\n         cmsUInt8Number* Block;\n         cmsUInt32Number BlockSize;\n         cmsUInt32Number Used;\n\n    } SUBALLOCATOR;",
+      {
+        "* Block": "cmsUInt8Number",
+        "BlockSize": "cmsUInt32Number",
+        "Used": "cmsUInt32Number"
+      },
+      "SUBALLOCATOR",
+      [
+        106,
+        0
+      ],
+      [
+        112,
+        19
+      ]
+    ],
+    [
+      "typedef struct _Table {\n\n        char SheetType[MAXSTR];               // The first row of the IT8 (the type)\n\n        int            nSamples, nPatches;    // Cols, Rows\n        int            SampleID;              // Pos of ID\n\n        KEYVALUE*      HeaderList;            // The properties\n\n        char**         DataFormat;            // The binary stream descriptor\n        char**         Data;                  // The binary stream\n\n    } TABLE;",
+      {
+        "SheetType[MAXSTR]": "char",
+        "nSamples": "int",
+        "SampleID": "int",
+        "*      HeaderList": "KEYVALUE",
+        "**         DataFormat": "char",
+        "**         Data": "char"
+      },
+      "TABLE",
+      [
+        115,
+        0
+      ],
+      [
+        127,
+        12
+      ]
+    ],
+    [
+      "typedef struct _FileContext {\n        char           FileName[cmsMAX_PATH];    // File name if being read from file\n        FILE*          Stream;                   // File stream or NULL if holded in memory\n    } FILECTX;",
+      {
+        "FileName[cmsMAX_PATH]": "char",
+        "*          Stream": "FILE"
+      },
+      "FILECTX",
+      [
+        130,
+        0
+      ],
+      [
+        133,
+        14
+      ]
+    ],
+    [
+      "typedef struct {\n\n        struct struct_it8* it8;\n        cmsInt32Number max;\n        cmsInt32Number len;\n        char* begin;\n    } string;",
+      {
+        "* it8": "struct struct_it8",
+        "max": "cmsInt32Number",
+        "len": "cmsInt32Number",
+        "* begin": "char"
+      },
+      "string",
+      [
+        136,
+        0
+      ],
+      [
+        142,
+        13
+      ]
+    ],
+    [
+      "struct struct_it8",
+      {},
+      "",
+      [
+        138,
+        8
+      ],
+      [
+        138,
+        25
+      ]
+    ],
+    [
+      "typedef struct struct_it8 {\n\n        cmsUInt32Number  TablesCount;                     // How many tables in this stream\n        cmsUInt32Number  nTable;                          // The actual table\n\n        TABLE Tab[MAXTABLES];\n\n        // Memory management\n        OWNEDMEM*      MemorySink;            // The storage backend\n        SUBALLOCATOR   Allocator;             // String suballocator -- just to keep it fast\n\n        // Parser state machine\n        SYMBOL             sy;                // Current symbol\n        int                ch;                // Current character\n\n        cmsInt32Number     inum;              // integer value\n        cmsFloat64Number   dnum;              // real value\n\n        string*        id;            // identifier\n        string*        str;           // string\n\n        // Allowed keywords & datasets. They have visibility on whole stream\n        KEYVALUE*      ValidKeywords;\n        KEYVALUE*      ValidSampleID;\n\n        char*          Source;                // Points to loc. being parsed\n        cmsInt32Number lineno;                // line counter for error reporting\n\n        FILECTX*       FileStack[MAXINCLUDE]; // Stack of files being parsed\n        cmsInt32Number IncludeSP;             // Include Stack Pointer\n\n        char*          MemoryBlock;           // The stream if holded in memory\n\n        char           DoubleFormatter[MAXID];// Printf-like 'cmsFloat64Number' formatter\n\n        cmsContext    ContextID;              // The threading context\n\n   } cmsIT8;",
+      {
+        "TablesCount": "cmsUInt32Number",
+        "nTable": "cmsUInt32Number",
+        "Tab[MAXTABLES]": "TABLE",
+        "*      MemorySink": "OWNEDMEM",
+        "Allocator": "SUBALLOCATOR",
+        "sy": "SYMBOL",
+        "ch": "int",
+        "inum": "cmsInt32Number",
+        "dnum": "cmsFloat64Number",
+        "*        id": "string",
+        "*        str": "string",
+        "*      ValidKeywords": "KEYVALUE",
+        "*      ValidSampleID": "KEYVALUE",
+        "*          Source": "char",
+        "lineno": "cmsInt32Number",
+        "*       FileStack[MAXINCLUDE]": "FILECTX",
+        "IncludeSP": "cmsInt32Number",
+        "*          MemoryBlock": "char",
+        "DoubleFormatter[MAXID]": "char",
+        "ContextID": "cmsContext"
+      },
+      "cmsIT8",
+      [
+        146,
+        0
+      ],
+      [
+        183,
+        12
+      ]
+    ],
+    [
+      "typedef struct {\n\n        FILE* stream;   // For save-to-file behaviour\n\n        cmsUInt8Number* Base;\n        cmsUInt8Number* Ptr;        // For save-to-mem behaviour\n        cmsUInt32Number Used;\n        cmsUInt32Number Max;\n\n    } SAVESTREAM;",
+      {
+        "* stream": "FILE",
+        "* Base": "cmsUInt8Number",
+        "* Ptr": "cmsUInt8Number",
+        "Used": "cmsUInt32Number",
+        "Max": "cmsUInt32Number"
+      },
+      "SAVESTREAM",
+      [
+        187,
+        0
+      ],
+      [
+        196,
+        17
+      ]
+    ],
+    [
+      "typedef struct {\n\n        const char *id;\n        SYMBOL sy;\n\n   } KEYWORD;",
+      {
+        "char": "const",
+        "sy": "SYMBOL"
+      },
+      "KEYWORD",
+      [
+        203,
+        0
+      ],
+      [
+        208,
+        13
+      ]
+    ],
+    [
+      "typedef struct {\n        const char *id;    // The identifier\n        WRITEMODE as;      // How is supposed to be written\n    } PROPERTY;",
+      {
+        "char": "const",
+        "as": "WRITEMODE"
+      },
+      "PROPERTY",
+      [
+        229,
+        0
+      ],
+      [
+        232,
+        15
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"lcms2_internal.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#    include <io.h>\n",
+      [
+        40,
+        0
+      ],
+      [
+        41,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": [
+    [
+      "typedef enum {\n\n        SUNDEFINED,\n        SINUM,      // Integer\n        SDNUM,      // Real\n        SIDENT,     // Identifier\n        SSTRING,    // string\n        SCOMMENT,   // comment\n        SEOLN,      // End of line\n        SEOF,       // End of stream\n        SSYNERROR,  // Syntax error found on stream\n\n        // Keywords\n\n        SBEGIN_DATA,\n        SBEGIN_DATA_FORMAT,\n        SEND_DATA,\n        SEND_DATA_FORMAT,\n        SKEYWORD,\n        SDATA_FORMAT_ID,\n        SINCLUDE\n\n    } SYMBOL;",
+      {
+        "SUNDEFINED": "",
+        "SINUM": "",
+        "SDNUM": "",
+        "SIDENT": "",
+        "SSTRING": "",
+        "SCOMMENT": "",
+        "SEOLN": "",
+        "SEOF": "",
+        "SSYNERROR": "",
+        "SBEGIN_DATA": "",
+        "SBEGIN_DATA_FORMAT": "",
+        "SEND_DATA": "",
+        "SEND_DATA_FORMAT": "",
+        "SKEYWORD": "",
+        "SDATA_FORMAT_ID": "",
+        "SINCLUDE": ""
+      },
+      "SYMBOL",
+      [
+        48,
+        0
+      ],
+      [
+        70,
+        13
+      ]
+    ],
+    [
+      "typedef enum {\n\n        WRITE_UNCOOKED,\n        WRITE_STRINGIFY,\n        WRITE_HEXADECIMAL,\n        WRITE_BINARY,\n        WRITE_PAIR\n\n    } WRITEMODE;",
+      {
+        "WRITE_UNCOOKED": "",
+        "WRITE_STRINGIFY": "",
+        "WRITE_HEXADECIMAL": "",
+        "WRITE_BINARY": "",
+        "WRITE_PAIR": ""
+      },
+      "WRITEMODE",
+      [
+        74,
+        0
+      ],
+      [
+        82,
+        16
+      ]
+    ]
+  ]
+}

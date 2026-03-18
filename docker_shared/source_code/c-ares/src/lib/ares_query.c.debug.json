@@ -1,0 +1,408 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void rc4(rc4_key* key, unsigned char *buffer_ptr, int buffer_len)\n{\n  unsigned char x;\n  unsigned char y;\n  unsigned char* state;\n  unsigned char xorIndex;\n  int counter;\n\n  x = key->x;\n  y = key->y;\n\n  state = &key->state[0];\n  for(counter = 0; counter < buffer_len; counter ++)\n  {\n    x = (unsigned char)((x + 1) % 256);\n    y = (unsigned char)((state[x] + y) % 256);\n    ARES_SWAP_BYTE(&state[x], &state[y]);\n\n    xorIndex = (unsigned char)((state[x] + state[y]) % 256);\n\n    buffer_ptr[counter] = (unsigned char)(buffer_ptr[counter]^state[xorIndex]);\n  }\n  key->x = x;\n  key->y = y;\n}",
+      "fn_code_pos": [
+        [
+          35,
+          0
+        ],
+        [
+          59,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "rc4",
+        "parameters": {
+          "key": "rc4_key",
+          "buffer_ptr": "unsigned char",
+          "buffer_len": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static struct query* find_query_by_id(ares_channel channel, unsigned short id)\n{\n  unsigned short qid;\n  struct list_node* list_head;\n  struct list_node* list_node;\n  DNS_HEADER_SET_QID(((unsigned char*)&qid), id);\n\n  /* Find the query corresponding to this packet. */\n  list_head = &(channel->queries_by_qid[qid % ARES_QID_TABLE_SIZE]);\n  for (list_node = list_head->next; list_node != list_head;\n       list_node = list_node->next)\n    {\n       struct query *q = list_node->data;\n       if (q->qid == qid)\n\t  return q;\n    }\n  return NULL;\n}",
+      "fn_code_pos": [
+        [
+          61,
+          0
+        ],
+        [
+          78,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "find_query_by_id",
+        "parameters": {
+          "channel": "ares_channel",
+          "id": "unsigned short"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static unsigned short generate_unique_id(ares_channel channel)\n{\n  unsigned short id;\n\n  do {\n    id = ares__generate_new_id(&channel->id_key);\n  } while (find_query_by_id(channel, id));\n\n  return (unsigned short)id;\n}",
+      "fn_code_pos": [
+        [
+          86,
+          0
+        ],
+        [
+          95,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "generate_unique_id",
+        "parameters": {
+          "channel": "ares_channel"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "unsigned short ares__generate_new_id(rc4_key* key)\n{\n  unsigned short r=0;\n  rc4(key, (unsigned char *)&r, sizeof(r));\n  return r;\n}",
+      "fn_code_pos": [
+        [
+          97,
+          0
+        ],
+        [
+          102,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__generate_new_id",
+        "parameters": {
+          "key": "rc4_key"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void ares_query(ares_channel channel, const char *name, int dnsclass,\n                int type, ares_callback callback, void *arg)\n{\n  struct qquery *qquery;\n  unsigned char *qbuf;\n  int qlen, rd, status;\n\n  /* Compose the query. */\n  rd = !(channel->flags & ARES_FLAG_NORECURSE);\n  status = ares_create_query(name, dnsclass, type, channel->next_id, rd, &qbuf,\n              &qlen, (channel->flags & ARES_FLAG_EDNS) ? channel->ednspsz : 0);\n  if (status != ARES_SUCCESS)\n    {\n      if (qbuf != NULL) ares_free(qbuf);\n      callback(arg, status, 0, NULL, 0);\n      return;\n    }\n\n  channel->next_id = generate_unique_id(channel);\n\n  /* Allocate and fill in the query structure. */\n  qquery = ares_malloc(sizeof(struct qquery));\n  if (!qquery)\n    {\n      ares_free_string(qbuf);\n      callback(arg, ARES_ENOMEM, 0, NULL, 0);\n      return;\n    }\n  qquery->callback = callback;\n  qquery->arg = arg;\n\n  /* Send it off.  qcallback will be called when we get an answer. */\n  ares_send(channel, qbuf, qlen, qcallback, qquery);\n  ares_free_string(qbuf);\n}",
+      "fn_code_pos": [
+        [
+          104,
+          0
+        ],
+        [
+          138,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_query",
+        "parameters": {
+          "channel": "ares_channel",
+          "name": "char",
+          "dnsclass": "int",
+          "type": "int",
+          "callback": "ares_callback",
+          "arg": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void qcallback(void *arg, int status, int timeouts, unsigned char *abuf, int alen)\n{\n  struct qquery *qquery = (struct qquery *) arg;\n  unsigned int ancount;\n  int rcode;\n\n  if (status != ARES_SUCCESS)\n    qquery->callback(qquery->arg, status, timeouts, abuf, alen);\n  else\n    {\n      /* Pull the response code and answer count from the packet. */\n      rcode = DNS_HEADER_RCODE(abuf);\n      ancount = DNS_HEADER_ANCOUNT(abuf);\n\n      /* Convert errors. */\n      switch (rcode)\n        {\n        case NOERROR:\n          status = (ancount > 0) ? ARES_SUCCESS : ARES_ENODATA;\n          break;\n        case FORMERR:\n          status = ARES_EFORMERR;\n          break;\n        case SERVFAIL:\n          status = ARES_ESERVFAIL;\n          break;\n        case NXDOMAIN:\n          status = ARES_ENOTFOUND;\n          break;\n        case NOTIMP:\n          status = ARES_ENOTIMP;\n          break;\n        case REFUSED:\n          status = ARES_EREFUSED;\n          break;\n        }\n      qquery->callback(qquery->arg, status, timeouts, abuf, alen);\n    }\n  ares_free(qquery);\n}",
+      "fn_code_pos": [
+        [
+          140,
+          0
+        ],
+        [
+          179,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "qcallback",
+        "parameters": {
+          "arg": "void",
+          "status": "int",
+          "timeouts": "int",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "qcallback(void *arg, int status, int timeouts, unsigned char *abuf, int alen)",
+      "fn_dec_pos": [
+        [
+          33,
+          12
+        ],
+        [
+          33,
+          89
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "qcallback",
+        "parameters": {
+          "arg": "void",
+          "status": "int",
+          "timeouts": "int",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "find_query_by_id(ares_channel channel, unsigned short id)",
+      "fn_dec_pos": [
+        [
+          61,
+          21
+        ],
+        [
+          61,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "find_query_by_id",
+        "parameters": {
+          "channel": "ares_channel",
+          "id": "unsigned short"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct qquery {\n  ares_callback callback;\n  void *arg;\n}",
+      {
+        "callback": "ares_callback",
+        "*arg": "void"
+      },
+      "qquery",
+      [
+        28,
+        0
+      ],
+      [
+        31,
+        1
+      ]
+    ],
+    [
+      "struct qquery {\n  ares_callback callback;\n  void *arg;\n}",
+      {
+        "callback": "ares_callback",
+        "*arg": "void"
+      },
+      "qquery",
+      [
+        28,
+        0
+      ],
+      [
+        31,
+        1
+      ]
+    ],
+    [
+      "struct query",
+      {},
+      "",
+      [
+        61,
+        7
+      ],
+      [
+        61,
+        19
+      ]
+    ],
+    [
+      "struct list_node",
+      {},
+      "",
+      [
+        64,
+        2
+      ],
+      [
+        64,
+        18
+      ]
+    ],
+    [
+      "struct list_node",
+      {},
+      "",
+      [
+        65,
+        2
+      ],
+      [
+        65,
+        18
+      ]
+    ],
+    [
+      "struct query",
+      {},
+      "",
+      [
+        73,
+        7
+      ],
+      [
+        73,
+        19
+      ]
+    ],
+    [
+      "struct qquery",
+      {},
+      "",
+      [
+        107,
+        2
+      ],
+      [
+        107,
+        15
+      ]
+    ],
+    [
+      "struct qquery",
+      {},
+      "",
+      [
+        125,
+        30
+      ],
+      [
+        125,
+        43
+      ]
+    ],
+    [
+      "struct qquery",
+      {},
+      "",
+      [
+        142,
+        2
+      ],
+      [
+        142,
+        15
+      ]
+    ],
+    [
+      "struct qquery",
+      {},
+      "",
+      [
+        142,
+        27
+      ],
+      [
+        142,
+        40
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_dns.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

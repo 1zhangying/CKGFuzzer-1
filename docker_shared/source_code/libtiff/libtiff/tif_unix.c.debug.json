@@ -1,0 +1,920 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static tmsize_t _tiffReadProc(thandle_t fd, void *buf, tmsize_t size)\n{\n    fd_as_handle_union_t fdh;\n    const size_t bytes_total = (size_t)size;\n    size_t bytes_read;\n    tmsize_t count = -1;\n    if ((tmsize_t)bytes_total != size)\n    {\n        errno = EINVAL;\n        return (tmsize_t)-1;\n    }\n    fdh.h = fd;\n    for (bytes_read = 0; bytes_read < bytes_total; bytes_read += count)\n    {\n        char *buf_offset = (char *)buf + bytes_read;\n        size_t io_size = bytes_total - bytes_read;\n        if (io_size > TIFF_IO_MAX)\n            io_size = TIFF_IO_MAX;\n        /* Below is an obvious false positive of Coverity Scan */\n        /* coverity[overflow_sink] */\n        count = read(fdh.fd, buf_offset, (TIFFIOSize_t)io_size);\n        if (count <= 0)\n            break;\n    }\n    if (count < 0)\n        return (tmsize_t)-1;\n    return (tmsize_t)bytes_read;\n}",
+      "fn_code_pos": [
+        [
+          67,
+          0
+        ],
+        [
+          94,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffReadProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "buf": "void",
+          "size": "tmsize_t"
+        },
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "static tmsize_t _tiffWriteProc(thandle_t fd, void *buf, tmsize_t size)\n{\n    fd_as_handle_union_t fdh;\n    const size_t bytes_total = (size_t)size;\n    size_t bytes_written;\n    tmsize_t count = -1;\n    if ((tmsize_t)bytes_total != size)\n    {\n        errno = EINVAL;\n        return (tmsize_t)-1;\n    }\n    fdh.h = fd;\n    for (bytes_written = 0; bytes_written < bytes_total; bytes_written += count)\n    {\n        const char *buf_offset = (char *)buf + bytes_written;\n        size_t io_size = bytes_total - bytes_written;\n        if (io_size > TIFF_IO_MAX)\n            io_size = TIFF_IO_MAX;\n        /* Below is an obvious false positive of Coverity Scan */\n        /* coverity[overflow_sink] */\n        count = write(fdh.fd, buf_offset, (TIFFIOSize_t)io_size);\n        if (count <= 0)\n            break;\n    }\n    if (count < 0)\n        return (tmsize_t)-1;\n    return (tmsize_t)bytes_written;\n    /* return ((tmsize_t) write(fdh.fd, buf, bytes_total)); */\n}",
+      "fn_code_pos": [
+        [
+          96,
+          0
+        ],
+        [
+          124,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffWriteProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "buf": "void",
+          "size": "tmsize_t"
+        },
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "static uint64_t _tiffSeekProc(thandle_t fd, uint64_t off, int whence)\n{\n    fd_as_handle_union_t fdh;\n    _TIFF_off_t off_io = (_TIFF_off_t)off;\n    if ((uint64_t)off_io != off)\n    {\n        errno = EINVAL;\n        return (uint64_t)-1; /* this is really gross */\n    }\n    fdh.h = fd;\n    return ((uint64_t)_TIFF_lseek_f(fdh.fd, off_io, whence));\n}",
+      "fn_code_pos": [
+        [
+          126,
+          0
+        ],
+        [
+          137,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffSeekProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "off": "uint64_t",
+          "whence": "int"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "static int _tiffCloseProc(thandle_t fd)\n{\n    fd_as_handle_union_t fdh;\n    fdh.h = fd;\n    return (close(fdh.fd));\n}",
+      "fn_code_pos": [
+        [
+          139,
+          0
+        ],
+        [
+          144,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffCloseProc",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static uint64_t _tiffSizeProc(thandle_t fd)\n{\n    _TIFF_stat_s sb;\n    fd_as_handle_union_t fdh;\n    fdh.h = fd;\n    if (_TIFF_fstat_f(fdh.fd, &sb) < 0)\n        return (0);\n    else\n        return ((uint64_t)sb.st_size);\n}",
+      "fn_code_pos": [
+        [
+          146,
+          0
+        ],
+        [
+          155,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffSizeProc",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "static int _tiffMapProc(thandle_t fd, void **pbase, toff_t *psize)\n{\n    uint64_t size64 = _tiffSizeProc(fd);\n    tmsize_t sizem = (tmsize_t)size64;\n    if (size64 && (uint64_t)sizem == size64)\n    {\n        fd_as_handle_union_t fdh;\n        fdh.h = fd;\n        *pbase =\n            (void *)mmap(0, (size_t)sizem, PROT_READ, MAP_SHARED, fdh.fd, 0);\n        if (*pbase != (void *)-1)\n        {\n            *psize = (tmsize_t)sizem;\n            return (1);\n        }\n    }\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          160,
+          0
+        ],
+        [
+          177,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffMapProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "pbase": "void",
+          "psize": "toff_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void _tiffUnmapProc(thandle_t fd, void *base, toff_t size)\n{\n    (void)fd;\n    (void)munmap(base, (off_t)size);\n}",
+      "fn_code_pos": [
+        [
+          179,
+          0
+        ],
+        [
+          183,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffUnmapProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "base": "void",
+          "size": "toff_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int _tiffMapProc(thandle_t fd, void **pbase, toff_t *psize)\n{\n    (void)fd;\n    (void)pbase;\n    (void)psize;\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          185,
+          0
+        ],
+        [
+          191,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffMapProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "pbase": "void",
+          "psize": "toff_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void _tiffUnmapProc(thandle_t fd, void *base, toff_t size)\n{\n    (void)fd;\n    (void)base;\n    (void)size;\n}",
+      "fn_code_pos": [
+        [
+          193,
+          0
+        ],
+        [
+          198,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffUnmapProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "base": "void",
+          "size": "toff_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFFdOpen(int fd, const char *name, const char *mode)\n{\n    return TIFFFdOpenExt(fd, name, mode, NULL);\n}",
+      "fn_code_pos": [
+        [
+          204,
+          0
+        ],
+        [
+          207,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFdOpen",
+        "parameters": {
+          "fd": "int",
+          "name": "char",
+          "mode": "char"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFFdOpenExt(int fd, const char *name, const char *mode,\n                    TIFFOpenOptions *opts)\n{\n    TIFF *tif;\n\n    fd_as_handle_union_t fdh;\n    fdh.fd = fd;\n    tif = TIFFClientOpenExt(name, mode, fdh.h, _tiffReadProc, _tiffWriteProc,\n                            _tiffSeekProc, _tiffCloseProc, _tiffSizeProc,\n                            _tiffMapProc, _tiffUnmapProc, opts);\n    if (tif)\n        tif->tif_fd = fd;\n    return (tif);\n}",
+      "fn_code_pos": [
+        [
+          209,
+          0
+        ],
+        [
+          222,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFdOpenExt",
+        "parameters": {
+          "fd": "int",
+          "name": "char",
+          "mode": "char",
+          "opts": "TIFFOpenOptions"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFOpen(const char *name, const char *mode)\n{\n    return TIFFOpenExt(name, mode, NULL);\n}",
+      "fn_code_pos": [
+        [
+          227,
+          0
+        ],
+        [
+          230,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpen",
+        "parameters": {
+          "name": "char",
+          "mode": "char"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFOpenExt(const char *name, const char *mode, TIFFOpenOptions *opts)\n{\n    static const char module[] = \"TIFFOpen\";\n    int m, fd;\n    TIFF *tif;\n\n    m = _TIFFgetMode(opts, NULL, mode, module);\n    if (m == -1)\n        return ((TIFF *)0);\n\n/* for cygwin and mingw */\n#ifdef O_BINARY\n    m |= O_BINARY;\n#endif\n\n    fd = open(name, m, 0666);\n    if (fd < 0)\n    {\n        if (errno > 0 && strerror(errno) != NULL)\n        {\n            _TIFFErrorEarly(opts, NULL, module, \"%s: %s\", name,\n                            strerror(errno));\n        }\n        else\n        {\n            _TIFFErrorEarly(opts, NULL, module, \"%s: Cannot open\", name);\n        }\n        return ((TIFF *)0);\n    }\n\n    tif = TIFFFdOpenExt((int)fd, name, mode, opts);\n    if (!tif)\n        close(fd);\n    return tif;\n}",
+      "fn_code_pos": [
+        [
+          232,
+          0
+        ],
+        [
+          266,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpenExt",
+        "parameters": {
+          "name": "char",
+          "mode": "char",
+          "opts": "TIFFOpenOptions"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFOpenW(const wchar_t *name, const char *mode)\n{\n    return TIFFOpenWExt(name, mode, NULL);\n}",
+      "fn_code_pos": [
+        [
+          273,
+          0
+        ],
+        [
+          276,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpenW",
+        "parameters": {
+          "name": "wchar_t",
+          "mode": "char"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFOpenWExt(const wchar_t *name, const char *mode, TIFFOpenOptions *opts)\n{\n    static const char module[] = \"TIFFOpenW\";\n    int m, fd;\n    int mbsize;\n    char *mbname;\n    TIFF *tif;\n\n    m = _TIFFgetMode(opts, NULL, mode, module);\n    if (m == -1)\n        return ((TIFF *)0);\n\n/* for cygwin and mingw */\n#ifdef O_BINARY\n    m |= O_BINARY;\n#endif\n\n    fd = _wopen(name, m, 0666);\n    if (fd < 0)\n    {\n        _TIFFErrorEarly(opts, NULL, module, \"%ls: Cannot open\", name);\n        return ((TIFF *)0);\n    }\n\n    mbname = NULL;\n    mbsize = WideCharToMultiByte(CP_ACP, 0, name, -1, NULL, 0, NULL, NULL);\n    if (mbsize > 0)\n    {\n        mbname = _TIFFmalloc(mbsize);\n        if (!mbname)\n        {\n            _TIFFErrorEarly(\n                opts, NULL, module,\n                \"Can't allocate space for filename conversion buffer\");\n            return ((TIFF *)0);\n        }\n\n        WideCharToMultiByte(CP_ACP, 0, name, -1, mbname, mbsize, NULL, NULL);\n    }\n\n    tif = TIFFFdOpenExt((int)fd, (mbname != NULL) ? mbname : \"<unknown>\", mode,\n                        opts);\n\n    _TIFFfree(mbname);\n\n    if (!tif)\n        close(fd);\n    return tif;\n}",
+      "fn_code_pos": [
+        [
+          277,
+          0
+        ],
+        [
+          325,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpenWExt",
+        "parameters": {
+          "name": "wchar_t",
+          "mode": "char",
+          "opts": "TIFFOpenOptions"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "void *_TIFFmalloc(tmsize_t s)\n{\n    if (s == 0)\n        return ((void *)NULL);\n\n    return (malloc((size_t)s));\n}",
+      "fn_code_pos": [
+        [
+          328,
+          0
+        ],
+        [
+          334,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFmalloc",
+        "parameters": {
+          "s": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void *_TIFFcalloc(tmsize_t nmemb, tmsize_t siz)\n{\n    if (nmemb == 0 || siz == 0)\n        return ((void *)NULL);\n\n    return calloc((size_t)nmemb, (size_t)siz);\n}",
+      "fn_code_pos": [
+        [
+          336,
+          0
+        ],
+        [
+          342,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFcalloc",
+        "parameters": {
+          "nmemb": "tmsize_t",
+          "siz": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _TIFFfree(void *p) { free(p); }",
+      "fn_code_pos": [
+        [
+          344,
+          0
+        ],
+        [
+          344,
+          36
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFfree",
+        "parameters": {
+          "p": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void *_TIFFrealloc(void *p, tmsize_t s) { return (realloc(p, (size_t)s)); }",
+      "fn_code_pos": [
+        [
+          346,
+          0
+        ],
+        [
+          346,
+          75
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFrealloc",
+        "parameters": {
+          "p": "void",
+          "s": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _TIFFmemset(void *p, int v, tmsize_t c) { memset(p, v, (size_t)c); }",
+      "fn_code_pos": [
+        [
+          348,
+          0
+        ],
+        [
+          348,
+          73
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFmemset",
+        "parameters": {
+          "p": "void",
+          "v": "int",
+          "c": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _TIFFmemcpy(void *d, const void *s, tmsize_t c)\n{\n    memcpy(d, s, (size_t)c);\n}",
+      "fn_code_pos": [
+        [
+          350,
+          0
+        ],
+        [
+          353,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFmemcpy",
+        "parameters": {
+          "d": "void",
+          "s": "void",
+          "c": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int _TIFFmemcmp(const void *p1, const void *p2, tmsize_t c)\n{\n    return (memcmp(p1, p2, (size_t)c));\n}",
+      "fn_code_pos": [
+        [
+          355,
+          0
+        ],
+        [
+          358,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFmemcmp",
+        "parameters": {
+          "p1": "void",
+          "p2": "void",
+          "c": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void unixWarningHandler(const char *module, const char *fmt, va_list ap)\n{\n    if (module != NULL)\n        fprintf(stderr, \"%s: \", module);\n    fprintf(stderr, \"Warning, \");\n    vfprintf(stderr, fmt, ap);\n    fprintf(stderr, \".\\n\");\n}",
+      "fn_code_pos": [
+        [
+          360,
+          0
+        ],
+        [
+          367,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "unixWarningHandler",
+        "parameters": {
+          "module": "char",
+          "fmt": "char",
+          "ap": "va_list"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void unixErrorHandler(const char *module, const char *fmt, va_list ap)\n{\n    if (module != NULL)\n        fprintf(stderr, \"%s: \", module);\n    vfprintf(stderr, fmt, ap);\n    fprintf(stderr, \".\\n\");\n}",
+      "fn_code_pos": [
+        [
+          370,
+          0
+        ],
+        [
+          376,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "unixErrorHandler",
+        "parameters": {
+          "module": "char",
+          "fmt": "char",
+          "ap": "va_list"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "TIFFFdOpen(int fd, const char *name, const char *mode)",
+      "fn_dec_pos": [
+        [
+          204,
+          6
+        ],
+        [
+          204,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFdOpen",
+        "parameters": {
+          "fd": "int",
+          "name": "char",
+          "mode": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFFdOpenExt(int fd, const char *name, const char *mode,\n                    TIFFOpenOptions *opts)",
+      "fn_dec_pos": [
+        [
+          209,
+          6
+        ],
+        [
+          210,
+          42
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFdOpenExt",
+        "parameters": {
+          "fd": "int",
+          "name": "char",
+          "mode": "char",
+          "opts": "TIFFOpenOptions"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFOpen(const char *name, const char *mode)",
+      "fn_dec_pos": [
+        [
+          227,
+          6
+        ],
+        [
+          227,
+          50
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpen",
+        "parameters": {
+          "name": "char",
+          "mode": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFOpenExt(const char *name, const char *mode, TIFFOpenOptions *opts)",
+      "fn_dec_pos": [
+        [
+          232,
+          6
+        ],
+        [
+          232,
+          76
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpenExt",
+        "parameters": {
+          "name": "char",
+          "mode": "char",
+          "opts": "TIFFOpenOptions"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFOpenW(const wchar_t *name, const char *mode)",
+      "fn_dec_pos": [
+        [
+          273,
+          6
+        ],
+        [
+          273,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpenW",
+        "parameters": {
+          "name": "wchar_t",
+          "mode": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFOpenWExt(const wchar_t *name, const char *mode, TIFFOpenOptions *opts)",
+      "fn_dec_pos": [
+        [
+          277,
+          6
+        ],
+        [
+          277,
+          80
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpenWExt",
+        "parameters": {
+          "name": "wchar_t",
+          "mode": "char",
+          "opts": "TIFFOpenOptions"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_TIFFmalloc(tmsize_t s)",
+      "fn_dec_pos": [
+        [
+          328,
+          6
+        ],
+        [
+          328,
+          29
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFmalloc",
+        "parameters": {
+          "s": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_TIFFcalloc(tmsize_t nmemb, tmsize_t siz)",
+      "fn_dec_pos": [
+        [
+          336,
+          6
+        ],
+        [
+          336,
+          47
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFcalloc",
+        "parameters": {
+          "nmemb": "tmsize_t",
+          "siz": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_TIFFrealloc(void *p, tmsize_t s)",
+      "fn_dec_pos": [
+        [
+          346,
+          6
+        ],
+        [
+          346,
+          39
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFrealloc",
+        "parameters": {
+          "p": "void",
+          "s": "tmsize_t"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include <sys/types.h>\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ],
+    [
+      "#include <errno.h>\n",
+      [
+        39,
+        0
+      ],
+      [
+        40,
+        0
+      ]
+    ],
+    [
+      "#include <stdarg.h>\n",
+      [
+        41,
+        0
+      ],
+      [
+        42,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        42,
+        0
+      ],
+      [
+        43,
+        0
+      ]
+    ],
+    [
+      "#include <sys/stat.h>\n",
+      [
+        43,
+        0
+      ],
+      [
+        44,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        46,
+        0
+      ],
+      [
+        47,
+        0
+      ]
+    ],
+    [
+      "#include <fcntl.h>\n",
+      [
+        50,
+        0
+      ],
+      [
+        51,
+        0
+      ]
+    ],
+    [
+      "#include <io.h>\n",
+      [
+        54,
+        0
+      ],
+      [
+        55,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        57,
+        0
+      ],
+      [
+        58,
+        0
+      ]
+    ],
+    [
+      "#include <sys/mman.h>\n",
+      [
+        158,
+        0
+      ],
+      [
+        159,
+        0
+      ]
+    ],
+    [
+      "#include <windows.h>\n",
+      [
+        269,
+        0
+      ],
+      [
+        270,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

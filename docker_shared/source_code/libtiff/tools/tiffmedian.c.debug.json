@@ -1,0 +1,679 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    int i, dither = 0;\n    uint16_t shortv, config, photometric;\n    Colorbox *box_list, *ptr;\n    float floatv;\n    uint32_t longv;\n    int c;\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n\n    num_colors = MAX_CMAP_SIZE;\n    while ((c = getopt(argc, argv, \"c:C:r:fh\")) != -1)\n        switch (c)\n        {\n            case 'c': /* compression scheme */\n                if (!processCompressOptions(optarg))\n                    usage(EXIT_FAILURE);\n                break;\n            case 'C': /* set colormap size */\n                num_colors = atoi(optarg);\n                if (num_colors > MAX_CMAP_SIZE)\n                {\n                    fprintf(stderr, \"-C: colormap too big, max %d\\n\",\n                            MAX_CMAP_SIZE);\n                    usage(EXIT_FAILURE);\n                }\n                if (num_colors < 2)\n                {\n                    fprintf(stderr, \"-C: colormap too small, min %d\\n\", 2);\n                    usage(EXIT_FAILURE);\n                }\n                break;\n            case 'f': /* dither */\n                dither = 1;\n                break;\n            case 'r': /* rows/strip */\n                rowsperstrip = atoi(optarg);\n                break;\n            case 'h':\n                usage(EXIT_SUCCESS);\n                /*NOTREACHED*/\n                break;\n            case '?':\n                usage(EXIT_FAILURE);\n                /*NOTREACHED*/\n                break;\n        }\n    if (argc - optind != 2)\n        usage(EXIT_FAILURE);\n    in = TIFFOpen(argv[optind], \"r\");\n    if (in == NULL)\n        return (EXIT_FAILURE);\n    TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &imagewidth);\n    TIFFGetField(in, TIFFTAG_IMAGELENGTH, &imagelength);\n    TIFFGetField(in, TIFFTAG_BITSPERSAMPLE, &bitspersample);\n    TIFFGetField(in, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);\n    if (bitspersample != 8 && bitspersample != 16)\n    {\n        fprintf(stderr, \"%s: Image must have at least 8-bits/sample\\n\",\n                argv[optind]);\n        return (EXIT_FAILURE);\n    }\n    if (!TIFFGetField(in, TIFFTAG_PHOTOMETRIC, &photometric) ||\n        photometric != PHOTOMETRIC_RGB || samplesperpixel < 3)\n    {\n        fprintf(stderr, \"%s: Image must have RGB data\\n\", argv[optind]);\n        return (EXIT_FAILURE);\n    }\n    TIFFGetField(in, TIFFTAG_PLANARCONFIG, &config);\n    if (config != PLANARCONFIG_CONTIG)\n    {\n        fprintf(stderr, \"%s: Can only handle contiguous data packing\\n\",\n                argv[optind]);\n        return (EXIT_FAILURE);\n    }\n\n    /*\n     * STEP 1:  create empty boxes\n     */\n    usedboxes = NULL;\n    box_list = freeboxes =\n        (Colorbox *)_TIFFmalloc(num_colors * sizeof(Colorbox));\n    freeboxes[0].next = &freeboxes[1];\n    freeboxes[0].prev = NULL;\n    for (i = 1; i < num_colors - 1; ++i)\n    {\n        freeboxes[i].next = &freeboxes[i + 1];\n        freeboxes[i].prev = &freeboxes[i - 1];\n    }\n    freeboxes[num_colors - 1].next = NULL;\n    freeboxes[num_colors - 1].prev = &freeboxes[num_colors - 2];\n\n    /*\n     * STEP 2: get histogram, initialize first box\n     */\n    ptr = freeboxes;\n    freeboxes = ptr->next;\n    if (freeboxes)\n        freeboxes->prev = NULL;\n    ptr->next = usedboxes;\n    usedboxes = ptr;\n    if (ptr->next)\n        ptr->next->prev = ptr;\n    get_histogram(in, ptr);\n\n    /*\n     * STEP 3: continually subdivide boxes until no more free\n     * boxes remain or until all colors assigned.\n     */\n    while (freeboxes != NULL)\n    {\n        ptr = largest_box();\n        if (ptr != NULL)\n            splitbox(ptr);\n        else\n            freeboxes = NULL;\n    }\n\n    /*\n     * STEP 4: assign colors to all boxes\n     */\n    for (i = 0, ptr = usedboxes; ptr != NULL; ++i, ptr = ptr->next)\n    {\n        rm[i] = ((ptr->rmin + ptr->rmax) << COLOR_SHIFT) / 2;\n        gm[i] = ((ptr->gmin + ptr->gmax) << COLOR_SHIFT) / 2;\n        bm[i] = ((ptr->bmin + ptr->bmax) << COLOR_SHIFT) / 2;\n    }\n\n    /* We're done with the boxes now */\n    _TIFFfree(box_list);\n    freeboxes = usedboxes = NULL;\n\n    /*\n     * STEP 5: scan histogram and map all values to closest color\n     */\n    /* 5a: create cell list as described in Heckbert[2] */\n    ColorCells =\n        (C_cell **)_TIFFmalloc(C_LEN * C_LEN * C_LEN * sizeof(C_cell *));\n    _TIFFmemset(ColorCells, 0, C_LEN * C_LEN * C_LEN * sizeof(C_cell *));\n    /* 5b: create mapping from truncated pixel space to color\n       table entries */\n    map_colortable();\n\n    /*\n     * STEP 6: scan image, match input values to table entries\n     */\n    out = TIFFOpen(argv[optind + 1], \"w\");\n    if (out == NULL)\n    {\n        _TIFFfree(ColorCells);\n        return (EXIT_FAILURE);\n    }\n\n    CopyField(TIFFTAG_SUBFILETYPE, longv);\n    CopyField(TIFFTAG_IMAGEWIDTH, longv);\n    TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, (short)COLOR_DEPTH);\n    if (compression != (uint16_t)-1)\n    {\n        TIFFSetField(out, TIFFTAG_COMPRESSION, compression);\n        switch (compression)\n        {\n            case COMPRESSION_LZW:\n            case COMPRESSION_ADOBE_DEFLATE:\n            case COMPRESSION_DEFLATE:\n                if (predictor != 0)\n                    TIFFSetField(out, TIFFTAG_PREDICTOR, predictor);\n                break;\n        }\n    }\n    else\n        CopyField(TIFFTAG_COMPRESSION, compression);\n    TIFFSetField(out, TIFFTAG_PHOTOMETRIC, (short)PHOTOMETRIC_PALETTE);\n    CopyField(TIFFTAG_ORIENTATION, shortv);\n    TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, (short)1);\n    CopyField(TIFFTAG_PLANARCONFIG, shortv);\n    TIFFSetField(out, TIFFTAG_ROWSPERSTRIP,\n                 TIFFDefaultStripSize(out, rowsperstrip));\n    CopyField(TIFFTAG_MINSAMPLEVALUE, shortv);\n    CopyField(TIFFTAG_MAXSAMPLEVALUE, shortv);\n    CopyField(TIFFTAG_RESOLUTIONUNIT, shortv);\n    CopyField(TIFFTAG_XRESOLUTION, floatv);\n    CopyField(TIFFTAG_YRESOLUTION, floatv);\n    CopyField(TIFFTAG_XPOSITION, floatv);\n    CopyField(TIFFTAG_YPOSITION, floatv);\n\n    if (dither)\n        quant_fsdither(in, out);\n    else\n        quant(in, out);\n        /*\n         * Scale colormap to TIFF-required 16-bit values.\n         */\n#define SCALE(x) (((x) * ((1L << 16) - 1)) / 255)\n    for (i = 0; i < MAX_CMAP_SIZE; ++i)\n    {\n        rm[i] = SCALE(rm[i]);\n        gm[i] = SCALE(gm[i]);\n        bm[i] = SCALE(bm[i]);\n    }\n    TIFFSetField(out, TIFFTAG_COLORMAP, rm, gm, bm);\n    (void)TIFFClose(out);\n    _TIFFfree(ColorCells);\n    return (EXIT_SUCCESS);\n}",
+      "fn_code_pos": [
+        [
+          121,
+          0
+        ],
+        [
+          327,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int processCompressOptions(char *opt)\n{\n    if (streq(opt, \"none\"))\n        compression = COMPRESSION_NONE;\n    else if (streq(opt, \"packbits\"))\n        compression = COMPRESSION_PACKBITS;\n    else if (strneq(opt, \"lzw\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_LZW;\n    }\n    else if (strneq(opt, \"zip\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_ADOBE_DEFLATE;\n    }\n    else\n        return (0);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          329,
+          0
+        ],
+        [
+          352,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {
+          "opt": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"%s\\n\\n\", TIFFGetVersion());\n    fprintf(out, \"%s\", usage_info);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          382,
+          0
+        ],
+        [
+          389,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void get_histogram(TIFF *in, Colorbox *box)\n{\n    register unsigned char *inptr;\n    register int red, green, blue;\n    register uint32_t j, i;\n    unsigned char *inputline;\n\n    inputline = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(in));\n    if (inputline == NULL)\n    {\n        fprintf(stderr, \"No space for scanline buffer\\n\");\n        exit(EXIT_FAILURE);\n    }\n    box->rmin = box->gmin = box->bmin = 999;\n    box->rmax = box->gmax = box->bmax = -1;\n    box->total = imagewidth * imagelength;\n\n    {\n        register uint32_t *ptr = &histogram[0][0][0];\n        for (i = B_LEN * B_LEN * B_LEN; i-- > 0;)\n            *ptr++ = 0;\n    }\n    for (i = 0; i < imagelength; i++)\n    {\n        if (TIFFReadScanline(in, inputline, i, 0) <= 0)\n            break;\n        inptr = inputline;\n        for (j = imagewidth; j-- > 0;)\n        {\n            red = (*inptr++) & 0xff >> COLOR_SHIFT;\n            green = (*inptr++) & 0xff >> COLOR_SHIFT;\n            blue = (*inptr++) & 0xff >> COLOR_SHIFT;\n            if ((red | green | blue) >= B_LEN)\n            {\n                fprintf(stderr, \"Logic error. \"\n                                \"Histogram array overflow!\\n\");\n                exit(EXIT_FAILURE);\n            }\n            if (red < box->rmin)\n                box->rmin = red;\n            if (red > box->rmax)\n                box->rmax = red;\n            if (green < box->gmin)\n                box->gmin = green;\n            if (green > box->gmax)\n                box->gmax = green;\n            if (blue < box->bmin)\n                box->bmin = blue;\n            if (blue > box->bmax)\n                box->bmax = blue;\n            histogram[red][green][blue]++;\n        }\n    }\n    _TIFFfree(inputline);\n}",
+      "fn_code_pos": [
+        [
+          391,
+          0
+        ],
+        [
+          445,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "get_histogram",
+        "parameters": {
+          "in": "TIFF",
+          "box": "Colorbox"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static Colorbox *largest_box(void)\n{\n    register Colorbox *p, *b;\n    register uint32_t size;\n\n    b = NULL;\n    size = 0;\n    for (p = usedboxes; p != NULL; p = p->next)\n        if ((p->rmax > p->rmin || p->gmax > p->gmin || p->bmax > p->bmin) &&\n            p->total > size)\n            size = (b = p)->total;\n    return (b);\n}",
+      "fn_code_pos": [
+        [
+          447,
+          0
+        ],
+        [
+          459,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "largest_box",
+        "parameters": {},
+        "return_type": "Colorbox"
+      }
+    },
+    {
+      "fn_code": "static void splitbox(Colorbox *ptr)\n{\n    uint32_t hist2[B_LEN];\n    int first = 0, last = 0;\n    register Colorbox *new;\n    register uint32_t *iptr, *histp;\n    register int i, j;\n    register int ir, ig, ib;\n    register uint32_t sum, sum1, sum2;\n    enum\n    {\n        RED,\n        GREEN,\n        BLUE\n    } axis;\n\n    /*\n     * See which axis is the largest, do a histogram along that\n     * axis.  Split at median point.  Contract both new boxes to\n     * fit points and return\n     */\n    i = ptr->rmax - ptr->rmin;\n    if (i >= ptr->gmax - ptr->gmin && i >= ptr->bmax - ptr->bmin)\n        axis = RED;\n    else if (ptr->gmax - ptr->gmin >= ptr->bmax - ptr->bmin)\n        axis = GREEN;\n    else\n        axis = BLUE;\n    /* get histogram along longest axis */\n    switch (axis)\n    {\n        case RED:\n            histp = &hist2[ptr->rmin];\n            for (ir = ptr->rmin; ir <= ptr->rmax; ++ir)\n            {\n                *histp = 0;\n                for (ig = ptr->gmin; ig <= ptr->gmax; ++ig)\n                {\n                    iptr = &histogram[ir][ig][ptr->bmin];\n                    for (ib = ptr->bmin; ib <= ptr->bmax; ++ib)\n                        *histp += *iptr++;\n                }\n                histp++;\n            }\n            first = ptr->rmin;\n            last = ptr->rmax;\n            break;\n        case GREEN:\n            histp = &hist2[ptr->gmin];\n            for (ig = ptr->gmin; ig <= ptr->gmax; ++ig)\n            {\n                *histp = 0;\n                for (ir = ptr->rmin; ir <= ptr->rmax; ++ir)\n                {\n                    iptr = &histogram[ir][ig][ptr->bmin];\n                    for (ib = ptr->bmin; ib <= ptr->bmax; ++ib)\n                        *histp += *iptr++;\n                }\n                histp++;\n            }\n            first = ptr->gmin;\n            last = ptr->gmax;\n            break;\n        case BLUE:\n            histp = &hist2[ptr->bmin];\n            for (ib = ptr->bmin; ib <= ptr->bmax; ++ib)\n            {\n                *histp = 0;\n                for (ir = ptr->rmin; ir <= ptr->rmax; ++ir)\n                {\n                    iptr = &histogram[ir][ptr->gmin][ib];\n                    for (ig = ptr->gmin; ig <= ptr->gmax; ++ig)\n                    {\n                        *histp += *iptr;\n                        iptr += B_LEN;\n                    }\n                }\n                histp++;\n            }\n            first = ptr->bmin;\n            last = ptr->bmax;\n            break;\n    }\n    /* find median point */\n    sum2 = ptr->total / 2;\n    histp = &hist2[first];\n    sum = 0;\n    for (i = first; i <= last && (sum += *histp++) < sum2; ++i)\n        ;\n    if (i == first)\n        i++;\n\n    /* Create new box, re-allocate points */\n    new = freeboxes;\n    freeboxes = new->next;\n    if (freeboxes)\n        freeboxes->prev = NULL;\n    if (usedboxes)\n        usedboxes->prev = new;\n    new->next = usedboxes;\n    usedboxes = new;\n\n    histp = &hist2[first];\n    for (sum1 = 0, j = first; j < i; j++)\n        sum1 += *histp++;\n    for (sum2 = 0, j = i; j <= last; j++)\n        sum2 += *histp++;\n    new->total = sum1;\n    ptr->total = sum2;\n\n    new->rmin = ptr->rmin;\n    new->rmax = ptr->rmax;\n    new->gmin = ptr->gmin;\n    new->gmax = ptr->gmax;\n    new->bmin = ptr->bmin;\n    new->bmax = ptr->bmax;\n    switch (axis)\n    {\n        case RED:\n            new->rmax = i - 1;\n            ptr->rmin = i;\n            break;\n        case GREEN:\n            new->gmax = i - 1;\n            ptr->gmin = i;\n            break;\n        case BLUE:\n            new->bmax = i - 1;\n            ptr->bmin = i;\n            break;\n    }\n    shrinkbox(new);\n    shrinkbox(ptr);\n}",
+      "fn_code_pos": [
+        [
+          461,
+          0
+        ],
+        [
+          594,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "splitbox",
+        "parameters": {
+          "ptr": "Colorbox"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void shrinkbox(Colorbox *box)\n{\n    register uint32_t *histp;\n    register int ir, ig, ib;\n\n    if (box->rmax > box->rmin)\n    {\n        for (ir = box->rmin; ir <= box->rmax; ++ir)\n            for (ig = box->gmin; ig <= box->gmax; ++ig)\n            {\n                histp = &histogram[ir][ig][box->bmin];\n                for (ib = box->bmin; ib <= box->bmax; ++ib)\n                    if (*histp++ != 0)\n                    {\n                        box->rmin = ir;\n                        goto have_rmin;\n                    }\n            }\n    have_rmin:\n        if (box->rmax > box->rmin)\n            for (ir = box->rmax; ir >= box->rmin; --ir)\n                for (ig = box->gmin; ig <= box->gmax; ++ig)\n                {\n                    histp = &histogram[ir][ig][box->bmin];\n                    ib = box->bmin;\n                    for (; ib <= box->bmax; ++ib)\n                        if (*histp++ != 0)\n                        {\n                            box->rmax = ir;\n                            goto have_rmax;\n                        }\n                }\n    }\nhave_rmax:\n    if (box->gmax > box->gmin)\n    {\n        for (ig = box->gmin; ig <= box->gmax; ++ig)\n            for (ir = box->rmin; ir <= box->rmax; ++ir)\n            {\n                histp = &histogram[ir][ig][box->bmin];\n                for (ib = box->bmin; ib <= box->bmax; ++ib)\n                    if (*histp++ != 0)\n                    {\n                        box->gmin = ig;\n                        goto have_gmin;\n                    }\n            }\n    have_gmin:\n        if (box->gmax > box->gmin)\n            for (ig = box->gmax; ig >= box->gmin; --ig)\n                for (ir = box->rmin; ir <= box->rmax; ++ir)\n                {\n                    histp = &histogram[ir][ig][box->bmin];\n                    ib = box->bmin;\n                    for (; ib <= box->bmax; ++ib)\n                        if (*histp++ != 0)\n                        {\n                            box->gmax = ig;\n                            goto have_gmax;\n                        }\n                }\n    }\nhave_gmax:\n    if (box->bmax > box->bmin)\n    {\n        for (ib = box->bmin; ib <= box->bmax; ++ib)\n            for (ir = box->rmin; ir <= box->rmax; ++ir)\n            {\n                histp = &histogram[ir][box->gmin][ib];\n                for (ig = box->gmin; ig <= box->gmax; ++ig)\n                {\n                    if (*histp != 0)\n                    {\n                        box->bmin = ib;\n                        goto have_bmin;\n                    }\n                    histp += B_LEN;\n                }\n            }\n    have_bmin:\n        if (box->bmax > box->bmin)\n            for (ib = box->bmax; ib >= box->bmin; --ib)\n                for (ir = box->rmin; ir <= box->rmax; ++ir)\n                {\n                    histp = &histogram[ir][box->gmin][ib];\n                    ig = box->gmin;\n                    for (; ig <= box->gmax; ++ig)\n                    {\n                        if (*histp != 0)\n                        {\n                            box->bmax = ib;\n                            goto have_bmax;\n                        }\n                        histp += B_LEN;\n                    }\n                }\n    }\nhave_bmax:;\n}",
+      "fn_code_pos": [
+        [
+          596,
+          0
+        ],
+        [
+          694,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "shrinkbox",
+        "parameters": {
+          "box": "Colorbox"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static C_cell *create_colorcell(int red, int green, int blue)\n{\n    register int ir, ig, ib, i;\n    register C_cell *ptr;\n    int mindist, next_n;\n    register int tmp, dist, n;\n\n    ir = red >> (COLOR_DEPTH - C_DEPTH);\n    ig = green >> (COLOR_DEPTH - C_DEPTH);\n    ib = blue >> (COLOR_DEPTH - C_DEPTH);\n    ptr = (C_cell *)_TIFFmalloc(sizeof(C_cell));\n    *(ColorCells + ir * C_LEN * C_LEN + ig * C_LEN + ib) = ptr;\n    ptr->num_ents = 0;\n\n    /*\n     * Step 1: find all colors inside this cell, while we're at\n     *\t   it, find distance of centermost point to furthest corner\n     */\n    mindist = 99999999;\n    for (i = 0; i < num_colors; ++i)\n    {\n        if (rm[i] >> (COLOR_DEPTH - C_DEPTH) != ir ||\n            gm[i] >> (COLOR_DEPTH - C_DEPTH) != ig ||\n            bm[i] >> (COLOR_DEPTH - C_DEPTH) != ib)\n            continue;\n        ptr->entries[ptr->num_ents][0] = i;\n        ptr->entries[ptr->num_ents][1] = 0;\n        ++ptr->num_ents;\n        tmp = rm[i] - red;\n        if (tmp < (MAX_COLOR / C_LEN / 2))\n            tmp = MAX_COLOR / C_LEN - 1 - tmp;\n        dist = tmp * tmp;\n        tmp = gm[i] - green;\n        if (tmp < (MAX_COLOR / C_LEN / 2))\n            tmp = MAX_COLOR / C_LEN - 1 - tmp;\n        dist += tmp * tmp;\n        tmp = bm[i] - blue;\n        if (tmp < (MAX_COLOR / C_LEN / 2))\n            tmp = MAX_COLOR / C_LEN - 1 - tmp;\n        dist += tmp * tmp;\n        if (dist < mindist)\n            mindist = dist;\n    }\n\n    /*\n     * Step 3: find all points within that distance to cell.\n     */\n    for (i = 0; i < num_colors; ++i)\n    {\n        if (rm[i] >> (COLOR_DEPTH - C_DEPTH) == ir &&\n            gm[i] >> (COLOR_DEPTH - C_DEPTH) == ig &&\n            bm[i] >> (COLOR_DEPTH - C_DEPTH) == ib)\n            continue;\n        dist = 0;\n        if ((tmp = red - rm[i]) > 0 ||\n            (tmp = rm[i] - (red + MAX_COLOR / C_LEN - 1)) > 0)\n            dist += tmp * tmp;\n        if ((tmp = green - gm[i]) > 0 ||\n            (tmp = gm[i] - (green + MAX_COLOR / C_LEN - 1)) > 0)\n            dist += tmp * tmp;\n        if ((tmp = blue - bm[i]) > 0 ||\n            (tmp = bm[i] - (blue + MAX_COLOR / C_LEN - 1)) > 0)\n            dist += tmp * tmp;\n        if (dist < mindist)\n        {\n            ptr->entries[ptr->num_ents][0] = i;\n            ptr->entries[ptr->num_ents][1] = dist;\n            ++ptr->num_ents;\n        }\n    }\n\n    /*\n     * Sort color cells by distance, use cheap exchange sort\n     */\n    for (n = ptr->num_ents - 1; n > 0; n = next_n)\n    {\n        next_n = 0;\n        for (i = 0; i < n; ++i)\n            if (ptr->entries[i][1] > ptr->entries[i + 1][1])\n            {\n                tmp = ptr->entries[i][0];\n                ptr->entries[i][0] = ptr->entries[i + 1][0];\n                ptr->entries[i + 1][0] = tmp;\n                tmp = ptr->entries[i][1];\n                ptr->entries[i][1] = ptr->entries[i + 1][1];\n                ptr->entries[i + 1][1] = tmp;\n                next_n = i;\n            }\n    }\n    return (ptr);\n}",
+      "fn_code_pos": [
+        [
+          696,
+          0
+        ],
+        [
+          786,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "create_colorcell",
+        "parameters": {
+          "red": "int",
+          "green": "int",
+          "blue": "int"
+        },
+        "return_type": "C_cell"
+      }
+    },
+    {
+      "fn_code": "static void map_colortable(void)\n{\n    register uint32_t *histp = &histogram[0][0][0];\n    register C_cell *cell = NULL;\n    register int j, tmp, d2, dist;\n    int ir, ig, ib, i;\n\n    for (ir = 0; ir < B_LEN; ++ir)\n        for (ig = 0; ig < B_LEN; ++ig)\n            for (ib = 0; ib < B_LEN; ++ib, histp++)\n            {\n                if (*histp == 0)\n                {\n                    *histp = -1;\n                    continue;\n                }\n                cell = *(ColorCells +\n                         (((ir >> (B_DEPTH - C_DEPTH)) << C_DEPTH * 2) +\n                          ((ig >> (B_DEPTH - C_DEPTH)) << C_DEPTH) +\n                          (ib >> (B_DEPTH - C_DEPTH))));\n                if (cell == NULL)\n                    cell =\n                        create_colorcell(ir << COLOR_SHIFT, ig << COLOR_SHIFT,\n                                         ib << COLOR_SHIFT);\n                dist = 9999999;\n                for (i = 0; i < cell->num_ents && dist > cell->entries[i][1];\n                     ++i)\n                {\n                    j = cell->entries[i][0];\n                    d2 = rm[j] - (ir << COLOR_SHIFT);\n                    d2 *= d2;\n                    tmp = gm[j] - (ig << COLOR_SHIFT);\n                    d2 += tmp * tmp;\n                    tmp = bm[j] - (ib << COLOR_SHIFT);\n                    d2 += tmp * tmp;\n                    if (d2 < dist)\n                    {\n                        dist = d2;\n                        *histp = j;\n                    }\n                }\n            }\n    _TIFFfree(cell);\n}",
+      "fn_code_pos": [
+        [
+          788,
+          0
+        ],
+        [
+          831,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "map_colortable",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void quant(TIFF *in, TIFF *out)\n{\n    unsigned char *outline, *inputline;\n    register unsigned char *outptr, *inptr;\n    register uint32_t i, j;\n    register int red, green, blue;\n\n    inputline = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(in));\n    outline = (unsigned char *)_TIFFmalloc(imagewidth);\n    for (i = 0; i < imagelength; i++)\n    {\n        if (TIFFReadScanline(in, inputline, i, 0) <= 0)\n            break;\n        inptr = inputline;\n        outptr = outline;\n        for (j = 0; j < imagewidth; j++)\n        {\n            red = *inptr++ >> COLOR_SHIFT;\n            green = *inptr++ >> COLOR_SHIFT;\n            blue = *inptr++ >> COLOR_SHIFT;\n            *outptr++ = (unsigned char)histogram[red][green][blue];\n        }\n        if (TIFFWriteScanline(out, outline, i, 0) < 0)\n            break;\n    }\n    _TIFFfree(inputline);\n    _TIFFfree(outline);\n}",
+      "fn_code_pos": [
+        [
+          838,
+          0
+        ],
+        [
+          865,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "quant",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void quant_fsdither(TIFF *in, TIFF *out)\n{\n    unsigned char *outline, *inputline, *inptr;\n    short *thisline, *nextline;\n    register unsigned char *outptr;\n    register short *thisptr, *nextptr;\n    register uint32_t i, j;\n    uint32_t imax, jmax;\n    int lastline, lastpixel;\n\n    imax = imagelength - 1;\n    jmax = imagewidth - 1;\n    inputline = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(in));\n    thisline = (short *)_TIFFmalloc(imagewidth * 3 * sizeof(short));\n    nextline = (short *)_TIFFmalloc(imagewidth * 3 * sizeof(short));\n    outline = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(out));\n\n    GetInputLine(in, 0, goto bad); /* get first line */\n    for (i = 1; i <= imagelength; ++i)\n    {\n        SWAP(short *, thisline, nextline);\n        lastline = (i >= imax);\n        if (i <= imax)\n            GetInputLine(in, i, break);\n        thisptr = thisline;\n        nextptr = nextline;\n        outptr = outline;\n        for (j = 0; j < imagewidth; ++j)\n        {\n            int red, green, blue;\n            register int oval, r2, g2, b2;\n\n            lastpixel = (j == jmax);\n            GetComponent(*thisptr++, r2, red);\n            GetComponent(*thisptr++, g2, green);\n            GetComponent(*thisptr++, b2, blue);\n            oval = histogram[r2][g2][b2];\n            if (oval == -1)\n            {\n                int ci;\n                register int cj, tmp, d2, dist;\n                register C_cell *cell;\n\n                cell = *(ColorCells +\n                         (((r2 >> (B_DEPTH - C_DEPTH)) << C_DEPTH * 2) +\n                          ((g2 >> (B_DEPTH - C_DEPTH)) << C_DEPTH) +\n                          (b2 >> (B_DEPTH - C_DEPTH))));\n                if (cell == NULL)\n                    cell = create_colorcell(red, green, blue);\n                dist = 9999999;\n                for (ci = 0; ci < cell->num_ents && dist > cell->entries[ci][1];\n                     ++ci)\n                {\n                    cj = cell->entries[ci][0];\n                    d2 = (rm[cj] >> COLOR_SHIFT) - r2;\n                    d2 *= d2;\n                    tmp = (gm[cj] >> COLOR_SHIFT) - g2;\n                    d2 += tmp * tmp;\n                    tmp = (bm[cj] >> COLOR_SHIFT) - b2;\n                    d2 += tmp * tmp;\n                    if (d2 < dist)\n                    {\n                        dist = d2;\n                        oval = cj;\n                    }\n                }\n                histogram[r2][g2][b2] = oval;\n            }\n            *outptr++ = oval;\n            red -= rm[oval];\n            green -= gm[oval];\n            blue -= bm[oval];\n            if (!lastpixel)\n            {\n                thisptr[0] += blue * 7 / 16;\n                thisptr[1] += green * 7 / 16;\n                thisptr[2] += red * 7 / 16;\n            }\n            if (!lastline)\n            {\n                if (j != 0)\n                {\n                    nextptr[-3] += blue * 3 / 16;\n                    nextptr[-2] += green * 3 / 16;\n                    nextptr[-1] += red * 3 / 16;\n                }\n                nextptr[0] += blue * 5 / 16;\n                nextptr[1] += green * 5 / 16;\n                nextptr[2] += red * 5 / 16;\n                if (!lastpixel)\n                {\n                    nextptr[3] += blue / 16;\n                    nextptr[4] += green / 16;\n                    nextptr[5] += red / 16;\n                }\n                nextptr += 3;\n            }\n        }\n        if (TIFFWriteScanline(out, outline, i - 1, 0) < 0)\n            break;\n    }\nbad:\n    _TIFFfree(inputline);\n    _TIFFfree(thisline);\n    _TIFFfree(nextline);\n    _TIFFfree(outline);\n}",
+      "fn_code_pos": [
+        [
+          901,
+          0
+        ],
+        [
+          1007,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "quant_fsdither",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "get_histogram(TIFF *, Colorbox *)",
+      "fn_dec_pos": [
+        [
+          106,
+          12
+        ],
+        [
+          106,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "get_histogram",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "splitbox(Colorbox *)",
+      "fn_dec_pos": [
+        [
+          107,
+          12
+        ],
+        [
+          107,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "splitbox",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "shrinkbox(Colorbox *)",
+      "fn_dec_pos": [
+        [
+          108,
+          12
+        ],
+        [
+          108,
+          33
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "shrinkbox",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "map_colortable(void)",
+      "fn_dec_pos": [
+        [
+          109,
+          12
+        ],
+        [
+          109,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "map_colortable",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "quant(TIFF *, TIFF *)",
+      "fn_dec_pos": [
+        [
+          110,
+          12
+        ],
+        [
+          110,
+          33
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "quant",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "quant_fsdither(TIFF *, TIFF *)",
+      "fn_dec_pos": [
+        [
+          111,
+          12
+        ],
+        [
+          111,
+          42
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "quant_fsdither",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "largest_box(void)",
+      "fn_dec_pos": [
+        [
+          112,
+          17
+        ],
+        [
+          112,
+          34
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "largest_box",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "usage(int)",
+      "fn_dec_pos": [
+        [
+          114,
+          12
+        ],
+        [
+          114,
+          22
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "processCompressOptions(char *)",
+      "fn_dec_pos": [
+        [
+          115,
+          11
+        ],
+        [
+          115,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "largest_box(void)",
+      "fn_dec_pos": [
+        [
+          447,
+          17
+        ],
+        [
+          447,
+          34
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "largest_box",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "create_colorcell(int red, int green, int blue)",
+      "fn_dec_pos": [
+        [
+          696,
+          15
+        ],
+        [
+          696,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "create_colorcell",
+        "parameters": {
+          "red": "int",
+          "green": "int",
+          "blue": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "SWAP(short *, thisline, nextline)",
+      "fn_dec_pos": [
+        [
+          921,
+          8
+        ],
+        [
+          921,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SWAP",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct colorbox\n{\n    struct colorbox *next, *prev;\n    int rmin, rmax;\n    int gmin, gmax;\n    int bmin, bmax;\n    uint32_t total;\n} Colorbox;",
+      {
+        "*next": "struct colorbox",
+        "rmin": "int",
+        "gmin": "int",
+        "bmin": "int",
+        "total": "uint32_t"
+      },
+      "Colorbox",
+      [
+        76,
+        0
+      ],
+      [
+        83,
+        11
+      ]
+    ],
+    [
+      "typedef struct\n{\n    int num_ents;\n    int entries[MAX_CMAP_SIZE][2];\n} C_cell;",
+      {
+        "num_ents": "int",
+        "entries[MAX_CMAP_SIZE][2]": "int"
+      },
+      "C_cell",
+      [
+        85,
+        0
+      ],
+      [
+        89,
+        9
+      ]
+    ],
+    [
+      "typedef struct colorbox\n{\n    struct colorbox *next, *prev;\n    int rmin, rmax;\n    int gmin, gmax;\n    int bmin, bmax;\n    uint32_t total;\n} Colorbox;",
+      {
+        "*next": "struct colorbox",
+        "rmin": "int",
+        "gmin": "int",
+        "bmin": "int",
+        "total": "uint32_t"
+      },
+      "Colorbox",
+      [
+        76,
+        0
+      ],
+      [
+        83,
+        11
+      ]
+    ],
+    [
+      "struct colorbox",
+      {},
+      "",
+      [
+        78,
+        4
+      ],
+      [
+        78,
+        19
+      ]
+    ],
+    [
+      "typedef struct\n{\n    int num_ents;\n    int entries[MAX_CMAP_SIZE][2];\n} C_cell;",
+      {
+        "num_ents": "int",
+        "entries[MAX_CMAP_SIZE][2]": "int"
+      },
+      "C_cell",
+      [
+        85,
+        0
+      ],
+      [
+        89,
+        9
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        40,
+        0
+      ],
+      [
+        41,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        41,
+        0
+      ],
+      [
+        42,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        43,
+        0
+      ],
+      [
+        44,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        44,
+        0
+      ],
+      [
+        45,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        45,
+        0
+      ],
+      [
+        46,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        48,
+        0
+      ],
+      [
+        49,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        51,
+        0
+      ],
+      [
+        52,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": [
+    [
+      "enum\n    {\n        RED,\n        GREEN,\n        BLUE\n    }",
+      {
+        "RED": "",
+        "GREEN": "",
+        "BLUE": ""
+      },
+      "",
+      [
+        470,
+        4
+      ],
+      [
+        475,
+        5
+      ]
+    ]
+  ]
+}

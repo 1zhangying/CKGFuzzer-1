@@ -1,0 +1,1471 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "struct ares_addrinfo_cname *ares__malloc_addrinfo_cname()\n{\n  struct ares_addrinfo_cname *cname = ares_malloc(sizeof(struct ares_addrinfo_cname));\n  if (!cname)\n    return NULL;\n\n  *cname = empty_addrinfo_cname;\n  return cname;\n}",
+      "fn_code_pos": [
+        [
+          115,
+          0
+        ],
+        [
+          123,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__malloc_addrinfo_cname",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "struct ares_addrinfo_cname *ares__append_addrinfo_cname(struct ares_addrinfo_cname **head)\n{\n  struct ares_addrinfo_cname *tail = ares__malloc_addrinfo_cname();\n  struct ares_addrinfo_cname *last = *head;\n  if (!last)\n    {\n      *head = tail;\n      return tail;\n    }\n\n  while (last->next)\n    {\n      last = last->next;\n    }\n\n  last->next = tail;\n  return tail;\n}",
+      "fn_code_pos": [
+        [
+          125,
+          0
+        ],
+        [
+          142,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__append_addrinfo_cname",
+        "parameters": {
+          "head": "struct ares_addrinfo_cname"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void ares__addrinfo_cat_cnames(struct ares_addrinfo_cname **head,\n                               struct ares_addrinfo_cname *tail)\n{\n  struct ares_addrinfo_cname *last = *head;\n  if (!last)\n    {\n      *head = tail;\n      return;\n    }\n\n  while (last->next)\n    {\n      last = last->next;\n    }\n\n  last->next = tail;\n}",
+      "fn_code_pos": [
+        [
+          144,
+          0
+        ],
+        [
+          160,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__addrinfo_cat_cnames",
+        "parameters": {
+          "head": "struct ares_addrinfo_cname",
+          "tail": "struct ares_addrinfo_cname"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "struct ares_addrinfo *ares__malloc_addrinfo()\n{\n  struct ares_addrinfo *ai = ares_malloc(sizeof(struct ares_addrinfo));\n  if (!ai)\n    return NULL;\n\n  *ai = empty_addrinfo;\n  return ai;\n}",
+      "fn_code_pos": [
+        [
+          162,
+          0
+        ],
+        [
+          170,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__malloc_addrinfo",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "struct ares_addrinfo_node *ares__malloc_addrinfo_node()\n{\n  struct ares_addrinfo_node *node =\n      ares_malloc(sizeof(struct ares_addrinfo_node));\n  if (!node)\n    return NULL;\n\n  *node = empty_addrinfo_node;\n  return node;\n}",
+      "fn_code_pos": [
+        [
+          172,
+          0
+        ],
+        [
+          181,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__malloc_addrinfo_node",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "struct ares_addrinfo_node *ares__append_addrinfo_node(struct ares_addrinfo_node **head)\n{\n  struct ares_addrinfo_node *tail = ares__malloc_addrinfo_node();\n  struct ares_addrinfo_node *last = *head;\n  if (!last)\n    {\n      *head = tail;\n      return tail;\n    }\n\n  while (last->ai_next)\n    {\n      last = last->ai_next;\n    }\n\n  last->ai_next = tail;\n  return tail;\n}",
+      "fn_code_pos": [
+        [
+          184,
+          0
+        ],
+        [
+          201,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__append_addrinfo_node",
+        "parameters": {
+          "head": "struct ares_addrinfo_node"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void ares__addrinfo_cat_nodes(struct ares_addrinfo_node **head,\n                              struct ares_addrinfo_node *tail)\n{\n  struct ares_addrinfo_node *last = *head;\n  if (!last)\n    {\n      *head = tail;\n      return;\n    }\n\n  while (last->ai_next)\n    {\n      last = last->ai_next;\n    }\n\n  last->ai_next = tail;\n}",
+      "fn_code_pos": [
+        [
+          203,
+          0
+        ],
+        [
+          219,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__addrinfo_cat_nodes",
+        "parameters": {
+          "head": "struct ares_addrinfo_node",
+          "tail": "struct ares_addrinfo_node"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static unsigned short lookup_service(const char *service, int flags)\n{\n  const char *proto;\n  struct servent *sep;\n#ifdef HAVE_GETSERVBYNAME_R\n  struct servent se;\n  char tmpbuf[4096];\n#endif\n\n  if (service)\n    {\n      if (flags & ARES_NI_UDP)\n        proto = \"udp\";\n      else if (flags & ARES_NI_SCTP)\n        proto = \"sctp\";\n      else if (flags & ARES_NI_DCCP)\n        proto = \"dccp\";\n      else\n        proto = \"tcp\";\n#ifdef HAVE_GETSERVBYNAME_R\n      memset(&se, 0, sizeof(se));\n      sep = &se;\n      memset(tmpbuf, 0, sizeof(tmpbuf));\n#if GETSERVBYNAME_R_ARGS == 6\n      if (getservbyname_r(service, proto, &se, (void *)tmpbuf, sizeof(tmpbuf),\n                          &sep) != 0)\n        sep = NULL; /* LCOV_EXCL_LINE: buffer large so this never fails */\n#elif GETSERVBYNAME_R_ARGS == 5\n      sep =\n          getservbyname_r(service, proto, &se, (void *)tmpbuf, sizeof(tmpbuf));\n#elif GETSERVBYNAME_R_ARGS == 4\n      if (getservbyname_r(service, proto, &se, (void *)tmpbuf) != 0)\n        sep = NULL;\n#else\n      /* Lets just hope the OS uses TLS! */\n      sep = getservbyname(service, proto);\n#endif\n#else\n        /* Lets just hope the OS uses TLS! */\n#if (defined(NETWARE) && !defined(__NOVELL_LIBC__))\n      sep = getservbyname(service, (char *)proto);\n#else\n      sep = getservbyname(service, proto);\n#endif\n#endif\n      return (sep ? ntohs((unsigned short)sep->s_port) : 0);\n    }\n  return 0;\n}",
+      "fn_code_pos": [
+        [
+          224,
+          0
+        ],
+        [
+          272,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "lookup_service",
+        "parameters": {
+          "service": "char",
+          "flags": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static int fake_addrinfo(const char *name,\n                         unsigned short port,\n                         const struct ares_addrinfo_hints *hints,\n                         struct ares_addrinfo *ai,\n                         ares_addrinfo_callback callback,\n                         void *arg)\n{\n  struct ares_addrinfo_cname *cname;\n  int status = ARES_SUCCESS;\n  int result = 0;\n  int family = hints->ai_family;\n  if (family == AF_INET || family == AF_INET6 || family == AF_UNSPEC)\n    {\n      /* It only looks like an IP address if it's all numbers and dots. */\n      int numdots = 0, valid = 1;\n      const char *p;\n      for (p = name; *p; p++)\n        {\n          if (!ISDIGIT(*p) && *p != '.')\n            {\n              valid = 0;\n              break;\n            }\n          else if (*p == '.')\n            {\n              numdots++;\n            }\n        }\n\n      /* if we don't have 3 dots, it is illegal\n       * (although inet_pton doesn't think so).\n       */\n      if (numdots != 3 || !valid)\n        result = 0;\n      else\n        {\n          struct in_addr addr4;\n          result = ares_inet_pton(AF_INET, name, &addr4) < 1 ? 0 : 1;\n          if (result)\n            {\n              status = ares_append_ai_node(AF_INET, port, 0, &addr4, &ai->nodes);\n              if (status != ARES_SUCCESS)\n                {\n                  callback(arg, status, 0, NULL);\n                  return 1;\n                }\n            }\n        }\n    }\n\n  if (family == AF_INET6 || family == AF_UNSPEC)\n    {\n      struct ares_in6_addr addr6;\n      result = ares_inet_pton(AF_INET6, name, &addr6) < 1 ? 0 : 1;\n      if (result)\n        {\n          status = ares_append_ai_node(AF_INET6, port, 0, &addr6, &ai->nodes);\n          if (status != ARES_SUCCESS)\n            {\n              callback(arg, status, 0, NULL);\n              return 1;\n            }\n        }\n    }\n\n  if (!result)\n    return 0;\n\n  if (hints->ai_flags & ARES_AI_CANONNAME)\n    {\n      cname = ares__append_addrinfo_cname(&ai->cnames);\n      if (!cname)\n        {\n          ares_freeaddrinfo(ai);\n          callback(arg, ARES_ENOMEM, 0, NULL);\n          return 1;\n        }\n\n      /* Duplicate the name, to avoid a constness violation. */\n      cname->name = ares_strdup(name);\n      if (!cname->name)\n        {\n          ares_freeaddrinfo(ai);\n          callback(arg, ARES_ENOMEM, 0, NULL);\n          return 1;\n        }\n    }\n\n  ai->nodes->ai_socktype = hints->ai_socktype;\n  ai->nodes->ai_protocol = hints->ai_protocol;\n\n  callback(arg, ARES_SUCCESS, 0, ai);\n  return 1;\n}",
+      "fn_code_pos": [
+        [
+          278,
+          0
+        ],
+        [
+          371,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "fake_addrinfo",
+        "parameters": {
+          "name": "char",
+          "port": "unsigned short",
+          "hints": "struct ares_addrinfo_hints",
+          "ai": "struct ares_addrinfo",
+          "callback": "ares_addrinfo_callback",
+          "arg": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void end_hquery(struct host_query *hquery, int status)\n{\n  struct ares_addrinfo_node sentinel;\n  struct ares_addrinfo_node *next;\n  if (status == ARES_SUCCESS)\n    {\n      if (!(hquery->hints.ai_flags & ARES_AI_NOSORT) && hquery->ai->nodes)\n        {\n          sentinel.ai_next = hquery->ai->nodes;\n          ares__sortaddrinfo(hquery->channel, &sentinel);\n          hquery->ai->nodes = sentinel.ai_next;\n        }\n      next = hquery->ai->nodes;\n\n      while (next)\n        {\n          next->ai_socktype = hquery->hints.ai_socktype;\n          next->ai_protocol = hquery->hints.ai_protocol;\n          next = next->ai_next;\n        }\n    }\n  else\n    {\n      /* Clean up what we have collected by so far. */\n      ares_freeaddrinfo(hquery->ai);\n      hquery->ai = NULL;\n    }\n\n  hquery->callback(hquery->arg, status, hquery->timeouts, hquery->ai);\n  ares_free(hquery->name);\n  ares_free(hquery);\n}",
+      "fn_code_pos": [
+        [
+          373,
+          0
+        ],
+        [
+          404,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "end_hquery",
+        "parameters": {
+          "hquery": "struct host_query",
+          "status": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int file_lookup(struct host_query *hquery)\n{\n  FILE *fp;\n  int error;\n  int status;\n  const char *path_hosts = NULL;\n\n  if (hquery->hints.ai_flags & ARES_AI_ENVHOSTS)\n    {\n      path_hosts = getenv(\"CARES_HOSTS\");\n    }\n\n  if (!path_hosts)\n    {\n#ifdef WIN32\n      char PATH_HOSTS[MAX_PATH];\n      win_platform platform;\n\n      PATH_HOSTS[0] = '\\0';\n\n      platform = ares__getplatform();\n\n      if (platform == WIN_NT)\n        {\n          char tmp[MAX_PATH];\n          HKEY hkeyHosts;\n\n          if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, WIN_NS_NT_KEY, 0, KEY_READ,\n                           &hkeyHosts) == ERROR_SUCCESS)\n            {\n              DWORD dwLength = MAX_PATH;\n              RegQueryValueExA(hkeyHosts, DATABASEPATH, NULL, NULL, (LPBYTE)tmp,\n                              &dwLength);\n              ExpandEnvironmentStringsA(tmp, PATH_HOSTS, MAX_PATH);\n              RegCloseKey(hkeyHosts);\n            }\n        }\n      else if (platform == WIN_9X)\n        GetWindowsDirectoryA(PATH_HOSTS, MAX_PATH);\n      else\n        return ARES_ENOTFOUND;\n\n      strcat(PATH_HOSTS, WIN_PATH_HOSTS);\n      path_hosts = PATH_HOSTS;\n\n#elif defined(WATT32)\n      const char *PATH_HOSTS = _w32_GetHostsFile();\n\n      if (!PATH_HOSTS)\n        return ARES_ENOTFOUND;\n#endif\n      path_hosts = PATH_HOSTS;\n    }\n\n  fp = fopen(path_hosts, \"r\");\n  if (!fp)\n    {\n      error = ERRNO;\n      switch (error)\n        {\n        case ENOENT:\n        case ESRCH:\n          return ARES_ENOTFOUND;\n        default:\n          DEBUGF(fprintf(stderr, \"fopen() failed with error: %d %s\\n\", error,\n                         strerror(error)));\n          DEBUGF(fprintf(stderr, \"Error opening file: %s\\n\", path_hosts));\n          return ARES_EFILE;\n        }\n    }\n  status = ares__readaddrinfo(fp, hquery->name, hquery->port, &hquery->hints, hquery->ai);\n  fclose(fp);\n\n  /* RFC6761 section 6.3 #3 states that \"Name resolution APIs and libraries\n   * SHOULD recognize localhost names as special and SHOULD always return the\n   * IP loopback address for address queries\" */\n  if (status == ARES_ENOTFOUND && strcmp(hquery->name, \"localhost\") == 0)\n    {\n      return ares__addrinfo_localhost(hquery->name, hquery->port,\n                                      &hquery->hints, hquery->ai);\n    }\n\n  return status;\n}",
+      "fn_code_pos": [
+        [
+          406,
+          0
+        ],
+        [
+          489,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_lookup",
+        "parameters": {
+          "hquery": "struct host_query"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void next_lookup(struct host_query *hquery, int status)\n{\n  switch (*hquery->remaining_lookups)\n    {\n      case 'b':\n          /* RFC6761 section 6.3 #3 says \"Name resolution APIs SHOULD NOT send\n           * queries for localhost names to their configured caching DNS\n           * server(s).\" */\n          if (strcmp(hquery->name, \"localhost\") != 0)\n            {\n              /* DNS lookup */\n              if (next_dns_lookup(hquery))\n                break;\n            }\n\n          hquery->remaining_lookups++;\n          next_lookup(hquery, status);\n          break;\n\n      case 'f':\n          /* Host file lookup */\n          if (file_lookup(hquery) == ARES_SUCCESS)\n            {\n              end_hquery(hquery, ARES_SUCCESS);\n              break;\n            }\n          hquery->remaining_lookups++;\n          next_lookup(hquery, status);\n          break;\n      default:\n          /* No lookup left */\n         end_hquery(hquery, status);\n         break;\n    }\n}",
+      "fn_code_pos": [
+        [
+          491,
+          0
+        ],
+        [
+          525,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "next_lookup",
+        "parameters": {
+          "hquery": "struct host_query",
+          "status": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void host_callback(void *arg, int status, int timeouts,\n                          unsigned char *abuf, int alen)\n{\n  struct host_query *hquery = (struct host_query*)arg;\n  int addinfostatus = ARES_SUCCESS;\n  hquery->timeouts += timeouts;\n  hquery->remaining--;\n\n  if (status == ARES_SUCCESS)\n    {\n      addinfostatus = ares__parse_into_addrinfo(abuf, alen, 1, hquery->port, hquery->ai);\n    }\n\n  if (!hquery->remaining)\n    {\n      if (addinfostatus != ARES_SUCCESS && addinfostatus != ARES_ENODATA)\n        {\n          /* error in parsing result e.g. no memory */\n          end_hquery(hquery, addinfostatus);\n        }\n      else if (hquery->ai->nodes)\n        {\n          /* at least one query ended with ARES_SUCCESS */\n          end_hquery(hquery, ARES_SUCCESS);\n        }\n      else if (status == ARES_ENOTFOUND || status == ARES_ENODATA ||\n               addinfostatus == ARES_ENODATA)\n        {\n          if (status == ARES_ENODATA || addinfostatus == ARES_ENODATA)\n            hquery->nodata_cnt++;\n          next_lookup(hquery, hquery->nodata_cnt?ARES_ENODATA:status);\n        }\n      else if (status == ARES_EDESTRUCTION)\n        {\n          /* NOTE: Could also be ARES_EDESTRUCTION.  We need to only call this\n           * once all queries (there can be multiple for getaddrinfo) are\n           * terminated.  */\n          end_hquery(hquery, status);\n        }\n      else\n        {\n          end_hquery(hquery, status);\n        }\n    }\n\n  /* at this point we keep on waiting for the next query to finish */\n}",
+      "fn_code_pos": [
+        [
+          527,
+          0
+        ],
+        [
+          573,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "host_callback",
+        "parameters": {
+          "arg": "void",
+          "status": "int",
+          "timeouts": "int",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void ares_getaddrinfo(ares_channel channel,\n                      const char* name, const char* service,\n                      const struct ares_addrinfo_hints* hints,\n                      ares_addrinfo_callback callback, void* arg)\n{\n  struct host_query *hquery;\n  unsigned short port = 0;\n  int family;\n  struct ares_addrinfo *ai;\n  char *alias_name = NULL;\n  int status;\n\n  if (!hints)\n    {\n      hints = &default_hints;\n    }\n\n  family = hints->ai_family;\n\n  /* Right now we only know how to look up Internet addresses\n     and unspec means try both basically. */\n  if (family != AF_INET &&\n      family != AF_INET6 &&\n      family != AF_UNSPEC)\n    {\n      callback(arg, ARES_ENOTIMP, 0, NULL);\n      return;\n    }\n\n  if (ares__is_onion_domain(name))\n    {\n      callback(arg, ARES_ENOTFOUND, 0, NULL);\n      return;\n    }\n\n  /* perform HOSTALIAS resolution (technically this function does some other\n   * things we are going to ignore) */\n  status = ares__single_domain(channel, name, &alias_name);\n  if (status != ARES_SUCCESS) {\n    callback(arg, status, 0, NULL);\n    return;\n  }\n\n  if (alias_name)\n    name = alias_name;\n\n  if (service)\n    {\n      if (hints->ai_flags & ARES_AI_NUMERICSERV)\n        {\n          port = (unsigned short)strtoul(service, NULL, 0);\n          if (!port)\n            {\n              ares_free(alias_name);\n              callback(arg, ARES_ESERVICE, 0, NULL);\n              return;\n            }\n        }\n      else\n        {\n          port = lookup_service(service, 0);\n          if (!port)\n            {\n              port = (unsigned short)strtoul(service, NULL, 0);\n              if (!port)\n                {\n                  ares_free(alias_name);\n                  callback(arg, ARES_ESERVICE, 0, NULL);\n                  return;\n                }\n            }\n        }\n    }\n\n  ai = ares__malloc_addrinfo();\n  if (!ai)\n    {\n      ares_free(alias_name);\n      callback(arg, ARES_ENOMEM, 0, NULL);\n      return;\n    }\n\n  if (fake_addrinfo(name, port, hints, ai, callback, arg))\n    {\n      ares_free(alias_name);\n      return;\n    }\n\n  /* Allocate and fill in the host query structure. */\n  hquery = ares_malloc(sizeof(struct host_query));\n  if (!hquery)\n    {\n      ares_free(alias_name);\n      ares_freeaddrinfo(ai);\n      callback(arg, ARES_ENOMEM, 0, NULL);\n      return;\n    }\n\n  hquery->name = ares_strdup(name);\n  ares_free(alias_name);\n  if (!hquery->name)\n    {\n      ares_free(hquery);\n      ares_freeaddrinfo(ai);\n      callback(arg, ARES_ENOMEM, 0, NULL);\n      return;\n    }\n\n  hquery->port = port;\n  hquery->channel = channel;\n  hquery->hints = *hints;\n  hquery->sent_family = -1; /* nothing is sent yet */\n  hquery->callback = callback;\n  hquery->arg = arg;\n  hquery->remaining_lookups = channel->lookups;\n  hquery->timeouts = 0;\n  hquery->ai = ai;\n  hquery->next_domain = -1;\n  hquery->remaining = 0;\n  hquery->nodata_cnt = 0;\n\n  /* Start performing lookups according to channel->lookups. */\n  next_lookup(hquery, ARES_ECONNREFUSED /* initial error code */);\n}",
+      "fn_code_pos": [
+        [
+          575,
+          0
+        ],
+        [
+          698,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_getaddrinfo",
+        "parameters": {
+          "channel": "ares_channel",
+          "name": "char",
+          "service": "char",
+          "hints": "struct ares_addrinfo_hints",
+          "callback": "ares_addrinfo_callback",
+          "arg": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int next_dns_lookup(struct host_query *hquery)\n{\n  char *s = NULL;\n  int is_s_allocated = 0;\n  int status;\n\n  /* if next_domain == -1 and as_is_first is true, try hquery->name */\n  if (hquery->next_domain == -1)\n    {\n      if (as_is_first(hquery))\n        {\n          s = hquery->name;\n        }\n      hquery->next_domain = 0;\n    }\n\n  /* if as_is_first is false, try hquery->name at last */\n  if (!s && hquery->next_domain == hquery->channel->ndomains) {\n    if (!as_is_first(hquery))\n      {\n        s = hquery->name;\n      }\n    hquery->next_domain++;\n  }\n\n  if (!s && hquery->next_domain < hquery->channel->ndomains && !as_is_only(hquery))\n    {\n      status = ares__cat_domain(\n          hquery->name,\n          hquery->channel->domains[hquery->next_domain++],\n          &s);\n      if (status == ARES_SUCCESS)\n        {\n          is_s_allocated = 1;\n        }\n    }\n\n  if (s)\n    {\n      switch (hquery->hints.ai_family)\n        {\n          case AF_INET:\n            hquery->remaining += 1;\n            ares_query(hquery->channel, s, C_IN, T_A, host_callback, hquery);\n            break;\n          case AF_INET6:\n            hquery->remaining += 1;\n            ares_query(hquery->channel, s, C_IN, T_AAAA, host_callback, hquery);\n            break;\n          case AF_UNSPEC:\n            hquery->remaining += 2;\n            ares_query(hquery->channel, s, C_IN, T_A, host_callback, hquery);\n            ares_query(hquery->channel, s, C_IN, T_AAAA, host_callback, hquery);\n            break;\n          default: break;\n        }\n      if (is_s_allocated)\n        {\n          ares_free(s);\n        }\n      return 1;\n    }\n  else\n    {\n      assert(!hquery->ai->nodes);\n      return 0;\n    }\n}",
+      "fn_code_pos": [
+        [
+          700,
+          0
+        ],
+        [
+          767,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "next_dns_lookup",
+        "parameters": {
+          "hquery": "struct host_query"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int as_is_first(const struct host_query* hquery)\n{\n  char* p;\n  int ndots = 0;\n  size_t nname = hquery->name?strlen(hquery->name):0;\n  for (p = hquery->name; *p; p++)\n    {\n      if (*p == '.')\n        {\n          ndots++;\n        }\n    }\n  if (nname && hquery->name[nname-1] == '.')\n    {\n      /* prevent ARES_EBADNAME for valid FQDN, where ndots < channel->ndots  */\n      return 1;\n    }\n  return ndots >= hquery->channel->ndots;\n}",
+      "fn_code_pos": [
+        [
+          769,
+          0
+        ],
+        [
+          787,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "as_is_first",
+        "parameters": {
+          "hquery": "struct host_query"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int as_is_only(const struct host_query* hquery)\n{\n  size_t nname = hquery->name?strlen(hquery->name):0;\n  if (nname && hquery->name[nname-1] == '.')\n    return 1;\n  return 0;\n}",
+      "fn_code_pos": [
+        [
+          789,
+          0
+        ],
+        [
+          795,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "as_is_only",
+        "parameters": {
+          "hquery": "struct host_query"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "host_callback(void *arg, int status, int timeouts,\n                          unsigned char *abuf, int alen)",
+      "fn_dec_pos": [
+        [
+          109,
+          12
+        ],
+        [
+          110,
+          56
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "host_callback",
+        "parameters": {
+          "arg": "void",
+          "status": "int",
+          "timeouts": "int",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "as_is_first(const struct host_query *hquery)",
+      "fn_dec_pos": [
+        [
+          111,
+          11
+        ],
+        [
+          111,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "as_is_first",
+        "parameters": {
+          "hquery": "struct host_query"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "as_is_only(const struct host_query* hquery)",
+      "fn_dec_pos": [
+        [
+          112,
+          11
+        ],
+        [
+          112,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "as_is_only",
+        "parameters": {
+          "hquery": "struct host_query"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "next_dns_lookup(struct host_query *hquery)",
+      "fn_dec_pos": [
+        [
+          113,
+          11
+        ],
+        [
+          113,
+          53
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "next_dns_lookup",
+        "parameters": {
+          "hquery": "struct host_query"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "ares__malloc_addrinfo_cname()",
+      "fn_dec_pos": [
+        [
+          115,
+          28
+        ],
+        [
+          115,
+          57
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__malloc_addrinfo_cname",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "ares__append_addrinfo_cname(struct ares_addrinfo_cname **head)",
+      "fn_dec_pos": [
+        [
+          125,
+          28
+        ],
+        [
+          125,
+          90
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__append_addrinfo_cname",
+        "parameters": {
+          "head": "struct ares_addrinfo_cname"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "ares__malloc_addrinfo()",
+      "fn_dec_pos": [
+        [
+          162,
+          22
+        ],
+        [
+          162,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__malloc_addrinfo",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "ares__malloc_addrinfo_node()",
+      "fn_dec_pos": [
+        [
+          172,
+          27
+        ],
+        [
+          172,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__malloc_addrinfo_node",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "ares__append_addrinfo_node(struct ares_addrinfo_node **head)",
+      "fn_dec_pos": [
+        [
+          184,
+          27
+        ],
+        [
+          184,
+          87
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__append_addrinfo_node",
+        "parameters": {
+          "head": "struct ares_addrinfo_node"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct host_query\n{\n  ares_channel channel;\n  char *name;\n  unsigned short port; /* in host order */\n  ares_addrinfo_callback callback;\n  void *arg;\n  struct ares_addrinfo_hints hints;\n  int sent_family; /* this family is what was is being used */\n  int timeouts;    /* number of timeouts we saw for this request */\n  const char *remaining_lookups; /* types of lookup we need to perform (\"fb\" by\n                                    default, file and dns respectively) */\n  struct ares_addrinfo *ai;      /* store results between lookups */\n  int remaining;   /* number of DNS answers waiting for */\n  int next_domain; /* next search domain to try */\n  int nodata_cnt; /* Track nodata responses to possibly override final result */\n}",
+      {
+        "channel": "ares_channel",
+        "*name": "char",
+        "port": "unsigned short",
+        "callback": "ares_addrinfo_callback",
+        "*arg": "void",
+        "hints": "struct ares_addrinfo_hints",
+        "sent_family": "int",
+        "timeouts": "int",
+        "char": "const",
+        "*ai": "struct ares_addrinfo",
+        "remaining": "int",
+        "next_domain": "int",
+        "nodata_cnt": "int"
+      },
+      "host_query",
+      [
+        59,
+        0
+      ],
+      [
+        75,
+        1
+      ]
+    ],
+    [
+      "struct host_query\n{\n  ares_channel channel;\n  char *name;\n  unsigned short port; /* in host order */\n  ares_addrinfo_callback callback;\n  void *arg;\n  struct ares_addrinfo_hints hints;\n  int sent_family; /* this family is what was is being used */\n  int timeouts;    /* number of timeouts we saw for this request */\n  const char *remaining_lookups; /* types of lookup we need to perform (\"fb\" by\n                                    default, file and dns respectively) */\n  struct ares_addrinfo *ai;      /* store results between lookups */\n  int remaining;   /* number of DNS answers waiting for */\n  int next_domain; /* next search domain to try */\n  int nodata_cnt; /* Track nodata responses to possibly override final result */\n}",
+      {
+        "channel": "ares_channel",
+        "*name": "char",
+        "port": "unsigned short",
+        "callback": "ares_addrinfo_callback",
+        "*arg": "void",
+        "hints": "struct ares_addrinfo_hints",
+        "sent_family": "int",
+        "timeouts": "int",
+        "char": "const",
+        "*ai": "struct ares_addrinfo",
+        "remaining": "int",
+        "next_domain": "int",
+        "nodata_cnt": "int"
+      },
+      "host_query",
+      [
+        59,
+        0
+      ],
+      [
+        75,
+        1
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        66,
+        2
+      ],
+      [
+        66,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo",
+      {},
+      "",
+      [
+        71,
+        2
+      ],
+      [
+        71,
+        22
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        77,
+        13
+      ],
+      [
+        77,
+        39
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        84,
+        13
+      ],
+      [
+        84,
+        39
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        91,
+        13
+      ],
+      [
+        91,
+        38
+      ]
+    ],
+    [
+      "struct ares_addrinfo",
+      {},
+      "",
+      [
+        102,
+        13
+      ],
+      [
+        102,
+        33
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        111,
+        29
+      ],
+      [
+        111,
+        46
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        112,
+        28
+      ],
+      [
+        112,
+        45
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        113,
+        27
+      ],
+      [
+        113,
+        44
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        115,
+        0
+      ],
+      [
+        115,
+        26
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        117,
+        2
+      ],
+      [
+        117,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        117,
+        57
+      ],
+      [
+        117,
+        83
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        125,
+        0
+      ],
+      [
+        125,
+        26
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        125,
+        56
+      ],
+      [
+        125,
+        82
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        127,
+        2
+      ],
+      [
+        127,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        128,
+        2
+      ],
+      [
+        128,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        144,
+        31
+      ],
+      [
+        144,
+        57
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        145,
+        31
+      ],
+      [
+        145,
+        57
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        147,
+        2
+      ],
+      [
+        147,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo",
+      {},
+      "",
+      [
+        162,
+        0
+      ],
+      [
+        162,
+        20
+      ]
+    ],
+    [
+      "struct ares_addrinfo",
+      {},
+      "",
+      [
+        164,
+        2
+      ],
+      [
+        164,
+        22
+      ]
+    ],
+    [
+      "struct ares_addrinfo",
+      {},
+      "",
+      [
+        164,
+        48
+      ],
+      [
+        164,
+        68
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        172,
+        0
+      ],
+      [
+        172,
+        25
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        174,
+        2
+      ],
+      [
+        174,
+        27
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        175,
+        25
+      ],
+      [
+        175,
+        50
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        184,
+        0
+      ],
+      [
+        184,
+        25
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        184,
+        54
+      ],
+      [
+        184,
+        79
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        186,
+        2
+      ],
+      [
+        186,
+        27
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        187,
+        2
+      ],
+      [
+        187,
+        27
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        203,
+        30
+      ],
+      [
+        203,
+        55
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        204,
+        30
+      ],
+      [
+        204,
+        55
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        206,
+        2
+      ],
+      [
+        206,
+        27
+      ]
+    ],
+    [
+      "struct servent",
+      {},
+      "",
+      [
+        227,
+        2
+      ],
+      [
+        227,
+        16
+      ]
+    ],
+    [
+      "struct servent",
+      {},
+      "",
+      [
+        229,
+        2
+      ],
+      [
+        229,
+        16
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        280,
+        31
+      ],
+      [
+        280,
+        57
+      ]
+    ],
+    [
+      "struct ares_addrinfo",
+      {},
+      "",
+      [
+        281,
+        25
+      ],
+      [
+        281,
+        45
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        285,
+        2
+      ],
+      [
+        285,
+        28
+      ]
+    ],
+    [
+      "struct in_addr",
+      {},
+      "",
+      [
+        314,
+        10
+      ],
+      [
+        314,
+        24
+      ]
+    ],
+    [
+      "struct ares_in6_addr",
+      {},
+      "",
+      [
+        330,
+        6
+      ],
+      [
+        330,
+        26
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        373,
+        23
+      ],
+      [
+        373,
+        40
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        375,
+        2
+      ],
+      [
+        375,
+        27
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        376,
+        2
+      ],
+      [
+        376,
+        27
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        406,
+        23
+      ],
+      [
+        406,
+        40
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        491,
+        24
+      ],
+      [
+        491,
+        41
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        530,
+        2
+      ],
+      [
+        530,
+        19
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        530,
+        31
+      ],
+      [
+        530,
+        48
+      ]
+    ],
+    [
+      "struct ares_addrinfo_hints",
+      {},
+      "",
+      [
+        577,
+        28
+      ],
+      [
+        577,
+        54
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        580,
+        2
+      ],
+      [
+        580,
+        19
+      ]
+    ],
+    [
+      "struct ares_addrinfo",
+      {},
+      "",
+      [
+        583,
+        2
+      ],
+      [
+        583,
+        22
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        664,
+        30
+      ],
+      [
+        664,
+        47
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        700,
+        27
+      ],
+      [
+        700,
+        44
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        769,
+        29
+      ],
+      [
+        769,
+        46
+      ]
+    ],
+    [
+      "struct host_query",
+      {},
+      "",
+      [
+        789,
+        28
+      ],
+      [
+        789,
+        45
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        18,
+        0
+      ],
+      [
+        19,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#  include <netdb.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ],
+    [
+      "#include <strings.h>\n",
+      [
+        40,
+        0
+      ],
+      [
+        41,
+        0
+      ]
+    ],
+    [
+      "#include <assert.h>\n",
+      [
+        42,
+        0
+      ],
+      [
+        43,
+        0
+      ]
+    ],
+    [
+      "#include <limits.h>\n",
+      [
+        45,
+        0
+      ],
+      [
+        46,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        48,
+        0
+      ],
+      [
+        49,
+        0
+      ]
+    ],
+    [
+      "#include \"bitncmp.h\"\n",
+      [
+        49,
+        0
+      ],
+      [
+        50,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        50,
+        0
+      ],
+      [
+        51,
+        0
+      ]
+    ],
+    [
+      "#  include \"ares_platform.h\"\n",
+      [
+        56,
+        0
+      ],
+      [
+        57,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

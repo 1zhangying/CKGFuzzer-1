@@ -1,0 +1,274 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int is_reservedch(int ch)\n{\n  switch (ch) {\n    case '\"':\n    case '.':\n    case ';':\n    case '\\\\':\n    case '(':\n    case ')':\n    case '@':\n    case '$':\n      return 1;\n    default:\n      break;\n  }\n\n  return 0;\n}",
+      "fn_code_pos": [
+        [
+          35,
+          0
+        ],
+        [
+          52,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "is_reservedch",
+        "parameters": {
+          "ch": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ares__isprint(int ch)\n{\n  if (ch >= 0x20 && ch <= 0x7E)\n    return 1;\n  return 0;\n}",
+      "fn_code_pos": [
+        [
+          54,
+          0
+        ],
+        [
+          59,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__isprint",
+        "parameters": {
+          "ch": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int is_hostnamech(int ch)\n{\n  /* [A-Za-z0-9-._/]\n   * Don't use isalnum() as it is locale-specific\n   */\n  if (ch >= 'A' && ch <= 'Z')\n    return 1;\n  if (ch >= 'a' && ch <= 'z')\n    return 1;\n  if (ch >= '0' && ch <= '9')\n    return 1;\n  if (ch == '-' || ch == '.' || ch == '_' || ch == '/')\n    return 1;\n\n  return 0;\n}",
+      "fn_code_pos": [
+        [
+          71,
+          0
+        ],
+        [
+          86,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "is_hostnamech",
+        "parameters": {
+          "ch": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ares__expand_name_validated(const unsigned char *encoded,\n                                const unsigned char *abuf,\n                                int alen, char **s, long *enclen,\n                                int is_hostname)\n{\n  int len, indir = 0;\n  char *q;\n  const unsigned char *p;\n  union {\n    ares_ssize_t sig;\n     size_t uns;\n  } nlen;\n\n  nlen.sig = name_length(encoded, abuf, alen, is_hostname);\n  if (nlen.sig < 0)\n    return ARES_EBADNAME;\n\n  *s = ares_malloc(nlen.uns + 1);\n  if (!*s)\n    return ARES_ENOMEM;\n  q = *s;\n\n  if (nlen.uns == 0) {\n    /* RFC2181 says this should be \".\": the root of the DNS tree.\n     * Since this function strips trailing dots though, it becomes \"\"\n     */\n    q[0] = '\\0';\n\n    /* indirect root label (like 0xc0 0x0c) is 2 bytes long (stupid, but\n       valid) */\n    if ((*encoded & INDIR_MASK) == INDIR_MASK)\n      *enclen = 2L;\n    else\n      *enclen = 1L;  /* the caller should move one byte to get past this */\n\n    return ARES_SUCCESS;\n  }\n\n  /* No error-checking necessary; it was all done by name_length(). */\n  p = encoded;\n  while (*p)\n    {\n      if ((*p & INDIR_MASK) == INDIR_MASK)\n        {\n          if (!indir)\n            {\n              *enclen = aresx_uztosl(p + 2U - encoded);\n              indir = 1;\n            }\n          p = abuf + ((*p & ~INDIR_MASK) << 8 | *(p + 1));\n        }\n      else\n        {\n          int name_len = *p;\n          len = name_len;\n          p++;\n\n          while (len--)\n            {\n              /* Output as \\DDD for consistency with RFC1035 5.1, except\n               * for the special case of a root name response  */\n              if (!ares__isprint(*p) && !(name_len == 1 && *p == 0))\n                {\n                  *q++ = '\\\\';\n                  *q++ = '0' + *p / 100;\n                  *q++ = '0' + (*p % 100) / 10;\n                  *q++ = '0' + (*p % 10);\n                }\n              else if (is_reservedch(*p))\n                {\n                  *q++ = '\\\\';\n                  *q++ = *p;\n                }\n              else\n                {\n                  *q++ = *p;\n                }\n              p++;\n            }\n          *q++ = '.';\n        }\n     }\n\n  if (!indir)\n    *enclen = aresx_uztosl(p + 1U - encoded);\n\n  /* Nuke the trailing period if we wrote one. */\n  if (q > *s)\n    *(q - 1) = 0;\n  else\n    *q = 0; /* zero terminate; LCOV_EXCL_LINE: empty names exit above */\n\n  return ARES_SUCCESS;\n}",
+      "fn_code_pos": [
+        [
+          115,
+          0
+        ],
+        [
+          208,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__expand_name_validated",
+        "parameters": {
+          "encoded": "unsigned char",
+          "abuf": "unsigned char",
+          "alen": "int",
+          "s": "char",
+          "enclen": "long",
+          "is_hostname": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ares_expand_name(const unsigned char *encoded, const unsigned char *abuf,\n                     int alen, char **s, long *enclen)\n{\n  return ares__expand_name_validated(encoded, abuf, alen, s, enclen, 0);\n}",
+      "fn_code_pos": [
+        [
+          211,
+          0
+        ],
+        [
+          215,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_expand_name",
+        "parameters": {
+          "encoded": "unsigned char",
+          "abuf": "unsigned char",
+          "alen": "int",
+          "s": "char",
+          "enclen": "long"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int name_length(const unsigned char *encoded, const unsigned char *abuf,\n                       int alen, int is_hostname)\n{\n  int n = 0, offset, indir = 0, top;\n\n  /* Allow the caller to pass us abuf + alen and have us check for it. */\n  if (encoded >= abuf + alen)\n    return -1;\n\n  while (*encoded)\n    {\n      top = (*encoded & INDIR_MASK);\n      if (top == INDIR_MASK)\n        {\n          /* Check the offset and go there. */\n          if (encoded + 1 >= abuf + alen)\n            return -1;\n          offset = (*encoded & ~INDIR_MASK) << 8 | *(encoded + 1);\n          if (offset >= alen)\n            return -1;\n          encoded = abuf + offset;\n\n          /* If we've seen more indirects than the message length,\n           * then there's a loop.\n           */\n          ++indir;\n          if (indir > alen || indir > MAX_INDIRS)\n            return -1;\n        }\n      else if (top == 0x00)\n        {\n          int name_len = *encoded;\n          offset = name_len;\n          if (encoded + offset + 1 >= abuf + alen)\n            return -1;\n          encoded++;\n\n          while (offset--)\n            {\n              if (!ares__isprint(*encoded) && !(name_len == 1 && *encoded == 0))\n                {\n                  if (is_hostname)\n                    return -1;\n                  n += 4;\n                }\n              else if (is_reservedch(*encoded))\n                {\n                  if (is_hostname)\n                    return -1;\n                  n += 2;\n                }\n              else\n                {\n                  if (is_hostname && !is_hostnamech(*encoded))\n                    return -1;\n                  n += 1;\n                }\n              encoded++;\n            }\n\n          n++;\n        }\n      else\n        {\n          /* RFC 1035 4.1.4 says other options (01, 10) for top 2\n           * bits are reserved.\n           */\n          return -1;\n        }\n    }\n\n  /* If there were any labels at all, then the number of dots is one\n   * less than the number of labels, so subtract one.\n   */\n  return (n) ? n - 1 : n;\n}",
+      "fn_code_pos": [
+        [
+          220,
+          0
+        ],
+        [
+          295,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "name_length",
+        "parameters": {
+          "encoded": "unsigned char",
+          "abuf": "unsigned char",
+          "alen": "int",
+          "is_hostname": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ares__expand_name_for_response(const unsigned char *encoded,\n                                   const unsigned char *abuf, int alen,\n                                   char **s, long *enclen, int is_hostname)\n{\n  int status = ares__expand_name_validated(encoded, abuf, alen, s, enclen,\n    is_hostname);\n  if (status == ARES_EBADNAME)\n    status = ARES_EBADRESP;\n  return status;\n}",
+      "fn_code_pos": [
+        [
+          299,
+          0
+        ],
+        [
+          308,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__expand_name_for_response",
+        "parameters": {
+          "encoded": "unsigned char",
+          "abuf": "unsigned char",
+          "alen": "int",
+          "s": "char",
+          "enclen": "long",
+          "is_hostname": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "name_length(const unsigned char *encoded, const unsigned char *abuf,\n                       int alen, int is_hostname)",
+      "fn_dec_pos": [
+        [
+          31,
+          11
+        ],
+        [
+          32,
+          49
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "name_length",
+        "parameters": {
+          "encoded": "unsigned char",
+          "abuf": "unsigned char",
+          "alen": "int",
+          "is_hostname": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nowarn.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\" /* for the memdebug */\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -18,6 +18,9 @@ remove_suffix() {
 fuzz_driver_file=$1
 project_name=$2
 
+[ -f $SRC/$PROJECT_NAME/test/ares-test-fuzz.c ] && rm -rf $SRC/$PROJECT_NAME/test/ares-test-fuzz.c
+
+
 # Get the base name without the suffix
 fuzz_driver_base=$(remove_suffix "$fuzz_driver_file")
 
@@ -25,14 +28,29 @@ fuzz_driver_base=$(remove_suffix "$fuzz_driver_file")
 cp /generated_fuzzer/fuzz_driver/${project_name}/scripts/build.sh $SRC/build.sh
 
 # Copy the fuzz driver file
-echo "cp -rf /generated_fuzzer/fuzz_driver/${project_name}/compilation_pass_rag/${fuzz_driver_file} $SRC/${project_name}/test/${fuzz_driver_file}" #>> /generated_fuzzer/fuzz_driver/${project_name}/scripts/a.txt
+echo "cp -rf /generated_fuzzer/fuzz_driver/${project_name}/compilation_pass_rag/${fuzz_driver_file} $SRC/${project_name}/test/${fuzz_driver_file}"
 cp -rf /generated_fuzzer/fuzz_driver/${project_name}/compilation_pass_rag/${fuzz_driver_file} $SRC/${project_name}/test/${fuzz_driver_file}
 
-# Replace placeholders in the build script
-sed -i "s/FUZZ_DRIVER_FILE_TARGET/$fuzz_driver_base/g" $SRC/build.sh
-sed -i "s/FUZZ_DRIVER_FILE/$fuzz_driver_file/g" $SRC/build.sh
+# Replace placeholders in the build script using environment variables
+# Export variables so build.sh can use them
+export FUZZ_FILE="${fuzz_driver_file}"
+export FUZZ_TARGET="${fuzz_driver_base}"
+
+# Debug: print the values
+echo "FUZZ_FILE=${FUZZ_FILE}"
+echo "FUZZ_TARGET=${FUZZ_TARGET}"
 
 # Optionally, print the modified build.sh for debugging
 # cat $SRC/build.sh
 # cd $SRC/${project_name} 
+
 #compile
+# cd $SRC/${project_name}
+# echo "Starting compilation with: bash $SRC/build.sh"
+# bash $SRC/build.sh
+# if [ $? -eq 0 ]; then
+#     echo "Compilation succeeded"
+# else
+#     echo "Compilation failed with error code $?"
+#     exit 1
+# fi

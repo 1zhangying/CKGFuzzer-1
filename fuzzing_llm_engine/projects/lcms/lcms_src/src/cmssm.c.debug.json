@@ -1,0 +1,634 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\ncmsFloat64Number _cmsAtan2(cmsFloat64Number y, cmsFloat64Number x)\n{\n    cmsFloat64Number a;\n\n    // Deal with undefined case\n    if (x == 0.0 && y == 0.0) return 0;\n\n    a = (atan2(y, x) * 180.0) / M_PI;\n\n    while (a < 0) {\n        a += 360;\n    }\n\n    return a;\n}",
+      "fn_code_pos": [
+        [
+          99,
+          0
+        ],
+        [
+          114,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsAtan2",
+        "parameters": {
+          "y": "cmsFloat64Number",
+          "x": "cmsFloat64Number"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ToSpherical(cmsSpherical* sp, const cmsVEC3* v)\n{\n\n    cmsFloat64Number L, a, b;\n\n    L = v ->n[VX];\n    a = v ->n[VY];\n    b = v ->n[VZ];\n\n    sp ->r = sqrt( L*L + a*a + b*b );\n\n   if (sp ->r == 0) {\n        sp ->alpha = sp ->theta = 0;\n        return;\n    }\n\n    sp ->alpha = _cmsAtan2(a, b);\n    sp ->theta = _cmsAtan2(sqrt(a*a + b*b), L);\n}",
+      "fn_code_pos": [
+        [
+          117,
+          0
+        ],
+        [
+          136,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ToSpherical",
+        "parameters": {
+          "sp": "cmsSpherical",
+          "v": "cmsVEC3"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ToCartesian(cmsVEC3* v, const cmsSpherical* sp)\n{\n    cmsFloat64Number sin_alpha;\n    cmsFloat64Number cos_alpha;\n    cmsFloat64Number sin_theta;\n    cmsFloat64Number cos_theta;\n    cmsFloat64Number L, a, b;\n\n    sin_alpha = sin((M_PI * sp ->alpha) / 180.0);\n    cos_alpha = cos((M_PI * sp ->alpha) / 180.0);\n    sin_theta = sin((M_PI * sp ->theta) / 180.0);\n    cos_theta = cos((M_PI * sp ->theta) / 180.0);\n\n    a = sp ->r * sin_theta * sin_alpha;\n    b = sp ->r * sin_theta * cos_alpha;\n    L = sp ->r * cos_theta;\n\n    v ->n[VX] = L;\n    v ->n[VY] = a;\n    v ->n[VZ] = b;\n}",
+      "fn_code_pos": [
+        [
+          140,
+          0
+        ],
+        [
+          161,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ToCartesian",
+        "parameters": {
+          "v": "cmsVEC3",
+          "sp": "cmsSpherical"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid QuantizeToSector(const cmsSpherical* sp, int* alpha, int* theta)\n{\n    *alpha = (int) floor(((sp->alpha * (SECTORS)) / 360.0) );\n    *theta = (int) floor(((sp->theta * (SECTORS)) / 180.0) );\n\n    if (*alpha >= SECTORS)\n        *alpha = SECTORS-1;\n    if (*theta >= SECTORS)\n        *theta = SECTORS-1;\n}",
+      "fn_code_pos": [
+        [
+          166,
+          0
+        ],
+        [
+          176,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "QuantizeToSector",
+        "parameters": {
+          "sp": "cmsSpherical",
+          "alpha": "int",
+          "theta": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid LineOf2Points(cmsLine* line, cmsVEC3* a, cmsVEC3* b)\n{\n\n    _cmsVEC3init(&line ->a, a ->n[VX], a ->n[VY], a ->n[VZ]);\n    _cmsVEC3init(&line ->u, b ->n[VX] - a ->n[VX],\n                            b ->n[VY] - a ->n[VY],\n                            b ->n[VZ] - a ->n[VZ]);\n}",
+      "fn_code_pos": [
+        [
+          180,
+          0
+        ],
+        [
+          188,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LineOf2Points",
+        "parameters": {
+          "line": "cmsLine",
+          "a": "cmsVEC3",
+          "b": "cmsVEC3"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid GetPointOfLine(cmsVEC3* p, const cmsLine* line, cmsFloat64Number t)\n{\n    p ->n[VX] = line ->a.n[VX] + t * line->u.n[VX];\n    p ->n[VY] = line ->a.n[VY] + t * line->u.n[VY];\n    p ->n[VZ] = line ->a.n[VZ] + t * line->u.n[VZ];\n}",
+      "fn_code_pos": [
+        [
+          192,
+          0
+        ],
+        [
+          198,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetPointOfLine",
+        "parameters": {
+          "p": "cmsVEC3",
+          "line": "cmsLine",
+          "t": "cmsFloat64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool ClosestLineToLine(cmsVEC3* r, const cmsLine* line1, const cmsLine* line2)\n{\n    cmsFloat64Number a, b, c, d, e, D;\n    cmsFloat64Number sc, sN, sD;\n    //cmsFloat64Number tc; // left for future use\n    cmsFloat64Number tN, tD;\n    cmsVEC3 w0;\n\n    _cmsVEC3minus(&w0, &line1 ->a, &line2 ->a);\n\n    a  = _cmsVEC3dot(&line1 ->u, &line1 ->u);\n    b  = _cmsVEC3dot(&line1 ->u, &line2 ->u);\n    c  = _cmsVEC3dot(&line2 ->u, &line2 ->u);\n    d  = _cmsVEC3dot(&line1 ->u, &w0);\n    e  = _cmsVEC3dot(&line2 ->u, &w0);\n\n    D  = a*c - b * b;      // Denominator\n    sD = tD = D;           // default sD = D >= 0\n\n    if (D <  MATRIX_DET_TOLERANCE) {   // the lines are almost parallel\n\n        sN = 0.0;        // force using point P0 on segment S1\n        sD = 1.0;        // to prevent possible division by 0.0 later\n        tN = e;\n        tD = c;\n    }\n    else {                // get the closest points on the infinite lines\n\n        sN = (b*e - c*d);\n        tN = (a*e - b*d);\n\n        if (sN < 0.0) {       // sc < 0 => the s=0 edge is visible\n\n            sN = 0.0;\n            tN = e;\n            tD = c;\n        }\n        else if (sN > sD) {   // sc > 1 => the s=1 edge is visible\n            sN = sD;\n            tN = e + b;\n            tD = c;\n        }\n    }\n\n    if (tN < 0.0) {           // tc < 0 => the t=0 edge is visible\n\n        tN = 0.0;\n        // recompute sc for this edge\n        if (-d < 0.0)\n            sN = 0.0;\n        else if (-d > a)\n            sN = sD;\n        else {\n            sN = -d;\n            sD = a;\n        }\n    }\n    else if (tN > tD) {      // tc > 1 => the t=1 edge is visible\n\n        tN = tD;\n\n        // recompute sc for this edge\n        if ((-d + b) < 0.0)\n            sN = 0;\n        else if ((-d + b) > a)\n            sN = sD;\n        else {\n            sN = (-d + b);\n            sD = a;\n        }\n    }\n    // finally do the division to get sc and tc\n    sc = (fabs(sN) < MATRIX_DET_TOLERANCE ? 0.0 : sN / sD);\n    //tc = (fabs(tN) < MATRIX_DET_TOLERANCE ? 0.0 : tN / tD); // left for future use.\n\n    GetPointOfLine(r, line1, sc);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          215,
+          0
+        ],
+        [
+          293,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ClosestLineToLine",
+        "parameters": {
+          "r": "cmsVEC3",
+          "line1": "cmsLine",
+          "line2": "cmsLine"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsHANDLE  CMSEXPORT cmsGBDAlloc(cmsContext ContextID)\n{\n    cmsGDB* gbd = (cmsGDB*) _cmsMallocZero(ContextID, sizeof(cmsGDB));\n    if (gbd == NULL) return NULL;\n\n    gbd -> ContextID = ContextID;\n\n    return (cmsHANDLE) gbd;\n}",
+      "fn_code_pos": [
+        [
+          301,
+          0
+        ],
+        [
+          309,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGBDAlloc",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsHANDLE"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsGBDFree(cmsHANDLE hGBD)\n{\n    cmsGDB* gbd = (cmsGDB*) hGBD;\n    if (hGBD != NULL)\n        _cmsFree(gbd->ContextID, (void*) gbd);\n}",
+      "fn_code_pos": [
+        [
+          312,
+          0
+        ],
+        [
+          317,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGBDFree",
+        "parameters": {
+          "hGBD": "cmsHANDLE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsGDBPoint* GetPoint(cmsGDB* gbd, const cmsCIELab* Lab, cmsSpherical* sp)\n{\n    cmsVEC3 v;\n    int alpha, theta;\n\n    // Housekeeping\n    _cmsAssert(gbd != NULL);\n    _cmsAssert(Lab != NULL);\n    _cmsAssert(sp != NULL);\n\n    // Center L* by subtracting half of its domain, that's 50\n    _cmsVEC3init(&v, Lab ->L - 50.0, Lab ->a, Lab ->b);\n\n    // Convert to spherical coordinates\n    ToSpherical(sp, &v);\n\n    if (sp ->r < 0 || sp ->alpha < 0 || sp->theta < 0) {\n         cmsSignalError(gbd ->ContextID, cmsERROR_RANGE, \"spherical value out of range\");\n         return NULL;\n    }\n\n    // On which sector it falls?\n    QuantizeToSector(sp, &alpha, &theta);\n\n    if (alpha < 0 || theta < 0 || alpha >= SECTORS || theta >= SECTORS) {\n         cmsSignalError(gbd ->ContextID, cmsERROR_RANGE, \" quadrant out of range\");\n         return NULL;\n    }\n\n    // Get pointer to the sector\n    return &gbd ->Gamut[theta][alpha];\n}",
+      "fn_code_pos": [
+        [
+          321,
+          0
+        ],
+        [
+          353,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetPoint",
+        "parameters": {
+          "gbd": "cmsGDB",
+          "Lab": "cmsCIELab",
+          "sp": "cmsSpherical"
+        },
+        "return_type": "cmsGDBPoint"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsGDBAddPoint(cmsHANDLE hGBD, const cmsCIELab* Lab)\n{\n    cmsGDB* gbd = (cmsGDB*) hGBD;\n    cmsGDBPoint* ptr;\n    cmsSpherical sp;\n\n\n    // Get pointer to the sector\n    ptr = GetPoint(gbd, Lab, &sp);\n    if (ptr == NULL) return FALSE;\n\n    // If no samples at this sector, add it\n    if (ptr ->Type == GP_EMPTY) {\n\n        ptr -> Type = GP_SPECIFIED;\n        ptr -> p    = sp;\n    }\n    else {\n\n\n        // Substitute only if radius is greater\n        if (sp.r > ptr -> p.r) {\n\n                ptr -> Type = GP_SPECIFIED;\n                ptr -> p    = sp;\n        }\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          357,
+          0
+        ],
+        [
+          386,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGDBAddPoint",
+        "parameters": {
+          "hGBD": "cmsHANDLE",
+          "Lab": "cmsCIELab"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsGDBCheckPoint(cmsHANDLE hGBD, const cmsCIELab* Lab)\n{\n    cmsGDB* gbd = (cmsGDB*) hGBD;\n    cmsGDBPoint* ptr;\n    cmsSpherical sp;\n\n    // Get pointer to the sector\n    ptr = GetPoint(gbd, Lab, &sp);\n    if (ptr == NULL) return FALSE;\n\n    // If no samples at this sector, return no data\n    if (ptr ->Type == GP_EMPTY) return FALSE;\n\n    // In gamut only if radius is greater\n\n    return (sp.r <= ptr -> p.r);\n}",
+      "fn_code_pos": [
+        [
+          389,
+          0
+        ],
+        [
+          405,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGDBCheckPoint",
+        "parameters": {
+          "hGBD": "cmsHANDLE",
+          "Lab": "cmsCIELab"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nint FindNearSectors(cmsGDB* gbd, int alpha, int theta, cmsGDBPoint* Close[])\n{\n    int nSectors = 0;\n    int a, t;\n    cmsUInt32Number i;\n    cmsGDBPoint* pt;\n\n    for (i=0; i < NSTEPS; i++) {\n\n        a = alpha + Spiral[i].AdvX;\n        t = theta + Spiral[i].AdvY;\n\n        // Cycle at the end\n        a %= SECTORS;\n        t %= SECTORS;\n\n        // Cycle at the begin\n        if (a < 0) a = SECTORS + a;\n        if (t < 0) t = SECTORS + t;\n\n        pt = &gbd ->Gamut[t][a];\n\n        if (pt -> Type != GP_EMPTY) {\n\n            Close[nSectors++] = pt;\n        }\n    }\n\n    return nSectors;\n}",
+      "fn_code_pos": [
+        [
+          438,
+          0
+        ],
+        [
+          468,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FindNearSectors",
+        "parameters": {
+          "gbd": "cmsGDB",
+          "alpha": "int",
+          "theta": "int",
+          "Close": "cmsGDBPoint"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool InterpolateMissingSector(cmsGDB* gbd, int alpha, int theta)\n{\n    cmsSpherical sp;\n    cmsVEC3 Lab;\n    cmsVEC3 Centre;\n    cmsLine ray;\n    int nCloseSectors;\n    cmsGDBPoint* Close[NSTEPS + 1];\n    cmsSpherical closel, templ;\n    cmsLine edge;\n    int k, m;\n\n    // Is that point already specified?\n    if (gbd ->Gamut[theta][alpha].Type != GP_EMPTY) return TRUE;\n\n    // Fill close points\n    nCloseSectors = FindNearSectors(gbd, alpha, theta, Close);\n\n\n    // Find a central point on the sector\n    sp.alpha = (cmsFloat64Number) ((alpha + 0.5) * 360.0) / (SECTORS);\n    sp.theta = (cmsFloat64Number) ((theta + 0.5) * 180.0) / (SECTORS);\n    sp.r     = 50.0;\n\n    // Convert to Cartesian\n    ToCartesian(&Lab, &sp);\n\n    // Create a ray line from centre to this point\n    _cmsVEC3init(&Centre, 50.0, 0, 0);\n    LineOf2Points(&ray, &Lab, &Centre);\n\n    // For all close sectors\n    closel.r = 0.0;\n    closel.alpha = 0;\n    closel.theta = 0;\n\n    for (k=0; k < nCloseSectors; k++) {\n\n        for(m = k+1; m < nCloseSectors; m++) {\n\n            cmsVEC3 temp, a1, a2;\n\n            // A line from sector to sector\n            ToCartesian(&a1, &Close[k]->p);\n            ToCartesian(&a2, &Close[m]->p);\n\n            LineOf2Points(&edge, &a1, &a2);\n\n            // Find a line\n            ClosestLineToLine(&temp, &ray, &edge);\n\n            // Convert to spherical\n            ToSpherical(&templ, &temp);\n\n\n            if ( templ.r > closel.r &&\n                 templ.theta >= (theta*180.0/SECTORS) &&\n                 templ.theta <= ((theta+1)*180.0/SECTORS) &&\n                 templ.alpha >= (alpha*360.0/SECTORS) &&\n                 templ.alpha <= ((alpha+1)*360.0/SECTORS)) {\n\n                closel = templ;\n            }\n        }\n    }\n\n    gbd ->Gamut[theta][alpha].p = closel;\n    gbd ->Gamut[theta][alpha].Type = GP_MODELED;\n\n    return TRUE;\n\n}",
+      "fn_code_pos": [
+        [
+          472,
+          0
+        ],
+        [
+          544,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "InterpolateMissingSector",
+        "parameters": {
+          "gbd": "cmsGDB",
+          "alpha": "int",
+          "theta": "int"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsGDBCompute(cmsHANDLE hGBD, cmsUInt32Number dwFlags)\n{\n    int alpha, theta;\n    cmsGDB* gbd = (cmsGDB*) hGBD;\n\n    _cmsAssert(hGBD != NULL);\n\n    // Interpolate black\n    for (alpha = 0; alpha < SECTORS; alpha++) {\n\n        if (!InterpolateMissingSector(gbd, alpha, 0)) return FALSE;\n    }\n\n    // Interpolate white\n    for (alpha = 0; alpha < SECTORS; alpha++) {\n\n        if (!InterpolateMissingSector(gbd, alpha, SECTORS-1)) return FALSE;\n    }\n\n\n    // Interpolate Mid\n    for (theta = 1; theta < SECTORS; theta++) {\n        for (alpha = 0; alpha < SECTORS; alpha++) {\n\n            if (!InterpolateMissingSector(gbd, alpha, theta)) return FALSE;\n        }\n    }\n\n    // Done\n    return TRUE;\n\n    cmsUNUSED_PARAMETER(dwFlags);\n}",
+      "fn_code_pos": [
+        [
+          549,
+          0
+        ],
+        [
+          581,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGDBCompute",
+        "parameters": {
+          "hGBD": "cmsHANDLE",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool cmsGBDdumpVRML(cmsHANDLE hGBD, const char* fname)\n{\n    FILE* fp;\n    int   i, j;\n    cmsGDB* gbd = (cmsGDB*) hGBD;\n    cmsGDBPoint* pt;\n\n    fp = fopen (fname, \"wt\");\n    if (fp == NULL)\n        return FALSE;\n\n    fprintf (fp, \"#VRML V2.0 utf8\\n\");\n\n    // set the viewing orientation and distance\n    fprintf (fp, \"DEF CamTest Group {\\n\");\n    fprintf (fp, \"\\tchildren [\\n\");\n    fprintf (fp, \"\\t\\tDEF Cameras Group {\\n\");\n    fprintf (fp, \"\\t\\t\\tchildren [\\n\");\n    fprintf (fp, \"\\t\\t\\t\\tDEF DefaultView Viewpoint {\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\tposition 0 0 340\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\torientation 0 0 1 0\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\tdescription \\\"default view\\\"\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t}\\n\");\n    fprintf (fp, \"\\t\\t\\t]\\n\");\n    fprintf (fp, \"\\t\\t},\\n\");\n    fprintf (fp, \"\\t]\\n\");\n    fprintf (fp, \"}\\n\");\n\n    // Output the background stuff\n    fprintf (fp, \"Background {\\n\");\n    fprintf (fp, \"\\tskyColor [\\n\");\n    fprintf (fp, \"\\t\\t.5 .5 .5\\n\");\n    fprintf (fp, \"\\t]\\n\");\n    fprintf (fp, \"}\\n\");\n\n    // Output the shape stuff\n    fprintf (fp, \"Transform {\\n\");\n    fprintf (fp, \"\\tscale .3 .3 .3\\n\");\n    fprintf (fp, \"\\tchildren [\\n\");\n\n    // Draw the axes as a shape:\n    fprintf (fp, \"\\t\\tShape {\\n\");\n    fprintf (fp, \"\\t\\t\\tappearance Appearance {\\n\");\n    fprintf (fp, \"\\t\\t\\t\\tmaterial Material {\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\tdiffuseColor 0 0.8 0\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\temissiveColor 1.0 1.0 1.0\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\tshininess 0.8\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t}\\n\");\n    fprintf (fp, \"\\t\\t\\t}\\n\");\n    fprintf (fp, \"\\t\\t\\tgeometry IndexedLineSet {\\n\");\n    fprintf (fp, \"\\t\\t\\t\\tcoord Coordinate {\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\tpoint [\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\t0.0 0.0 0.0,\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\t%f 0.0 0.0,\\n\",  255.0);\n    fprintf (fp, \"\\t\\t\\t\\t\\t0.0 %f 0.0,\\n\",  255.0);\n    fprintf (fp, \"\\t\\t\\t\\t\\t0.0 0.0 %f]\\n\",  255.0);\n    fprintf (fp, \"\\t\\t\\t\\t}\\n\");\n    fprintf (fp, \"\\t\\t\\t\\tcoordIndex [\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\t0, 1, -1\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\t0, 2, -1\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\t0, 3, -1]\\n\");\n    fprintf (fp, \"\\t\\t\\t}\\n\");\n    fprintf (fp, \"\\t\\t}\\n\");\n\n\n    fprintf (fp, \"\\t\\tShape {\\n\");\n    fprintf (fp, \"\\t\\t\\tappearance Appearance {\\n\");\n    fprintf (fp, \"\\t\\t\\t\\tmaterial Material {\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\tdiffuseColor 0 0.8 0\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\temissiveColor 1 1 1\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\tshininess 0.8\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t}\\n\");\n    fprintf (fp, \"\\t\\t\\t}\\n\");\n    fprintf (fp, \"\\t\\t\\tgeometry PointSet {\\n\");\n\n    // fill in the points here\n    fprintf (fp, \"\\t\\t\\t\\tcoord Coordinate {\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\tpoint [\\n\");\n\n    // We need to transverse all gamut hull.\n    for (i=0; i < SECTORS; i++)\n        for (j=0; j < SECTORS; j++) {\n\n            cmsVEC3 v;\n\n            pt = &gbd ->Gamut[i][j];\n            ToCartesian(&v, &pt ->p);\n\n            fprintf (fp, \"\\t\\t\\t\\t\\t%g %g %g\", v.n[0]+50, v.n[1], v.n[2]);\n\n            if ((j == SECTORS - 1) && (i == SECTORS - 1))\n                fprintf (fp, \"]\\n\");\n            else\n                fprintf (fp, \",\\n\");\n\n        }\n\n        fprintf (fp, \"\\t\\t\\t\\t}\\n\");\n\n\n\n    // fill in the face colors\n    fprintf (fp, \"\\t\\t\\t\\tcolor Color {\\n\");\n    fprintf (fp, \"\\t\\t\\t\\t\\tcolor [\\n\");\n\n    for (i=0; i < SECTORS; i++)\n        for (j=0; j < SECTORS; j++) {\n\n           cmsVEC3 v;\n\n            pt = &gbd ->Gamut[i][j];\n\n\n            ToCartesian(&v, &pt ->p);\n\n\n        if (pt ->Type == GP_EMPTY)\n            fprintf (fp, \"\\t\\t\\t\\t\\t%g %g %g\", 0.0, 0.0, 0.0);\n        else\n            if (pt ->Type == GP_MODELED)\n                fprintf (fp, \"\\t\\t\\t\\t\\t%g %g %g\", 1.0, .5, .5);\n            else {\n                fprintf (fp, \"\\t\\t\\t\\t\\t%g %g %g\", 1.0, 1.0, 1.0);\n\n            }\n\n        if ((j == SECTORS - 1) && (i == SECTORS - 1))\n                fprintf (fp, \"]\\n\");\n            else\n                fprintf (fp, \",\\n\");\n    }\n    fprintf (fp, \"\\t\\t\\t}\\n\");\n\n\n    fprintf (fp, \"\\t\\t\\t}\\n\");\n    fprintf (fp, \"\\t\\t}\\n\");\n    fprintf (fp, \"\\t]\\n\");\n    fprintf (fp, \"}\\n\");\n\n    fclose (fp);\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          591,
+          0
+        ],
+        [
+          733,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGBDdumpVRML",
+        "parameters": {
+          "hGBD": "cmsHANDLE",
+          "fname": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "GetPoint(cmsGDB* gbd, const cmsCIELab* Lab, cmsSpherical* sp)",
+      "fn_dec_pos": [
+        [
+          322,
+          13
+        ],
+        [
+          322,
+          74
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetPoint",
+        "parameters": {
+          "gbd": "cmsGDB",
+          "Lab": "cmsCIELab",
+          "sp": "cmsSpherical"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n\n    cmsFloat64Number r;\n    cmsFloat64Number alpha;\n    cmsFloat64Number theta;\n\n} cmsSpherical;",
+      {
+        "r": "cmsFloat64Number",
+        "alpha": "cmsFloat64Number",
+        "theta": "cmsFloat64Number"
+      },
+      "cmsSpherical",
+      [
+        41,
+        0
+      ],
+      [
+        47,
+        15
+      ]
+    ],
+    [
+      "typedef struct {\n\n    GDBPointType Type;\n    cmsSpherical p;         // Keep also alpha & theta of maximum\n\n} cmsGDBPoint;",
+      {
+        "Type": "GDBPointType",
+        "p": "cmsSpherical"
+      },
+      "cmsGDBPoint",
+      [
+        57,
+        0
+      ],
+      [
+        62,
+        14
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsContext ContextID;\n    cmsGDBPoint Gamut[SECTORS][SECTORS];\n\n} cmsGDB;",
+      {
+        "ContextID": "cmsContext",
+        "Gamut[SECTORS][SECTORS]": "cmsGDBPoint"
+      },
+      "cmsGDB",
+      [
+        65,
+        0
+      ],
+      [
+        70,
+        9
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsVEC3 a;\n    cmsVEC3 u;\n\n} cmsLine;",
+      {
+        "a": "cmsVEC3",
+        "u": "cmsVEC3"
+      },
+      "cmsLine",
+      [
+        75,
+        0
+      ],
+      [
+        80,
+        10
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsVEC3 b;\n    cmsVEC3 v;\n    cmsVEC3 w;\n\n} cmsPlane;",
+      {
+        "b": "cmsVEC3",
+        "v": "cmsVEC3",
+        "w": "cmsVEC3"
+      },
+      "cmsPlane",
+      [
+        85,
+        0
+      ],
+      [
+        91,
+        11
+      ]
+    ],
+    [
+      "struct _spiral {\n\n    int AdvX, AdvY;\n\n    }",
+      {
+        "AdvX": "int"
+      },
+      "_spiral",
+      [
+        427,
+        6
+      ],
+      [
+        431,
+        5
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsFloat64Number r;\n    cmsFloat64Number alpha;\n    cmsFloat64Number theta;\n\n} cmsSpherical;",
+      {
+        "r": "cmsFloat64Number",
+        "alpha": "cmsFloat64Number",
+        "theta": "cmsFloat64Number"
+      },
+      "cmsSpherical",
+      [
+        41,
+        0
+      ],
+      [
+        47,
+        15
+      ]
+    ],
+    [
+      "typedef struct {\n\n    GDBPointType Type;\n    cmsSpherical p;         // Keep also alpha & theta of maximum\n\n} cmsGDBPoint;",
+      {
+        "Type": "GDBPointType",
+        "p": "cmsSpherical"
+      },
+      "cmsGDBPoint",
+      [
+        57,
+        0
+      ],
+      [
+        62,
+        14
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsContext ContextID;\n    cmsGDBPoint Gamut[SECTORS][SECTORS];\n\n} cmsGDB;",
+      {
+        "ContextID": "cmsContext",
+        "Gamut[SECTORS][SECTORS]": "cmsGDBPoint"
+      },
+      "cmsGDB",
+      [
+        65,
+        0
+      ],
+      [
+        70,
+        9
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsVEC3 a;\n    cmsVEC3 u;\n\n} cmsLine;",
+      {
+        "a": "cmsVEC3",
+        "u": "cmsVEC3"
+      },
+      "cmsLine",
+      [
+        75,
+        0
+      ],
+      [
+        80,
+        10
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsVEC3 b;\n    cmsVEC3 v;\n    cmsVEC3 w;\n\n} cmsPlane;",
+      {
+        "b": "cmsVEC3",
+        "v": "cmsVEC3",
+        "w": "cmsVEC3"
+      },
+      "cmsPlane",
+      [
+        85,
+        0
+      ],
+      [
+        91,
+        11
+      ]
+    ],
+    [
+      "struct _spiral {\n\n    int AdvX, AdvY;\n\n    }",
+      {
+        "AdvX": "int"
+      },
+      "_spiral",
+      [
+        427,
+        6
+      ],
+      [
+        431,
+        5
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"lcms2_internal.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": [
+    [
+      "typedef  enum {\n        GP_EMPTY,\n        GP_SPECIFIED,\n        GP_MODELED\n\n    } GDBPointType;",
+      {
+        "GP_EMPTY": "",
+        "GP_SPECIFIED": "",
+        "GP_MODELED": ""
+      },
+      "GDBPointType",
+      [
+        49,
+        0
+      ],
+      [
+        54,
+        19
+      ]
+    ]
+  ]
+}

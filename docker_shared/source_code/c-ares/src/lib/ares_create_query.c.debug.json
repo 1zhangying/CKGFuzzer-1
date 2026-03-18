@@ -1,0 +1,106 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int ares_create_query(const char *name, int dnsclass, int type,\n                      unsigned short id, int rd, unsigned char **bufp,\n                      int *buflenp, int max_udp_size)\n{\n  size_t len;\n  unsigned char *q;\n  const char *p;\n  size_t buflen;\n  unsigned char *buf;\n\n  /* Set our results early, in case we bail out early with an error. */\n  *buflenp = 0;\n  *bufp = NULL;\n\n  /* Per RFC 7686, reject queries for \".onion\" domain names with NXDOMAIN. */\n  if (ares__is_onion_domain(name))\n    return ARES_ENOTFOUND;\n\n  /* Allocate a memory area for the maximum size this packet might need. +2\n   * is for the length byte and zero termination if no dots or ecscaping is\n   * used.\n   */\n  len = strlen(name) + 2 + HFIXEDSZ + QFIXEDSZ +\n    (max_udp_size ? EDNSFIXEDSZ : 0);\n  buf = ares_malloc(len);\n  if (!buf)\n    return ARES_ENOMEM;\n\n  /* Set up the header. */\n  q = buf;\n  memset(q, 0, HFIXEDSZ);\n  DNS_HEADER_SET_QID(q, id);\n  DNS_HEADER_SET_OPCODE(q, O_QUERY);\n  if (rd) {\n    DNS_HEADER_SET_RD(q, 1);\n  }\n  else {\n    DNS_HEADER_SET_RD(q, 0);\n  }\n  DNS_HEADER_SET_QDCOUNT(q, 1);\n\n  if (max_udp_size) {\n      DNS_HEADER_SET_ARCOUNT(q, 1);\n  }\n\n  /* A name of \".\" is a screw case for the loop below, so adjust it. */\n  if (strcmp(name, \".\") == 0)\n    name++;\n\n  /* Start writing out the name after the header. */\n  q += HFIXEDSZ;\n  while (*name)\n    {\n      if (*name == '.') {\n        ares_free (buf);\n        return ARES_EBADNAME;\n      }\n\n      /* Count the number of bytes in this label. */\n      len = 0;\n      for (p = name; *p && *p != '.'; p++)\n        {\n          if (*p == '\\\\' && *(p + 1) != 0)\n            p++;\n          len++;\n        }\n      if (len > MAXLABEL) {\n        ares_free (buf);\n        return ARES_EBADNAME;\n      }\n\n      /* Encode the length and copy the data. */\n      *q++ = (unsigned char)len;\n      for (p = name; *p && *p != '.'; p++)\n        {\n          if (*p == '\\\\' && *(p + 1) != 0)\n            p++;\n          *q++ = *p;\n        }\n\n      /* Go to the next label and repeat, unless we hit the end. */\n      if (!*p)\n        break;\n      name = p + 1;\n    }\n\n  /* Add the zero-length label at the end. */\n  *q++ = 0;\n\n  /* Finish off the question with the type and class. */\n  DNS_QUESTION_SET_TYPE(q, type);\n  DNS_QUESTION_SET_CLASS(q, dnsclass);\n\n  q += QFIXEDSZ;\n  if (max_udp_size)\n  {\n      memset(q, 0, EDNSFIXEDSZ);\n      q++;\n      DNS_RR_SET_TYPE(q, T_OPT);\n      DNS_RR_SET_CLASS(q, max_udp_size);\n      q += (EDNSFIXEDSZ-1);\n  }\n  buflen = (q - buf);\n\n  /* Reject names that are longer than the maximum of 255 bytes that's\n   * specified in RFC 1035 (\"To simplify implementations, the total length of\n   * a domain name (i.e., label octets and label length octets) is restricted\n   * to 255 octets or less.\"). */\n  if (buflen > (size_t)(MAXCDNAME + HFIXEDSZ + QFIXEDSZ +\n                (max_udp_size ? EDNSFIXEDSZ : 0))) {\n    ares_free (buf);\n    return ARES_EBADNAME;\n  }\n\n  /* we know this fits in an int at this point */\n  *buflenp = (int) buflen;\n  *bufp = buf;\n\n  return ARES_SUCCESS;\n}",
+      "fn_code_pos": [
+        [
+          77,
+          0
+        ],
+        [
+          196,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_create_query",
+        "parameters": {
+          "name": "char",
+          "dnsclass": "int",
+          "type": "int",
+          "id": "unsigned short",
+          "rd": "int",
+          "bufp": "unsigned char",
+          "buflenp": "int",
+          "max_udp_size": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_dns.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

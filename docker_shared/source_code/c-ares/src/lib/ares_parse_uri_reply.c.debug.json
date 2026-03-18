@@ -1,0 +1,187 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int\nares_parse_uri_reply (const unsigned char *abuf, int alen,\n                      struct ares_uri_reply **uri_out)\n{\n  unsigned int qdcount, ancount, i;\n  const unsigned char *aptr, *vptr;\n  int status, rr_type, rr_class, rr_len, rr_ttl;\n  long len;\n  char *uri_str = NULL, *rr_name = NULL;\n  struct ares_uri_reply *uri_head = NULL;\n  struct ares_uri_reply *uri_last = NULL;\n  struct ares_uri_reply *uri_curr;\n\n  /* Set *uri_out to NULL for all failure cases. */\n  *uri_out = NULL;\n\n  /* Give up if abuf doesn't have room for a header. */\n  if (alen < HFIXEDSZ){\n\t  return ARES_EBADRESP;\n  }\n\n  /* Fetch the question and answer count from the header. */\n  qdcount = DNS_HEADER_QDCOUNT (abuf);\n  ancount = DNS_HEADER_ANCOUNT (abuf);\n  if (qdcount != 1) {\n      return ARES_EBADRESP;\n  }\n  if (ancount == 0) {\n\t  return ARES_ENODATA;\n  }\n  /* Expand the name from the question, and skip past the question. */\n  aptr = abuf + HFIXEDSZ;\n\n  status = ares_expand_name (aptr, abuf, alen, &uri_str, &len);\n  if (status != ARES_SUCCESS){\n\t  return status;\n  }\n  if (aptr + len + QFIXEDSZ > abuf + alen)\n    {\n      ares_free (uri_str);\n      return ARES_EBADRESP;\n    }\n  aptr += len + QFIXEDSZ;\n\n  /* Examine each answer resource record (RR) in turn. */\n  for (i = 0; i < ancount; i++)\n    {\n      /* Decode the RR up to the data field. */\n      status = ares_expand_name (aptr, abuf, alen, &rr_name, &len);\n      if (status != ARES_SUCCESS)\n        {\n          break;\n        }\n      aptr += len;\n      if (aptr + RRFIXEDSZ > abuf + alen)\n        {\n          status = ARES_EBADRESP;\n          break;\n        }\n\n      rr_type \t= DNS_RR_TYPE (aptr);\n      rr_class \t= DNS_RR_CLASS (aptr);\n      rr_ttl \t= DNS_RR_TTL(aptr);\n      rr_len \t= DNS_RR_LEN (aptr);\n      aptr += RRFIXEDSZ;\n\n      if (aptr + rr_len > abuf + alen)\n        {\n          status = ARES_EBADRESP;\n          break;\n        }\n\n      /* Check if we are really looking at a URI record */\n      if (rr_class == C_IN && rr_type == T_URI)\n        {\n          /* parse the URI record itself */\n          if (rr_len < 5)\n            {\n              status = ARES_EBADRESP;\n              break;\n            }\n          /* Allocate storage for this URI answer appending it to the list */\n          uri_curr = ares_malloc_data(ARES_DATATYPE_URI_REPLY);\n          if (!uri_curr)\n            {\n              status = ARES_ENOMEM;\n              break;\n            }\n          if (uri_last)\n            {\n              uri_last->next = uri_curr;\n            }\n          else\n            {\n              uri_head = uri_curr;\n            }\n          uri_last = uri_curr;\n\n          vptr = aptr;\n          uri_curr->priority = DNS__16BIT(vptr);\n          vptr += sizeof(unsigned short);\n          uri_curr->weight = DNS__16BIT(vptr);\n          vptr += sizeof(unsigned short);\n          uri_curr->uri = (char *)ares_malloc(rr_len-3);\n\t  \t  if (!uri_curr->uri)\n\t      \t{\n\t      \t  status = ARES_ENOMEM;\n\t\t\t  break;\n\t\t    }\n          uri_curr->uri = strncpy(uri_curr->uri, (const char *)vptr, rr_len-4);\n          uri_curr->uri[rr_len-4]='\\0';\n          uri_curr->ttl = rr_ttl;\n\n          if (status != ARES_SUCCESS)\n            break;\n        }\n\n      /* Don't lose memory in the next iteration */\n      ares_free (rr_name);\n      rr_name = NULL;\n\n      /* Move on to the next record */\n      aptr += rr_len;\n    }\n\n  if (uri_str)\n    ares_free (uri_str);\n  if (rr_name)\n    ares_free (rr_name);\n\n  /* clean up on error */\n  if (status != ARES_SUCCESS)\n    {\n      if (uri_head)\n        ares_free_data (uri_head);\n      return status;\n    }\n\n  /* everything looks fine, return the data */\n  *uri_out = uri_head;\n\n  return ARES_SUCCESS;\n}",
+      "fn_code_pos": [
+        [
+          41,
+          0
+        ],
+        [
+          183,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_parse_uri_reply",
+        "parameters": {
+          "abuf": "unsigned char",
+          "alen": "int",
+          "uri_out": "struct ares_uri_reply"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        43,
+        22
+      ],
+      [
+        43,
+        43
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        50,
+        2
+      ],
+      [
+        50,
+        23
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        51,
+        2
+      ],
+      [
+        51,
+        23
+      ]
+    ],
+    [
+      "struct ares_uri_reply",
+      {},
+      "",
+      [
+        52,
+        2
+      ],
+      [
+        52,
+        23
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        20,
+        0
+      ],
+      [
+        21,
+        0
+      ]
+    ],
+    [
+      "#  include <netdb.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_dns.h\"\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_data.h\"\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

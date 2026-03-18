@@ -1,0 +1,385 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void printruns(unsigned char *buf, uint32_t *runs, uint32_t *erun,\n                      uint32_t lastx)\n{\n    static struct\n    {\n        char white, black;\n        unsigned short width;\n    } WBarr[] = {{'d', 'n', 512}, {'e', 'o', 256}, {'f', 'p', 128},\n                 {'g', 'q', 64},  {'h', 'r', 32},  {'i', 's', 16},\n                 {'j', 't', 8},   {'k', 'u', 4},   {'l', 'v', 2},\n                 {'m', 'w', 1}};\n    static char *svalue =\n        \" !\\\"#$&'*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_`abc\";\n    int colormode = 1; /* 0 for white, 1 for black */\n    uint32_t runlength = 0;\n    int n = maxline;\n    uint32_t x = 0;\n    int l;\n\n    (void)buf;\n    printf(\"%d m(\", row++);\n    while (runs < erun)\n    {\n        if (runlength <= 0)\n        {\n            colormode ^= 1;\n            runlength = *runs++;\n            if (x + runlength > lastx)\n                runlength = runs[-1] = lastx - x;\n            x += runlength;\n            if (!colormode && runs == erun)\n                break; /* don't bother printing the final white run */\n        }\n        /*\n         * If a runlength is greater than 6 pixels, then spit out\n         * black or white characters until the runlength drops to\n         * 6 or less.  Once a runlength is <= 6, then combine black\n         * and white runlengths until a 6-pixel pattern is obtained.\n         * Then write out the special character.  Six-pixel patterns\n         * were selected since 64 patterns is the largest power of\n         * two less than the 92 \"easily printable\" PostScript\n         * characters (i.e., no escape codes or octal chars).\n         */\n        l = 0;\n        while (runlength > 6)\n        { /* Run is greater than six... */\n            if (runlength >= WBarr[l].width)\n            {\n                if (n == 0)\n                {\n                    putchar('\\n');\n                    n = maxline;\n                }\n                putchar(colormode ? WBarr[l].black : WBarr[l].white), n--;\n                runlength -= WBarr[l].width;\n            }\n            else\n                l++;\n        }\n        while (runlength > 0 && runlength <= 6)\n        {\n            uint32_t bitsleft = 6;\n            int t = 0;\n            while (bitsleft)\n            {\n                if (runlength <= bitsleft)\n                {\n                    if (colormode)\n                        t |= ((1 << runlength) - 1) << (bitsleft - runlength);\n                    bitsleft -= runlength;\n                    runlength = 0;\n                    if (bitsleft)\n                    {\n                        if (runs >= erun)\n                            break;\n                        colormode ^= 1;\n                        runlength = *runs++;\n                        if (x + runlength > lastx)\n                            runlength = runs[-1] = lastx - x;\n                        x += runlength;\n                    }\n                }\n                else\n                { /* runlength exceeds bits left */\n                    if (colormode)\n                        t |= ((1 << bitsleft) - 1);\n                    runlength -= bitsleft;\n                    bitsleft = 0;\n                }\n            }\n            if (n == 0)\n            {\n                putchar('\\n');\n                n = maxline;\n            }\n            putchar(svalue[t]), n--;\n        }\n    }\n    printf(\")s\\n\");\n}",
+      "fn_code_pos": [
+        [
+          73,
+          0
+        ],
+        [
+          172,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "printruns",
+        "parameters": {
+          "buf": "unsigned char",
+          "runs": "uint32_t",
+          "erun": "uint32_t",
+          "lastx": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void emitFont(FILE *fd)\n{\n    static const char *fontPrologue[] = {\n        \"/newfont 10 dict def newfont begin /FontType 3 def /FontMatrix [1\",\n        \"0 0 1 0 0] def /FontBBox [0 0 512 1] def /Encoding 256 array def\",\n        \"0 1 31{Encoding exch /255 put}for 120 1 255{Encoding exch /255\",\n        \"put}for Encoding 37 /255 put Encoding 40 /255 put Encoding 41 /255\",\n        \"put Encoding 92 /255 put /count 0 def /ls{Encoding exch count 3\",\n        \"string cvs cvn put /count count 1 add def}def 32 1 36{ls}for\",\n        \"38 1 39{ls}for 42 1 91{ls}for 93 1 99{ls}for /count 100\",\n        \"def 100 1 119{ls}for /CharDict 5 dict def CharDict begin /white\",\n        \"{dup 255 eq{pop}{1 dict begin 100 sub neg 512 exch bitshift\",\n        \"/cw exch def cw 0 0 0 cw 1 setcachedevice end}ifelse}def /black\",\n        \"{dup 255 eq{pop}{1 dict begin 110 sub neg 512 exch bitshift\",\n        \"/cw exch def cw 0 0 0 cw 1 setcachedevice 0 0 moveto cw 0 rlineto\",\n        \"0 1 rlineto cw neg 0 rlineto closepath fill end}ifelse}def /numbuild\",\n        \"{dup 255 eq{pop}{6 0 0 0 6 1 setcachedevice 0 1 5{0 moveto\",\n        \"dup 32 and 32 eq{1 0 rlineto 0 1 rlineto -1 0 rlineto closepath\",\n        \"fill newpath}if 1 bitshift}for pop}ifelse}def /.notdef {}\",\n        \"def /255 {}def end /BuildChar{exch begin dup 110 ge{Encoding\",\n        \"exch get 3 string cvs cvi CharDict /black get}{dup 100 ge {Encoding\",\n        \"exch get 3 string cvs cvi CharDict /white get}{Encoding exch get\",\n        \"3 string cvs cvi CharDict /numbuild get}ifelse}ifelse exec end\",\n        \"}def end /Bitfont newfont definefont 1 scalefont setfont\",\n        NULL};\n    int i;\n    for (i = 0; fontPrologue[i] != NULL; i++)\n        fprintf(fd, \"%s\\n\", fontPrologue[i]);\n}",
+      "fn_code_pos": [
+        [
+          179,
+          0
+        ],
+        [
+          207,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "emitFont",
+        "parameters": {
+          "fd": "FILE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void printTIF(TIFF *tif, uint16_t pageNumber)\n{\n    uint32_t w, h;\n    uint16_t unit, compression;\n    float xres, yres, scale = 1.0;\n    tstrip_t s, ns;\n    time_t creation_time;\n\n    TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);\n    TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &w);\n    if (!TIFFGetField(tif, TIFFTAG_COMPRESSION, &compression) ||\n        compression < COMPRESSION_CCITTRLE ||\n        compression > COMPRESSION_CCITT_T6)\n        return;\n    if (!TIFFGetField(tif, TIFFTAG_XRESOLUTION, &xres) || !xres)\n    {\n        TIFFWarning(TIFFFileName(tif), \"No x-resolution, assuming %g dpi\",\n                    defxres);\n        xres = defxres;\n    }\n    if (!TIFFGetField(tif, TIFFTAG_YRESOLUTION, &yres) || !yres)\n    {\n        TIFFWarning(TIFFFileName(tif), \"No y-resolution, assuming %g lpi\",\n                    defyres);\n        yres = defyres; /* XXX */\n    }\n    if (TIFFGetField(tif, TIFFTAG_RESOLUTIONUNIT, &unit) &&\n        unit == RESUNIT_CENTIMETER)\n    {\n        xres *= 2.54F;\n        yres *= 2.54F;\n    }\n    if (pageWidth == 0)\n        pageWidth = w / xres;\n    if (pageHeight == 0)\n        pageHeight = h / yres;\n\n    printf(\"%%!PS-Adobe-3.0\\n\");\n    printf(\"%%%%Creator: fax2ps\\n\");\n#ifdef notdef\n    printf(\"%%%%Title: %s\\n\", file);\n#endif\n    creation_time = time(0);\n    printf(\"%%%%CreationDate: %s\", ctime(&creation_time));\n    printf(\"%%%%Origin: 0 0\\n\");\n    printf(\"%%%%BoundingBox: 0 0 %u %u\\n\", (int)(pageWidth * points),\n           (int)(pageHeight * points)); /* XXX */\n    printf(\"%%%%Pages: (atend)\\n\");\n    printf(\"%%%%EndComments\\n\");\n    printf(\"%%%%BeginProlog\\n\");\n    emitFont(stdout);\n    printf(\"/d{bind def}def\\n\"); /* bind and def proc */\n    printf(\"/m{0 exch moveto}d\\n\");\n    printf(\"/s{show}d\\n\");\n    printf(\"/p{showpage}d \\n\"); /* end page */\n    printf(\"%%%%EndProlog\\n\");\n    printf(\"%%%%Page: \\\"%u\\\" %u\\n\", pageNumber, pageNumber);\n    printf(\"/$pageTop save def gsave\\n\");\n    if (scaleToPage)\n        scale = pageHeight / (h / yres) < pageWidth / (w / xres)\n                    ? pageHeight / (h / yres)\n                    : pageWidth / (w / xres);\n    printf(\"%g %g translate\\n\", points * (pageWidth - scale * w / xres) * half,\n           points *\n               (scale * h / yres + (pageHeight - scale * h / yres) * half));\n    printf(\"%g %g scale\\n\", points / xres * scale, -points / yres * scale);\n    printf(\"0 setgray\\n\");\n    TIFFSetField(tif, TIFFTAG_FAXFILLFUNC, printruns);\n    ns = TIFFNumberOfStrips(tif);\n    row = 0;\n    for (s = 0; s < ns; s++)\n        (void)TIFFReadEncodedStrip(tif, s, (tdata_t)NULL, (tsize_t)-1);\n    printf(\"p\\n\");\n    printf(\"grestore $pageTop restore\\n\");\n    totalPages++;\n}",
+      "fn_code_pos": [
+        [
+          209,
+          0
+        ],
+        [
+          284,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "printTIF",
+        "parameters": {
+          "tif": "TIFF",
+          "pageNumber": "uint16_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int findPage(TIFF *tif, uint16_t pageNumber)\n{\n    uint16_t pn = (uint16_t)-1;\n    uint16_t ptotal = (uint16_t)-1;\n    if (GetPageNumber(tif))\n    {\n        while (pn != (pageNumber - 1) && TIFFReadDirectory(tif) &&\n               GetPageNumber(tif))\n            ;\n        return (pn == (pageNumber - 1));\n    }\n    else\n        return (TIFFSetDirectory(tif, (tdir_t)(pageNumber - 1)));\n}",
+      "fn_code_pos": [
+        [
+          288,
+          0
+        ],
+        [
+          301,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "findPage",
+        "parameters": {
+          "tif": "TIFF",
+          "pageNumber": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void fax2ps(TIFF *tif, uint16_t npages, uint16_t *pages, char *filename)\n{\n    if (npages > 0)\n    {\n        uint16_t pn, ptotal;\n        int i;\n\n        if (!GetPageNumber(tif))\n            fprintf(stderr, \"%s: No page numbers, counting directories.\\n\",\n                    filename);\n        for (i = 0; i < npages; i++)\n        {\n            if (findPage(tif, pages[i]))\n                printTIF(tif, pages[i]);\n            else\n                fprintf(stderr, \"%s: No page number %d\\n\", filename, pages[i]);\n        }\n    }\n    else\n    {\n        uint16_t pageNumber = 0;\n        do\n            printTIF(tif, pageNumber++);\n        while (TIFFReadDirectory(tif));\n    }\n}",
+      "fn_code_pos": [
+        [
+          303,
+          0
+        ],
+        [
+          328,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "fax2ps",
+        "parameters": {
+          "tif": "TIFF",
+          "npages": "uint16_t",
+          "pages": "uint16_t",
+          "filename": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int pcompar(const void *va, const void *vb)\n{\n    const uint16_t *pa = (const uint16_t *)va;\n    const uint16_t *pb = (const uint16_t *)vb;\n    return ((int32_t)*pa - (int32_t)*pb);\n}",
+      "fn_code_pos": [
+        [
+          332,
+          0
+        ],
+        [
+          337,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "pcompar",
+        "parameters": {
+          "va": "void",
+          "vb": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char **argv)\n{\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n    uint16_t *pages = NULL, npages = 0, pageNumber;\n    int c, dowarnings = 0; /* if 1, enable library warnings */\n    TIFF *tif;\n\n    while ((c = getopt(argc, argv, \"l:p:x:y:W:H:wSh\")) != -1)\n        switch (c)\n        {\n            case 'H': /* page height */\n                pageHeight = (float)atof(optarg);\n                break;\n            case 'S': /* scale to page */\n                scaleToPage = 1;\n                break;\n            case 'W': /* page width */\n                pageWidth = (float)atof(optarg);\n                break;\n            case 'p': /* print specific page */\n                pageNumber = (uint16_t)atoi(optarg);\n                if (pages)\n                    pages = (uint16_t *)realloc(pages, (npages + 1) *\n                                                           sizeof(uint16_t));\n                else\n                    pages = (uint16_t *)malloc(sizeof(uint16_t));\n                if (pages == NULL)\n                {\n                    fprintf(stderr, \"Out of memory\\n\");\n                    exit(EXIT_FAILURE);\n                }\n                pages[npages++] = pageNumber;\n                break;\n            case 'w':\n                dowarnings = 1;\n                break;\n            case 'x':\n                defxres = (float)atof(optarg);\n                break;\n            case 'y':\n                defyres = (float)atof(optarg);\n                break;\n            case 'l':\n                maxline = atoi(optarg);\n                break;\n            case 'h':\n                free(pages);\n                usage(EXIT_SUCCESS);\n                break;\n            case '?':\n                free(pages);\n                usage(EXIT_FAILURE);\n        }\n    if (npages > 0)\n        qsort(pages, npages, sizeof(uint16_t), pcompar);\n    if (!dowarnings)\n        TIFFSetWarningHandler(0);\n    if (optind < argc)\n    {\n        do\n        {\n            tif = TIFFOpen(argv[optind], \"r\");\n            if (tif)\n            {\n                fax2ps(tif, npages, pages, argv[optind]);\n                TIFFClose(tif);\n            }\n            else\n                fprintf(stderr, \"%s: Can not open, or not a TIFF file.\\n\",\n                        argv[optind]);\n        } while (++optind < argc);\n    }\n    else\n    {\n        int n;\n        FILE *fd;\n        char buf[16 * 1024];\n\n        fd = tmpfile();\n        if (fd == NULL)\n        {\n            fprintf(stderr, \"Could not obtain temporary file.\\n\");\n            free(pages);\n            exit(EXIT_FAILURE);\n        }\n#if defined(HAVE_SETMODE) && defined(O_BINARY)\n        setmode(fileno(stdin), O_BINARY);\n#endif\n        while ((n = read(fileno(stdin), buf, sizeof(buf))) > 0)\n        {\n            if (write(fileno(fd), buf, n) != n)\n            {\n                fclose(fd);\n                fprintf(stderr, \"Could not copy stdin to temporary file.\\n\");\n                free(pages);\n                exit(EXIT_FAILURE);\n            }\n        }\n        _TIFF_lseek_f(fileno(fd), 0, SEEK_SET);\n#if defined(_WIN32) && defined(USE_WIN32_FILEIO)\n        tif = TIFFFdOpen(_get_osfhandle(fileno(fd)), \"temp\", \"r\");\n#else\n        tif = TIFFFdOpen(fileno(fd), \"temp\", \"r\");\n#endif\n        if (tif)\n        {\n            fax2ps(tif, npages, pages, \"<stdin>\");\n            TIFFClose(tif);\n        }\n        else\n            fprintf(stderr, \"Can not open, or not a TIFF file.\\n\");\n        fclose(fd);\n    }\n    printf(\"%%%%Trailer\\n\");\n    printf(\"%%%%Pages: %u\\n\", totalPages);\n    printf(\"%%%%EOF\\n\");\n\n    free(pages);\n    return (EXIT_SUCCESS);\n}",
+      "fn_code_pos": [
+        [
+          341,
+          0
+        ],
+        [
+          463,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"%s\\n\\n\", TIFFGetVersion());\n    fprintf(out, \"%s\", usage_info);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          478,
+          0
+        ],
+        [
+          485,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "usage(int code)",
+      "fn_dec_pos": [
+        [
+          339,
+          12
+        ],
+        [
+          339,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct\n    {\n        char white, black;\n        unsigned short width;\n    }",
+      {
+        "white": "char",
+        "width": "unsigned short"
+      },
+      "",
+      [
+        76,
+        11
+      ],
+      [
+        80,
+        5
+      ]
+    ],
+    [
+      "struct\n    {\n        char white, black;\n        unsigned short width;\n    }",
+      {
+        "white": "char",
+        "width": "unsigned short"
+      },
+      "",
+      [
+        76,
+        11
+      ],
+      [
+        80,
+        5
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <time.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include <fcntl.h>\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ],
+    [
+      "#include <io.h>\n",
+      [
+        41,
+        0
+      ],
+      [
+        42,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        44,
+        0
+      ],
+      [
+        45,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        45,
+        0
+      ],
+      [
+        46,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

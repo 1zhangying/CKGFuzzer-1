@@ -1,0 +1,829 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static tmsize_t _tiffosReadProc(thandle_t, void *, tmsize_t) { return 0; }",
+      "fn_code_pos": [
+        [
+          105,
+          4
+        ],
+        [
+          105,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffosReadProc",
+        "parameters": {},
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "static tmsize_t _tiffisReadProc(thandle_t fd, void *buf, tmsize_t size)\n    {\n        tiffis_data *data = reinterpret_cast<tiffis_data *>(fd);\n\n        // Verify that type does not overflow.\n        streamsize request_size = size;\n        if (static_cast<tmsize_t>(request_size) != size)\n            return static_cast<tmsize_t>(-1);\n\n        data->stream->read((char *)buf, request_size);\n\n        return static_cast<tmsize_t>(data->stream->gcount());\n    }",
+      "fn_code_pos": [
+        [
+          107,
+          4
+        ],
+        [
+          119,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffisReadProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "buf": "void",
+          "size": "tmsize_t"
+        },
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "static tmsize_t _tiffosWriteProc(thandle_t fd, void *buf, tmsize_t size)\n    {\n        tiffos_data *data = reinterpret_cast<tiffos_data *>(fd);\n        ostream *os = data->stream;\n        ios::pos_type pos = os->tellp();\n\n        // Verify that type does not overflow.\n        streamsize request_size = size;\n        if (static_cast<tmsize_t>(request_size) != size)\n            return static_cast<tmsize_t>(-1);\n\n        os->write(reinterpret_cast<const char *>(buf), request_size);\n\n        return static_cast<tmsize_t>(os->tellp() - pos);\n    }",
+      "fn_code_pos": [
+        [
+          121,
+          4
+        ],
+        [
+          135,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffosWriteProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "buf": "void",
+          "size": "tmsize_t"
+        },
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "static tmsize_t _tiffisWriteProc(thandle_t, void *, tmsize_t) { return 0; }",
+      "fn_code_pos": [
+        [
+          137,
+          4
+        ],
+        [
+          137,
+          79
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffisWriteProc",
+        "parameters": {},
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "static uint64_t _tiffosSeekProc(thandle_t fd, uint64_t off, int whence)\n    {\n        tiffos_data *data = reinterpret_cast<tiffos_data *>(fd);\n        ostream *os = data->stream;\n\n        // if the stream has already failed, don't do anything\n        if (os->fail())\n            return static_cast<uint64_t>(-1);\n\n        switch (whence)\n        {\n            case SEEK_SET:\n            {\n                // Compute 64-bit offset\n                uint64_t new_offset =\n                    static_cast<uint64_t>(data->start_pos) + off;\n\n                // Verify that value does not overflow\n                ios::off_type offset = static_cast<ios::off_type>(new_offset);\n                if (static_cast<uint64_t>(offset) != new_offset)\n                    return static_cast<uint64_t>(-1);\n\n                os->seekp(offset, ios::beg);\n                break;\n            }\n            case SEEK_CUR:\n            {\n                // Verify that value does not overflow\n                ios::off_type offset = static_cast<ios::off_type>(off);\n                if (static_cast<uint64_t>(offset) != off)\n                    return static_cast<uint64_t>(-1);\n\n                os->seekp(offset, ios::cur);\n                break;\n            }\n            case SEEK_END:\n            {\n                // Verify that value does not overflow\n                ios::off_type offset = static_cast<ios::off_type>(off);\n                if (static_cast<uint64_t>(offset) != off)\n                    return static_cast<uint64_t>(-1);\n\n                os->seekp(offset, ios::end);\n                break;\n            }\n        }\n\n        // Attempt to workaround problems with seeking past the end of the\n        // stream.  ofstream doesn't have a problem with this but\n        // ostrstream/ostringstream does. In that situation, add intermediate\n        // '\\0' characters.\n        if (os->fail())\n        {\n            ios::iostate old_state;\n            ios::pos_type origin;\n\n            old_state = os->rdstate();\n            // reset the fail bit or else tellp() won't work below\n            os->clear(os->rdstate() & ~ios::failbit);\n            switch (whence)\n            {\n                case SEEK_SET:\n                default:\n                    origin = data->start_pos;\n                    break;\n                case SEEK_CUR:\n                    origin = os->tellp();\n                    break;\n                case SEEK_END:\n                    os->seekp(0, ios::end);\n                    origin = os->tellp();\n                    break;\n            }\n            // restore original stream state\n            os->clear(old_state);\n\n            // only do something if desired seek position is valid\n            if ((static_cast<uint64_t>(origin) + off) >\n                static_cast<uint64_t>(data->start_pos))\n            {\n                uint64_t num_fill;\n\n                // clear the fail bit\n                os->clear(os->rdstate() & ~ios::failbit);\n\n                // extend the stream to the expected size\n                os->seekp(0, ios::end);\n                num_fill = (static_cast<uint64_t>(origin)) + off - os->tellp();\n                for (uint64_t i = 0; i < num_fill; i++)\n                    os->put('\\0');\n\n                // retry the seek\n                os->seekp(static_cast<ios::off_type>(\n                              static_cast<uint64_t>(origin) + off),\n                          ios::beg);\n            }\n        }\n\n        return static_cast<uint64_t>(os->tellp());\n    }",
+      "fn_code_pos": [
+        [
+          139,
+          4
+        ],
+        [
+          238,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffosSeekProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "off": "uint64_t",
+          "whence": "int"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "static uint64_t _tiffisSeekProc(thandle_t fd, uint64_t off, int whence)\n    {\n        tiffis_data *data = reinterpret_cast<tiffis_data *>(fd);\n\n        switch (whence)\n        {\n            case SEEK_SET:\n            {\n                // Compute 64-bit offset\n                uint64_t new_offset =\n                    static_cast<uint64_t>(data->start_pos) + off;\n\n                // Verify that value does not overflow\n                ios::off_type offset = static_cast<ios::off_type>(new_offset);\n                if (static_cast<uint64_t>(offset) != new_offset)\n                    return static_cast<uint64_t>(-1);\n\n                data->stream->seekg(offset, ios::beg);\n                break;\n            }\n            case SEEK_CUR:\n            {\n                // Verify that value does not overflow\n                ios::off_type offset = static_cast<ios::off_type>(off);\n                if (static_cast<uint64_t>(offset) != off)\n                    return static_cast<uint64_t>(-1);\n\n                data->stream->seekg(offset, ios::cur);\n                break;\n            }\n            case SEEK_END:\n            {\n                // Verify that value does not overflow\n                ios::off_type offset = static_cast<ios::off_type>(off);\n                if (static_cast<uint64_t>(offset) != off)\n                    return static_cast<uint64_t>(-1);\n\n                data->stream->seekg(offset, ios::end);\n                break;\n            }\n        }\n\n        return (uint64_t)(data->stream->tellg() - data->start_pos);\n    }",
+      "fn_code_pos": [
+        [
+          240,
+          4
+        ],
+        [
+          283,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffisSeekProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "off": "uint64_t",
+          "whence": "int"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "static uint64_t _tiffosSizeProc(thandle_t fd)\n    {\n        tiffos_data *data = reinterpret_cast<tiffos_data *>(fd);\n        ostream *os = data->stream;\n        ios::pos_type pos = os->tellp();\n        ios::pos_type len;\n\n        os->seekp(0, ios::end);\n        len = os->tellp();\n        os->seekp(pos);\n\n        return (uint64_t)len;\n    }",
+      "fn_code_pos": [
+        [
+          285,
+          4
+        ],
+        [
+          297,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffosSizeProc",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "static uint64_t _tiffisSizeProc(thandle_t fd)\n    {\n        tiffis_data *data = reinterpret_cast<tiffis_data *>(fd);\n        ios::pos_type pos = data->stream->tellg();\n        ios::pos_type len;\n\n        data->stream->seekg(0, ios::end);\n        len = data->stream->tellg();\n        data->stream->seekg(pos);\n\n        return (uint64_t)len;\n    }",
+      "fn_code_pos": [
+        [
+          299,
+          4
+        ],
+        [
+          310,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffisSizeProc",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "static int _tiffosCloseProc(thandle_t fd)\n    {\n        // Our stream was not allocated by us, so it shouldn't be closed by us.\n        delete reinterpret_cast<tiffos_data *>(fd);\n        return 0;\n    }",
+      "fn_code_pos": [
+        [
+          312,
+          4
+        ],
+        [
+          317,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffosCloseProc",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int _tiffisCloseProc(thandle_t fd)\n    {\n        // Our stream was not allocated by us, so it shouldn't be closed by us.\n        delete reinterpret_cast<tiffis_data *>(fd);\n        return 0;\n    }",
+      "fn_code_pos": [
+        [
+          319,
+          4
+        ],
+        [
+          324,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffisCloseProc",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int _tiffDummyMapProc(thandle_t, void **base, toff_t *size)\n    {\n        (void)base;\n        (void)size;\n        return (0);\n    }",
+      "fn_code_pos": [
+        [
+          326,
+          4
+        ],
+        [
+          331,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffDummyMapProc",
+        "parameters": {
+          "base": "void",
+          "size": "toff_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void _tiffDummyUnmapProc(thandle_t, void *base, toff_t size)\n    {\n        (void)base;\n        (void)size;\n    }",
+      "fn_code_pos": [
+        [
+          333,
+          4
+        ],
+        [
+          337,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffDummyUnmapProc",
+        "parameters": {
+          "base": "void",
+          "size": "toff_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static TIFF *_tiffStreamOpen(const char *name, const char *mode, void *fd)\n    {\n        TIFF *tif;\n\n        if (strchr(mode, 'w'))\n        {\n            tiffos_data *data = new tiffos_data;\n            data->stream = reinterpret_cast<ostream *>(fd);\n            data->start_pos = data->stream->tellp();\n\n            // Open for writing.\n            tif = TIFFClientOpen(\n                name, mode, reinterpret_cast<thandle_t>(data), _tiffosReadProc,\n                _tiffosWriteProc, _tiffosSeekProc, _tiffosCloseProc,\n                _tiffosSizeProc, _tiffDummyMapProc, _tiffDummyUnmapProc);\n            if (!tif)\n            {\n                delete data;\n            }\n        }\n        else\n        {\n            tiffis_data *data = new tiffis_data;\n            data->stream = reinterpret_cast<istream *>(fd);\n            data->start_pos = data->stream->tellg();\n            // Open for reading.\n            tif = TIFFClientOpen(\n                name, mode, reinterpret_cast<thandle_t>(data), _tiffisReadProc,\n                _tiffisWriteProc, _tiffisSeekProc, _tiffisCloseProc,\n                _tiffisSizeProc, _tiffDummyMapProc, _tiffDummyUnmapProc);\n            if (!tif)\n            {\n                delete data;\n            }\n        }\n\n        return (tif);\n    }",
+      "fn_code_pos": [
+        [
+          342,
+          4
+        ],
+        [
+          379,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffStreamOpen",
+        "parameters": {
+          "name": "char",
+          "mode": "char",
+          "fd": "void"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFStreamOpen(const char *name, ostream *os)\n{\n    // If os is either a ostrstream or ostringstream, and has no data\n    // written to it yet, then tellp() will return -1 which will break us.\n    // We workaround this by writing out a dummy character and\n    // then seek back to the beginning.\n    if (!os->fail() && static_cast<int>(os->tellp()) < 0)\n    {\n        *os << '\\0';\n        os->seekp(0);\n    }\n\n    // NB: We don't support mapped files with streams so add 'm'\n    return _tiffStreamOpen(name, \"wm\", os);\n}",
+      "fn_code_pos": [
+        [
+          383,
+          0
+        ],
+        [
+          397,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFStreamOpen",
+        "parameters": {
+          "name": "char",
+          "os": "ostream"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFStreamOpen(const char *name, istream *is)\n{\n    // NB: We don't support mapped files with streams so add 'm'\n    return _tiffStreamOpen(name, \"rm\", is);\n}",
+      "fn_code_pos": [
+        [
+          399,
+          0
+        ],
+        [
+          403,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFStreamOpen",
+        "parameters": {
+          "name": "char",
+          "is": "istream"
+        },
+        "return_type": "TIFF"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "_tiffosReadProc(thandle_t, void *, tmsize_t)",
+      "fn_dec_pos": [
+        [
+          79,
+          20
+        ],
+        [
+          79,
+          64
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffosReadProc",
+        "parameters": {},
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "_tiffisReadProc(thandle_t fd, void *buf, tmsize_t size)",
+      "fn_dec_pos": [
+        [
+          80,
+          20
+        ],
+        [
+          80,
+          75
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffisReadProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "buf": "void",
+          "size": "tmsize_t"
+        },
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "_tiffosWriteProc(thandle_t fd, void *buf, tmsize_t size)",
+      "fn_dec_pos": [
+        [
+          81,
+          20
+        ],
+        [
+          81,
+          76
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffosWriteProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "buf": "void",
+          "size": "tmsize_t"
+        },
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "_tiffisWriteProc(thandle_t, void *, tmsize_t)",
+      "fn_dec_pos": [
+        [
+          82,
+          20
+        ],
+        [
+          82,
+          65
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffisWriteProc",
+        "parameters": {},
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "_tiffosSeekProc(thandle_t fd, uint64_t off, int whence)",
+      "fn_dec_pos": [
+        [
+          83,
+          20
+        ],
+        [
+          83,
+          75
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffosSeekProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "off": "uint64_t",
+          "whence": "int"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "_tiffisSeekProc(thandle_t fd, uint64_t off, int whence)",
+      "fn_dec_pos": [
+        [
+          84,
+          20
+        ],
+        [
+          84,
+          75
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffisSeekProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "off": "uint64_t",
+          "whence": "int"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "_tiffosSizeProc(thandle_t fd)",
+      "fn_dec_pos": [
+        [
+          85,
+          20
+        ],
+        [
+          85,
+          49
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffosSizeProc",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "_tiffisSizeProc(thandle_t fd)",
+      "fn_dec_pos": [
+        [
+          86,
+          20
+        ],
+        [
+          86,
+          49
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffisSizeProc",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "_tiffosCloseProc(thandle_t fd)",
+      "fn_dec_pos": [
+        [
+          87,
+          15
+        ],
+        [
+          87,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffosCloseProc",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "_tiffisCloseProc(thandle_t fd)",
+      "fn_dec_pos": [
+        [
+          88,
+          15
+        ],
+        [
+          88,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffisCloseProc",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "_tiffDummyMapProc(thandle_t, void **base, toff_t *size)",
+      "fn_dec_pos": [
+        [
+          89,
+          15
+        ],
+        [
+          89,
+          70
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffDummyMapProc",
+        "parameters": {
+          "base": "void",
+          "size": "toff_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "_tiffDummyUnmapProc(thandle_t, void *base, toff_t size)",
+      "fn_dec_pos": [
+        [
+          90,
+          16
+        ],
+        [
+          90,
+          71
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffDummyUnmapProc",
+        "parameters": {
+          "base": "void",
+          "size": "toff_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "_tiffStreamOpen(const char *name, const char *mode, void *fd)",
+      "fn_dec_pos": [
+        [
+          91,
+          17
+        ],
+        [
+          91,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffStreamOpen",
+        "parameters": {
+          "name": "char",
+          "mode": "char",
+          "fd": "void"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_tiffStreamOpen(const char *name, const char *mode, void *fd)",
+      "fn_dec_pos": [
+        [
+          342,
+          17
+        ],
+        [
+          342,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffStreamOpen",
+        "parameters": {
+          "name": "char",
+          "mode": "char",
+          "fd": "void"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFStreamOpen(const char *name, ostream *os)",
+      "fn_dec_pos": [
+        [
+          383,
+          6
+        ],
+        [
+          383,
+          51
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFStreamOpen",
+        "parameters": {
+          "name": "char",
+          "os": "ostream"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFStreamOpen(const char *name, istream *is)",
+      "fn_dec_pos": [
+        [
+          399,
+          6
+        ],
+        [
+          399,
+          51
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFStreamOpen",
+        "parameters": {
+          "name": "char",
+          "is": "istream"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct tiffis_data\n    {\n        istream *stream;\n        ios::pos_type start_pos;\n    }",
+      {
+        "*stream": "istream",
+        "start_pos": "ios::pos_type"
+      },
+      "tiffis_data",
+      [
+        93,
+        4
+      ],
+      [
+        97,
+        5
+      ]
+    ],
+    [
+      "struct tiffos_data\n    {\n        ostream *stream;\n        ios::pos_type start_pos;\n    }",
+      {
+        "*stream": "ostream",
+        "start_pos": "ios::pos_type"
+      },
+      "tiffos_data",
+      [
+        99,
+        4
+      ],
+      [
+        103,
+        5
+      ]
+    ],
+    [
+      "struct tiffis_data",
+      {},
+      "",
+      [
+        73,
+        0
+      ],
+      [
+        73,
+        18
+      ]
+    ],
+    [
+      "struct tiffos_data",
+      {},
+      "",
+      [
+        74,
+        0
+      ],
+      [
+        74,
+        18
+      ]
+    ],
+    [
+      "struct tiffis_data\n    {\n        istream *stream;\n        ios::pos_type start_pos;\n    }",
+      {
+        "*stream": "istream",
+        "start_pos": "ios::pos_type"
+      },
+      "tiffis_data",
+      [
+        93,
+        4
+      ],
+      [
+        97,
+        5
+      ]
+    ],
+    [
+      "struct tiffos_data\n    {\n        ostream *stream;\n        ios::pos_type start_pos;\n    }",
+      {
+        "*stream": "ostream",
+        "start_pos": "ios::pos_type"
+      },
+      "tiffos_data",
+      [
+        99,
+        4
+      ],
+      [
+        103,
+        5
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <iostream>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -1,0 +1,405 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static CurvesFloatData* malloc_aligned(cmsContext ContextID)\n{\n       cmsUInt8Number* real_ptr = (cmsUInt8Number*)_cmsMallocZero(ContextID, sizeof(CurvesFloatData) + 32);\n       cmsUInt8Number* aligned = (cmsUInt8Number*)(((uintptr_t)real_ptr + 16) & ~0xf);\n       CurvesFloatData* p = (CurvesFloatData*)aligned;\n\n       p->real_ptr = real_ptr;\n       \n       return p;\n}",
+      "fn_code_pos": [
+        [
+          38,
+          0
+        ],
+        [
+          47,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "malloc_aligned",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "CurvesFloatData"
+      }
+    },
+    {
+      "fn_code": "static void free_aligned(cmsContext ContextID, void* Data)\n{\n       CurvesFloatData* p = (CurvesFloatData*)Data;\n       if (p != NULL)\n              _cmsFree(ContextID, p->real_ptr);\n}",
+      "fn_code_pos": [
+        [
+          50,
+          0
+        ],
+        [
+          55,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "free_aligned",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Data": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void FastEvaluateFloatRGBCurves(struct _cmstransform_struct *CMMcargo,\n                                        const void* Input,\n                                        void* Output,\n                                        cmsUInt32Number PixelsPerLine,\n                                        cmsUInt32Number LineCount,\n                                        const cmsStride* Stride)\n{   \n    cmsUInt32Number i, ii;\n\tcmsUInt32Number SourceStartingOrder[cmsMAXCHANNELS];\n\tcmsUInt32Number SourceIncrements[cmsMAXCHANNELS];\n\tcmsUInt32Number DestStartingOrder[cmsMAXCHANNELS];\n\tcmsUInt32Number DestIncrements[cmsMAXCHANNELS];\n\n    const cmsUInt8Number* rin;\n    const cmsUInt8Number* gin;\n    const cmsUInt8Number* bin;\n    const cmsUInt8Number* ain = NULL;\n\n    cmsUInt8Number* rout;\n    cmsUInt8Number* gout;\n    cmsUInt8Number* bout;\n    cmsUInt8Number* aout = NULL;\n\n    cmsUInt32Number InputFormat  = cmsGetTransformInputFormat((cmsHTRANSFORM) CMMcargo);\n    cmsUInt32Number OutputFormat = cmsGetTransformOutputFormat((cmsHTRANSFORM) CMMcargo);\n\n    CurvesFloatData* Data = (CurvesFloatData*)  _cmsGetTransformUserData(CMMcargo);\n\n    cmsUInt32Number nchans, nalpha;\n    cmsUInt32Number strideIn, strideOut;\n\n    _cmsComputeComponentIncrements(InputFormat,  Stride->BytesPerPlaneIn, &nchans, &nalpha, SourceStartingOrder, SourceIncrements);\n    _cmsComputeComponentIncrements(OutputFormat, Stride->BytesPerPlaneOut, &nchans, &nalpha, DestStartingOrder, DestIncrements);\n\n    if (!(_cmsGetTransformFlags((cmsHTRANSFORM)CMMcargo) & cmsFLAGS_COPY_ALPHA))\n        nalpha = 0;\n\n\n    strideIn = strideOut = 0;\n    for (i = 0; i < LineCount; i++) {\n\n        rin = (const cmsUInt8Number*)Input + SourceStartingOrder[0] + strideIn;\n        gin = (const cmsUInt8Number*)Input + SourceStartingOrder[1] + strideIn;\n        bin = (const cmsUInt8Number*)Input + SourceStartingOrder[2] + strideIn;\n\n        if (nalpha)\n            ain = (const cmsUInt8Number*)Input + SourceStartingOrder[3] + strideIn;\n\n        rout = (cmsUInt8Number*)Output + DestStartingOrder[0] + strideOut;\n        gout = (cmsUInt8Number*)Output + DestStartingOrder[1] + strideOut;\n        bout = (cmsUInt8Number*)Output + DestStartingOrder[2] + strideOut;\n\n        if (nalpha)\n            aout = (cmsUInt8Number*)Output + DestStartingOrder[3] + strideOut;\n\n\n        for (ii = 0; ii < PixelsPerLine; ii++) {\n\n            *(cmsFloat32Number*)rout = flerp(Data->CurveR, *(cmsFloat32Number*)rin);\n            *(cmsFloat32Number*)gout = flerp(Data->CurveG, *(cmsFloat32Number*)gin);\n            *(cmsFloat32Number*)bout = flerp(Data->CurveB, *(cmsFloat32Number*)bin);\n\n            rin += SourceIncrements[0];\n            gin += SourceIncrements[1];\n            bin += SourceIncrements[2];\n\n            rout += DestIncrements[0];\n            gout += DestIncrements[1];\n            bout += DestIncrements[2];\n\n            if (ain)\n            {\n                *(cmsFloat32Number*)aout = *(cmsFloat32Number*)ain;\n                ain += SourceIncrements[3];\n                aout += DestIncrements[3];\n            }\n        }\n\n        strideIn += Stride->BytesPerLineIn;\n        strideOut += Stride->BytesPerLineOut;\n    }\n}",
+      "fn_code_pos": [
+        [
+          59,
+          0
+        ],
+        [
+          140,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FastEvaluateFloatRGBCurves",
+        "parameters": {
+          "CMMcargo": "struct _cmstransform_struct",
+          "Input": "void",
+          "Output": "void",
+          "PixelsPerLine": "cmsUInt32Number",
+          "LineCount": "cmsUInt32Number",
+          "Stride": "cmsStride"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void FastFloatRGBIdentity(struct _cmstransform_struct *CMMcargo,\n                                        const void* Input,\n                                        void* Output,\n                                        cmsUInt32Number PixelsPerLine,\n                                        cmsUInt32Number LineCount,\n                                        const cmsStride* Stride)\n{   \n    cmsUInt32Number i, ii;\n\tcmsUInt32Number SourceStartingOrder[cmsMAXCHANNELS];\n\tcmsUInt32Number SourceIncrements[cmsMAXCHANNELS];\n    cmsUInt32Number DestStartingOrder[cmsMAXCHANNELS];\n    cmsUInt32Number DestIncrements[cmsMAXCHANNELS];\n    const cmsUInt8Number* rin;\n    const cmsUInt8Number* gin;\n    const cmsUInt8Number* bin;\n    const cmsUInt8Number* ain = NULL;\n    cmsUInt8Number* rout;\n    cmsUInt8Number* gout;\n    cmsUInt8Number* bout;\n    cmsUInt8Number* aout = NULL;\n\n    cmsUInt32Number InputFormat  = cmsGetTransformInputFormat((cmsHTRANSFORM) CMMcargo);\n    cmsUInt32Number OutputFormat = cmsGetTransformOutputFormat((cmsHTRANSFORM) CMMcargo);\n  \n    cmsUInt32Number nchans, nalpha;\n    cmsUInt32Number strideIn, strideOut;\n\n    _cmsComputeComponentIncrements(InputFormat,  Stride->BytesPerPlaneIn,  &nchans, &nalpha, SourceStartingOrder, SourceIncrements);\n    _cmsComputeComponentIncrements(OutputFormat, Stride->BytesPerPlaneOut, &nchans, &nalpha, DestStartingOrder, DestIncrements);\n\n    if (!(_cmsGetTransformFlags((cmsHTRANSFORM)CMMcargo) & cmsFLAGS_COPY_ALPHA))\n        nalpha = 0;\n\n    strideIn = strideOut = 0;\n    for (i = 0; i < LineCount; i++) {\n\n    rin = (const cmsUInt8Number*)Input + SourceStartingOrder[0] + strideIn;\n    gin = (const cmsUInt8Number*)Input + SourceStartingOrder[1] + strideIn;\n    bin = (const cmsUInt8Number*)Input + SourceStartingOrder[2] + strideIn;\n\n    if (nalpha)\n        ain = (const cmsUInt8Number*)Input + SourceStartingOrder[3] + strideIn;\n\n\n    rout = (cmsUInt8Number*)Output + DestStartingOrder[0] + strideOut;\n    gout = (cmsUInt8Number*)Output + DestStartingOrder[1] + strideOut;\n    bout = (cmsUInt8Number*)Output + DestStartingOrder[2] + strideOut;\n\n    if (nalpha)\n        aout = (cmsUInt8Number*)Output + DestStartingOrder[3] + strideOut;\n\n\n    for (ii=0; ii < PixelsPerLine; ii++) {\n\n        *(cmsFloat32Number*)rout = *(cmsFloat32Number*)rin;\n        *(cmsFloat32Number*)gout = *(cmsFloat32Number*)gin;\n        *(cmsFloat32Number*)bout = *(cmsFloat32Number*)bin;\n        \n        rin += SourceIncrements[0];\n        gin += SourceIncrements[1];\n        bin += SourceIncrements[2];\n\n        rout += DestIncrements[0];\n        gout += DestIncrements[1];\n        bout += DestIncrements[2];\n\n\n        if (ain)\n        {\n            *(cmsFloat32Number*)aout = *(cmsFloat32Number*)ain;\n            ain += SourceIncrements[3];\n            aout += DestIncrements[3];\n        }\n    }\n\n    strideIn += Stride->BytesPerLineIn;\n    strideOut += Stride->BytesPerLineOut;\n    }\n}",
+      "fn_code_pos": [
+        [
+          143,
+          0
+        ],
+        [
+          221,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FastFloatRGBIdentity",
+        "parameters": {
+          "CMMcargo": "struct _cmstransform_struct",
+          "Input": "void",
+          "Output": "void",
+          "PixelsPerLine": "cmsUInt32Number",
+          "LineCount": "cmsUInt32Number",
+          "Stride": "cmsStride"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void FastEvaluateFloatGrayCurves(struct _cmstransform_struct* CMMcargo,\n                                        const void* Input,\n                                        void* Output,\n                                        cmsUInt32Number PixelsPerLine,\n                                        cmsUInt32Number LineCount,\n                                        const cmsStride* Stride)\n{\n    cmsUInt32Number i, ii;\n    cmsUInt32Number SourceStartingOrder[cmsMAXCHANNELS];\n    cmsUInt32Number SourceIncrements[cmsMAXCHANNELS];\n    cmsUInt32Number DestStartingOrder[cmsMAXCHANNELS];\n    cmsUInt32Number DestIncrements[cmsMAXCHANNELS];\n    const cmsUInt8Number* kin;\n    const cmsUInt8Number* ain = NULL;\n    cmsUInt8Number* kout;\n    cmsUInt8Number* aout = NULL;\n\n    cmsUInt32Number InputFormat = cmsGetTransformInputFormat((cmsHTRANSFORM)CMMcargo);\n    cmsUInt32Number OutputFormat = cmsGetTransformOutputFormat((cmsHTRANSFORM)CMMcargo);\n\n    CurvesFloatData* Data = (CurvesFloatData*)_cmsGetTransformUserData(CMMcargo);\n\n    cmsUInt32Number nchans, nalpha;\n    cmsUInt32Number strideIn, strideOut;\n\n    _cmsComputeComponentIncrements(InputFormat, Stride->BytesPerPlaneIn, &nchans, &nalpha, SourceStartingOrder, SourceIncrements);\n    _cmsComputeComponentIncrements(OutputFormat, Stride->BytesPerPlaneIn, &nchans, &nalpha, DestStartingOrder, DestIncrements);\n\n    if (!(_cmsGetTransformFlags((cmsHTRANSFORM)CMMcargo) & cmsFLAGS_COPY_ALPHA))\n        nalpha = 0;\n\n    strideIn = strideOut = 0;\n    for (i = 0; i < LineCount; i++) {\n\n        kin = (const cmsUInt8Number*)Input + SourceStartingOrder[0] + strideIn;\n        kout = (cmsUInt8Number*)Output + DestStartingOrder[0] + strideOut;\n\n        if (nalpha)\n        {\n            ain = (const cmsUInt8Number*)Input + SourceStartingOrder[1] + strideIn;\n            aout = (cmsUInt8Number*)Output + DestStartingOrder[1] + strideOut;\n        }\n\n        for (ii = 0; ii < PixelsPerLine; ii++) {\n\n            *(cmsFloat32Number*)kout = flerp(Data->CurveR, *(cmsFloat32Number*)kin);\n\n            kin += SourceIncrements[0];\n            kout += DestIncrements[0];\n\n            if (ain)\n            {\n                *(cmsFloat32Number*)aout = *(cmsFloat32Number*)ain;\n                ain += SourceIncrements[1];\n                aout += DestIncrements[1];\n            }\n        }\n\n        strideIn += Stride->BytesPerLineIn;\n        strideOut += Stride->BytesPerLineOut;\n    }\n}",
+      "fn_code_pos": [
+        [
+          224,
+          0
+        ],
+        [
+          285,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FastEvaluateFloatGrayCurves",
+        "parameters": {
+          "CMMcargo": "struct _cmstransform_struct",
+          "Input": "void",
+          "Output": "void",
+          "PixelsPerLine": "cmsUInt32Number",
+          "LineCount": "cmsUInt32Number",
+          "Stride": "cmsStride"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void FastFloatGrayIdentity(struct _cmstransform_struct* CMMcargo,\n                                        const void* Input,\n                                        void* Output,\n                                        cmsUInt32Number PixelsPerLine,\n                                        cmsUInt32Number LineCount,\n                                        const cmsStride* Stride)\n{   \n    cmsUInt32Number i, ii;\n    cmsUInt32Number SourceStartingOrder[cmsMAXCHANNELS];\n    cmsUInt32Number SourceIncrements[cmsMAXCHANNELS];\n    cmsUInt32Number DestStartingOrder[cmsMAXCHANNELS];\n    cmsUInt32Number DestIncrements[cmsMAXCHANNELS];\n\n    const cmsUInt8Number* kin;\n    const cmsUInt8Number* ain = NULL;\n    cmsUInt8Number* kout;\n    cmsUInt8Number* aout = NULL;\n\n    cmsUInt32Number InputFormat = cmsGetTransformInputFormat((cmsHTRANSFORM)CMMcargo);\n    cmsUInt32Number OutputFormat = cmsGetTransformOutputFormat((cmsHTRANSFORM)CMMcargo);\n\n    cmsUInt32Number nchans, nalpha;\n    cmsUInt32Number strideIn, strideOut;\n\n    _cmsComputeComponentIncrements(InputFormat, Stride->BytesPerPlaneIn, &nchans, &nalpha, SourceStartingOrder, SourceIncrements);\n    _cmsComputeComponentIncrements(OutputFormat, Stride->BytesPerPlaneOut, &nchans, &nalpha, DestStartingOrder, DestIncrements);\n\n    if (!(_cmsGetTransformFlags((cmsHTRANSFORM)CMMcargo) & cmsFLAGS_COPY_ALPHA))\n        nalpha = 0;\n\n    strideIn = strideOut = 0;\n    for (i = 0; i < LineCount; i++) {\n\n\n        kin = (const cmsUInt8Number*)Input + SourceStartingOrder[0] + strideIn;\n        kout = (cmsUInt8Number*)Output + DestStartingOrder[0] + strideOut;\n\n        if (nalpha)\n        {\n            ain = (const cmsUInt8Number*)Input + SourceStartingOrder[1] + strideIn;\n            aout = (cmsUInt8Number*)Output + DestStartingOrder[1] + strideOut;\n        }\n\n\n        for (ii = 0; ii < PixelsPerLine; ii++) {\n\n            *(cmsFloat32Number*)kout = *(cmsFloat32Number*)kin;\n\n            kin += SourceIncrements[0];\n            kout += DestIncrements[0];\n\n            if (ain)\n            {\n                *(cmsFloat32Number*)aout = *(cmsFloat32Number*)ain;\n                ain += SourceIncrements[1];\n                aout += DestIncrements[1];\n            }\n        }\n        strideIn += Stride->BytesPerLineIn;\n        strideOut += Stride->BytesPerLineOut;\n    }\n}",
+      "fn_code_pos": [
+        [
+          288,
+          0
+        ],
+        [
+          349,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FastFloatGrayIdentity",
+        "parameters": {
+          "CMMcargo": "struct _cmstransform_struct",
+          "Input": "void",
+          "Output": "void",
+          "PixelsPerLine": "cmsUInt32Number",
+          "LineCount": "cmsUInt32Number",
+          "Stride": "cmsStride"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool AllRGBCurvesAreLinear(CurvesFloatData* data)\n{\n       int j;\n       cmsFloat32Number expected;\n\n       for (j = 0; j < MAX_NODES_IN_CURVE; j++) {\n\n              expected = (cmsFloat32Number)j / (cmsFloat32Number)(MAX_NODES_IN_CURVE - 1);\n\n              if (fabsf(data->CurveR[j] - expected) > LINEAR_CURVES_EPSILON ||\n                     fabsf(data->CurveG[j] - expected) > LINEAR_CURVES_EPSILON ||\n                     fabsf(data->CurveB[j] - expected) > LINEAR_CURVES_EPSILON) {\n                     return FALSE;\n              }\n       }\n\n       return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          355,
+          0
+        ],
+        [
+          373,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllRGBCurvesAreLinear",
+        "parameters": {
+          "data": "CurvesFloatData"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool KCurveIsLinear(CurvesFloatData* data)\n{\n       int j;\n       cmsFloat32Number expected;\n\n       for (j = 0; j < MAX_NODES_IN_CURVE; j++) {\n              expected = (cmsFloat32Number)j / (cmsFloat32Number)(MAX_NODES_IN_CURVE - 1);\n\n              if (fabs(data->CurveR[j] - expected) > LINEAR_CURVES_EPSILON) return FALSE;\n       }\n\n\n       return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          375,
+          0
+        ],
+        [
+          389,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "KCurveIsLinear",
+        "parameters": {
+          "data": "CurvesFloatData"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nCurvesFloatData* ComputeCompositeCurves(cmsUInt32Number nChan,  cmsPipeline* Src)\n{\n    cmsUInt32Number i, j;\n    cmsFloat32Number InFloat[3], OutFloat[3];\n\n    CurvesFloatData* Data = malloc_aligned(cmsGetPipelineContextID(Src));\n    if (Data == NULL) return NULL;\n\n    // Create target curves\n    for (i = 0; i < MAX_NODES_IN_CURVE; i++) {\n\n        for (j=0; j <nChan; j++) \n               InFloat[j] = (cmsFloat32Number)i /  (cmsFloat32Number)(MAX_NODES_IN_CURVE-1);\n\n        cmsPipelineEvalFloat(InFloat, OutFloat, Src);\n\n        if (nChan == 1) {\n\n               Data->CurveR[i] = OutFloat[0];\n        }\n        else {\n               Data->CurveR[i] = OutFloat[0];\n               Data->CurveG[i] = OutFloat[1];\n               Data->CurveB[i] = OutFloat[2];\n        }\n        \n    }\n\n    return Data;\n}",
+      "fn_code_pos": [
+        [
+          393,
+          0
+        ],
+        [
+          423,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComputeCompositeCurves",
+        "parameters": {
+          "nChan": "cmsUInt32Number",
+          "Src": "cmsPipeline"
+        },
+        "return_type": "CurvesFloatData"
+      }
+    },
+    {
+      "fn_code": "cmsBool OptimizeFloatByJoiningCurves(_cmsTransform2Fn* TransformFn,                                  \n                                  void** UserData,\n                                  _cmsFreeUserDataFn* FreeUserData,\n                                  cmsPipeline** Lut, \n                                  cmsUInt32Number* InputFormat, \n                                  cmsUInt32Number* OutputFormat, \n                                  cmsUInt32Number* dwFlags)    \n{\n \n    cmsPipeline* Src = *Lut;\n    cmsStage* mpe;   \n    CurvesFloatData* Data;\n    cmsUInt32Number nChans;\n\n    // Apply only to floating-point cases\n    if (!T_FLOAT(*InputFormat) || !T_FLOAT(*OutputFormat)) return FALSE;\n\n    // Only on 8-bit\n    if (T_BYTES(*InputFormat) != 4 ||  T_BYTES(*OutputFormat) != 4) return FALSE;\n\n    // Curves need same channels on input and output (despite extra channels may differ)\n    nChans = T_CHANNELS(*InputFormat);\n    if (nChans != T_CHANNELS(*OutputFormat)) return FALSE;\n\n    // gray and RGB \n    if (nChans != 1 && nChans != 3) return FALSE;\n   \n    //  Only curves in this LUT?\n    for (mpe = cmsPipelineGetPtrToFirstStage(Src);\n        mpe != NULL;\n        mpe = cmsStageNext(mpe)) {\n\n            if (cmsStageType(mpe) != cmsSigCurveSetElemType) return FALSE;\n    }\n   \n    Data = ComputeCompositeCurves(nChans, Src);\n    \n    *dwFlags |= cmsFLAGS_NOCACHE;\n    *dwFlags &= ~cmsFLAGS_CAN_CHANGE_FORMATTER;\n    *UserData = Data;\n    *FreeUserData = free_aligned;\n\n    // Maybe the curves are linear at the end\n    if (nChans == 1)\n        *TransformFn = (KCurveIsLinear(Data) ? FastFloatGrayIdentity : FastEvaluateFloatGrayCurves);\n    else\n        *TransformFn = (AllRGBCurvesAreLinear(Data) ? FastFloatRGBIdentity : FastEvaluateFloatRGBCurves);\n\n    return TRUE;\n\n}",
+      "fn_code_pos": [
+        [
+          428,
+          0
+        ],
+        [
+          478,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OptimizeFloatByJoiningCurves",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeUserData": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "malloc_aligned(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          38,
+          24
+        ],
+        [
+          38,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "malloc_aligned",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "ComputeCompositeCurves(cmsUInt32Number nChan,  cmsPipeline* Src)",
+      "fn_dec_pos": [
+        [
+          394,
+          17
+        ],
+        [
+          394,
+          81
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComputeCompositeCurves",
+        "parameters": {
+          "nChan": "cmsUInt32Number",
+          "Src": "cmsPipeline"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n   \n    cmsFloat32Number CurveR[MAX_NODES_IN_CURVE];\n    cmsFloat32Number CurveG[MAX_NODES_IN_CURVE];\n    cmsFloat32Number CurveB[MAX_NODES_IN_CURVE];\n\n    void* real_ptr;\n\n} CurvesFloatData;",
+      {
+        "CurveR[MAX_NODES_IN_CURVE]": "cmsFloat32Number",
+        "CurveG[MAX_NODES_IN_CURVE]": "cmsFloat32Number",
+        "CurveB[MAX_NODES_IN_CURVE]": "cmsFloat32Number",
+        "* real_ptr": "void"
+      },
+      "CurvesFloatData",
+      [
+        24,
+        0
+      ],
+      [
+        32,
+        18
+      ]
+    ],
+    [
+      "typedef struct {\n   \n    cmsFloat32Number CurveR[MAX_NODES_IN_CURVE];\n    cmsFloat32Number CurveG[MAX_NODES_IN_CURVE];\n    cmsFloat32Number CurveB[MAX_NODES_IN_CURVE];\n\n    void* real_ptr;\n\n} CurvesFloatData;",
+      {
+        "CurveR[MAX_NODES_IN_CURVE]": "cmsFloat32Number",
+        "CurveG[MAX_NODES_IN_CURVE]": "cmsFloat32Number",
+        "CurveB[MAX_NODES_IN_CURVE]": "cmsFloat32Number",
+        "* real_ptr": "void"
+      },
+      "CurvesFloatData",
+      [
+        24,
+        0
+      ],
+      [
+        32,
+        18
+      ]
+    ],
+    [
+      "struct _cmstransform_struct",
+      {},
+      "",
+      [
+        59,
+        39
+      ],
+      [
+        59,
+        66
+      ]
+    ],
+    [
+      "struct _cmstransform_struct",
+      {},
+      "",
+      [
+        143,
+        33
+      ],
+      [
+        143,
+        60
+      ]
+    ],
+    [
+      "struct _cmstransform_struct",
+      {},
+      "",
+      [
+        224,
+        40
+      ],
+      [
+        224,
+        67
+      ]
+    ],
+    [
+      "struct _cmstransform_struct",
+      {},
+      "",
+      [
+        288,
+        34
+      ],
+      [
+        288,
+        61
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"fast_float_internal.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

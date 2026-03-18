@@ -1,0 +1,184 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int list_contains(char * const *list, size_t num_elem, const char *str, int insensitive)\n{\n  size_t len;\n  size_t i;\n\n  len = strlen(str);\n  for (i=0; i<num_elem; i++)\n  {\n    if (insensitive)\n    {\n#ifdef WIN32\n      if (strnicmp(list[i], str, len) == 0)\n#else\n      if (strncasecmp(list[i], str, len) == 0)\n#endif\n        return 1;\n    }\n    else\n    {\n      if (strncmp(list[i], str, len) == 0)\n        return 1;\n    }\n  }\n\n  return 0;\n}",
+      "fn_code_pos": [
+        [
+          24,
+          0
+        ],
+        [
+          49,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "list_contains",
+        "parameters": {
+          "list": "char",
+          "num_elem": "size_t",
+          "str": "char",
+          "insensitive": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int is_delim(char c, const char *delims, size_t num_delims)\n{\n  size_t i;\n\n  for (i=0; i<num_delims; i++)\n  {\n    if (c == delims[i])\n      return 1;\n  }\n  return 0;\n}",
+      "fn_code_pos": [
+        [
+          51,
+          0
+        ],
+        [
+          61,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "is_delim",
+        "parameters": {
+          "c": "char",
+          "delims": "char",
+          "num_delims": "size_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void ares_strsplit_free(char **elms, size_t num_elm)\n{\n  size_t i;\n\n  if (elms == NULL)\n    return;\n\n  for (i=0; i<num_elm; i++)\n    ares_free(elms[i]);\n  ares_free(elms);\n}",
+      "fn_code_pos": [
+        [
+          64,
+          0
+        ],
+        [
+          74,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_strsplit_free",
+        "parameters": {
+          "elms": "char",
+          "num_elm": "size_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "char **ares_strsplit(const char *in, const char *delms, int make_set, size_t *num_elm)\n{\n  char *parsestr;\n  char **temp;\n  char **out;\n  size_t cnt;\n  size_t nelms;\n  size_t in_len;\n  size_t num_delims;\n  size_t i;\n\n  if (in == NULL || delms == NULL || num_elm == NULL)\n    return NULL;\n\n  *num_elm = 0;\n\n  in_len = strlen(in);\n  num_delims = strlen(delms);\n\n  /* Figure out how many elements. */\n  nelms = 1;\n  for (i=0; i<in_len; i++)\n  {\n    if (is_delim(in[i], delms, num_delims))\n    {\n      nelms++;\n    }\n  }\n\n  /* Copy of input so we can cut it up. */\n  parsestr = ares_strdup(in);\n  if (parsestr == NULL)\n    return NULL;\n\n  /* Temporary array to store locations of start of each element\n   * within parsestr. */\n  temp = ares_malloc(nelms * sizeof(*temp));\n  if (temp == NULL)\n  {\n    ares_free(parsestr);\n    return NULL;\n  }\n  temp[0] = parsestr;\n  cnt = 1;\n  for (i=0; i<in_len && cnt<nelms; i++)\n  {\n    if (!is_delim(parsestr[i], delms, num_delims))\n      continue;\n\n    /* Replace sep with NULL. */\n    parsestr[i] = '\\0';\n    /* Add the pointer to the array of elements */\n    temp[cnt] = parsestr+i+1;\n    cnt++;\n  }\n\n  /* Copy each element to our output array. */\n  out = ares_malloc(nelms * sizeof(*out));\n  if (out == NULL)\n  {\n    ares_free(parsestr);\n    ares_free(temp);\n    return NULL;\n  }\n\n  nelms = 0;\n  for (i=0; i<cnt; i++)\n  {\n    if (temp[i][0] == '\\0')\n      continue;\n\n    if (make_set && list_contains(out, nelms, temp[i], 1))\n      continue;\n\n    out[nelms] = ares_strdup(temp[i]);\n    if (out[nelms] == NULL)\n    {\n      ares_strsplit_free(out, nelms);\n      ares_free(parsestr);\n      ares_free(temp);\n      return NULL;\n    }\n    nelms++;\n  }\n\n\n  /* If there are no elements don't return an empty allocated\n   * array. */\n  if (nelms == 0)\n  {\n    ares_strsplit_free(out, nelms);\n    out = NULL;\n  }\n\n  /* Get the true number of elements (recalculated because of make_set) */\n  *num_elm = nelms;\n\n  ares_free(parsestr);\n  ares_free(temp);\n  return out;\n}",
+      "fn_code_pos": [
+        [
+          77,
+          0
+        ],
+        [
+          177,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {},
+        "return_type": "char"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "ares_strsplit(const char *in, const char *delms, int make_set, size_t *num_elm)",
+      "fn_dec_pos": [
+        [
+          77,
+          7
+        ],
+        [
+          77,
+          86
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_strsplit",
+        "parameters": {
+          "in": "char",
+          "delms": "char",
+          "make_set": "int",
+          "num_elm": "size_t"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <strings.h>\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_strsplit.h\"\n",
+      [
+        20,
+        0
+      ],
+      [
+        21,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

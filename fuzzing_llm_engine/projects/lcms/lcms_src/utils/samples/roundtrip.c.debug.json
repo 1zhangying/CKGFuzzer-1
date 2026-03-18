@@ -1,0 +1,79 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\ndouble VecDist(cmsUInt8Number bin[3], cmsUInt8Number bout[3])\n{\n       double rdist, gdist, bdist;\n\n       rdist = fabs((double) bout[0] - bin[0]);\n       gdist = fabs((double) bout[1] - bin[1]);\n       bdist = fabs((double) bout[2] - bin[2]);\n\n       return (sqrt((rdist*rdist + gdist*gdist + bdist*bdist)));\n}",
+      "fn_code_pos": [
+        [
+          26,
+          0
+        ],
+        [
+          36,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "VecDist",
+        "parameters": {
+          "bin": "cmsUInt8Number",
+          "bout": "cmsUInt8Number"
+        },
+        "return_type": "double"
+      }
+    },
+    {
+      "fn_code": "int main(int  argc, char* argv[])\n{\n\n    int r, g, b;\n    cmsUInt8Number RGB[3], RGB_OUT[3];\n    cmsHTRANSFORM xform;\n    cmsHPROFILE hProfile;\n    double err, SumX=0, SumX2=0, Peak = 0, n = 0;\n\n\n    if (argc != 2) {\n        printf(\"roundtrip <RGB icc profile>\\n\");\n        return 1;\n    }\n\n    hProfile = cmsOpenProfileFromFile(argv[1], \"r\");\n    if (hProfile == NULL)\n    {\n        printf(\"invalid profile\\n\");\n        return 1;\n    }\n\n    xform = cmsCreateTransform(hProfile,TYPE_RGB_8, hProfile, TYPE_RGB_8, INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOOPTIMIZE);\n    if (xform == NULL)\n    {\n        printf(\"Not a valid RGB profile\\n\");\n        return 1;\n    }\n\n    for (r=0; r< 256; r++) {\n        printf(\"%d  \\r\", r);\n        for (g=0; g < 256; g++) {\n            for (b=0; b < 256; b++) {\n\n                RGB[0] = r;\n                RGB[1] = g;\n                RGB[2] = b;\n\n                cmsDoTransform(xform, RGB, RGB_OUT, 1);\n\n                err = VecDist(RGB, RGB_OUT);\n\n                SumX  += err;\n                SumX2 += err * err;\n                n += 1.0;\n                if (err > Peak)\n                    Peak = err;\n\n            }\n        }\n    }\n\n    printf(\"Average %g\\n\", SumX / n);\n    printf(\"Max %g\\n\", Peak);\n    printf(\"Std  %g\\n\", sqrt((n*SumX2 - SumX * SumX) / (n*(n-1))));\n    cmsCloseProfile(hProfile);\n    cmsDeleteTransform(xform);\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          39,
+          0
+        ],
+        [
+          98,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"lcms2.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -1,0 +1,132 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int test(int classictif, int height, int tiled)\n{\n    const char *filename = \"defer_strile_loading.tif\";\n    TIFF *tif;\n    int i;\n    int ret = 0;\n    FILE *f;\n\n    (void)ret;\n\n    tif = TIFFOpen(filename,\n                   classictif ? \"wDO\"\n                              : \"w8DO\"); /* O should be ignored in write mode */\n    if (!tif)\n    {\n        fprintf(stderr, \"cannot create %s\\n\", filename);\n        return 1;\n    }\n    ret = TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_NONE);\n    assert(ret);\n    ret = TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, 1);\n    assert(ret);\n    ret = TIFFSetField(tif, TIFFTAG_IMAGELENGTH, height);\n    assert(ret);\n    ret = TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8);\n    assert(ret);\n    ret = TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);\n    assert(ret);\n    ret = TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);\n    assert(ret);\n    if (tiled)\n    {\n        int j;\n        ret = TIFFSetField(tif, TIFFTAG_TILEWIDTH, 16);\n        assert(ret);\n        ret = TIFFSetField(tif, TIFFTAG_TILELENGTH, 16);\n        assert(ret);\n        for (j = 0; j < (height + 15) / 16; j++)\n        {\n            unsigned char tilebuffer[256];\n            memset(tilebuffer, (unsigned char)j, 256);\n            ret = TIFFWriteEncodedTile(tif, j, tilebuffer, 256);\n            assert(ret == 256);\n        }\n    }\n    else\n    {\n        ret = TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, 1);\n        assert(ret);\n        for (i = 0; i < height; i++)\n        {\n            unsigned char c = (unsigned char)i;\n            ret = TIFFWriteEncodedStrip(tif, i, &c, 1);\n            assert(ret == 1);\n\n            if (i == 1 && height > 100000)\n                i = height - 2;\n        }\n    }\n    TIFFClose(tif);\n\n    f = fopen(filename, \"rb\");\n    if (!f)\n        return 1;\n\n    for (i = 0; i < 2; i++)\n    {\n        tif = TIFFOpen(filename, i == 0 ? \"rD\" : \"rO\");\n        if (!tif)\n        {\n            fprintf(stderr, \"cannot open %s\\n\", filename);\n            fclose(f);\n            return 1;\n        }\n        if (tiled)\n        {\n            int j;\n            for (j = 0; j < (height + 15) / 16; j++)\n            {\n                int retry;\n                unsigned char expected_c = (unsigned char)j;\n\n                for (retry = 0; retry < 2; retry++)\n                {\n                    unsigned char tilebuffer[256];\n                    memset(tilebuffer, 0, 256);\n                    ret = TIFFReadEncodedTile(tif, j, tilebuffer, 256);\n                    assert(ret == 256);\n                    if (tilebuffer[0] != expected_c ||\n                        tilebuffer[255] != expected_c)\n                    {\n                        fprintf(stderr, \"unexpected value at tile %d: %d %d\\n\",\n                                j, tilebuffer[0], tilebuffer[255]);\n                        TIFFClose(tif);\n                        fclose(f);\n                        return 1;\n                    }\n                }\n\n                {\n                    int err = 0;\n                    int offset, size;\n                    unsigned char inputbuffer[256];\n                    unsigned char tilebuffer[256];\n\n                    offset = TIFFGetStrileOffsetWithErr(tif, j, &err);\n                    assert(offset != 0);\n                    assert(err == 0);\n\n                    size = TIFFGetStrileByteCountWithErr(tif, j, &err);\n                    (void)size;\n                    assert(size == 256);\n                    assert(err == 0);\n\n                    fseek(f, offset, SEEK_SET);\n                    {\n                        size_t nread = fread(inputbuffer, 256, 1, f);\n                        (void)nread;\n                    }\n\n                    memset(tilebuffer, 0, 256);\n                    ret = TIFFReadFromUserBuffer(tif, j, inputbuffer, 256,\n                                                 tilebuffer, 256);\n                    assert(ret == 1);\n                    if (tilebuffer[0] != expected_c ||\n                        tilebuffer[255] != expected_c)\n                    {\n                        fprintf(stderr, \"unexpected value at tile %d: %d %d\\n\",\n                                j, tilebuffer[0], tilebuffer[255]);\n                        TIFFClose(tif);\n                        fclose(f);\n                        return 1;\n                    }\n                }\n            }\n        }\n        else\n        {\n            int j;\n            for (j = 0; j < height; j++)\n            {\n                int retry;\n                unsigned char expected_c = (unsigned char)j;\n                for (retry = 0; retry < 2; retry++)\n                {\n                    unsigned char c = 0;\n                    ret = TIFFReadEncodedStrip(tif, j, &c, 1);\n                    assert(ret == 1);\n                    if (c != expected_c)\n                    {\n                        fprintf(stderr, \"unexpected value at line %d: %d\\n\", j,\n                                c);\n                        TIFFClose(tif);\n                        fclose(f);\n                        return 1;\n                    }\n                }\n\n                {\n                    int err = 0;\n                    int offset, size;\n                    unsigned char inputbuffer[1];\n                    unsigned char tilebuffer[1];\n\n                    offset = TIFFGetStrileOffsetWithErr(tif, j, &err);\n                    assert(offset != 0);\n                    assert(err == 0);\n\n                    size = TIFFGetStrileByteCountWithErr(tif, j, &err);\n                    (void)size;\n                    assert(size == 1);\n                    assert(err == 0);\n\n                    fseek(f, offset, SEEK_SET);\n                    {\n                        size_t nread = fread(inputbuffer, 1, 1, f);\n                        (void)nread;\n                    }\n                    memset(tilebuffer, 0, 1);\n                    ret = TIFFReadFromUserBuffer(tif, j, inputbuffer, 1,\n                                                 tilebuffer, 1);\n                    assert(ret == 1);\n                    if (tilebuffer[0] != expected_c)\n                    {\n                        fprintf(stderr, \"unexpected value at line %d: %d\\n\", j,\n                                tilebuffer[0]);\n                        TIFFClose(tif);\n                        fclose(f);\n                        return 1;\n                    }\n                }\n\n                if (j == 1 && height > 100000)\n                    j = height - 2;\n            }\n\n            if (height > 100000)\n            {\n                /* Missing strip */\n                int err = 0;\n                ret = TIFFGetStrileOffsetWithErr(tif, 2, &err);\n                assert(ret == 0);\n                assert(err == 0);\n\n                ret = TIFFGetStrileByteCountWithErr(tif, 2, &err);\n                assert(ret == 0);\n                assert(err == 0);\n            }\n        }\n\n        {\n            int err = 0;\n            ret = TIFFGetStrileOffsetWithErr(tif, 0xFFFFFFFFU, &err);\n            assert(ret == 0);\n            assert(err == 1);\n\n            ret = TIFFGetStrileByteCountWithErr(tif, 0xFFFFFFFFU, &err);\n            assert(ret == 0);\n            assert(err == 1);\n        }\n\n        {\n            toff_t *offsets = NULL;\n            toff_t *bytecounts = NULL;\n            ret = TIFFGetField(\n                tif, tiled ? TIFFTAG_TILEOFFSETS : TIFFTAG_STRIPOFFSETS,\n                &offsets);\n            assert(ret);\n            assert(offsets);\n            ret = TIFFGetField(\n                tif, tiled ? TIFFTAG_TILEBYTECOUNTS : TIFFTAG_STRIPBYTECOUNTS,\n                &bytecounts);\n            assert(ret);\n            assert(bytecounts);\n            if (tiled)\n            {\n                assert(bytecounts[0] == 256);\n            }\n            else\n            {\n                assert(bytecounts[0] == 1);\n                if (height > 1 && height <= 100000)\n                {\n                    assert(offsets[1] == offsets[0] + 1);\n                    assert(offsets[height - 1] == offsets[0] + height - 1);\n                }\n                assert(bytecounts[height - 1] == 1);\n            }\n        }\n\n        TIFFClose(tif);\n    }\n    fclose(f);\n\n    unlink(filename);\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          42,
+          0
+        ],
+        [
+          298,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test",
+        "parameters": {
+          "classictif": "int",
+          "height": "int",
+          "tiled": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int main()\n{\n    int is_classic;\n    for (is_classic = 1; is_classic >= 0; is_classic--)\n    {\n        int tiled;\n        for (tiled = 0; tiled <= 1; tiled++)\n        {\n            if (test(is_classic, 1, tiled))\n                return 1;\n            if (test(is_classic, 8192, tiled))\n                return 1;\n        }\n        if (test(is_classic, 2000000, 0))\n            return 1;\n    }\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          300,
+          0
+        ],
+        [
+          317,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <assert.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        39,
+        0
+      ],
+      [
+        40,
+        0
+      ]
+    ],
+    [
+      "#include \"tifftest.h\"\n",
+      [
+        40,
+        0
+      ],
+      [
+        41,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

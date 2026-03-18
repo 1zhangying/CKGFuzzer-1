@@ -1,0 +1,1701 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void ProcessWork(ares_channel channel,\n                 std::function<std::set<int>()> get_extrafds,\n                 std::function<void(int)> process_extra) {\n  int nfds, count;\n  fd_set readers, writers;\n  struct timeval tv;\n  while (true) {\n    // Retrieve the set of file descriptors that the library wants us to monitor.\n    FD_ZERO(&readers);\n    FD_ZERO(&writers);\n    nfds = ares_fds(channel, &readers, &writers);\n    if (nfds == 0)  // no work left to do in the library\n      return;\n\n    // Add in the extra FDs if present.\n    std::set<int> extrafds = get_extrafds();\n    for (int extrafd : extrafds) {\n      FD_SET(extrafd, &readers);\n      if (extrafd >= nfds) {\n        nfds = extrafd + 1;\n      }\n    }\n\n    // Wait for activity or timeout.\n    tv.tv_sec = 0;\n    tv.tv_usec = 100000;  // 100ms\n    count = select(nfds, &readers, &writers, nullptr, &tv);\n    if (count < 0) {\n      fprintf(stderr, \"select() failed, errno %d\\n\", errno);\n      return;\n    }\n\n    // Let the library process any activity.\n    ares_process(channel, &readers, &writers);\n\n    // Let the provided callback process any activity on the extra FD.\n    for (int extrafd : extrafds) {\n      if (FD_ISSET(extrafd, &readers)) {\n        process_extra(extrafd);\n      }\n    }\n  }\n}",
+      "fn_code_pos": [
+        [
+          63,
+          0
+        ],
+        [
+          105,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ProcessWork",
+        "parameters": {
+          "channel": "ares_channel",
+          "get_extrafds": "std::function<std::set<int>()>",
+          "process_extra": "std::function<void(int)>"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void LibraryTest::SetAllocFail(int nth) {\n  assert(nth > 0);\n  assert(nth <= (int)(8 * sizeof(fails_)));\n  fails_ |= (1LL << (nth - 1));\n}",
+      "fn_code_pos": [
+        [
+          108,
+          0
+        ],
+        [
+          112,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LibraryTest::SetAllocFail",
+        "parameters": {
+          "nth": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void LibraryTest::SetAllocSizeFail(size_t size) {\n  size_fails_[size]++;\n}",
+      "fn_code_pos": [
+        [
+          115,
+          0
+        ],
+        [
+          117,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LibraryTest::SetAllocSizeFail",
+        "parameters": {
+          "size": "size_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void LibraryTest::ClearFails() {\n  fails_ = 0;\n  size_fails_.clear();\n}",
+      "fn_code_pos": [
+        [
+          120,
+          0
+        ],
+        [
+          123,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LibraryTest::ClearFails",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "bool LibraryTest::ShouldAllocFail(size_t size) {\n  bool fail = (fails_ & 0x01);\n  fails_ >>= 1;\n  if (size_fails_[size] > 0) {\n    size_fails_[size]--;\n    fail = true;\n  }\n  return fail;\n}",
+      "fn_code_pos": [
+        [
+          127,
+          0
+        ],
+        [
+          135,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LibraryTest::ShouldAllocFail",
+        "parameters": {
+          "size": "size_t"
+        },
+        "return_type": "bool"
+      }
+    },
+    {
+      "fn_code": "void* LibraryTest::amalloc(size_t size) {\n  if (ShouldAllocFail(size) || size == 0) {\n    if (verbose) std::cerr << \"Failing malloc(\" << size << \") request\" << std::endl;\n    return nullptr;\n  } else {\n    return malloc(size);\n  }\n}",
+      "fn_code_pos": [
+        [
+          138,
+          0
+        ],
+        [
+          145,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LibraryTest::amalloc",
+        "parameters": {
+          "size": "size_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void* LibraryTest::arealloc(void *ptr, size_t size) {\n  if (ShouldAllocFail(size)) {\n    if (verbose) std::cerr << \"Failing realloc(\" << ptr << \", \" << size << \") request\" << std::endl;\n    return nullptr;\n  } else {\n    return realloc(ptr, size);\n  }\n}",
+      "fn_code_pos": [
+        [
+          148,
+          0
+        ],
+        [
+          155,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LibraryTest::arealloc",
+        "parameters": {
+          "ptr": "void",
+          "size": "size_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void LibraryTest::afree(void *ptr) {\n  free(ptr);\n}",
+      "fn_code_pos": [
+        [
+          158,
+          0
+        ],
+        [
+          160,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LibraryTest::afree",
+        "parameters": {
+          "ptr": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "std::set<int> NoExtraFDs() {\n  return std::set<int>();\n}",
+      "fn_code_pos": [
+        [
+          162,
+          0
+        ],
+        [
+          164,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NoExtraFDs",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void DefaultChannelTest::Process() {\n  ProcessWork(channel_, NoExtraFDs, nullptr);\n}",
+      "fn_code_pos": [
+        [
+          166,
+          0
+        ],
+        [
+          168,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DefaultChannelTest::Process",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void DefaultChannelModeTest::Process() {\n  ProcessWork(channel_, NoExtraFDs, nullptr);\n}",
+      "fn_code_pos": [
+        [
+          170,
+          0
+        ],
+        [
+          172,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DefaultChannelModeTest::Process",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "MockServer::MockServer(int family, int port)\n  : udpport_(port), tcpport_(port), qid_(-1) {\n  // Create a TCP socket to receive data on.\n  tcpfd_ = socket(family, SOCK_STREAM, 0);\n  EXPECT_NE(-1, tcpfd_);\n  int optval = 1;\n  setsockopt(tcpfd_, SOL_SOCKET, SO_REUSEADDR,\n             BYTE_CAST &optval , sizeof(int));\n  // Send TCP data right away.\n  setsockopt(tcpfd_, IPPROTO_TCP, TCP_NODELAY,\n             BYTE_CAST &optval , sizeof(int));\n\n  // Create a UDP socket to receive data on.\n  udpfd_ = socket(family, SOCK_DGRAM, 0);\n  EXPECT_NE(-1, udpfd_);\n\n  // Bind the sockets to the given port.\n  if (family == AF_INET) {\n    struct sockaddr_in addr;\n    memset(&addr, 0, sizeof(addr));\n    addr.sin_family = AF_INET;\n    addr.sin_addr.s_addr = htonl(INADDR_ANY);\n    addr.sin_port = htons(tcpport_);\n    int tcprc = bind(tcpfd_, (struct sockaddr*)&addr, sizeof(addr));\n    EXPECT_EQ(0, tcprc) << \"Failed to bind AF_INET to TCP port \" << tcpport_;\n    addr.sin_port = htons(udpport_);\n    int udprc = bind(udpfd_, (struct sockaddr*)&addr, sizeof(addr));\n    EXPECT_EQ(0, udprc) << \"Failed to bind AF_INET to UDP port \" << udpport_;\n    // retrieve system-assigned port\n    if (udpport_ == dynamic_port) {\n      ares_socklen_t len = sizeof(addr);\n      auto result = getsockname(udpfd_, (struct sockaddr*)&addr, &len);\n      EXPECT_EQ(0, result);\n      udpport_ = ntohs(addr.sin_port);\n      EXPECT_NE(dynamic_port, udpport_);\n    }\n    if (tcpport_ == dynamic_port) {\n      ares_socklen_t len = sizeof(addr);\n      auto result = getsockname(tcpfd_, (struct sockaddr*)&addr, &len);\n      EXPECT_EQ(0, result);\n      tcpport_ = ntohs(addr.sin_port);\n      EXPECT_NE(dynamic_port, tcpport_);\n    }\n  } else {\n    EXPECT_EQ(AF_INET6, family);\n    struct sockaddr_in6 addr;\n    memset(&addr, 0, sizeof(addr));\n    addr.sin6_family = AF_INET6;\n    memset(&addr.sin6_addr, 0, sizeof(addr.sin6_addr));  // in6addr_any\n    addr.sin6_port = htons(tcpport_);\n    int tcprc = bind(tcpfd_, (struct sockaddr*)&addr, sizeof(addr));\n    EXPECT_EQ(0, tcprc) << \"Failed to bind AF_INET6 to TCP port \" << tcpport_;\n    addr.sin6_port = htons(udpport_);\n    int udprc = bind(udpfd_, (struct sockaddr*)&addr, sizeof(addr));\n    EXPECT_EQ(0, udprc) << \"Failed to bind AF_INET6 to UDP port \" << udpport_;\n    // retrieve system-assigned port\n    if (udpport_ == dynamic_port) {\n      ares_socklen_t len = sizeof(addr);\n      auto result = getsockname(udpfd_, (struct sockaddr*)&addr, &len);\n      EXPECT_EQ(0, result);\n      udpport_ = ntohs(addr.sin6_port);\n      EXPECT_NE(dynamic_port, udpport_);\n    }\n    if (tcpport_ == dynamic_port) {\n      ares_socklen_t len = sizeof(addr);\n      auto result = getsockname(tcpfd_, (struct sockaddr*)&addr, &len);\n      EXPECT_EQ(0, result);\n      tcpport_ = ntohs(addr.sin6_port);\n      EXPECT_NE(dynamic_port, tcpport_);\n    }\n  }\n  if (verbose) std::cerr << \"Configured \"\n                         << (family == AF_INET ? \"IPv4\" : \"IPv6\")\n                         << \" mock server with TCP socket \" << tcpfd_\n                         << \" on port \" << tcpport_\n                         << \" and UDP socket \" << udpfd_\n                         << \" on port \" << udpport_ << std::endl;\n\n  // For TCP, also need to listen for connections.\n  EXPECT_EQ(0, listen(tcpfd_, 5)) << \"Failed to listen for TCP connections\";\n}",
+      "fn_code_pos": [
+        [
+          174,
+          0
+        ],
+        [
+          254,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MockServer::MockServer",
+        "parameters": {
+          "family": "int",
+          "port": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MockServer::~MockServer() {\n  for (int fd : connfds_) {\n    sclose(fd);\n  }\n  sclose(tcpfd_);\n  sclose(udpfd_);\n}",
+      "fn_code_pos": [
+        [
+          256,
+          0
+        ],
+        [
+          262,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MockServer::~MockServer",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void MockServer::ProcessPacket(int fd, struct sockaddr_storage *addr, socklen_t addrlen,\n                               byte *data, int len) {\n\n  // Assume the packet is a well-formed DNS request and extract the request\n  // details.\n  if (len < NS_HFIXEDSZ) {\n    std::cerr << \"Packet too short (\" << len << \")\" << std::endl;\n    return;\n  }\n  int qid = DNS_HEADER_QID(data);\n  if (DNS_HEADER_QR(data) != 0) {\n    std::cerr << \"Not a request\" << std::endl;\n    return;\n  }\n  if (DNS_HEADER_OPCODE(data) != O_QUERY) {\n    std::cerr << \"Not a query (opcode \" << DNS_HEADER_OPCODE(data)\n              << \")\" << std::endl;\n    return;\n  }\n  if (DNS_HEADER_QDCOUNT(data) != 1) {\n    std::cerr << \"Unexpected question count (\" << DNS_HEADER_QDCOUNT(data)\n              << \")\" << std::endl;\n    return;\n  }\n  byte* question = data + 12;\n  int qlen = len - 12;\n\n  char *name = nullptr;\n  long enclen;\n  ares_expand_name(question, data, len, &name, &enclen);\n  if (!name) {\n    std::cerr << \"Failed to retrieve name\" << std::endl;\n    return;\n  }\n  qlen -= enclen;\n  question += enclen;\n  std::string namestr(name);\n  ares_free_string(name);\n\n  if (qlen < 4) {\n    std::cerr << \"Unexpected question size (\" << qlen\n              << \" bytes after name)\" << std::endl;\n    return;\n  }\n  if (DNS_QUESTION_CLASS(question) != C_IN) {\n    std::cerr << \"Unexpected question class (\" << DNS_QUESTION_CLASS(question)\n              << \")\" << std::endl;\n    return;\n  }\n  int rrtype = DNS_QUESTION_TYPE(question);\n\n  if (verbose) {\n    std::vector<byte> req(data, data + len);\n    std::cerr << \"received \" << (fd == udpfd_ ? \"UDP\" : \"TCP\") << \" request \" << PacketToString(req)\n              << \" on port \" << (fd == udpfd_ ? udpport_ : tcpport_) << std::endl;\n    std::cerr << \"ProcessRequest(\" << qid << \", '\" << namestr\n              << \"', \" << RRTypeToString(rrtype) << \")\" << std::endl;\n  }\n  ProcessRequest(fd, addr, addrlen, qid, namestr, rrtype);\n\n}",
+      "fn_code_pos": [
+        [
+          264,
+          0
+        ],
+        [
+          324,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MockServer::ProcessPacket",
+        "parameters": {
+          "fd": "int",
+          "addr": "struct sockaddr_storage",
+          "addrlen": "socklen_t",
+          "data": "byte",
+          "len": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void MockServer::ProcessFD(int fd) {\n  if (fd != tcpfd_ && fd != udpfd_ && connfds_.find(fd) == connfds_.end()) {\n    // Not one of our FDs.\n    return;\n  }\n  if (fd == tcpfd_) {\n    int connfd = accept(tcpfd_, NULL, NULL);\n    if (connfd < 0) {\n      std::cerr << \"Error accepting connection on fd \" << fd << std::endl;\n    } else {\n      connfds_.insert(connfd);\n    }\n    return;\n  }\n\n  // Activity on a data-bearing file descriptor.\n  struct sockaddr_storage addr;\n  socklen_t addrlen = sizeof(addr);\n  byte buffer[2048];\n  int len = recvfrom(fd, BYTE_CAST buffer, sizeof(buffer), 0,\n                     (struct sockaddr *)&addr, &addrlen);\n  byte* data = buffer;\n\n  if (fd != udpfd_) {\n    if (len == 0) {\n      connfds_.erase(std::find(connfds_.begin(), connfds_.end(), fd));\n      sclose(fd);\n      return;\n    }\n    if (len < 2) {\n      std::cerr << \"Packet too short (\" << len << \")\" << std::endl;\n      return;\n    }\n    /* TCP might aggregate the various requests into a single packet, so we\n     * need to split */\n    while (len) {\n      int tcplen = (data[0] << 8) + data[1];\n      data += 2;\n      len -= 2;\n      if (tcplen > len) {\n        std::cerr << \"Warning: TCP length \" << tcplen\n                  << \" doesn't match remaining data length \" << len << std::endl;\n      }\n      int process_len = (tcplen > len)?len:tcplen;\n      ProcessPacket(fd, &addr, addrlen, data, process_len);\n      len -= process_len;\n      data += process_len;\n    }\n  } else {\n    /* UDP is always a single packet */\n    ProcessPacket(fd, &addr, addrlen, data, len);\n  }\n\n}",
+      "fn_code_pos": [
+        [
+          326,
+          0
+        ],
+        [
+          379,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MockServer::ProcessFD",
+        "parameters": {
+          "fd": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "std::set<int> MockServer::fds() const {\n  std::set<int> result = connfds_;\n  result.insert(tcpfd_);\n  result.insert(udpfd_);\n  return result;\n}",
+      "fn_code_pos": [
+        [
+          381,
+          0
+        ],
+        [
+          386,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MockServer::fds",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void MockServer::ProcessRequest(int fd, struct sockaddr_storage* addr, int addrlen,\n                                int qid, const std::string& name, int rrtype) {\n  // Before processing, let gMock know the request is happening.\n  OnRequest(name, rrtype);\n\n  if (reply_.size() == 0) {\n    return;\n  }\n\n  // Make a local copy of the current pending reply.\n  std::vector<byte> reply = reply_;\n\n  if (qid_ >= 0) {\n    // Use the explicitly specified query ID.\n    qid = qid_;\n  }\n  if (reply.size() >=  2) {\n    // Overwrite the query ID if space to do so.\n    reply[0] = (byte)((qid >> 8) & 0xff);\n    reply[1] = (byte)(qid & 0xff);\n  }\n  if (verbose) std::cerr << \"sending reply \" << PacketToString(reply)\n                         << \" on port \" << ((fd == udpfd_) ? udpport_ : tcpport_) << std::endl;\n\n  // Prefix with 2-byte length if TCP.\n  if (fd != udpfd_) {\n    int len = reply.size();\n    std::vector<byte> vlen = {(byte)((len & 0xFF00) >> 8), (byte)(len & 0xFF)};\n    reply.insert(reply.begin(), vlen.begin(), vlen.end());\n    // Also, don't bother with the destination address.\n    addr = nullptr;\n    addrlen = 0;\n  }\n\n  int rc = sendto(fd, BYTE_CAST reply.data(), reply.size(), 0,\n                  (struct sockaddr *)addr, addrlen);\n  if (rc < static_cast<int>(reply.size())) {\n    std::cerr << \"Failed to send full reply, rc=\" << rc << std::endl;\n  }\n}",
+      "fn_code_pos": [
+        [
+          388,
+          0
+        ],
+        [
+          427,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MockServer::ProcessRequest",
+        "parameters": {
+          "fd": "int",
+          "addr": "struct sockaddr_storage",
+          "addrlen": "int",
+          "qid": "int",
+          "name": "std::string",
+          "rrtype": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "MockChannelOptsTest::NiceMockServers MockChannelOptsTest::BuildServers(int count, int family, int base_port) {\n  NiceMockServers servers;\n  assert(count > 0);\n  for (int ii = 0; ii < count; ii++) {\n    int port = base_port == dynamic_port ? dynamic_port : base_port + ii;\n    std::unique_ptr<NiceMockServer> server(new NiceMockServer(family, port));\n    servers.push_back(std::move(server));\n  }\n  return servers;\n}",
+      "fn_code_pos": [
+        [
+          430,
+          0
+        ],
+        [
+          439,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MockChannelOptsTest::BuildServers",
+        "parameters": {
+          "count": "int",
+          "family": "int",
+          "base_port": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MockChannelOptsTest::MockChannelOptsTest(int count,\n                                         int family,\n                                         bool force_tcp,\n                                         struct ares_options* givenopts,\n                                         int optmask)\n  : servers_(BuildServers(count, family, mock_port)),\n    server_(*servers_[0].get()), channel_(nullptr) {\n  // Set up channel options.\n  struct ares_options opts;\n  if (givenopts) {\n    memcpy(&opts, givenopts, sizeof(opts));\n  } else {\n    memset(&opts, 0, sizeof(opts));\n  }\n\n  // Point the library at the first mock server by default (overridden below).\n  opts.udp_port = server_.udpport();\n  optmask |= ARES_OPT_UDP_PORT;\n  opts.tcp_port = server_.tcpport();\n  optmask |= ARES_OPT_TCP_PORT;\n\n  // If not already overridden, set short-ish timeouts.\n  if (!(optmask & (ARES_OPT_TIMEOUTMS|ARES_OPT_TIMEOUT))) {\n    opts.timeout = 1500;\n    optmask |= ARES_OPT_TIMEOUTMS;\n  }\n  // If not already overridden, set 3 retries.\n  if (!(optmask & ARES_OPT_TRIES)) {\n    opts.tries = 3;\n    optmask |= ARES_OPT_TRIES;\n  }\n  // If not already overridden, set search domains.\n  const char *domains[3] = {\"first.com\", \"second.org\", \"third.gov\"};\n  if (!(optmask & ARES_OPT_DOMAINS)) {\n    opts.ndomains = 3;\n    opts.domains = (char**)domains;\n    optmask |= ARES_OPT_DOMAINS;\n  }\n  if (force_tcp) {\n    opts.flags |= ARES_FLAG_USEVC;\n    optmask |= ARES_OPT_FLAGS;\n  }\n\n  EXPECT_EQ(ARES_SUCCESS, ares_init_options(&channel_, &opts, optmask));\n  EXPECT_NE(nullptr, channel_);\n\n  // Set up servers after construction so we can set individual ports\n  struct ares_addr_port_node* prev = nullptr;\n  struct ares_addr_port_node* first = nullptr;\n  for (const auto& server : servers_) {\n    struct ares_addr_port_node* node = (struct ares_addr_port_node*)malloc(sizeof(*node));\n    if (prev) {\n      prev->next = node;\n    } else {\n      first = node;\n    }\n    node->next = nullptr;\n    node->family = family;\n    node->udp_port = server->udpport();\n    node->tcp_port = server->tcpport();\n    if (family == AF_INET) {\n      node->addr.addr4.s_addr = htonl(0x7F000001);\n    } else {\n      memset(&node->addr.addr6, 0, sizeof(node->addr.addr6));\n      node->addr.addr6._S6_un._S6_u8[15] = 1;\n    }\n    prev = node;\n  }\n  EXPECT_EQ(ARES_SUCCESS, ares_set_servers_ports(channel_, first));\n\n  while (first) {\n    prev = first;\n    first = first->next;\n    free(prev);\n  }\n  if (verbose) {\n    std::cerr << \"Configured library with servers:\";\n    std::vector<std::string> servers = GetNameServers(channel_);\n    for (const auto& server : servers) {\n      std::cerr << \" \" << server;\n    }\n    std::cerr << std::endl;\n  }\n}",
+      "fn_code_pos": [
+        [
+          441,
+          0
+        ],
+        [
+          524,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MockChannelOptsTest::MockChannelOptsTest",
+        "parameters": {
+          "count": "int",
+          "family": "int",
+          "force_tcp": "bool",
+          "givenopts": "struct ares_options",
+          "optmask": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MockChannelOptsTest::~MockChannelOptsTest() {\n  if (channel_) {\n    ares_destroy(channel_);\n  }\n  channel_ = nullptr;\n}",
+      "fn_code_pos": [
+        [
+          526,
+          0
+        ],
+        [
+          531,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MockChannelOptsTest::~MockChannelOptsTest",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "std::set<int> MockChannelOptsTest::fds() const {\n  std::set<int> fds;\n  for (const auto& server : servers_) {\n    std::set<int> serverfds = server->fds();\n    fds.insert(serverfds.begin(), serverfds.end());\n  }\n  return fds;\n}",
+      "fn_code_pos": [
+        [
+          533,
+          0
+        ],
+        [
+          540,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MockChannelOptsTest::fds",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void MockChannelOptsTest::ProcessFD(int fd) {\n  for (auto& server : servers_) {\n    server->ProcessFD(fd);\n  }\n}",
+      "fn_code_pos": [
+        [
+          542,
+          0
+        ],
+        [
+          546,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MockChannelOptsTest::ProcessFD",
+        "parameters": {
+          "fd": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void MockChannelOptsTest::Process() {\n  using namespace std::placeholders;\n  ProcessWork(channel_,\n              std::bind(&MockChannelOptsTest::fds, this),\n              std::bind(&MockChannelOptsTest::ProcessFD, this, _1));\n}",
+      "fn_code_pos": [
+        [
+          548,
+          0
+        ],
+        [
+          553,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MockChannelOptsTest::Process",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "std::ostream& operator<<(std::ostream& os, const HostResult& result) {\n  os << '{';\n  if (result.done_) {\n    os << StatusToString(result.status_);\n    if (result.host_.addrtype_ != -1) {\n      os << \" \" << result.host_;\n    } else {\n      os << \", (no hostent)\";\n    }\n  } else {\n    os << \"(incomplete)\";\n  }\n  os << '}';\n  return os;\n}",
+      "fn_code_pos": [
+        [
+          555,
+          0
+        ],
+        [
+          569,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "HostEnt::HostEnt(const struct hostent *hostent) : addrtype_(-1) {\n  if (!hostent)\n    return;\n\n  if (hostent->h_name)\n    name_ = hostent->h_name;\n\n  if (hostent->h_aliases) {\n    char** palias = hostent->h_aliases;\n    while (*palias != nullptr) {\n      aliases_.push_back(*palias);\n      palias++;\n    }\n  }\n\n  addrtype_ = hostent->h_addrtype;\n\n  if (hostent->h_addr_list) {\n    char** paddr = hostent->h_addr_list;\n    while (*paddr != nullptr) {\n      std::string addr = AddressToString(*paddr, hostent->h_length);\n      addrs_.push_back(addr);\n      paddr++;\n    }\n  }\n}",
+      "fn_code_pos": [
+        [
+          571,
+          0
+        ],
+        [
+          596,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "HostEnt::HostEnt",
+        "parameters": {
+          "hostent": "struct hostent"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "std::ostream& operator<<(std::ostream& os, const HostEnt& host) {\n  os << \"{'\";\n  if (host.name_.length() > 0) {\n    os << host.name_;\n  }\n  os << \"' aliases=[\";\n  for (size_t ii = 0; ii < host.aliases_.size(); ii++) {\n    if (ii > 0) os << \", \";\n    os << host.aliases_[ii];\n  }\n  os << \"] \";\n  os << \"addrs=[\";\n  for (size_t ii = 0; ii < host.addrs_.size(); ii++) {\n    if (ii > 0) os << \", \";\n    os << host.addrs_[ii];\n  }\n  os << \"]\";\n  os << '}';\n  return os;\n}",
+      "fn_code_pos": [
+        [
+          598,
+          0
+        ],
+        [
+          617,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void HostCallback(void *data, int status, int timeouts,\n                  struct hostent *hostent) {\n  EXPECT_NE(nullptr, data);\n  if (data == nullptr)\n    return;\n\n  HostResult* result = reinterpret_cast<HostResult*>(data);\n  result->done_ = true;\n  result->status_ = status;\n  result->timeouts_ = timeouts;\n  if (hostent)\n    result->host_ = HostEnt(hostent);\n  if (verbose) std::cerr << \"HostCallback(\" << *result << \")\" << std::endl;\n}",
+      "fn_code_pos": [
+        [
+          619,
+          0
+        ],
+        [
+          632,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "HostCallback",
+        "parameters": {
+          "data": "void",
+          "status": "int",
+          "timeouts": "int",
+          "hostent": "struct hostent"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "std::ostream& operator<<(std::ostream& os, const AddrInfoResult& result) {\n  os << '{';\n  if (result.done_ && result.ai_) {\n    os << StatusToString(result.status_) << \" \" << result.ai_;\n  } else {\n    os << \"(incomplete)\";\n  }\n  os << '}';\n  return os;\n}",
+      "fn_code_pos": [
+        [
+          634,
+          0
+        ],
+        [
+          643,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "std::ostream& operator<<(std::ostream& os, const AddrInfo& ai) {\n  os << '{';\n  if (ai == nullptr) {\n    os << \"nullptr}\";\n    return os;\n  }\n\n  struct ares_addrinfo_cname *next_cname = ai->cnames;\n  while(next_cname) {\n    if(next_cname->alias) {\n      os << next_cname->alias << \"->\";\n    }\n    if(next_cname->name) {\n      os << next_cname->name;\n    }\n    if((next_cname = next_cname->next))\n      os << \", \";\n    else\n      os << \" \";\n  }\n\n  struct ares_addrinfo_node *next = ai->nodes;\n  while(next) {\n    //if(next->ai_canonname) {\n      //os << \"'\" << next->ai_canonname << \"' \";\n    //}\n    unsigned short port = 0;\n    os << \"addr=[\";\n    if(next->ai_family == AF_INET) {\n      sockaddr_in* sin = (sockaddr_in*)next->ai_addr;\n      port = ntohs(sin->sin_port);\n      os << AddressToString(&sin->sin_addr, 4);\n    }\n    else if (next->ai_family == AF_INET6) {\n      sockaddr_in6* sin = (sockaddr_in6*)next->ai_addr;\n      port = ntohs(sin->sin6_port);\n      os << \"[\" << AddressToString(&sin->sin6_addr, 16) << \"]\";\n    }\n    else\n      os << \"unknown family\";\n    if(port) {\n      os << \":\" << port;\n    }\n    os << \"]\";\n    if((next = next->ai_next))\n      os << \", \";\n  }\n  os << '}';\n  return os;\n}",
+      "fn_code_pos": [
+        [
+          645,
+          0
+        ],
+        [
+          694,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void AddrInfoCallback(void *data, int status, int timeouts,\n                      struct ares_addrinfo *ai) {\n  EXPECT_NE(nullptr, data);\n  AddrInfoResult* result = reinterpret_cast<AddrInfoResult*>(data);\n  result->done_ = true;\n  result->status_ = status;\n  result->timeouts_= timeouts;\n  result->ai_ = AddrInfo(ai);\n  if (verbose) std::cerr << \"AddrInfoCallback(\" << *result << \")\" << std::endl;\n}",
+      "fn_code_pos": [
+        [
+          696,
+          0
+        ],
+        [
+          705,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AddrInfoCallback",
+        "parameters": {
+          "data": "void",
+          "status": "int",
+          "timeouts": "int",
+          "ai": "struct ares_addrinfo"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "std::ostream& operator<<(std::ostream& os, const SearchResult& result) {\n  os << '{';\n  if (result.done_) {\n    os << StatusToString(result.status_) << \" \" << PacketToString(result.data_);\n  } else {\n    os << \"(incomplete)\";\n  }\n  os << '}';\n  return os;\n}",
+      "fn_code_pos": [
+        [
+          707,
+          0
+        ],
+        [
+          716,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void SearchCallback(void *data, int status, int timeouts,\n                    unsigned char *abuf, int alen) {\n  EXPECT_NE(nullptr, data);\n  SearchResult* result = reinterpret_cast<SearchResult*>(data);\n  result->done_ = true;\n  result->status_ = status;\n  result->timeouts_ = timeouts;\n  result->data_.assign(abuf, abuf + alen);\n  if (verbose) std::cerr << \"SearchCallback(\" << *result << \")\" << std::endl;\n}",
+      "fn_code_pos": [
+        [
+          718,
+          0
+        ],
+        [
+          727,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SearchCallback",
+        "parameters": {
+          "data": "void",
+          "status": "int",
+          "timeouts": "int",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "std::ostream& operator<<(std::ostream& os, const NameInfoResult& result) {\n  os << '{';\n  if (result.done_) {\n    os << StatusToString(result.status_) << \" \" << result.node_ << \" \" << result.service_;\n  } else {\n    os << \"(incomplete)\";\n  }\n  os << '}';\n  return os;\n}",
+      "fn_code_pos": [
+        [
+          729,
+          0
+        ],
+        [
+          738,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void NameInfoCallback(void *data, int status, int timeouts,\n                      char *node, char *service) {\n  EXPECT_NE(nullptr, data);\n  NameInfoResult* result = reinterpret_cast<NameInfoResult*>(data);\n  result->done_ = true;\n  result->status_ = status;\n  result->timeouts_ = timeouts;\n  result->node_ = std::string(node ? node : \"\");\n  result->service_ = std::string(service ? service : \"\");\n  if (verbose) std::cerr << \"NameInfoCallback(\" << *result << \")\" << std::endl;\n}",
+      "fn_code_pos": [
+        [
+          740,
+          0
+        ],
+        [
+          750,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NameInfoCallback",
+        "parameters": {
+          "data": "void",
+          "status": "int",
+          "timeouts": "int",
+          "node": "char",
+          "service": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "std::vector<std::string> GetNameServers(ares_channel channel) {\n  struct ares_addr_port_node* servers = nullptr;\n  EXPECT_EQ(ARES_SUCCESS, ares_get_servers_ports(channel, &servers));\n  struct ares_addr_port_node* server = servers;\n  std::vector<std::string> results;\n  while (server) {\n    std::stringstream ss;\n    switch (server->family) {\n    case AF_INET:\n      ss << AddressToString((char*)&server->addr.addr4, 4);\n      break;\n    case AF_INET6:\n      if (server->udp_port != 0) {\n        ss << '[';\n      }\n      ss << AddressToString((char*)&server->addr.addr6, 16);\n      if (server->udp_port != 0) {\n        ss << ']';\n      }\n      break;\n    default:\n      results.push_back(\"<unknown family>\");\n      break;\n    }\n    if (server->udp_port != 0) {\n      ss << \":\" << server->udp_port;\n    }\n    results.push_back(ss.str());\n    server = server->next;\n  }\n  if (servers) ares_free_data(servers);\n  return results;\n}",
+      "fn_code_pos": [
+        [
+          752,
+          0
+        ],
+        [
+          784,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetNameServers",
+        "parameters": {
+          "channel": "ares_channel"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TransientDir::TransientDir(const std::string& dirname) : dirname_(dirname) {\n  if (mkdir_(dirname_.c_str(), 0755) != 0) {\n    std::cerr << \"Failed to create subdirectory '\" << dirname_ << \"'\" << std::endl;\n  }\n}",
+      "fn_code_pos": [
+        [
+          786,
+          0
+        ],
+        [
+          790,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TransientDir::TransientDir",
+        "parameters": {
+          "dirname": "std::string"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TransientDir::~TransientDir() {\n  rmdir(dirname_.c_str());\n}",
+      "fn_code_pos": [
+        [
+          792,
+          0
+        ],
+        [
+          794,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TransientDir::~TransientDir",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TransientFile::TransientFile(const std::string& filename,\n                             const std::string& contents)\n    : filename_(filename) {\n  FILE *f = fopen(filename.c_str(), \"w\");\n  if (f == nullptr) {\n    std::cerr << \"Error: failed to create '\" << filename << \"'\" << std::endl;\n    return;\n  }\n  int rc = fwrite(contents.data(), 1, contents.size(), f);\n  if (rc != (int)contents.size()) {\n    std::cerr << \"Error: failed to write contents of '\" << filename << \"'\" << std::endl;\n  }\n  fclose(f);\n}",
+      "fn_code_pos": [
+        [
+          796,
+          0
+        ],
+        [
+          809,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TransientFile::TransientFile",
+        "parameters": {
+          "filename": "std::string",
+          "contents": "std::string"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TransientFile::~TransientFile() {\n  unlink(filename_.c_str());\n}",
+      "fn_code_pos": [
+        [
+          811,
+          0
+        ],
+        [
+          813,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TransientFile::~TransientFile",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "std::string TempNam(const char *dir, const char *prefix) {\n  char *p = tempnam(dir, prefix);\n  std::string result(p);\n  free(p);\n  return result;\n}",
+      "fn_code_pos": [
+        [
+          815,
+          0
+        ],
+        [
+          820,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TempNam",
+        "parameters": {
+          "dir": "char",
+          "prefix": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TempFile::TempFile(const std::string& contents)\n  : TransientFile(TempNam(nullptr, \"ares\"), contents) {\n\n}",
+      "fn_code_pos": [
+        [
+          822,
+          0
+        ],
+        [
+          825,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TempFile::TempFile",
+        "parameters": {
+          "contents": "std::string"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "VirtualizeIO::VirtualizeIO(ares_channel c)\n  : channel_(c)\n{\n  ares_set_socket_functions(channel_, &default_functions, 0);\n}",
+      "fn_code_pos": [
+        [
+          827,
+          0
+        ],
+        [
+          831,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "VirtualizeIO::VirtualizeIO",
+        "parameters": {
+          "c": "ares_channel"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "VirtualizeIO::~VirtualizeIO() {\n  ares_set_socket_functions(channel_, 0, 0);\n}",
+      "fn_code_pos": [
+        [
+          833,
+          0
+        ],
+        [
+          835,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "VirtualizeIO::~VirtualizeIO",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "LibraryTest::amalloc(size_t size)",
+      "fn_dec_pos": [
+        [
+          138,
+          6
+        ],
+        [
+          138,
+          39
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LibraryTest::amalloc",
+        "parameters": {
+          "size": "size_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "LibraryTest::arealloc(void *ptr, size_t size)",
+      "fn_dec_pos": [
+        [
+          148,
+          6
+        ],
+        [
+          148,
+          51
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LibraryTest::arealloc",
+        "parameters": {
+          "ptr": "void",
+          "size": "size_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "namestr(name)",
+      "fn_dec_pos": [
+        [
+          300,
+          14
+        ],
+        [
+          300,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "namestr",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "operator<<(std::ostream& os, const HostResult& result)",
+      "fn_dec_pos": [
+        [
+          555,
+          14
+        ],
+        [
+          555,
+          68
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "os": "std::ostream",
+          "result": "HostResult"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "operator<<(std::ostream& os, const HostEnt& host)",
+      "fn_dec_pos": [
+        [
+          598,
+          14
+        ],
+        [
+          598,
+          63
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "os": "std::ostream",
+          "host": "HostEnt"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "operator<<(std::ostream& os, const AddrInfoResult& result)",
+      "fn_dec_pos": [
+        [
+          634,
+          14
+        ],
+        [
+          634,
+          72
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "os": "std::ostream",
+          "result": "AddrInfoResult"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "operator<<(std::ostream& os, const AddrInfo& ai)",
+      "fn_dec_pos": [
+        [
+          645,
+          14
+        ],
+        [
+          645,
+          62
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "os": "std::ostream",
+          "ai": "AddrInfo"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "operator<<(std::ostream& os, const SearchResult& result)",
+      "fn_dec_pos": [
+        [
+          707,
+          14
+        ],
+        [
+          707,
+          70
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "os": "std::ostream",
+          "result": "SearchResult"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "operator<<(std::ostream& os, const NameInfoResult& result)",
+      "fn_dec_pos": [
+        [
+          729,
+          14
+        ],
+        [
+          729,
+          72
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "os": "std::ostream",
+          "result": "NameInfoResult"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "result(p)",
+      "fn_dec_pos": [
+        [
+          817,
+          14
+        ],
+        [
+          817,
+          23
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "result",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        68,
+        2
+      ],
+      [
+        68,
+        16
+      ]
+    ],
+    [
+      "struct sockaddr_in",
+      {},
+      "",
+      [
+        192,
+        4
+      ],
+      [
+        192,
+        22
+      ]
+    ],
+    [
+      "struct sockaddr",
+      {},
+      "",
+      [
+        197,
+        30
+      ],
+      [
+        197,
+        45
+      ]
+    ],
+    [
+      "struct sockaddr",
+      {},
+      "",
+      [
+        200,
+        30
+      ],
+      [
+        200,
+        45
+      ]
+    ],
+    [
+      "struct sockaddr",
+      {},
+      "",
+      [
+        205,
+        41
+      ],
+      [
+        205,
+        56
+      ]
+    ],
+    [
+      "struct sockaddr",
+      {},
+      "",
+      [
+        212,
+        41
+      ],
+      [
+        212,
+        56
+      ]
+    ],
+    [
+      "struct sockaddr_in6",
+      {},
+      "",
+      [
+        219,
+        4
+      ],
+      [
+        219,
+        23
+      ]
+    ],
+    [
+      "struct sockaddr",
+      {},
+      "",
+      [
+        224,
+        30
+      ],
+      [
+        224,
+        45
+      ]
+    ],
+    [
+      "struct sockaddr",
+      {},
+      "",
+      [
+        227,
+        30
+      ],
+      [
+        227,
+        45
+      ]
+    ],
+    [
+      "struct sockaddr",
+      {},
+      "",
+      [
+        232,
+        41
+      ],
+      [
+        232,
+        56
+      ]
+    ],
+    [
+      "struct sockaddr",
+      {},
+      "",
+      [
+        239,
+        41
+      ],
+      [
+        239,
+        56
+      ]
+    ],
+    [
+      "struct sockaddr_storage",
+      {},
+      "",
+      [
+        264,
+        39
+      ],
+      [
+        264,
+        62
+      ]
+    ],
+    [
+      "struct sockaddr_storage",
+      {},
+      "",
+      [
+        342,
+        2
+      ],
+      [
+        342,
+        25
+      ]
+    ],
+    [
+      "struct sockaddr",
+      {},
+      "",
+      [
+        346,
+        22
+      ],
+      [
+        346,
+        37
+      ]
+    ],
+    [
+      "struct sockaddr_storage",
+      {},
+      "",
+      [
+        388,
+        40
+      ],
+      [
+        388,
+        63
+      ]
+    ],
+    [
+      "struct sockaddr",
+      {},
+      "",
+      [
+        423,
+        19
+      ],
+      [
+        423,
+        34
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        444,
+        41
+      ],
+      [
+        444,
+        60
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        449,
+        2
+      ],
+      [
+        449,
+        21
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        488,
+        2
+      ],
+      [
+        488,
+        28
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        489,
+        2
+      ],
+      [
+        489,
+        28
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        491,
+        4
+      ],
+      [
+        491,
+        30
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        491,
+        40
+      ],
+      [
+        491,
+        66
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        571,
+        23
+      ],
+      [
+        571,
+        37
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        620,
+        18
+      ],
+      [
+        620,
+        32
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        652,
+        2
+      ],
+      [
+        652,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        666,
+        2
+      ],
+      [
+        666,
+        27
+      ]
+    ],
+    [
+      "struct ares_addrinfo",
+      {},
+      "",
+      [
+        697,
+        22
+      ],
+      [
+        697,
+        42
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        753,
+        2
+      ],
+      [
+        753,
+        28
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        755,
+        2
+      ],
+      [
+        755,
+        28
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        2,
+        0
+      ],
+      [
+        3,
+        0
+      ]
+    ],
+    [
+      "#include \"ares-test.h\"\n",
+      [
+        3,
+        0
+      ],
+      [
+        4,
+        0
+      ]
+    ],
+    [
+      "#include \"ares-test-ai.h\"\n",
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        0
+      ]
+    ],
+    [
+      "#include \"dns-proto.h\"\n",
+      [
+        5,
+        0
+      ],
+      [
+        6,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_dns.h\"\n",
+      [
+        8,
+        0
+      ],
+      [
+        9,
+        0
+      ]
+    ],
+    [
+      "#include <netdb.h>\n",
+      [
+        11,
+        0
+      ],
+      [
+        12,
+        0
+      ]
+    ],
+    [
+      "#include <netinet/tcp.h>\n",
+      [
+        14,
+        0
+      ],
+      [
+        15,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        0
+      ]
+    ],
+    [
+      "#include <functional>\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include <sstream>\n",
+      [
+        20,
+        0
+      ],
+      [
+        21,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

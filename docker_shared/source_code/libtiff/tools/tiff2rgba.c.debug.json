@@ -1,0 +1,282 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    TIFF *in, *out;\n    int c;\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n\n    while ((c = getopt(argc, argv, \"c:r:t:B:bn8hM:\")) != -1)\n        switch (c)\n        {\n            case 'M':\n                maxMalloc = (tmsize_t)strtoul(optarg, NULL, 0) << 20;\n                break;\n            case 'b':\n                process_by_block = 1;\n                break;\n\n            case 'c':\n                if (streq(optarg, \"none\"))\n                    compression = COMPRESSION_NONE;\n                else if (streq(optarg, \"packbits\"))\n                    compression = COMPRESSION_PACKBITS;\n                else if (streq(optarg, \"lzw\"))\n                    compression = COMPRESSION_LZW;\n                else if (streq(optarg, \"jpeg\"))\n                    compression = COMPRESSION_JPEG;\n                else if (streq(optarg, \"zip\"))\n                    compression = COMPRESSION_ADOBE_DEFLATE;\n                else\n                    usage(EXIT_FAILURE);\n                break;\n\n            case 'r':\n                rowsperstrip = atoi(optarg);\n                break;\n\n            case 't':\n                rowsperstrip = atoi(optarg);\n                break;\n\n            case 'B':\n                background = atoi(optarg) & 0xFF;\n                break;\n\n            case 'n':\n                no_alpha = 1;\n                break;\n\n            case '8':\n                bigtiff_output = 1;\n                break;\n\n            case 'h':\n                usage(EXIT_SUCCESS);\n                /*NOTREACHED*/\n                break;\n            case '?':\n                usage(EXIT_FAILURE);\n                /*NOTREACHED*/\n                break;\n        }\n\n    if (argc - optind < 2)\n        usage(EXIT_FAILURE);\n\n    TIFFOpenOptions *opts = TIFFOpenOptionsAlloc();\n    if (opts == NULL)\n    {\n        return EXIT_FAILURE;\n    }\n    TIFFOpenOptionsSetMaxSingleMemAlloc(opts, maxMalloc);\n    out = TIFFOpenExt(argv[argc - 1], bigtiff_output ? \"w8\" : \"w\", opts);\n    if (out == NULL)\n    {\n        TIFFOpenOptionsFree(opts);\n        return (EXIT_FAILURE);\n    }\n\n    for (; optind < argc - 1; optind++)\n    {\n        in = TIFFOpenExt(argv[optind], \"r\", opts);\n        if (in != NULL)\n        {\n            do\n            {\n                if (!tiffcvt(in, out) || !TIFFWriteDirectory(out))\n                {\n                    (void)TIFFClose(out);\n                    (void)TIFFClose(in);\n                    TIFFOpenOptionsFree(opts);\n                    return (1);\n                }\n            } while (TIFFReadDirectory(in));\n            (void)TIFFClose(in);\n        }\n    }\n    TIFFOpenOptionsFree(opts);\n    (void)TIFFClose(out);\n    return (EXIT_SUCCESS);\n}",
+      "fn_code_pos": [
+        [
+          69,
+          0
+        ],
+        [
+          170,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int cvt_by_tile(TIFF *in, TIFF *out)\n\n{\n    uint32_t *raster;       /* retrieve RGBA image */\n    uint32_t width, height; /* image width & height */\n    uint32_t tile_width, tile_height;\n    uint32_t row, col;\n    uint32_t *wrk_line;\n    int ok = 1;\n    uint32_t rastersize, wrk_linesize;\n\n    TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &width);\n    TIFFGetField(in, TIFFTAG_IMAGELENGTH, &height);\n\n    if (!TIFFGetField(in, TIFFTAG_TILEWIDTH, &tile_width) ||\n        !TIFFGetField(in, TIFFTAG_TILELENGTH, &tile_height))\n    {\n        TIFFError(TIFFFileName(in), \"Source image not tiled\");\n        return (0);\n    }\n\n    TIFFSetField(out, TIFFTAG_TILEWIDTH, tile_width);\n    TIFFSetField(out, TIFFTAG_TILELENGTH, tile_height);\n\n    /*\n     * Allocate tile buffer\n     */\n    rastersize = tile_width * tile_height * sizeof(uint32_t);\n    if (tile_width != (rastersize / tile_height) / sizeof(uint32_t))\n    {\n        TIFFError(TIFFFileName(in),\n                  \"Integer overflow when calculating raster buffer\");\n        exit(EXIT_FAILURE);\n    }\n    raster = (uint32_t *)_TIFFmalloc(rastersize);\n    if (raster == 0)\n    {\n        TIFFError(TIFFFileName(in), \"No space for raster buffer\");\n        return (0);\n    }\n\n    /*\n     * Allocate a scanline buffer for swapping during the vertical\n     * mirroring pass.\n     */\n    wrk_linesize = tile_width * sizeof(uint32_t);\n    if (tile_width != wrk_linesize / sizeof(uint32_t))\n    {\n        TIFFError(TIFFFileName(in),\n                  \"Integer overflow when calculating wrk_line buffer\");\n        exit(EXIT_FAILURE);\n    }\n    wrk_line = (uint32_t *)_TIFFmalloc(wrk_linesize);\n    if (!wrk_line)\n    {\n        TIFFError(TIFFFileName(in), \"No space for raster scanline buffer\");\n        ok = 0;\n    }\n\n    /*\n     * Loop over the tiles.\n     */\n    for (row = 0; ok && row < height; row += tile_height)\n    {\n        for (col = 0; ok && col < width; col += tile_width)\n        {\n            uint32_t i_row;\n\n            /* Read the tile into an RGBA array */\n            if (!TIFFReadRGBATile(in, col, row, raster))\n            {\n                ok = 0;\n                break;\n            }\n\n            /*\n             * XXX: raster array has 4-byte unsigned integer type, that is why\n             * we should rearrange it here.\n             */\n#if HOST_BIGENDIAN\n            TIFFSwabArrayOfLong(raster, tile_width * tile_height);\n#endif\n\n            /*\n             * For some reason the TIFFReadRGBATile() function chooses the\n             * lower left corner as the origin.  Vertically mirror scanlines.\n             */\n            for (i_row = 0; i_row < tile_height / 2; i_row++)\n            {\n                uint32_t *top_line, *bottom_line;\n\n                top_line = raster + tile_width * i_row;\n                bottom_line = raster + tile_width * (tile_height - i_row - 1);\n\n                _TIFFmemcpy(wrk_line, top_line, 4 * tile_width);\n                _TIFFmemcpy(top_line, bottom_line, 4 * tile_width);\n                _TIFFmemcpy(bottom_line, wrk_line, 4 * tile_width);\n            }\n\n            /*\n             * Write out the result in a tile.\n             */\n\n            if (TIFFWriteEncodedTile(out, TIFFComputeTile(out, col, row, 0, 0),\n                                     raster,\n                                     4 * tile_width * tile_height) == -1)\n            {\n                ok = 0;\n                break;\n            }\n        }\n    }\n\n    _TIFFfree(raster);\n    _TIFFfree(wrk_line);\n\n    return ok;\n}",
+      "fn_code_pos": [
+        [
+          172,
+          0
+        ],
+        [
+          289,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cvt_by_tile",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int cvt_by_strip(TIFF *in, TIFF *out)\n\n{\n    uint32_t *raster;       /* retrieve RGBA image */\n    uint32_t width, height; /* image width & height */\n    uint32_t row;\n    uint32_t *wrk_line;\n    int ok = 1;\n    uint32_t rastersize, wrk_linesize;\n\n    TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &width);\n    TIFFGetField(in, TIFFTAG_IMAGELENGTH, &height);\n\n    if (!TIFFGetField(in, TIFFTAG_ROWSPERSTRIP, &rowsperstrip))\n    {\n        TIFFError(TIFFFileName(in), \"Source image not in strips\");\n        return (0);\n    }\n\n    TIFFSetField(out, TIFFTAG_ROWSPERSTRIP, rowsperstrip);\n\n    /*\n     * Allocate strip buffer\n     */\n    rastersize = width * rowsperstrip * sizeof(uint32_t);\n    if (width != (rastersize / rowsperstrip) / sizeof(uint32_t))\n    {\n        TIFFError(TIFFFileName(in),\n                  \"Integer overflow when calculating raster buffer\");\n        exit(EXIT_FAILURE);\n    }\n    raster = (uint32_t *)_TIFFmalloc(rastersize);\n    if (raster == 0)\n    {\n        TIFFError(TIFFFileName(in), \"No space for raster buffer\");\n        return (0);\n    }\n\n    /*\n     * Allocate a scanline buffer for swapping during the vertical\n     * mirroring pass.\n     */\n    wrk_linesize = width * sizeof(uint32_t);\n    if (width != wrk_linesize / sizeof(uint32_t))\n    {\n        TIFFError(TIFFFileName(in),\n                  \"Integer overflow when calculating wrk_line buffer\");\n        exit(EXIT_FAILURE);\n    }\n    wrk_line = (uint32_t *)_TIFFmalloc(wrk_linesize);\n    if (!wrk_line)\n    {\n        TIFFError(TIFFFileName(in), \"No space for raster scanline buffer\");\n        ok = 0;\n    }\n\n    /*\n     * Loop over the strips.\n     */\n    for (row = 0; ok && row < height; row += rowsperstrip)\n    {\n        int rows_to_write, i_row;\n\n        /* Read the strip into an RGBA array */\n        if (!TIFFReadRGBAStrip(in, row, raster))\n        {\n            ok = 0;\n            break;\n        }\n\n        /*\n         * XXX: raster array has 4-byte unsigned integer type, that is why\n         * we should rearrange it here.\n         */\n#if HOST_BIGENDIAN\n        TIFFSwabArrayOfLong(raster, width * rowsperstrip);\n#endif\n\n        /*\n         * Figure out the number of scanlines actually in this strip.\n         */\n        if (row + rowsperstrip > height)\n            rows_to_write = height - row;\n        else\n            rows_to_write = rowsperstrip;\n\n        /*\n         * For some reason the TIFFReadRGBAStrip() function chooses the\n         * lower left corner as the origin.  Vertically mirror scanlines.\n         */\n\n        for (i_row = 0; i_row < rows_to_write / 2; i_row++)\n        {\n            uint32_t *top_line, *bottom_line;\n\n            top_line = raster + width * i_row;\n            bottom_line = raster + width * (rows_to_write - i_row - 1);\n\n            _TIFFmemcpy(wrk_line, top_line, 4 * width);\n            _TIFFmemcpy(top_line, bottom_line, 4 * width);\n            _TIFFmemcpy(bottom_line, wrk_line, 4 * width);\n        }\n\n        /*\n         * Write out the result in a strip\n         */\n\n        if (TIFFWriteEncodedStrip(out, row / rowsperstrip, raster,\n                                  4 * rows_to_write * width) == -1)\n        {\n            ok = 0;\n            break;\n        }\n    }\n\n    _TIFFfree(raster);\n    _TIFFfree(wrk_line);\n\n    return ok;\n}",
+      "fn_code_pos": [
+        [
+          291,
+          0
+        ],
+        [
+          410,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cvt_by_strip",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int cvt_whole_image(TIFF *in, TIFF *out)\n\n{\n    uint32_t *raster;       /* retrieve RGBA image */\n    uint32_t width, height; /* image width & height */\n    uint32_t row;\n    size_t pixel_count;\n\n    TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &width);\n    TIFFGetField(in, TIFFTAG_IMAGELENGTH, &height);\n    pixel_count = width * height;\n\n    /* XXX: Check the integer overflow. */\n    if (!width || !height || pixel_count / width != height)\n    {\n        TIFFError(\n            TIFFFileName(in),\n            \"Malformed input file; can't allocate buffer for raster of %\" PRIu32\n            \"x%\" PRIu32 \" size\",\n            width, height);\n        return 0;\n    }\n    if (maxMalloc != 0 &&\n        (tmsize_t)pixel_count * (tmsize_t)sizeof(uint32_t) > maxMalloc)\n    {\n        TIFFError(TIFFFileName(in),\n                  \"Raster size %\" TIFF_SIZE_FORMAT\n                  \" over memory limit (%\" TIFF_SSIZE_FORMAT \"), try -b option.\",\n                  pixel_count * sizeof(uint32_t), maxMalloc);\n        return 0;\n    }\n\n    rowsperstrip = TIFFDefaultStripSize(out, rowsperstrip);\n    TIFFSetField(out, TIFFTAG_ROWSPERSTRIP, rowsperstrip);\n\n    raster = (uint32_t *)_TIFFCheckMalloc(in, pixel_count, sizeof(uint32_t),\n                                          \"raster buffer\");\n    if (raster == 0)\n    {\n        TIFFError(TIFFFileName(in),\n                  \"Failed to allocate buffer (%\" TIFF_SIZE_FORMAT\n                  \" elements of %\" TIFF_SIZE_FORMAT \" each)\",\n                  pixel_count, sizeof(uint32_t));\n        return (0);\n    }\n\n    /* Read the image in one chunk into an RGBA array */\n    if (!TIFFReadRGBAImageOriented(in, width, height, raster,\n                                   ORIENTATION_TOPLEFT, 0))\n    {\n        _TIFFfree(raster);\n        return (0);\n    }\n\n    /*\n     * XXX: raster array has 4-byte unsigned integer type, that is why\n     * we should rearrange it here.\n     */\n#if HOST_BIGENDIAN\n    TIFFSwabArrayOfLong(raster, width * height);\n#endif\n\n    /*\n     * Do we want to strip away alpha components?\n     */\n    if (no_alpha)\n    {\n        size_t count = pixel_count;\n        unsigned char *src, *dst;\n\n        src = dst = (unsigned char *)raster;\n        while (count > 0)\n        {\n            /* do alpha compositing */\n            const int src_alpha = src[3];\n            const int background_contribution = background * (0xFF - src_alpha);\n            *(dst++) = (*(src)*src_alpha + background_contribution) / 0xFF;\n            src++;\n            *(dst++) = (*(src)*src_alpha + background_contribution) / 0xFF;\n            src++;\n            *(dst++) = (*(src)*src_alpha + background_contribution) / 0xFF;\n            src++;\n            src++;\n            count--;\n        }\n    }\n\n    /*\n     * Write out the result in strips\n     */\n    for (row = 0; row < height; row += rowsperstrip)\n    {\n        unsigned char *raster_strip;\n        int rows_to_write;\n        int bytes_per_pixel;\n\n        if (no_alpha)\n        {\n            raster_strip = ((unsigned char *)raster) + 3 * row * width;\n            bytes_per_pixel = 3;\n        }\n        else\n        {\n            raster_strip = (unsigned char *)(raster + row * width);\n            bytes_per_pixel = 4;\n        }\n\n        if (row + rowsperstrip > height)\n            rows_to_write = height - row;\n        else\n            rows_to_write = rowsperstrip;\n\n        if (TIFFWriteEncodedStrip(out, row / rowsperstrip, raster_strip,\n                                  bytes_per_pixel * rows_to_write * width) ==\n            -1)\n        {\n            _TIFFfree(raster);\n            return 0;\n        }\n    }\n\n    _TIFFfree(raster);\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          420,
+          0
+        ],
+        [
+          544,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cvt_whole_image",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int tiffcvt(TIFF *in, TIFF *out)\n{\n    uint32_t width, height; /* image width & height */\n    uint16_t shortv;\n    float floatv;\n    char *stringv;\n    uint32_t longv;\n    uint16_t v[1];\n\n    TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &width);\n    TIFFGetField(in, TIFFTAG_IMAGELENGTH, &height);\n\n    CopyField(TIFFTAG_SUBFILETYPE, longv);\n    TIFFSetField(out, TIFFTAG_IMAGEWIDTH, width);\n    TIFFSetField(out, TIFFTAG_IMAGELENGTH, height);\n    TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, 8);\n    TIFFSetField(out, TIFFTAG_COMPRESSION, compression);\n    TIFFSetField(out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);\n\n    CopyField(TIFFTAG_FILLORDER, shortv);\n    TIFFSetField(out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);\n\n    if (no_alpha)\n        TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, 3);\n    else\n        TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, 4);\n\n    if (!no_alpha)\n    {\n        v[0] = EXTRASAMPLE_ASSOCALPHA;\n        TIFFSetField(out, TIFFTAG_EXTRASAMPLES, 1, v);\n    }\n\n    CopyField(TIFFTAG_XRESOLUTION, floatv);\n    CopyField(TIFFTAG_YRESOLUTION, floatv);\n    CopyField(TIFFTAG_RESOLUTIONUNIT, shortv);\n    TIFFSetField(out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);\n    TIFFSetField(out, TIFFTAG_SOFTWARE, TIFFGetVersion());\n    CopyField(TIFFTAG_DOCUMENTNAME, stringv);\n\n    if (maxMalloc != 0 && TIFFStripSize(in) > maxMalloc)\n    {\n        TIFFError(TIFFFileName(in),\n                  \"Strip Size %\" TIFF_SSIZE_FORMAT\n                  \" over memory limit (%\" TIFF_SSIZE_FORMAT \")\",\n                  TIFFStripSize(in), maxMalloc);\n        return 0;\n    }\n    if (process_by_block && TIFFIsTiled(in))\n        return (cvt_by_tile(in, out));\n    else if (process_by_block)\n        return (cvt_by_strip(in, out));\n    else\n        return (cvt_whole_image(in, out));\n}",
+      "fn_code_pos": [
+        [
+          546,
+          0
+        ],
+        [
+          600,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tiffcvt",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"%s\\n\\n\", TIFFGetVersion());\n    fprintf(out, \"%s\", usage_info);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          637,
+          0
+        ],
+        [
+          644,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "tiffcvt(TIFF *in, TIFF *out)",
+      "fn_dec_pos": [
+        [
+          66,
+          11
+        ],
+        [
+          66,
+          39
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tiffcvt",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "usage(int code)",
+      "fn_dec_pos": [
+        [
+          67,
+          12
+        ],
+        [
+          67,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

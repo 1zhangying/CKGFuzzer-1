@@ -1,0 +1,167 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\ncmsHTRANSFORM CreateRoundtripXForm(cmsHPROFILE hProfile, cmsUInt32Number nIntent)\n{\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n    cmsHPROFILE hLab = cmsCreateLab4ProfileTHR(ContextID, NULL);\n    cmsHTRANSFORM xform;\n    cmsBool BPC[4] = { FALSE, FALSE, FALSE, FALSE };\n    cmsFloat64Number States[4] = { 1.0, 1.0, 1.0, 1.0 };\n    cmsHPROFILE hProfiles[4];\n    cmsUInt32Number Intents[4];\n\n    hProfiles[0] = hLab; hProfiles[1] = hProfile; hProfiles[2] = hProfile; hProfiles[3] = hLab;\n    Intents[0]   = INTENT_RELATIVE_COLORIMETRIC; Intents[1] = nIntent; Intents[2] = INTENT_RELATIVE_COLORIMETRIC; Intents[3] = INTENT_RELATIVE_COLORIMETRIC;\n\n    xform =  cmsCreateExtendedTransform(ContextID, 4, hProfiles, BPC, Intents,\n        States, NULL, 0, TYPE_Lab_DBL, TYPE_Lab_DBL, cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE);\n\n    cmsCloseProfile(hLab);\n    return xform;\n}",
+      "fn_code_pos": [
+        [
+          39,
+          0
+        ],
+        [
+          58,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CreateRoundtripXForm",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "nIntent": "cmsUInt32Number"
+        },
+        "return_type": "cmsHTRANSFORM"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool  BlackPointAsDarkerColorant(cmsHPROFILE    hInput,\n                                    cmsUInt32Number Intent,\n                                    cmsCIEXYZ* BlackPoint,\n                                    cmsUInt32Number dwFlags)\n{\n    cmsUInt16Number *Black;\n    cmsHTRANSFORM xform;\n    cmsColorSpaceSignature Space;\n    cmsUInt32Number nChannels;\n    cmsUInt32Number dwFormat;\n    cmsHPROFILE hLab;\n    cmsCIELab  Lab;\n    cmsCIEXYZ  BlackXYZ;\n    cmsContext ContextID = cmsGetProfileContextID(hInput);\n\n    // If the profile does not support input direction, assume Black point 0\n    if (!cmsIsIntentSupported(hInput, Intent, LCMS_USED_AS_INPUT)) {\n\n        BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n        return FALSE;\n    }\n\n    // Create a formatter which has n channels and no floating point\n    dwFormat = cmsFormatterForColorspaceOfProfile(hInput, 2, FALSE);\n\n    // Try to get black by using black colorant\n    Space = cmsGetColorSpace(hInput);\n\n    // This function returns darker colorant in 16 bits for several spaces\n    if (!_cmsEndPointsBySpace(Space, NULL, &Black, &nChannels)) {\n\n        BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n        return FALSE;\n    }\n\n    if (nChannels != T_CHANNELS(dwFormat)) {\n       BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n       return FALSE;\n    }\n\n    // Lab will be used as the output space, but lab2 will avoid recursion\n    hLab = cmsCreateLab2ProfileTHR(ContextID, NULL);\n    if (hLab == NULL) {\n       BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n       return FALSE;\n    }\n\n    // Create the transform\n    xform = cmsCreateTransformTHR(ContextID, hInput, dwFormat,\n                                hLab, TYPE_Lab_DBL, Intent, cmsFLAGS_NOOPTIMIZE|cmsFLAGS_NOCACHE);\n    cmsCloseProfile(hLab);\n\n    if (xform == NULL) {\n\n        // Something went wrong. Get rid of open resources and return zero as black\n        BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n        return FALSE;\n    }\n\n    // Convert black to Lab\n    cmsDoTransform(xform, Black, &Lab, 1);\n\n    // Force it to be neutral, check for inconsistences\n    Lab.a = Lab.b = 0;\n    if (Lab.L > 50 || Lab.L < 0) Lab.L = 0;\n\n    // Free the resources\n    cmsDeleteTransform(xform);\n\n    // Convert from Lab (which is now clipped) to XYZ.\n    cmsLab2XYZ(NULL, &BlackXYZ, &Lab);\n\n    if (BlackPoint != NULL)\n        *BlackPoint = BlackXYZ;\n\n    return TRUE;\n\n    cmsUNUSED_PARAMETER(dwFlags);\n}",
+      "fn_code_pos": [
+        [
+          62,
+          0
+        ],
+        [
+          141,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BlackPointAsDarkerColorant",
+        "parameters": {
+          "hInput": "cmsHPROFILE",
+          "Intent": "cmsUInt32Number",
+          "BlackPoint": "cmsCIEXYZ",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool BlackPointUsingPerceptualBlack(cmsCIEXYZ* BlackPoint, cmsHPROFILE hProfile)\n{\n    cmsHTRANSFORM hRoundTrip;\n    cmsCIELab LabIn, LabOut;\n    cmsCIEXYZ  BlackXYZ;\n\n     // Is the intent supported by the profile?\n    if (!cmsIsIntentSupported(hProfile, INTENT_PERCEPTUAL, LCMS_USED_AS_INPUT)) {\n\n        BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n        return TRUE;\n    }\n\n    hRoundTrip = CreateRoundtripXForm(hProfile, INTENT_PERCEPTUAL);\n    if (hRoundTrip == NULL) {\n        BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n        return FALSE;\n    }\n\n    LabIn.L = LabIn.a = LabIn.b = 0;\n    cmsDoTransform(hRoundTrip, &LabIn, &LabOut, 1);\n\n    // Clip Lab to reasonable limits\n    if (LabOut.L > 50) LabOut.L = 50;\n    LabOut.a = LabOut.b = 0;\n\n    cmsDeleteTransform(hRoundTrip);\n\n    // Convert it to XYZ\n    cmsLab2XYZ(NULL, &BlackXYZ, &LabOut);\n\n    if (BlackPoint != NULL)\n        *BlackPoint = BlackXYZ;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          146,
+          0
+        ],
+        [
+          182,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BlackPointUsingPerceptualBlack",
+        "parameters": {
+          "BlackPoint": "cmsCIEXYZ",
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsDetectBlackPoint(cmsCIEXYZ* BlackPoint, cmsHPROFILE hProfile, cmsUInt32Number Intent, cmsUInt32Number dwFlags)\n{\n    cmsProfileClassSignature devClass;\n\n    // Make sure the device class is adequate\n    devClass = cmsGetDeviceClass(hProfile);\n    if (devClass == cmsSigLinkClass ||\n        devClass == cmsSigAbstractClass ||\n        devClass == cmsSigNamedColorClass) {\n            BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n            return FALSE;\n    }\n\n    // Make sure intent is adequate\n    if (Intent != INTENT_PERCEPTUAL &&\n        Intent != INTENT_RELATIVE_COLORIMETRIC &&\n        Intent != INTENT_SATURATION) {\n            BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n            return FALSE;\n    }\n\n    // v4 + perceptual & saturation intents does have its own black point, and it is\n    // well specified enough to use it. Black point tag is deprecated in V4.\n    if ((cmsGetEncodedICCversion(hProfile) >= 0x4000000) &&\n        (Intent == INTENT_PERCEPTUAL || Intent == INTENT_SATURATION)) {\n\n            // Matrix shaper share MRC & perceptual intents\n            if (cmsIsMatrixShaper(hProfile))\n                return BlackPointAsDarkerColorant(hProfile, INTENT_RELATIVE_COLORIMETRIC, BlackPoint, 0);\n\n            // Get Perceptual black out of v4 profiles. That is fixed for perceptual & saturation intents\n            BlackPoint -> X = cmsPERCEPTUAL_BLACK_X;\n            BlackPoint -> Y = cmsPERCEPTUAL_BLACK_Y;\n            BlackPoint -> Z = cmsPERCEPTUAL_BLACK_Z;\n\n            return TRUE;\n    }\n\n\n#ifdef CMS_USE_PROFILE_BLACK_POINT_TAG\n\n    // v2, v4 rel/abs colorimetric\n    if (cmsIsTag(hProfile, cmsSigMediaBlackPointTag) &&\n        Intent == INTENT_RELATIVE_COLORIMETRIC) {\n\n            cmsCIEXYZ *BlackPtr, BlackXYZ, UntrustedBlackPoint, TrustedBlackPoint, MediaWhite;\n            cmsCIELab Lab;\n\n            // If black point is specified, then use it,\n\n            BlackPtr = cmsReadTag(hProfile, cmsSigMediaBlackPointTag);\n            if (BlackPtr != NULL) {\n\n                BlackXYZ = *BlackPtr;\n                _cmsReadMediaWhitePoint(&MediaWhite, hProfile);\n\n                // Black point is absolute XYZ, so adapt to D50 to get PCS value\n                cmsAdaptToIlluminant(&UntrustedBlackPoint, &MediaWhite, cmsD50_XYZ(), &BlackXYZ);\n\n                // Force a=b=0 to get rid of any chroma\n                cmsXYZ2Lab(NULL, &Lab, &UntrustedBlackPoint);\n                Lab.a = Lab.b = 0;\n                if (Lab.L > 50) Lab.L = 50; // Clip to L* <= 50\n                cmsLab2XYZ(NULL, &TrustedBlackPoint, &Lab);\n\n                if (BlackPoint != NULL)\n                    *BlackPoint = TrustedBlackPoint;\n\n                return TRUE;\n            }\n    }\n#endif\n\n    // That is about v2 profiles.\n\n    // If output profile, discount ink-limiting and that's all\n    if (Intent == INTENT_RELATIVE_COLORIMETRIC &&\n        (cmsGetDeviceClass(hProfile) == cmsSigOutputClass) &&\n        (cmsGetColorSpace(hProfile)  == cmsSigCmykData))\n        return BlackPointUsingPerceptualBlack(BlackPoint, hProfile);\n\n    // Nope, compute BP using current intent.\n    return BlackPointAsDarkerColorant(hProfile, Intent, BlackPoint, dwFlags);\n}",
+      "fn_code_pos": [
+        [
+          190,
+          0
+        ],
+        [
+          273,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsDetectBlackPoint",
+        "parameters": {
+          "BlackPoint": "cmsCIEXYZ",
+          "hProfile": "cmsHPROFILE",
+          "Intent": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsFloat64Number RootOfLeastSquaresFitQuadraticCurve(int n, cmsFloat64Number x[], cmsFloat64Number y[])\n{\n    double sum_x = 0, sum_x2 = 0, sum_x3 = 0, sum_x4 = 0;\n    double sum_y = 0, sum_yx = 0, sum_yx2 = 0;\n    double d, a, b, c;\n    int i;\n    cmsMAT3 m;\n    cmsVEC3 v, res;\n\n    if (n < 4) return 0;\n\n    for (i=0; i < n; i++) {\n\n        double xn = x[i];\n        double yn = y[i];\n\n        sum_x  += xn;\n        sum_x2 += xn*xn;\n        sum_x3 += xn*xn*xn;\n        sum_x4 += xn*xn*xn*xn;\n\n        sum_y += yn;\n        sum_yx += yn*xn;\n        sum_yx2 += yn*xn*xn;\n    }\n\n    _cmsVEC3init(&m.v[0], n,      sum_x,  sum_x2);\n    _cmsVEC3init(&m.v[1], sum_x,  sum_x2, sum_x3);\n    _cmsVEC3init(&m.v[2], sum_x2, sum_x3, sum_x4);\n\n    _cmsVEC3init(&v, sum_y, sum_yx, sum_yx2);\n\n    if (!_cmsMAT3solve(&res, &m, &v)) return 0;\n\n      \n    a = res.n[2];\n    b = res.n[1];\n    c = res.n[0];\n\n    if (fabs(a) < 1.0E-10) {\n    \n        if (fabs(b) < 1.0E-10) return 0;\n        return cmsmin(0, cmsmax(50, -c/b ));\n    }\n    else {\n\n         d = b*b - 4.0 * a * c;\n         if (d <= 0) {\n             return 0;\n         }\n         else {\n\n             double rt;\n             \n             if (fabs(a) < 1.0E-10) return 0;\n\n             rt = (-b + sqrt(d)) / (2.0 * a);\n\n             return cmsmax(0, cmsmin(50, rt));\n         }\n   }\n\n}",
+      "fn_code_pos": [
+        [
+          282,
+          0
+        ],
+        [
+          345,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "RootOfLeastSquaresFitQuadraticCurve",
+        "parameters": {
+          "n": "int",
+          "x": "cmsFloat64Number",
+          "y": "cmsFloat64Number"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsDetectDestinationBlackPoint(cmsCIEXYZ* BlackPoint, cmsHPROFILE hProfile, cmsUInt32Number Intent, cmsUInt32Number dwFlags)\n{\n    cmsColorSpaceSignature ColorSpace;\n    cmsHTRANSFORM hRoundTrip = NULL;\n    cmsCIELab InitialLab, destLab, Lab;\n    cmsFloat64Number inRamp[256], outRamp[256];\n    cmsFloat64Number MinL, MaxL;\n    cmsBool NearlyStraightMidrange = TRUE;  \n    cmsFloat64Number yRamp[256];\n    cmsFloat64Number x[256], y[256];\n    cmsFloat64Number lo, hi;\n    int n, l;\n    cmsProfileClassSignature devClass;\n\n    // Make sure the device class is adequate\n    devClass = cmsGetDeviceClass(hProfile);\n    if (devClass == cmsSigLinkClass ||\n        devClass == cmsSigAbstractClass ||\n        devClass == cmsSigNamedColorClass) {\n            BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n            return FALSE;\n    }\n\n    // Make sure intent is adequate\n    if (Intent != INTENT_PERCEPTUAL &&\n        Intent != INTENT_RELATIVE_COLORIMETRIC &&\n        Intent != INTENT_SATURATION) {\n            BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n            return FALSE;\n    }\n\n\n    // v4 + perceptual & saturation intents does have its own black point, and it is\n    // well specified enough to use it. Black point tag is deprecated in V4.\n    if ((cmsGetEncodedICCversion(hProfile) >= 0x4000000) &&\n        (Intent == INTENT_PERCEPTUAL || Intent == INTENT_SATURATION)) {\n\n            // Matrix shaper share MRC & perceptual intents\n            if (cmsIsMatrixShaper(hProfile))\n                return BlackPointAsDarkerColorant(hProfile, INTENT_RELATIVE_COLORIMETRIC, BlackPoint, 0);\n\n            // Get Perceptual black out of v4 profiles. That is fixed for perceptual & saturation intents\n            BlackPoint -> X = cmsPERCEPTUAL_BLACK_X;\n            BlackPoint -> Y = cmsPERCEPTUAL_BLACK_Y;\n            BlackPoint -> Z = cmsPERCEPTUAL_BLACK_Z;\n            return TRUE;\n    }\n\n\n    // Check if the profile is lut based and gray, rgb or cmyk (7.2 in Adobe's document)\n    ColorSpace = cmsGetColorSpace(hProfile);\n    if (!cmsIsCLUT(hProfile, Intent, LCMS_USED_AS_OUTPUT ) ||\n        (ColorSpace != cmsSigGrayData &&\n         ColorSpace != cmsSigRgbData  &&\n         ColorSpace != cmsSigCmykData)) {\n\n        // In this case, handle as input case\n        return cmsDetectBlackPoint(BlackPoint, hProfile, Intent, dwFlags);\n    }\n\n    // It is one of the valid cases!, use Adobe algorithm\n\n    \n    // Set a first guess, that should work on good profiles.\n    if (Intent == INTENT_RELATIVE_COLORIMETRIC) {\n\n        cmsCIEXYZ IniXYZ;\n\n        // calculate initial Lab as source black point\n        if (!cmsDetectBlackPoint(&IniXYZ, hProfile, Intent, dwFlags)) {\n            return FALSE;\n        }\n\n        // convert the XYZ to lab\n        cmsXYZ2Lab(NULL, &InitialLab, &IniXYZ);\n\n    } else {\n\n        // set the initial Lab to zero, that should be the black point for perceptual and saturation\n        InitialLab.L = 0;\n        InitialLab.a = 0;\n        InitialLab.b = 0;\n    }\n\n\n    // Step 2\n    // ======\n\n    // Create a roundtrip. Define a Transform BT for all x in L*a*b*\n    hRoundTrip = CreateRoundtripXForm(hProfile, Intent);\n    if (hRoundTrip == NULL)  return FALSE;\n\n    // Compute ramps\n\n    for (l=0; l < 256; l++) {\n\n        Lab.L = (cmsFloat64Number) (l * 100.0) / 255.0;\n        Lab.a = cmsmin(50, cmsmax(-50, InitialLab.a));\n        Lab.b = cmsmin(50, cmsmax(-50, InitialLab.b));\n\n        cmsDoTransform(hRoundTrip, &Lab, &destLab, 1);\n\n        inRamp[l]  = Lab.L;\n        outRamp[l] = destLab.L;\n    }\n\n    // Make monotonic\n    for (l = 254; l > 0; --l) {\n        outRamp[l] = cmsmin(outRamp[l], outRamp[l+1]);\n    }\n\n    // Check\n    if (! (outRamp[0] < outRamp[255])) {\n\n        cmsDeleteTransform(hRoundTrip);\n        BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n        return FALSE;\n    }\n\n\n    // Test for mid range straight (only on relative colorimetric)\n    NearlyStraightMidrange = TRUE;\n    MinL = outRamp[0]; MaxL = outRamp[255];\n    if (Intent == INTENT_RELATIVE_COLORIMETRIC) {\n      \n        for (l=0; l < 256; l++) {\n\n            if (! ((inRamp[l] <= MinL + 0.2 * (MaxL - MinL) ) ||   \n                (fabs(inRamp[l] - outRamp[l]) < 4.0 )))\n                NearlyStraightMidrange = FALSE;\n        }\n\n        // If the mid range is straight (as determined above) then the \n        // DestinationBlackPoint shall be the same as initialLab. \n        // Otherwise, the DestinationBlackPoint shall be determined \n        // using curve fitting.\n        if (NearlyStraightMidrange) {\n\n            cmsLab2XYZ(NULL, BlackPoint, &InitialLab);\n            cmsDeleteTransform(hRoundTrip);\n            return TRUE;\n        }\n    }\n\n \n    // curve fitting: The round-trip curve normally looks like a nearly constant section at the black point,\n    // with a corner and a nearly straight line to the white point.  \n    for (l=0; l < 256; l++) {\n    \n        yRamp[l] = (outRamp[l] - MinL) / (MaxL - MinL);\n    }\n\n    // find the black point using the least squares error quadratic curve fitting\n    if (Intent == INTENT_RELATIVE_COLORIMETRIC) {\n        lo = 0.1;\n        hi = 0.5;\n    }\n    else {\n\n        // Perceptual and saturation\n        lo = 0.03;\n        hi = 0.25;\n    }\n\n    // Capture shadow points for the fitting.\n    n = 0;\n    for (l=0; l < 256; l++) {\n    \n        cmsFloat64Number ff = yRamp[l];\n\n        if (ff >= lo && ff < hi) {\n            x[n] = inRamp[l];\n            y[n] = yRamp[l];\n            n++;\n        }    \n    }\n\n    \n    // No suitable points\n    if (n < 3 ) {\n        cmsDeleteTransform(hRoundTrip);\n        BlackPoint -> X = BlackPoint ->Y = BlackPoint -> Z = 0.0;\n        return FALSE;\n    }\n\n  \n    // fit and get the vertex of quadratic curve\n    Lab.L = RootOfLeastSquaresFitQuadraticCurve(n, x, y);\n\n    if (Lab.L < 0.0) { // clip to zero L* if the vertex is negative\n        Lab.L = 0;\n    }\n\n    Lab.a = InitialLab.a;\n    Lab.b = InitialLab.b;\n\n    cmsLab2XYZ(NULL, BlackPoint, &Lab);\n\n    cmsDeleteTransform(hRoundTrip);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          351,
+          0
+        ],
+        [
+          551,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsDetectDestinationBlackPoint",
+        "parameters": {
+          "BlackPoint": "cmsCIEXYZ",
+          "hProfile": "cmsHPROFILE",
+          "Intent": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"lcms2_internal.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

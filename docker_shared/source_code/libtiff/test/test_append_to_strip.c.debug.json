@@ -1,0 +1,108 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main()\n{\n    int ret;\n    TIFF *tif = TIFFOpen(\"test_append_to_strip.tif\", \"w\");\n    if (tif == NULL)\n    {\n        fprintf(stderr, \"Cannot create test_append_to_strip.tif\");\n        return 1;\n    }\n    ret = TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_NONE);\n    assert(ret);\n    ret = TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, 1);\n    assert(ret);\n    ret = TIFFSetField(tif, TIFFTAG_IMAGELENGTH, 9);\n    assert(ret);\n    ret = TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, 5);\n    assert(ret);\n    ret = TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8);\n    assert(ret);\n    ret = TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);\n    assert(ret);\n    int row;\n    for (row = 0; row < 9; ++row)\n    {\n        char c = (char)row;\n        int strip = (row < 5) ? 0 : 1;\n        ret = TIFFWriteRawStrip(tif, strip, &c, 1);\n        assert(ret == 1);\n    }\n    (void)ret;\n    TIFFClose(tif);\n    tif = TIFFOpen(\"test_append_to_strip.tif\", \"r\");\n    if (tif == NULL)\n    {\n        fprintf(stderr, \"Cannot create test_append_to_strip.tif\");\n        return 1;\n    }\n    toff_t *panByteCounts = NULL;\n    TIFFGetField(tif, TIFFTAG_STRIPBYTECOUNTS, &panByteCounts);\n    assert(panByteCounts);\n    int exitCode = 0;\n    if (panByteCounts[0] != 5)\n    {\n        exitCode = 1;\n        fprintf(stderr, \"panByteCounts[0] = %d. Expected 5.\\n\",\n                (int)panByteCounts[0]);\n    }\n    if (panByteCounts[1] != 4)\n    {\n        exitCode = 1;\n        fprintf(stderr, \"panByteCounts[1] = %d. Expected 4.\\n\",\n                (int)panByteCounts[1]);\n    }\n    for (row = 0; row < 9; ++row)\n    {\n        char c;\n        TIFFReadScanline(tif, &c, row, 0);\n        if (c != row)\n        {\n            fprintf(\n                stderr,\n                \"TIFFReadScanline() for scanline %d returned %d. %d expected\\n\",\n                row, c, row);\n            exitCode = 1;\n        }\n    }\n    TIFFClose(tif);\n    unlink(\"test_append_to_strip.tif\");\n    return exitCode;\n}",
+      "fn_code_pos": [
+        [
+          43,
+          0
+        ],
+        [
+          112,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <assert.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        38,
+        0
+      ],
+      [
+        39,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        41,
+        0
+      ],
+      [
+        42,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

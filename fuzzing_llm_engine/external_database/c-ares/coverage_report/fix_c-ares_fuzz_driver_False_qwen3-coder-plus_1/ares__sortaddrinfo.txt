@@ -1,0 +1,510 @@
+Line	Count	Source	
+1		/*	
+2		* Original file name getaddrinfo.c	
+3		* Lifted from the 'Android Bionic' project with the BSD license.	
+4		*/	
+5			
+6		/*	
+7		* Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.	
+8		* Copyright (C) 2018 The Android Open Source Project	
+9		* Copyright (C) 2019 by Andrew Selivanov	
+10		* All rights reserved.	
+11		*	
+12		* Redistribution and use in source and binary forms, with or without	
+13		* modification, are permitted provided that the following conditions	
+14		* are met:	
+15		* 1. Redistributions of source code must retain the above copyright	
+16		*    notice, this list of conditions and the following disclaimer.	
+17		* 2. Redistributions in binary form must reproduce the above copyright	
+18		*    notice, this list of conditions and the following disclaimer in the	
+19		*    documentation and/or other materials provided with the distribution.	
+20		* 3. Neither the name of the project nor the names of its contributors	
+21		*    may be used to endorse or promote products derived from this software	
+22		*    without specific prior written permission.	
+23		*	
+24		* THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND	
+25		* ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE	
+26		* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE	
+27		* ARE DISCLAIMED.  IN NO EVENT SHALL THE PROJECT OR CONTRIBUTORS BE LIABLE	
+28		* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL	
+29		* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS	
+30		* OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)	
+31		* HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT	
+32		* LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY	
+33		* OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF	
+34		* SUCH DAMAGE.	
+35		*/	
+36			
+37		#include "ares_setup.h"	
+38			
+39		#ifdef HAVE_NETINET_IN_H	
+40		#  include <netinet/in.h>	
+41		#endif	
+42		#ifdef HAVE_NETDB_H	
+43		#  include <netdb.h>	
+44		#endif	
+45		#ifdef HAVE_STRINGS_H	
+46		#  include <strings.h>	
+47		#endif	
+48			
+49		#include <assert.h>	
+50		#include <limits.h>	
+51			
+52		#include "ares.h"	
+53		#include "ares_private.h"	
+54			
+55		struct addrinfo_sort_elem	
+56		{	
+57		struct ares_addrinfo_node *ai;	
+58		int has_src_addr;	
+59		ares_sockaddr src_addr;	
+60		int original_order;	
+61		};	
+62			
+63	0	#define ARES_IPV6_ADDR_MC_SCOPE(a)((a)->s6_addr[1] & 0x0f)	
+64			
+65	0	#define ARES_IPV6_ADDR_SCOPE_NODELOCAL0x01	
+66		#define ARES_IPV6_ADDR_SCOPE_INTFACELOCAL    0x01	
+67	0	#define ARES_IPV6_ADDR_SCOPE_LINKLOCAL0x02	
+68	0	#define ARES_IPV6_ADDR_SCOPE_SITELOCAL0x05	
+69		#define ARES_IPV6_ADDR_SCOPE_ORGLOCAL        0x08	
+70	0	#define ARES_IPV6_ADDR_SCOPE_GLOBAL0x0e	
+71			
+72	0	#define ARES_IN_LOOPBACK(a)((((long int)(a)) & 0xff000000) == 0x7f000000)	
+73			
+74		/* RFC 4193. */	
+75	0	#define ARES_IN6_IS_ADDR_ULA(a)(((a)->s6_addr[0] & 0xfe) == 0xfc)	
+76			
+77		/* These macros are modelled after the ones in <netinet/in6.h>. */	
+78		/* RFC 4380, section 2.6 */	
+79		#define ARES_IN6_IS_ADDR_TEREDO(a)    \	
+80	0	((*(const unsigned int *)(const void *)(&(a)->s6_addr[0]) == ntohl(0x20010000)))	
+81		/* RFC 3056, section 2. */	
+82		#define ARES_IN6_IS_ADDR_6TO4(a)      \	
+83	0	(((a)->s6_addr[0] == 0x20)&&((a)->s6_addr[1] == 0x02))	
+84		/* 6bone testing address area (3ffe::/16), deprecated in RFC 3701. */	
+85		#define ARES_IN6_IS_ADDR_6BONE(a)      \	
+86	0	(((a)->s6_addr[0] == 0x3f)&&((a)->s6_addr[1] == 0xfe))	
+87			
+88			
+89		static int get_scope(const struct sockaddr *addr)	
+90	0	{	
+91	0	if (addr->sa_family ==AF_INET6)	
+92	0	{	
+93	0	const struct sockaddr_in6 *addr6 =CARES_INADDR_CAST(const struct sockaddr_in6 *, addr);	
+94	0	if (IN6_IS_ADDR_MULTICAST(&addr6->sin6_addr))	
+95	0	{	
+96	0	returnARES_IPV6_ADDR_MC_SCOPE(&addr6->sin6_addr);	
+97	0	}	
+98	0	elseif (IN6_IS_ADDR_LOOPBACK(&addr6->sin6_addr)||	
+99	0	IN6_IS_ADDR_LINKLOCAL(&addr6->sin6_addr))	
+100	0	{	
+101		/*	
+102		* RFC 4291 section 2.5.3 says loopback is to be treated as having	
+103		* link-local scope.	
+104		*/	
+105	0	returnARES_IPV6_ADDR_SCOPE_LINKLOCAL;	
+106	0	}	
+107	0	elseif (IN6_IS_ADDR_SITELOCAL(&addr6->sin6_addr))	
+108	0	{	
+109	0	returnARES_IPV6_ADDR_SCOPE_SITELOCAL;	
+110	0	}	
+111	0	else	
+112	0	{	
+113	0	returnARES_IPV6_ADDR_SCOPE_GLOBAL;	
+114	0	}	
+115	0	}	
+116	0	elseif (addr->sa_family ==AF_INET)	
+117	0	{	
+118	0	const struct sockaddr_in *addr4 =CARES_INADDR_CAST(const struct sockaddr_in *, addr);	
+119	0	unsigned long int na =ntohl(addr4->sin_addr.s_addr);	
+120	0	if (ARES_IN_LOOPBACK(na)|| /* 127.0.0.0/8 */	
+121	0	(na & 0xffff0000) == 0xa9fe0000) /* 169.254.0.0/16 */	
+122	0	{	
+123	0	returnARES_IPV6_ADDR_SCOPE_LINKLOCAL;	
+124	0	}	
+125	0	else	
+126	0	{	
+127		/*	
+128		* RFC 6724 section 3.2. Other IPv4 addresses, including private	
+129		* addresses and shared addresses (100.64.0.0/10), are assigned global	
+130		* scope.	
+131		*/	
+132	0	returnARES_IPV6_ADDR_SCOPE_GLOBAL;	
+133	0	}	
+134	0	}	
+135	0	else	
+136	0	{	
+137		/*	
+138		* This should never happen.	
+139		* Return a scope with low priority as a last resort.	
+140		*/	
+141	0	returnARES_IPV6_ADDR_SCOPE_NODELOCAL;	
+142	0	}	
+143	0	}	
+144			
+145		static int get_label(const struct sockaddr *addr)	
+146	0	{	
+147	0	if (addr->sa_family ==AF_INET)	
+148	0	{	
+149	0	return 4;	
+150	0	}	
+151	0	elseif (addr->sa_family ==AF_INET6)	
+152	0	{	
+153	0	const struct sockaddr_in6 *addr6 =CARES_INADDR_CAST(const struct sockaddr_in6 *, addr);	
+154	0	if (IN6_IS_ADDR_LOOPBACK(&addr6->sin6_addr))	
+155	0	{	
+156	0	return 0;	
+157	0	}	
+158	0	elseif (IN6_IS_ADDR_V4MAPPED(&addr6->sin6_addr))	
+159	0	{	
+160	0	return 4;	
+161	0	}	
+162	0	elseif (ARES_IN6_IS_ADDR_6TO4(&addr6->sin6_addr))	
+163	0	{	
+164	0	return 2;	
+165	0	}	
+166	0	elseif (ARES_IN6_IS_ADDR_TEREDO(&addr6->sin6_addr))	
+167	0	{	
+168	0	return 5;	
+169	0	}	
+170	0	elseif (ARES_IN6_IS_ADDR_ULA(&addr6->sin6_addr))	
+171	0	{	
+172	0	return 13;	
+173	0	}	
+174	0	elseif (IN6_IS_ADDR_V4COMPAT(&addr6->sin6_addr))	
+175	0	{	
+176	0	return 3;	
+177	0	}	
+178	0	elseif (IN6_IS_ADDR_SITELOCAL(&addr6->sin6_addr))	
+179	0	{	
+180	0	return 11;	
+181	0	}	
+182	0	elseif (ARES_IN6_IS_ADDR_6BONE(&addr6->sin6_addr))	
+183	0	{	
+184	0	return 12;	
+185	0	}	
+186	0	else	
+187	0	{	
+188		/* All other IPv6 addresses, including global unicast addresses. */	
+189	0	return 1;	
+190	0	}	
+191	0	}	
+192	0	else	
+193	0	{	
+194		/*	
+195		* This should never happen.	
+196		* Return a semi-random label as a last resort.	
+197		*/	
+198	0	return 1;	
+199	0	}	
+200	0	}	
+201			
+202		/*	
+203		* Get the precedence for a given IPv4/IPv6 address.	
+204		* RFC 6724, section 2.1.	
+205		*/	
+206		static int get_precedence(const struct sockaddr *addr)	
+207	0	{	
+208	0	if (addr->sa_family ==AF_INET)	
+209	0	{	
+210	0	return 35;	
+211	0	}	
+212	0	elseif (addr->sa_family ==AF_INET6)	
+213	0	{	
+214	0	const struct sockaddr_in6 *addr6 =CARES_INADDR_CAST(const struct sockaddr_in6 *, addr);	
+215	0	if (IN6_IS_ADDR_LOOPBACK(&addr6->sin6_addr))	
+216	0	{	
+217	0	return 50;	
+218	0	}	
+219	0	elseif (IN6_IS_ADDR_V4MAPPED(&addr6->sin6_addr))	
+220	0	{	
+221	0	return 35;	
+222	0	}	
+223	0	elseif (ARES_IN6_IS_ADDR_6TO4(&addr6->sin6_addr))	
+224	0	{	
+225	0	return 30;	
+226	0	}	
+227	0	elseif (ARES_IN6_IS_ADDR_TEREDO(&addr6->sin6_addr))	
+228	0	{	
+229	0	return 5;	
+230	0	}	
+231	0	elseif (ARES_IN6_IS_ADDR_ULA(&addr6->sin6_addr))	
+232	0	{	
+233	0	return 3;	
+234	0	}	
+235	0	elseif (IN6_IS_ADDR_V4COMPAT(&addr6->sin6_addr)||	
+236	0	IN6_IS_ADDR_SITELOCAL(&addr6->sin6_addr) ||	
+237	0	ARES_IN6_IS_ADDR_6BONE(&addr6->sin6_addr))	
+238	0	{	
+239	0	return 1;	
+240	0	}	
+241	0	else	
+242	0	{	
+243		/* All other IPv6 addresses, including global unicast addresses. */	
+244	0	return 40;	
+245	0	}	
+246	0	}	
+247	0	else	
+248	0	{	
+249	0	return 1;	
+250	0	}	
+251	0	}	
+252			
+253		/*	
+254		* Find number of matching initial bits between the two addresses a1 and a2.	
+255		*/	
+256		static int common_prefix_len(const struct in6_addr *a1,	
+257		const struct in6_addr *a2)	
+258	0	{	
+259	0	const char *p1 = (const char *)a1;	
+260	0	const char *p2 = (const char *)a2;	
+261	0	unsigned i;	
+262	0	for (i = 0;i < sizeof(*a1);++i)	
+263	0	{	
+264	0	int x, j;	
+265	0	if (p1[i] == p2[i])	
+266	0	{	
+267	0	continue;	
+268	0	}	
+269	0	x = p1[i] ^ p2[i];	
+270	0	for (j = 0;j <CHAR_BIT;++j)	
+271	0	{	
+272	0	if (x & (1 << (CHAR_BIT - 1)))	
+273	0	{	
+274	0	return i *CHAR_BIT + j;	
+275	0	}	
+276	0	x <<= 1;	
+277	0	}	
+278	0	}	
+279	0	return sizeof(*a1) *CHAR_BIT;	
+280	0	}	
+281			
+282		/*	
+283		* Compare two source/destination address pairs.	
+284		* RFC 6724, section 6.	
+285		*/	
+286		static int rfc6724_compare(const void *ptr1, const void *ptr2)	
+287	0	{	
+288	0	const struct addrinfo_sort_elem *a1 = (const struct addrinfo_sort_elem *)ptr1;	
+289	0	const struct addrinfo_sort_elem *a2 = (const struct addrinfo_sort_elem *)ptr2;	
+290	0	int scope_src1, scope_dst1, scope_match1;	
+291	0	int scope_src2, scope_dst2, scope_match2;	
+292	0	int label_src1, label_dst1, label_match1;	
+293	0	int label_src2, label_dst2, label_match2;	
+294	0	int precedence1, precedence2;	
+295	0	int prefixlen1, prefixlen2;	
+296			
+297		/* Rule 1: Avoid unusable destinations. */	
+298	0	if (a1->has_src_addr != a2->has_src_addr)	
+299	0	{	
+300	0	return a2->has_src_addr - a1->has_src_addr;	
+301	0	}	
+302			
+303		/* Rule 2: Prefer matching scope. */	
+304	0	scope_src1 =ARES_IPV6_ADDR_SCOPE_NODELOCAL;	
+305	0	if (a1->has_src_addr)	
+306	0	scope_src1 = get_scope(&a1->src_addr.sa);	
+307	0	scope_dst1 = get_scope(a1->ai->ai_addr);	
+308	0	scope_match1 = (scope_src1 == scope_dst1);	
+309			
+310	0	scope_src2 =ARES_IPV6_ADDR_SCOPE_NODELOCAL;	
+311	0	if (a2->has_src_addr)	
+312	0	scope_src2 = get_scope(&a2->src_addr.sa);	
+313	0	scope_dst2 = get_scope(a2->ai->ai_addr);	
+314	0	scope_match2 = (scope_src2 == scope_dst2);	
+315			
+316	0	if (scope_match1 != scope_match2)	
+317	0	{	
+318	0	return scope_match2 - scope_match1;	
+319	0	}	
+320			
+321		/* Rule 3: Avoid deprecated addresses.  */	
+322			
+323		/* Rule 4: Prefer home addresses.  */	
+324			
+325		/* Rule 5: Prefer matching label. */	
+326	0	label_src1 = 1;	
+327	0	if (a1->has_src_addr)	
+328	0	label_src1 = get_label(&a1->src_addr.sa);	
+329	0	label_dst1 = get_label(a1->ai->ai_addr);	
+330	0	label_match1 = (label_src1 == label_dst1);	
+331			
+332	0	label_src2 = 1;	
+333	0	if (a2->has_src_addr)	
+334	0	label_src2 = get_label(&a2->src_addr.sa);	
+335	0	label_dst2 = get_label(a2->ai->ai_addr);	
+336	0	label_match2 = (label_src2 == label_dst2);	
+337			
+338	0	if (label_match1 != label_match2)	
+339	0	{	
+340	0	return label_match2 - label_match1;	
+341	0	}	
+342			
+343		/* Rule 6: Prefer higher precedence. */	
+344	0	precedence1 = get_precedence(a1->ai->ai_addr);	
+345	0	precedence2 = get_precedence(a2->ai->ai_addr);	
+346	0	if (precedence1 != precedence2)	
+347	0	{	
+348	0	return precedence2 - precedence1;	
+349	0	}	
+350			
+351		/* Rule 7: Prefer native transport.  */	
+352			
+353		/* Rule 8: Prefer smaller scope. */	
+354	0	if (scope_dst1 != scope_dst2)	
+355	0	{	
+356	0	return scope_dst1 - scope_dst2;	
+357	0	}	
+358			
+359		/* Rule 9: Use longest matching prefix. */	
+360	0	if (a1->has_src_addr&&a1->ai->ai_addr->sa_family ==AF_INET6&&	
+361	0	a2->has_src_addr&&a2->ai->ai_addr->sa_family ==AF_INET6)	
+362	0	{	
+363	0	const struct sockaddr_in6 *a1_src = &a1->src_addr.sa6;	
+364	0	const struct sockaddr_in6 *a1_dst =	
+365	0	CARES_INADDR_CAST(const struct sockaddr_in6 *, a1->ai->ai_addr);	
+366	0	const struct sockaddr_in6 *a2_src = &a2->src_addr.sa6;	
+367	0	const struct sockaddr_in6 *a2_dst =	
+368	0	CARES_INADDR_CAST(const struct sockaddr_in6 *, a2->ai->ai_addr);	
+369	0	prefixlen1 = common_prefix_len(&a1_src->sin6_addr, &a1_dst->sin6_addr);	
+370	0	prefixlen2 = common_prefix_len(&a2_src->sin6_addr, &a2_dst->sin6_addr);	
+371	0	if (prefixlen1 != prefixlen2)	
+372	0	{	
+373	0	return prefixlen2 - prefixlen1;	
+374	0	}	
+375	0	}	
+376			
+377		/*	
+378		* Rule 10: Leave the order unchanged.	
+379		* We need this since qsort() is not necessarily stable.	
+380		*/	
+381	0	return a1->original_order - a2->original_order;	
+382	0	}	
+383			
+384		/*	
+385		* Find the source address that will be used if trying to connect to the given	
+386		* address.	
+387		*	
+388		* Returns 1 if a source address was found, 0 if the address is unreachable,	
+389		* and -1 if a fatal error occurred. If 0 or 1, the contents of src_addr are	
+390		* undefined.	
+391		*/	
+392		static int find_src_addr(ares_channel channel,	
+393		const struct sockaddr *addr,	
+394		struct sockaddr *src_addr)	
+395	0	{	
+396	0	ares_socket_t sock;	
+397	0	int ret;	
+398	0	ares_socklen_t len;	
+399			
+400	0	switch (addr->sa_family)	
+401	0	{	
+402	0	caseAF_INET:	
+403	0	len = sizeof(struct sockaddr_in);	
+404	0	break;	
+405	0	caseAF_INET6:	
+406	0	len = sizeof(struct sockaddr_in6);	
+407	0	break;	
+408	0	default:	
+409		/* No known usable source address for non-INET families. */	
+410	0	return 0;	
+411	0	}	
+412			
+413	0	sock = ares__open_socket(channel, addr->sa_family,SOCK_DGRAM,IPPROTO_UDP);	
+414	0	if (sock ==ARES_SOCKET_BAD)	
+415	0	{	
+416	0	if (errno==EAFNOSUPPORT)	
+417	0	{	
+418	0	return 0;	
+419	0	}	
+420	0	else	
+421	0	{	
+422	0	return -1;	
+423	0	}	
+424	0	}	
+425			
+426	0	do	
+427	0	{	
+428	0	ret = ares__connect_socket(channel, sock, addr, len);	
+429	0	}	
+430	0	while (ret == -1&&errno==EINTR);	
+431			
+432	0	if (ret == -1)	
+433	0	{	
+434	0	ares__close_socket(channel, sock);	
+435	0	return 0;	
+436	0	}	
+437			
+438	0	if (getsockname(sock, src_addr, &len) != 0)	
+439	0	{	
+440	0	ares__close_socket(channel, sock);	
+441	0	return -1;	
+442	0	}	
+443	0	ares__close_socket(channel, sock);	
+444	0	return 1;	
+445	0	}	
+446			
+447		/*	
+448		* Sort the linked list starting at sentinel->ai_next in RFC6724 order.	
+449		* Will leave the list unchanged if an error occurs.	
+450		*/	
+451		int ares__sortaddrinfo(ares_channel channel, struct ares_addrinfo_node *list_sentinel)	
+452	0	{	
+453	0	struct ares_addrinfo_node *cur;	
+454	0	int nelem = 0, i;	
+455	0	int has_src_addr;	
+456	0	struct addrinfo_sort_elem *elems;	
+457			
+458	0	cur = list_sentinel->ai_next;	
+459	0	while (cur)	
+460	0	{	
+461	0	++nelem;	
+462	0	cur = cur->ai_next;	
+463	0	}	
+464			
+465	0	if (!nelem)	
+466	0	returnARES_ENODATA;	
+467			
+468	0	elems = (struct addrinfo_sort_elem *)ares_malloc(	
+469	0	nelem * sizeof(struct addrinfo_sort_elem));	
+470	0	if (!elems)	
+471	0	{	
+472	0	returnARES_ENOMEM;	
+473	0	}	
+474			
+475		/*	
+476		* Convert the linked list to an array that also contains the candidate	
+477		* source address for each destination address.	
+478		*/	
+479	0	for (i = 0, cur = list_sentinel->ai_next;i < nelem;++i, cur = cur->ai_next)	
+480	0	{	
+481	0	assert(cur != NULL);	
+482	0	elems[i].ai = cur;	
+483	0	elems[i].original_order = i;	
+484	0	has_src_addr = find_src_addr(channel, cur->ai_addr, &elems[i].src_addr.sa);	
+485	0	if (has_src_addr == -1)	
+486	0	{	
+487	0	ares_free(elems);	
+488	0	returnARES_ENOTFOUND;	
+489	0	}	
+490	0	elems[i].has_src_addr = has_src_addr;	
+491	0	}	
+492			
+493		/* Sort the addresses, and rearrange the linked list so it matches the sorted	
+494		* order. */	
+495	0	qsort((void *)elems, nelem, sizeof(struct addrinfo_sort_elem),	
+496	0	rfc6724_compare);	
+497			
+498	0	list_sentinel->ai_next = elems[0].ai;	
+499	0	for (i = 0;i < nelem - 1;++i)	
+500	0	{	
+501	0	elems[i].ai->ai_next = elems[i + 1].ai;	
+502	0	}	
+503	0	elems[nelem - 1].ai->ai_next =NULL;	
+504			
+505	0	ares_free(elems);	
+506	0	returnARES_SUCCESS;	
+507	0	}	
+
+

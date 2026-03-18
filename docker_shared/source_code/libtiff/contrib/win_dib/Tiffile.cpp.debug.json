@@ -1,0 +1,452 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void MyWarningHandler(const char *module, const char *fmt, va_list ap)\n{\n    // ignore all warnings (unused tags, etc)\n    return;\n}",
+      "fn_code_pos": [
+        [
+          43,
+          0
+        ],
+        [
+          47,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyWarningHandler",
+        "parameters": {
+          "module": "char",
+          "fmt": "char",
+          "ap": "va_list"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void MyErrorHandler(const char *module, const char *fmt, va_list ap)\n{\n    return;\n}",
+      "fn_code_pos": [
+        [
+          49,
+          0
+        ],
+        [
+          52,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyErrorHandler",
+        "parameters": {
+          "module": "char",
+          "fmt": "char",
+          "ap": "va_list"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int ChkTIFF(LPCTSTR lpszPath)\n{\n    int rtn = 0;\n\n    TIFFErrorHandler eh;\n    TIFFErrorHandler wh;\n\n    eh = TIFFSetErrorHandler(NULL);\n    wh = TIFFSetWarningHandler(NULL);\n\n    TIFF *tif = TIFFOpen(lpszPath, \"r\");\n    if (tif)\n    {\n        rtn = 1;\n        TIFFClose(tif);\n    }\n\n    TIFFSetErrorHandler(eh);\n    TIFFSetWarningHandler(wh);\n\n    return rtn;\n}",
+      "fn_code_pos": [
+        [
+          56,
+          0
+        ],
+        [
+          77,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ChkTIFF",
+        "parameters": {
+          "lpszPath": "LPCTSTR"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "PVOID ReadTIFF(LPCTSTR lpszPath)\n{\n    void *pDIB = 0;\n    TIFFErrorHandler wh;\n\n    wh = TIFFSetWarningHandler(MyWarningHandler);\n\n    if (ChkTIFF(lpszPath))\n    {\n        TIFF *tif = TIFFOpen(lpszPath, \"r\");\n        if (tif)\n        {\n            char emsg[1024];\n\n            if (TIFFRGBAImageOK(tif, emsg))\n            {\n                TIFFDibImage img;\n                char emsg[1024];\n\n                if (TIFFRGBAImageBegin(&img.tif, tif, -1, emsg))\n                {\n                    size_t npixels;\n                    uint32_t *raster;\n\n                    DibInstallHack(&img);\n\n                    npixels = img.tif.width * img.tif.height;\n                    raster =\n                        (uint32_t *)_TIFFmalloc(npixels * sizeof(uint32_t));\n                    if (raster != NULL)\n                    {\n                        if (TIFFRGBAImageGet(&img.tif, raster, img.tif.width,\n                                             img.tif.height))\n                        {\n                            pDIB = TIFFRGBA2DIB(&img, raster);\n                        }\n                    }\n                    _TIFFfree(raster);\n                }\n                TIFFRGBAImageEnd(&img.tif);\n            }\n            else\n            {\n                TRACE(\"Unable to open image(%s): %s\\n\", lpszPath, emsg);\n            }\n            TIFFClose(tif);\n        }\n    }\n\n    TIFFSetWarningHandler(wh);\n\n    return pDIB;\n}",
+      "fn_code_pos": [
+        [
+          81,
+          0
+        ],
+        [
+          133,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ReadTIFF",
+        "parameters": {
+          "lpszPath": "LPCTSTR"
+        },
+        "return_type": "PVOID"
+      }
+    },
+    {
+      "fn_code": "HANDLE TIFFRGBA2DIB(TIFFDibImage *dib, uint32_t *raster)\n{\n    void *pDIB = 0;\n    TIFFRGBAImage *img = &dib->tif;\n\n    uint32_t imageLength;\n    uint32_t imageWidth;\n    uint16_t BitsPerSample;\n    uint16_t SamplePerPixel;\n    uint32_t RowsPerStrip;\n    uint16_t PhotometricInterpretation;\n\n    BITMAPINFOHEADER bi;\n    int dwDIBSize;\n\n    TIFFGetField(img->tif, TIFFTAG_IMAGEWIDTH, &imageWidth);\n    TIFFGetField(img->tif, TIFFTAG_IMAGELENGTH, &imageLength);\n    TIFFGetField(img->tif, TIFFTAG_BITSPERSAMPLE, &BitsPerSample);\n    TIFFGetField(img->tif, TIFFTAG_ROWSPERSTRIP, &RowsPerStrip);\n    TIFFGetField(img->tif, TIFFTAG_SAMPLESPERPIXEL, &SamplePerPixel);\n    TIFFGetField(img->tif, TIFFTAG_PHOTOMETRIC, &PhotometricInterpretation);\n\n    if (BitsPerSample == 1 && SamplePerPixel == 1 && dib->dibinstalled)\n    { // bilevel\n        bi.biSize = sizeof(BITMAPINFOHEADER);\n        bi.biWidth = imageWidth;\n        bi.biHeight = imageLength;\n        bi.biPlanes = 1; // always\n        bi.biBitCount = 1;\n        bi.biCompression = BI_RGB;\n        bi.biSizeImage = WIDTHBYTES(bi.biWidth * bi.biBitCount) * bi.biHeight;\n        bi.biXPelsPerMeter = 0;\n        bi.biYPelsPerMeter = 0;\n        bi.biClrUsed = 0;      //  must be zero for RGB compression (none)\n        bi.biClrImportant = 0; // always\n\n        // Get the size of the DIB\n        dwDIBSize = GetDIBSize(&bi);\n\n        // Allocate for the BITMAPINFO structure and the color table.\n        pDIB = GlobalAllocPtr(GHND, dwDIBSize);\n        if (pDIB == 0)\n        {\n            return (NULL);\n        }\n\n        // Copy the header info\n        *((BITMAPINFOHEADER *)pDIB) = bi;\n\n        // Get a pointer to the color table\n        RGBQUAD *pRgbq = (RGBQUAD *)((LPSTR)pDIB + sizeof(BITMAPINFOHEADER));\n\n        pRgbq[0].rgbRed = 0;\n        pRgbq[0].rgbBlue = 0;\n        pRgbq[0].rgbGreen = 0;\n        pRgbq[0].rgbReserved = 0;\n        pRgbq[1].rgbRed = 255;\n        pRgbq[1].rgbBlue = 255;\n        pRgbq[1].rgbGreen = 255;\n        pRgbq[1].rgbReserved = 255;\n\n        // Pointers to the bits\n        // PVOID pbiBits = (LPSTR)pRgbq + bi.biClrUsed * sizeof(RGBQUAD);\n        //\n        // In the BITMAPINFOHEADER documentation, it appears that\n        // there should be no color table for 32 bit images, but\n        // experience shows that the image is off by 3 words if it\n        // is not included.  So here it is.\n        PVOID pbiBits = GetDIBImagePtr(\n            (BITMAPINFOHEADER *)pDIB); //(LPSTR)pRgbq + 3 * sizeof(RGBQUAD);\n\n        int sizeWords = bi.biSizeImage / 4;\n        RGBQUAD *rgbDib = (RGBQUAD *)pbiBits;\n        long *rgbTif = (long *)raster;\n\n        _TIFFmemcpy(pbiBits, raster, bi.biSizeImage);\n    }\n\n    //  For now just always default to the RGB 32 bit form. // save as 32 bit\n    //  for simplicity\n    else if (true /*BitsPerSample == 8 && SamplePerPixel == 3*/)\n    { // 24 bit color\n\n        bi.biSize = sizeof(BITMAPINFOHEADER);\n        bi.biWidth = imageWidth;\n        bi.biHeight = imageLength;\n        bi.biPlanes = 1; // always\n        bi.biBitCount = 32;\n        bi.biCompression = BI_RGB;\n        bi.biSizeImage = WIDTHBYTES(bi.biWidth * bi.biBitCount) * bi.biHeight;\n        bi.biXPelsPerMeter = 0;\n        bi.biYPelsPerMeter = 0;\n        bi.biClrUsed = 0;      //  must be zero for RGB compression (none)\n        bi.biClrImportant = 0; // always\n\n        // Get the size of the DIB\n        dwDIBSize = GetDIBSize(&bi);\n\n        // Allocate for the BITMAPINFO structure and the color table.\n        pDIB = GlobalAllocPtr(GHND, dwDIBSize);\n        if (pDIB == 0)\n        {\n            return (NULL);\n        }\n\n        // Copy the header info\n        *((BITMAPINFOHEADER *)pDIB) = bi;\n\n        // Get a pointer to the color table\n        RGBQUAD *pRgbq = (RGBQUAD *)((LPSTR)pDIB + sizeof(BITMAPINFOHEADER));\n\n        // Pointers to the bits\n        // PVOID pbiBits = (LPSTR)pRgbq + bi.biClrUsed * sizeof(RGBQUAD);\n        //\n        // In the BITMAPINFOHEADER documentation, it appears that\n        // there should be no color table for 32 bit images, but\n        // experience shows that the image is off by 3 words if it\n        // is not included.  So here it is.\n        PVOID pbiBits = (LPSTR)pRgbq + 3 * sizeof(RGBQUAD);\n\n        int sizeWords = bi.biSizeImage / 4;\n        RGBQUAD *rgbDib = (RGBQUAD *)pbiBits;\n        long *rgbTif = (long *)raster;\n\n        // Swap the byte order while copying\n        for (int i = 0; i < sizeWords; ++i)\n        {\n            rgbDib[i].rgbRed = TIFFGetR(rgbTif[i]);\n            rgbDib[i].rgbBlue = TIFFGetB(rgbTif[i]);\n            rgbDib[i].rgbGreen = TIFFGetG(rgbTif[i]);\n            rgbDib[i].rgbReserved = 0;\n        }\n    }\n\n    return pDIB;\n}",
+      "fn_code_pos": [
+        [
+          135,
+          0
+        ],
+        [
+          270,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFRGBA2DIB",
+        "parameters": {
+          "dib": "TIFFDibImage",
+          "raster": "uint32_t"
+        },
+        "return_type": "HANDLE"
+      }
+    },
+    {
+      "fn_code": "void DibInstallHack(TIFFDibImage *dib)\n{\n    TIFFRGBAImage *img = &dib->tif;\n    dib->dibinstalled = false;\n    switch (img->photometric)\n    {\n        case PHOTOMETRIC_MINISWHITE:\n        case PHOTOMETRIC_MINISBLACK:\n            switch (img->bitspersample)\n            {\n                case 1:\n                    img->put.contig = putContig1bitTile;\n                    img->get = getStripContig1Bit;\n                    dib->dibinstalled = true;\n                    break;\n            }\n            break;\n    }\n}",
+      "fn_code_pos": [
+        [
+          298,
+          0
+        ],
+        [
+          316,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DibInstallHack",
+        "parameters": {
+          "dib": "TIFFDibImage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "DECLAREContigPutFunc(putContig1bitTile)\n{\n    int samplesperpixel = img->samplesperpixel;\n\n    (void)y;\n    fromskew *= samplesperpixel;\n    int wb = WIDTHBYTES(w);\n    u_char *ucp = (u_char *)cp;\n\n    /* Convert 'w' to bytes from pixels (rounded up) */\n    w = (w + 7) / 8;\n\n    while (h-- > 0)\n    {\n        _TIFFmemcpy(ucp, pp, w);\n        /*\n        for (x = wb; x-- > 0;) {\n            *cp++ = rgbi(Map[pp[0]], Map[pp[1]], Map[pp[2]]);\n            pp += samplesperpixel;\n        }\n        */\n        ucp += (wb + toskew);\n        pp += (w + fromskew);\n    }\n}",
+      "fn_code_pos": [
+        [
+          323,
+          0
+        ],
+        [
+          347,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DECLAREContigPutFunc",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static uint32_t setorientation(TIFFRGBAImage *img, uint32_t h)\n{\n    TIFF *tif = img->tif;\n    uint32_t y;\n\n    switch (img->orientation)\n    {\n        case ORIENTATION_BOTRIGHT:\n        case ORIENTATION_RIGHTBOT: /* XXX */\n        case ORIENTATION_LEFTBOT:  /* XXX */\n            TIFFWarning(TIFFFileName(tif), \"using bottom-left orientation\");\n            img->orientation = ORIENTATION_BOTLEFT;\n        /* fall through... */\n        case ORIENTATION_BOTLEFT:\n            y = 0;\n            break;\n        case ORIENTATION_TOPRIGHT:\n        case ORIENTATION_RIGHTTOP: /* XXX */\n        case ORIENTATION_LEFTTOP:  /* XXX */\n        default:\n            TIFFWarning(TIFFFileName(tif), \"using top-left orientation\");\n            img->orientation = ORIENTATION_TOPLEFT;\n        /* fall through... */\n        case ORIENTATION_TOPLEFT:\n            y = h - 1;\n            break;\n    }\n    return (y);\n}",
+      "fn_code_pos": [
+        [
+          352,
+          0
+        ],
+        [
+          380,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setorientation",
+        "parameters": {
+          "img": "TIFFRGBAImage",
+          "h": "uint32_t"
+        },
+        "return_type": "uint32_t"
+      }
+    },
+    {
+      "fn_code": "static int getStripContig1Bit(TIFFRGBAImage *img, uint32_t *raster, uint32_t w,\n                              uint32_t h)\n{\n    TIFF *tif = img->tif;\n    tileContigRoutine put = img->put.contig;\n    uint16_t orientation;\n    uint32_t row, y, nrow, rowstoread;\n    uint32_t pos;\n    u_char *buf;\n    uint32_t rowsperstrip;\n    uint32_t imagewidth = img->width;\n    tsize_t scanline;\n    int32_t fromskew, toskew;\n    tstrip_t strip;\n    tsize_t stripsize;\n    u_char *braster = (u_char *)raster; // byte wide raster\n    uint32_t wb = WIDTHBYTES(w);\n    int ret = 1;\n\n    buf = (u_char *)_TIFFmalloc(TIFFStripSize(tif));\n    if (buf == 0)\n    {\n        TIFFErrorExtR(tif, TIFFFileName(tif), \"No space for strip buffer\");\n        return (0);\n    }\n    y = setorientation(img, h);\n    orientation = img->orientation;\n    toskew = -(int32_t)(orientation == ORIENTATION_TOPLEFT ? wb + wb : wb - wb);\n    TIFFGetFieldDefaulted(tif, TIFFTAG_ROWSPERSTRIP, &rowsperstrip);\n    scanline = TIFFScanlineSize(tif);\n    fromskew = (w < imagewidth ? imagewidth - w : 0) / 8;\n    for (row = 0; row < h; row += nrow)\n    {\n        rowstoread = rowsperstrip - (row + img->row_offset) % rowsperstrip;\n        nrow = (row + rowstoread > h ? h - row : rowstoread);\n        strip = TIFFComputeStrip(tif, row + img->row_offset, 0);\n        stripsize = ((row + img->row_offset) % rowsperstrip + nrow) * scanline;\n        if (TIFFReadEncodedStrip(tif, strip, buf, stripsize) < 0 &&\n            img->stoponerr)\n        {\n            ret = 0;\n            break;\n        }\n\n        pos = ((row + img->row_offset) % rowsperstrip) * scanline;\n        (*put)(img, (uint32_t *)(braster + y * wb), 0, y, w, nrow, fromskew,\n               toskew, buf + pos);\n        y += (orientation == ORIENTATION_TOPLEFT ? -(int32_t)nrow\n                                                 : (int32_t)nrow);\n    }\n    _TIFFfree(buf);\n    return (ret);\n}",
+      "fn_code_pos": [
+        [
+          393,
+          0
+        ],
+        [
+          445,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "getStripContig1Bit",
+        "parameters": {
+          "img": "TIFFRGBAImage",
+          "raster": "uint32_t",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "LoadTIFFinDIB(LPCTSTR lpFileName)",
+      "fn_dec_pos": [
+        [
+          40,
+          7
+        ],
+        [
+          40,
+          40
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LoadTIFFinDIB",
+        "parameters": {
+          "lpFileName": "LPCTSTR"
+        },
+        "return_type": "HANDLE"
+      }
+    },
+    {
+      "fn_code": "TIFFRGBA2DIB(TIFFDibImage *dib, uint32_t *raster)",
+      "fn_dec_pos": [
+        [
+          41,
+          7
+        ],
+        [
+          41,
+          56
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFRGBA2DIB",
+        "parameters": {
+          "dib": "TIFFDibImage",
+          "raster": "uint32_t"
+        },
+        "return_type": "HANDLE"
+      }
+    },
+    {
+      "fn_code": "DibInstallHack(TIFFDibImage *img)",
+      "fn_dec_pos": [
+        [
+          79,
+          5
+        ],
+        [
+          79,
+          38
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DibInstallHack",
+        "parameters": {
+          "img": "TIFFDibImage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "getStripContig1Bit(TIFFRGBAImage *img, uint32_t *uraster, uint32_t w,\n                              uint32_t h)",
+      "fn_dec_pos": [
+        [
+          290,
+          11
+        ],
+        [
+          291,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "getStripContig1Bit",
+        "parameters": {
+          "img": "TIFFRGBAImage",
+          "uraster": "uint32_t",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct TIFFDibImage\n{\n    TIFFRGBAImage tif;\n    int dibinstalled;\n}",
+      {
+        "tif": "TIFFRGBAImage",
+        "dibinstalled": "int"
+      },
+      "TIFFDibImage",
+      [
+        34,
+        0
+      ],
+      [
+        38,
+        1
+      ]
+    ],
+    [
+      "struct TIFFDibImage\n{\n    TIFFRGBAImage tif;\n    int dibinstalled;\n}",
+      {
+        "tif": "TIFFRGBAImage",
+        "dibinstalled": "int"
+      },
+      "TIFFDibImage",
+      [
+        34,
+        0
+      ],
+      [
+        38,
+        1
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"StdAfx.h\"\n",
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    [
+      "#include \"diblib.h\"\n",
+      [
+        3,
+        0
+      ],
+      [
+        4,
+        0
+      ]
+    ],
+    [
+      "#include <commdlg.h>\n",
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h> // MAX_ constants\n",
+      [
+        5,
+        0
+      ],
+      [
+        6,
+        0
+      ]
+    ],
+    [
+      "#include <windows.h>\n",
+      [
+        6,
+        0
+      ],
+      [
+        7,
+        0
+      ]
+    ],
+    [
+      "#include <windowsx.h>\n",
+      [
+        7,
+        0
+      ],
+      [
+        8,
+        0
+      ]
+    ],
+    [
+      "#include \"TiffLib/tiff.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include \"TiffLib/tiffio.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <assert.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

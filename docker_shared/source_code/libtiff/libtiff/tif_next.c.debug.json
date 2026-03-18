@@ -1,0 +1,93 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int NeXTDecode(TIFF *tif, uint8_t *buf, tmsize_t occ, uint16_t s)\n{\n    static const char module[] = \"NeXTDecode\";\n    unsigned char *bp, *op;\n    tmsize_t cc;\n    uint8_t *row;\n    tmsize_t scanline, n;\n\n    (void)s;\n    /*\n     * Each scanline is assumed to start off as all\n     * white (we assume a PhotometricInterpretation\n     * of ``min-is-black'').\n     */\n    for (op = (unsigned char *)buf, cc = occ; cc-- > 0;)\n        *op++ = 0xff;\n\n    bp = (unsigned char *)tif->tif_rawcp;\n    cc = tif->tif_rawcc;\n    scanline = tif->tif_scanlinesize;\n    if (occ % scanline)\n    {\n        TIFFErrorExtR(tif, module, \"Fractional scanlines cannot be read\");\n        return (0);\n    }\n    for (row = buf; cc > 0 && occ > 0; occ -= scanline, row += scanline)\n    {\n        n = *bp++;\n        cc--;\n        switch (n)\n        {\n            case LITERALROW:\n                /*\n                 * The entire scanline is given as literal values.\n                 */\n                if (cc < scanline)\n                    goto bad;\n                _TIFFmemcpy(row, bp, scanline);\n                bp += scanline;\n                cc -= scanline;\n                break;\n            case LITERALSPAN:\n            {\n                tmsize_t off;\n                /*\n                 * The scanline has a literal span that begins at some\n                 * offset.\n                 */\n                if (cc < 4)\n                    goto bad;\n                off = (bp[0] * 256) + bp[1];\n                n = (bp[2] * 256) + bp[3];\n                if (cc < 4 + n || off + n > scanline)\n                    goto bad;\n                _TIFFmemcpy(row + off, bp + 4, n);\n                bp += 4 + n;\n                cc -= 4 + n;\n                break;\n            }\n            default:\n            {\n                uint32_t npixels = 0, grey;\n                tmsize_t op_offset = 0;\n                uint32_t imagewidth = tif->tif_dir.td_imagewidth;\n                if (isTiled(tif))\n                    imagewidth = tif->tif_dir.td_tilewidth;\n\n                /*\n                 * The scanline is composed of a sequence of constant\n                 * color ``runs''.  We shift into ``run mode'' and\n                 * interpret bytes as codes of the form\n                 * <color><npixels> until we've filled the scanline.\n                 */\n                op = row;\n                for (;;)\n                {\n                    grey = (uint32_t)((n >> 6) & 0x3);\n                    n &= 0x3f;\n                    /*\n                     * Ensure the run does not exceed the scanline\n                     * bounds, potentially resulting in a security\n                     * issue.\n                     */\n                    while (n-- > 0 && npixels < imagewidth &&\n                           op_offset < scanline)\n                        SETPIXEL(op, grey);\n                    if (npixels >= imagewidth)\n                        break;\n                    if (op_offset >= scanline)\n                    {\n                        TIFFErrorExtR(tif, module,\n                                      \"Invalid data for scanline %\" PRIu32,\n                                      tif->tif_row);\n                        return (0);\n                    }\n                    if (cc == 0)\n                        goto bad;\n                    n = *bp++;\n                    cc--;\n                }\n                break;\n            }\n        }\n    }\n    tif->tif_rawcp = (uint8_t *)bp;\n    tif->tif_rawcc = cc;\n    return (1);\nbad:\n    TIFFErrorExtR(tif, module, \"Not enough data for scanline %\" PRIu32,\n                  tif->tif_row);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          56,
+          0
+        ],
+        [
+          167,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NeXTDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "buf": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int NeXTPreDecode(TIFF *tif, uint16_t s)\n{\n    static const char module[] = \"NeXTPreDecode\";\n    TIFFDirectory *td = &tif->tif_dir;\n    (void)s;\n\n    if (td->td_bitspersample != 2)\n    {\n        TIFFErrorExtR(tif, module, \"Unsupported BitsPerSample = %\" PRIu16,\n                      td->td_bitspersample);\n        return (0);\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          169,
+          0
+        ],
+        [
+          182,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NeXTPreDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFInitNeXT(TIFF *tif, int scheme)\n{\n    (void)scheme;\n    tif->tif_predecode = NeXTPreDecode;\n    tif->tif_decoderow = NeXTDecode;\n    tif->tif_decodestrip = NeXTDecode;\n    tif->tif_decodetile = NeXTDecode;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          184,
+          0
+        ],
+        [
+          192,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFInitNeXT",
+        "parameters": {
+          "tif": "TIFF",
+          "scheme": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

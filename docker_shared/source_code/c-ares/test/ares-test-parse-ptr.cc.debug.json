@@ -1,0 +1,390 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "TEST_F(LibraryTest, ParsePtrReplyOK) {\n  byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other.com\"));\n  std::vector<byte> data = pkt.data();\n\n  struct hostent *host = nullptr;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_ptr_reply(data.data(), data.size(),\n                                               addrv4, sizeof(addrv4), AF_INET, &host));\n  ASSERT_NE(nullptr, host);\n  std::stringstream ss;\n  ss << HostEnt(host);\n  EXPECT_EQ(\"{'other.com' aliases=[other.com] addrs=[16.32.48.64]}\", ss.str());\n  ares_free_hostent(host);\n}",
+      "fn_code_pos": [
+        [
+          9,
+          0
+        ],
+        [
+          25,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParsePtrReplyCname) {\n  byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR))\n    .add_answer(new DNSCnameRR(\"64.48.32.16.in-addr.arpa\", 50, \"64.48.32.8.in-addr.arpa\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.8.in-addr.arpa\", 100, \"other.com\"));\n  std::vector<byte> data = pkt.data();\n\n  struct hostent *host = nullptr;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_ptr_reply(data.data(), data.size(),\n                                               addrv4, sizeof(addrv4), AF_INET, &host));\n  ASSERT_NE(nullptr, host);\n  std::stringstream ss;\n  ss << HostEnt(host);\n  EXPECT_EQ(\"{'other.com' aliases=[other.com] addrs=[16.32.48.64]}\", ss.str());\n  ares_free_hostent(host);\n}",
+      "fn_code_pos": [
+        [
+          27,
+          0
+        ],
+        [
+          44,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "DNSMalformedCnameRR(const std::string& name, int ttl, const std::string& other)\n    : DNSCnameRR(name, ttl, other) {}",
+      "fn_code_pos": [
+        [
+          48,
+          2
+        ],
+        [
+          49,
+          37
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DNSMalformedCnameRR",
+        "parameters": {
+          "name": "std::string",
+          "ttl": "int",
+          "other": "std::string"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "std::vector<byte> data() const {\n    std::vector<byte> data = DNSRR::data();\n    std::vector<byte> encname = EncodeString(other_);\n    encname[0] = encname[0] + 63;  // invalid label length\n    int len = encname.size();\n    PushInt16(&data, len);\n    data.insert(data.end(), encname.begin(), encname.end());\n    return data;\n  }",
+      "fn_code_pos": [
+        [
+          50,
+          2
+        ],
+        [
+          58,
+          3
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "data",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParsePtrReplyMalformedCname) {\n  byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR))\n    .add_answer(new DNSMalformedCnameRR(\"64.48.32.16.in-addr.arpa\", 50, \"64.48.32.8.in-addr.arpa\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.8.in-addr.arpa\", 100, \"other.com\"));\n  std::vector<byte> data = pkt.data();\n\n  struct hostent *host = nullptr;\n  EXPECT_EQ(ARES_EBADRESP, ares_parse_ptr_reply(data.data(), data.size(),\n                                                addrv4, sizeof(addrv4), AF_INET, &host));\n  ASSERT_EQ(nullptr, host);\n}",
+      "fn_code_pos": [
+        [
+          61,
+          0
+        ],
+        [
+          74,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseManyPtrReply) {\n  byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"main.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other1.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other2.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other3.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other4.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other5.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other6.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other7.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other8.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other9.com\"));\n  std::vector<byte> data = pkt.data();\n\n  struct hostent *host = nullptr;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_ptr_reply(data.data(), data.size(),\n                                               addrv4, sizeof(addrv4), AF_INET, &host));\n  ASSERT_NE(nullptr, host);\n  ares_free_hostent(host);\n}",
+      "fn_code_pos": [
+        [
+          76,
+          0
+        ],
+        [
+          98,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParsePtrReplyAdditional) {\n  byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 55, \"other.com\"))\n    .add_auth(new DNSNsRR(\"16.in-addr.arpa\", 234, \"ns1.other.com\"))\n    .add_auth(new DNSNsRR(\"16.in-addr.arpa\", 234, \"bb.ns2.other.com\"))\n    .add_auth(new DNSNsRR(\"16.in-addr.arpa\", 234, \"ns3.other.com\"))\n    .add_additional(new DNSARR(\"ns1.other.com\", 229, {10,20,30,41}))\n    .add_additional(new DNSARR(\"bb.ns2.other.com\", 229, {10,20,30,42}))\n    .add_additional(new DNSARR(\"ns3.other.com\", 229, {10,20,30,43}));\n  std::vector<byte> data = pkt.data();\n\n  struct hostent *host = nullptr;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_ptr_reply(data.data(), data.size(),\n                                               addrv4, sizeof(addrv4), AF_INET, &host));\n  ASSERT_NE(nullptr, host);\n  std::stringstream ss;\n  ss << HostEnt(host);\n  EXPECT_EQ(\"{'other.com' aliases=[other.com] addrs=[16.32.48.64]}\", ss.str());\n  ares_free_hostent(host);\n}",
+      "fn_code_pos": [
+        [
+          100,
+          0
+        ],
+        [
+          122,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParsePtrReplyErrors) {\n  byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other.com\"));\n  std::vector<byte> data;\n  struct hostent *host = nullptr;\n\n  // No question.\n  pkt.questions_.clear();\n  data = pkt.data();\n  EXPECT_EQ(ARES_EBADRESP, ares_parse_ptr_reply(data.data(), data.size(),\n                                                addrv4, sizeof(addrv4), AF_INET, &host));\n  pkt.add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR));\n\n  // Question != answer\n  pkt.questions_.clear();\n  pkt.add_question(new DNSQuestion(\"99.48.32.16.in-addr.arpa\", T_PTR));\n  data = pkt.data();\n  EXPECT_EQ(ARES_ENODATA, ares_parse_ptr_reply(data.data(), data.size(),\n                                               addrv4, sizeof(addrv4), AF_INET, &host));\n  EXPECT_EQ(nullptr, host);\n  pkt.questions_.clear();\n  pkt.add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR));\n\n  // Two questions.\n  pkt.add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR));\n  data = pkt.data();\n  EXPECT_EQ(ARES_EBADRESP, ares_parse_ptr_reply(data.data(), data.size(),\n                                                addrv4, sizeof(addrv4), AF_INET, &host));\n  EXPECT_EQ(nullptr, host);\n  pkt.questions_.clear();\n  pkt.add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR));\n\n  // Wrong sort of answer.\n  pkt.answers_.clear();\n  pkt.add_answer(new DNSMxRR(\"example.com\", 100, 100, \"mx1.example.com\"));\n  data = pkt.data();\n  EXPECT_EQ(ARES_ENODATA, ares_parse_ptr_reply(data.data(), data.size(),\n                                               addrv4, sizeof(addrv4), AF_INET, &host));\n  EXPECT_EQ(nullptr, host);\n  pkt.answers_.clear();\n  pkt.add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other.com\"));\n\n  // No answer.\n  pkt.answers_.clear();\n  data = pkt.data();\n  EXPECT_EQ(ARES_ENODATA, ares_parse_ptr_reply(data.data(), data.size(),\n                                               addrv4, sizeof(addrv4), AF_INET, &host));\n  EXPECT_EQ(nullptr, host);\n  pkt.add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other.com\"));\n\n  // Truncated packets.\n  data = pkt.data();\n  for (size_t len = 1; len < data.size(); len++) {\n    EXPECT_EQ(ARES_EBADRESP, ares_parse_ptr_reply(data.data(), len,\n                                                  addrv4, sizeof(addrv4), AF_INET, &host));\n    EXPECT_EQ(nullptr, host);\n  }\n\n  // Truncated packets with CNAME.\n  pkt.add_answer(new DNSCnameRR(\"64.48.32.16.in-addr.arpa\", 50, \"64.48.32.8.in-addr.arpa\"));\n  data = pkt.data();\n  for (size_t len = 1; len < data.size(); len++) {\n    EXPECT_EQ(ARES_EBADRESP, ares_parse_ptr_reply(data.data(), len,\n                                                  addrv4, sizeof(addrv4), AF_INET, &host));\n    EXPECT_EQ(nullptr, host);\n  }\n}",
+      "fn_code_pos": [
+        [
+          124,
+          0
+        ],
+        [
+          193,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParsePtrReplyAllocFailSome) {\n  byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"main.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other1.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other2.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other3.com\"));\n  std::vector<byte> data = pkt.data();\n  struct hostent *host = nullptr;\n\n  for (int ii = 1; ii <= 18; ii++) {\n    ClearFails();\n    SetAllocFail(ii);\n    EXPECT_EQ(ARES_ENOMEM, ares_parse_ptr_reply(data.data(), data.size(),\n                                                addrv4, sizeof(addrv4), AF_INET, &host)) << ii;\n  }\n}",
+      "fn_code_pos": [
+        [
+          195,
+          0
+        ],
+        [
+          213,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParsePtrReplyAllocFailMany) {\n  byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"64.48.32.16.in-addr.arpa\", T_PTR))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"main.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other1.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other2.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other3.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other4.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other5.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other6.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other7.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other8.com\"))\n    .add_answer(new DNSPtrRR(\"64.48.32.16.in-addr.arpa\", 100, \"other9.com\"));\n  std::vector<byte> data = pkt.data();\n  struct hostent *host = nullptr;\n\n  for (int ii = 1; ii <= 63; ii++) {\n    ClearFails();\n    SetAllocFail(ii);\n    int rc = ares_parse_ptr_reply(data.data(), data.size(),\n                                  addrv4, sizeof(addrv4), AF_INET, &host);\n    if (rc != ARES_ENOMEM) {\n      EXPECT_EQ(ARES_SUCCESS, rc);\n      ares_free_hostent(host);\n      host = nullptr;\n    }\n  }\n}",
+      "fn_code_pos": [
+        [
+          215,
+          0
+        ],
+        [
+          244,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct DNSMalformedCnameRR : public DNSCnameRR {\n  DNSMalformedCnameRR(const std::string& name, int ttl, const std::string& other)\n    : DNSCnameRR(name, ttl, other) {}\n  std::vector<byte> data() const {\n    std::vector<byte> data = DNSRR::data();\n    std::vector<byte> encname = EncodeString(other_);\n    encname[0] = encname[0] + 63;  // invalid label length\n    int len = encname.size();\n    PushInt16(&data, len);\n    data.insert(data.end(), encname.begin(), encname.end());\n    return data;\n  }\n}",
+      {},
+      "",
+      [
+        47,
+        0
+      ],
+      [
+        59,
+        1
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        17,
+        2
+      ],
+      [
+        17,
+        16
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        36,
+        2
+      ],
+      [
+        36,
+        16
+      ]
+    ],
+    [
+      "struct DNSMalformedCnameRR : public DNSCnameRR {\n  DNSMalformedCnameRR(const std::string& name, int ttl, const std::string& other)\n    : DNSCnameRR(name, ttl, other) {}\n  std::vector<byte> data() const {\n    std::vector<byte> data = DNSRR::data();\n    std::vector<byte> encname = EncodeString(other_);\n    encname[0] = encname[0] + 63;  // invalid label length\n    int len = encname.size();\n    PushInt16(&data, len);\n    data.insert(data.end(), encname.begin(), encname.end());\n    return data;\n  }\n}",
+      {},
+      "",
+      [
+        47,
+        0
+      ],
+      [
+        59,
+        1
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        70,
+        2
+      ],
+      [
+        70,
+        16
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        93,
+        2
+      ],
+      [
+        93,
+        16
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        114,
+        2
+      ],
+      [
+        114,
+        16
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        131,
+        2
+      ],
+      [
+        131,
+        16
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        205,
+        2
+      ],
+      [
+        205,
+        16
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        231,
+        2
+      ],
+      [
+        231,
+        16
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares-test.h\"\n",
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    [
+      "#include \"dns-proto.h\"\n",
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    [
+      "#include <sstream>\n",
+      [
+        3,
+        0
+      ],
+      [
+        4,
+        0
+      ]
+    ],
+    [
+      "#include <vector>\n",
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

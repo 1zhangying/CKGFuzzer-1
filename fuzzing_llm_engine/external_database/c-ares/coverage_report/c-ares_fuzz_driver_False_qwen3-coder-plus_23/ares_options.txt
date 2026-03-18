@@ -1,0 +1,409 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		* Copyright (C) 2008-2013 by Daniel Stenberg	
+4		*	
+5		* Permission to use, copy, modify, and distribute this	
+6		* software and its documentation for any purpose and without	
+7		* fee is hereby granted, provided that the above copyright	
+8		* notice appear in all copies and that both that copyright	
+9		* notice and this permission notice appear in supporting	
+10		* documentation, and that the name of M.I.T. not be used in	
+11		* advertising or publicity pertaining to distribution of the	
+12		* software without specific, written prior permission.	
+13		* M.I.T. makes no representations about the suitability of	
+14		* this software for any purpose.  It is provided "as is"	
+15		* without express or implied warranty.	
+16		*/	
+17			
+18			
+19		#include "ares_setup.h"	
+20			
+21		#ifdef HAVE_ARPA_INET_H	
+22		#  include <arpa/inet.h>	
+23		#endif	
+24			
+25		#include "ares.h"	
+26		#include "ares_data.h"	
+27		#include "ares_inet_net_pton.h"	
+28		#include "ares_private.h"	
+29			
+30			
+31		int ares_get_servers(ares_channel channel,	
+32		struct ares_addr_node **servers)	
+33	0	{	
+34	0	struct ares_addr_node *srvr_head =NULL;	
+35	0	struct ares_addr_node *srvr_last =NULL;	
+36	0	struct ares_addr_node *srvr_curr;	
+37	0	int status =ARES_SUCCESS;	
+38	0	int i;	
+39			
+40	0	if (!channel)	
+41	0	returnARES_ENODATA;	
+42			
+43	0	for (i = 0;i < channel->nservers;i++)	
+44	0	{	
+45		/* Allocate storage for this server node appending it to the list */	
+46	0	srvr_curr = ares_malloc_data(ARES_DATATYPE_ADDR_NODE);	
+47	0	if (!srvr_curr)	
+48	0	{	
+49	0	status =ARES_ENOMEM;	
+50	0	break;	
+51	0	}	
+52	0	if (srvr_last)	
+53	0	{	
+54	0	srvr_last->next = srvr_curr;	
+55	0	}	
+56	0	else	
+57	0	{	
+58	0	srvr_head = srvr_curr;	
+59	0	}	
+60	0	srvr_last = srvr_curr;	
+61			
+62		/* Fill this server node data */	
+63	0	srvr_curr->family = channel->servers[i].addr.family;	
+64	0	if (srvr_curr->family ==AF_INET)	
+65	0	memcpy(&srvr_curr->addrV4, &channel->servers[i].addr.addrV4,	
+66	0	sizeof(srvr_curr->addrV4));	
+67	0	else	
+68	0	memcpy(&srvr_curr->addrV6, &channel->servers[i].addr.addrV6,	
+69	0	sizeof(srvr_curr->addrV6));	
+70	0	}	
+71			
+72	0	if (status !=ARES_SUCCESS)	
+73	0	{	
+74	0	if (srvr_head)	
+75	0	{	
+76	0	ares_free_data(srvr_head);	
+77	0	srvr_head =NULL;	
+78	0	}	
+79	0	}	
+80			
+81	0	*servers = srvr_head;	
+82			
+83	0	return status;	
+84	0	}	
+85			
+86		int ares_get_servers_ports(ares_channel channel,	
+87		struct ares_addr_port_node **servers)	
+88	0	{	
+89	0	struct ares_addr_port_node *srvr_head =NULL;	
+90	0	struct ares_addr_port_node *srvr_last =NULL;	
+91	0	struct ares_addr_port_node *srvr_curr;	
+92	0	int status =ARES_SUCCESS;	
+93	0	int i;	
+94			
+95	0	if (!channel)	
+96	0	returnARES_ENODATA;	
+97			
+98	0	for (i = 0;i < channel->nservers;i++)	
+99	0	{	
+100		/* Allocate storage for this server node appending it to the list */	
+101	0	srvr_curr = ares_malloc_data(ARES_DATATYPE_ADDR_PORT_NODE);	
+102	0	if (!srvr_curr)	
+103	0	{	
+104	0	status =ARES_ENOMEM;	
+105	0	break;	
+106	0	}	
+107	0	if (srvr_last)	
+108	0	{	
+109	0	srvr_last->next = srvr_curr;	
+110	0	}	
+111	0	else	
+112	0	{	
+113	0	srvr_head = srvr_curr;	
+114	0	}	
+115	0	srvr_last = srvr_curr;	
+116			
+117		/* Fill this server node data */	
+118	0	srvr_curr->family = channel->servers[i].addr.family;	
+119	0	srvr_curr->udp_port =ntohs((unsigned short)channel->servers[i].addr.udp_port);	
+120	0	srvr_curr->tcp_port =ntohs((unsigned short)channel->servers[i].addr.tcp_port);	
+121	0	if (srvr_curr->family ==AF_INET)	
+122	0	memcpy(&srvr_curr->addrV4, &channel->servers[i].addr.addrV4,	
+123	0	sizeof(srvr_curr->addrV4));	
+124	0	else	
+125	0	memcpy(&srvr_curr->addrV6, &channel->servers[i].addr.addrV6,	
+126	0	sizeof(srvr_curr->addrV6));	
+127	0	}	
+128			
+129	0	if (status !=ARES_SUCCESS)	
+130	0	{	
+131	0	if (srvr_head)	
+132	0	{	
+133	0	ares_free_data(srvr_head);	
+134	0	srvr_head =NULL;	
+135	0	}	
+136	0	}	
+137			
+138	0	*servers = srvr_head;	
+139			
+140	0	return status;	
+141	0	}	
+142			
+143		int ares_set_servers(ares_channel channel,	
+144		struct ares_addr_node *servers)	
+145	0	{	
+146	0	struct ares_addr_node *srvr;	
+147	0	int num_srvrs = 0;	
+148	0	int i;	
+149			
+150	0	if (ares_library_initialized() !=ARES_SUCCESS)	
+151	0	returnARES_ENOTINITIALIZED;  /* LCOV_EXCL_LINE: n/a on non-WinSock */	
+152			
+153	0	if (!channel)	
+154	0	returnARES_ENODATA;	
+155			
+156	0	if (!ares__is_list_empty(&channel->all_queries))	
+157	0	returnARES_ENOTIMP;	
+158			
+159	0	ares__destroy_servers_state(channel);	
+160			
+161	0	for (srvr = servers;srvr;srvr = srvr->next)	
+162	0	{	
+163	0	num_srvrs++;	
+164	0	}	
+165			
+166	0	if (num_srvrs > 0)	
+167	0	{	
+168		/* Allocate storage for servers state */	
+169	0	channel->servers = ares_malloc(num_srvrs * sizeof(struct server_state));	
+170	0	if (!channel->servers)	
+171	0	{	
+172	0	returnARES_ENOMEM;	
+173	0	}	
+174	0	channel->nservers = num_srvrs;	
+175		/* Fill servers state address data */	
+176	0	for (i = 0, srvr = servers;srvr;i++, srvr = srvr->next)	
+177	0	{	
+178	0	channel->servers[i].addr.family = srvr->family;	
+179	0	channel->servers[i].addr.udp_port = 0;	
+180	0	channel->servers[i].addr.tcp_port = 0;	
+181	0	if (srvr->family ==AF_INET)	
+182	0	memcpy(&channel->servers[i].addr.addrV4, &srvr->addrV4,	
+183	0	sizeof(srvr->addrV4));	
+184	0	else	
+185	0	memcpy(&channel->servers[i].addr.addrV6, &srvr->addrV6,	
+186	0	sizeof(srvr->addrV6));	
+187	0	}	
+188		/* Initialize servers state remaining data */	
+189	0	ares__init_servers_state(channel);	
+190	0	}	
+191			
+192	0	returnARES_SUCCESS;	
+193	0	}	
+194			
+195		int ares_set_servers_ports(ares_channel channel,	
+196		struct ares_addr_port_node *servers)	
+197	0	{	
+198	0	struct ares_addr_port_node *srvr;	
+199	0	int num_srvrs = 0;	
+200	0	int i;	
+201			
+202	0	if (ares_library_initialized() !=ARES_SUCCESS)	
+203	0	returnARES_ENOTINITIALIZED;  /* LCOV_EXCL_LINE: n/a on non-WinSock */	
+204			
+205	0	if (!channel)	
+206	0	returnARES_ENODATA;	
+207			
+208	0	if (!ares__is_list_empty(&channel->all_queries))	
+209	0	returnARES_ENOTIMP;	
+210			
+211	0	ares__destroy_servers_state(channel);	
+212			
+213	0	for (srvr = servers;srvr;srvr = srvr->next)	
+214	0	{	
+215	0	num_srvrs++;	
+216	0	}	
+217			
+218	0	if (num_srvrs > 0)	
+219	0	{	
+220		/* Allocate storage for servers state */	
+221	0	channel->servers = ares_malloc(num_srvrs * sizeof(struct server_state));	
+222	0	if (!channel->servers)	
+223	0	{	
+224	0	returnARES_ENOMEM;	
+225	0	}	
+226	0	channel->nservers = num_srvrs;	
+227		/* Fill servers state address data */	
+228	0	for (i = 0, srvr = servers;srvr;i++, srvr = srvr->next)	
+229	0	{	
+230	0	channel->servers[i].addr.family = srvr->family;	
+231	0	channel->servers[i].addr.udp_port =htons((unsigned short)srvr->udp_port);	
+232	0	channel->servers[i].addr.tcp_port =htons((unsigned short)srvr->tcp_port);	
+233	0	if (srvr->family ==AF_INET)	
+234	0	memcpy(&channel->servers[i].addr.addrV4, &srvr->addrV4,	
+235	0	sizeof(srvr->addrV4));	
+236	0	else	
+237	0	memcpy(&channel->servers[i].addr.addrV6, &srvr->addrV6,	
+238	0	sizeof(srvr->addrV6));	
+239	0	}	
+240		/* Initialize servers state remaining data */	
+241	0	ares__init_servers_state(channel);	
+242	0	}	
+243			
+244	0	returnARES_SUCCESS;	
+245	0	}	
+246			
+247		/* Incomming string format: host[:port][,host[:port]]... */	
+248		/* IPv6 addresses with ports require square brackets [fe80::1%lo0]:53 */	
+249		static int set_servers_csv(ares_channel channel,	
+250		const char* _csv, int use_port)	
+251	0	{	
+252	0	size_t i;	
+253	0	char* csv =NULL;	
+254	0	char* ptr;	
+255	0	char* start_host;	
+256	0	int cc = 0;	
+257	0	int rv =ARES_SUCCESS;	
+258	0	struct ares_addr_port_node *servers =NULL;	
+259	0	struct ares_addr_port_node *last =NULL;	
+260			
+261	0	if (ares_library_initialized() !=ARES_SUCCESS)	
+262	0	returnARES_ENOTINITIALIZED;  /* LCOV_EXCL_LINE: n/a on non-WinSock */	
+263			
+264	0	if (!channel)	
+265	0	returnARES_ENODATA;	
+266			
+267	0	i = strlen(_csv);	
+268	0	if (i == 0)	
+269	0	returnARES_SUCCESS; /* blank all servers */	
+270			
+271	0	csv = ares_malloc(i + 2);	
+272	0	if (!csv)	
+273	0	returnARES_ENOMEM;	
+274			
+275	0	strcpy(csv, _csv);	
+276	0	if (csv[i-1] != ','){ /* make parsing easier by ensuring ending ',' */	
+277	0	csv[i] = ',';	
+278	0	csv[i+1] = 0;	
+279	0	}	
+280			
+281	0	start_host = csv;	
+282	0	for (ptr = csv;*ptr;ptr++){	
+283	0	if (*ptr == ':'){	
+284		/* count colons to determine if we have an IPv6 number or IPv4 with	
+285		port */	
+286	0	cc++;	
+287	0	}	
+288	0	elseif (*ptr == '['){	
+289		/* move start_host if an open square bracket is found wrapping an IPv6	
+290		address */	
+291	0	start_host = ptr + 1;	
+292	0	}	
+293	0	elseif (*ptr == ','){	
+294	0	char* pp = ptr - 1;	
+295	0	char* p = ptr;	
+296	0	int port = 0;	
+297	0	struct in_addr in4;	
+298	0	struct ares_in6_addr in6;	
+299	0	struct ares_addr_port_node *s =NULL;	
+300			
+301	0	*ptr = 0; /* null terminate host:port string */	
+302		/* Got an entry..see if the port was specified. */	
+303	0	if (cc > 0){	
+304	0	while (pp > start_host){	
+305		/* a single close square bracket followed by a colon, ']:' indicates	
+306		an IPv6 address with port */	
+307	0	if ((*pp == ']')&&(*p == ':'))	
+308	0	break; /* found port */	
+309		/* a single colon, ':' indicates an IPv4 address with port */	
+310	0	if ((*pp == ':')&&(cc == 1))	
+311	0	break; /* found port */	
+312	0	if (!(ISDIGIT(*pp) ||(*pp == ':'))){	
+313		/* Found end of digits before we found :, so wasn't a port */	
+314		/* must allow ':' for IPv6 case of ']:' indicates we found a port */	
+315	0	pp = p = ptr;	
+316	0	break;	
+317	0	}	
+318	0	pp--;	
+319	0	p--;	
+320	0	}	
+321	0	if ((pp != start_host)&&((pp + 1) < ptr)){	
+322		/* Found it. Parse over the port number */	
+323		/* when an IPv6 address is wrapped with square brackets the port	
+324		starts at pp + 2 */	
+325	0	if (*pp == ']')	
+326	0	p++; /* move p before ':' */	
+327		/* p will point to the start of the port */	
+328	0	port = (int)strtol(p,NULL, 10);	
+329	0	*pp = 0; /* null terminate host */	
+330	0	}	
+331	0	}	
+332		/* resolve host, try ipv4 first, rslt is in network byte order */	
+333	0	rv = ares_inet_pton(AF_INET, start_host, &in4);	
+334	0	if (!rv){	
+335		/* Ok, try IPv6 then */	
+336	0	rv = ares_inet_pton(AF_INET6, start_host, &in6);	
+337	0	if (!rv){	
+338	0	rv =ARES_EBADSTR;	
+339	0	goto out;	
+340	0	}	
+341		/* was ipv6, add new server */	
+342	0	s = ares_malloc(sizeof(*s));	
+343	0	if (!s){	
+344	0	rv =ARES_ENOMEM;	
+345	0	goto out;	
+346	0	}	
+347	0	s->family =AF_INET6;	
+348	0	memcpy(&s->addr, &in6, sizeof(struct ares_in6_addr));	
+349	0	}	
+350	0	else{	
+351		/* was ipv4, add new server */	
+352	0	s = ares_malloc(sizeof(*s));	
+353	0	if (!s){	
+354	0	rv =ARES_ENOMEM;	
+355	0	goto out;	
+356	0	}	
+357	0	s->family =AF_INET;	
+358	0	memcpy(&s->addr, &in4, sizeof(struct in_addr));	
+359	0	}	
+360	0	if (s){	
+361	0	s->udp_port =use_port?port:0;	
+362	0	s->tcp_port = s->udp_port;	
+363	0	s->next =NULL;	
+364	0	if (last){	
+365	0	last->next = s;	
+366		/* need to move last to maintain the linked list */	
+367	0	last = last->next;	
+368	0	}	
+369	0	else{	
+370	0	servers = s;	
+371	0	last = s;	
+372	0	}	
+373	0	}	
+374			
+375		/* Set up for next one */	
+376	0	start_host = ptr + 1;	
+377	0	cc = 0;	
+378	0	}	
+379	0	}	
+380			
+381	0	rv = ares_set_servers_ports(channel, servers);	
+382			
+383	0	out:	
+384	0	if (csv)	
+385	0	ares_free(csv);	
+386	0	while (servers){	
+387	0	struct ares_addr_port_node *s = servers;	
+388	0	servers = servers->next;	
+389	0	ares_free(s);	
+390	0	}	
+391			
+392	0	return rv;	
+393	0	}	
+394			
+395		int ares_set_servers_csv(ares_channel channel,	
+396		const char* _csv)	
+397	0	{	
+398	0	return set_servers_csv(channel, _csv,FALSE);	
+399	0	}	
+400			
+401		int ares_set_servers_ports_csv(ares_channel channel,	
+402		const char* _csv)	
+403	0	{	
+404		return set_servers_csv(channel, _csv,TRUE);	
+405	0	}	
+406			
+
+

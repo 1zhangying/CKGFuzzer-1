@@ -1,0 +1,243 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nint Forward(register WORD In[], register WORD Out[], register LPVOID Cargo)\n{\t\n\tLPCARGO C = (LPCARGO) Cargo;\t\n\tWORD RGB[3];\n    cmsCIELab Lab;\n\n    cmsLabEncoded2Float(&Lab, In);\n\n\tprintf(\"%g %g %g\\n\", Lab.L, Lab.a, Lab.b);\n\n\tcmsDoTransform(C ->Lab2RGB, In, &RGB, 1);\n\n\n\tOut[0] = 0xFFFF - RGB[0]; // Our CMY is negative of RGB\n\tOut[1] = 0xFFFF - RGB[1]; \n\tOut[2] = 0xFFFF - RGB[2]; \n\t\n\t\n\treturn TRUE;\n\n}",
+      "fn_code_pos": [
+        [
+          45,
+          0
+        ],
+        [
+          66,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Forward",
+        "parameters": {
+          "In": "WORD",
+          "Out": "WORD",
+          "Cargo": "LPVOID"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nint Reverse(register WORD In[], register WORD Out[], register LPVOID Cargo)\n{\t\n\n\tLPCARGO C = (LPCARGO) Cargo;\t\n\tWORD RGB[3];\n  \n\tRGB[0] = 0xFFFF - In[0];\n\tRGB[1] = 0xFFFF - In[1];\n\tRGB[2] = 0xFFFF - In[2];\n\n\tcmsDoTransform(C ->RGB2Lab, &RGB, Out, 1);\n\t\n\treturn TRUE;\n\n}",
+      "fn_code_pos": [
+        [
+          69,
+          0
+        ],
+        [
+          84,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Reverse",
+        "parameters": {
+          "In": "WORD",
+          "Out": "WORD",
+          "Cargo": "LPVOID"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nvoid InitCargo(LPCARGO Cargo)\n{\n\t\n\n\tCargo -> hLab = cmsCreateLabProfile(NULL);\n\tCargo -> hRGB = cmsCreate_sRGBProfile();  \n\t\n\tCargo->Lab2RGB = cmsCreateTransform(Cargo->hLab, TYPE_Lab_16, \n\t\t\t\t\t\t\t\t\t    Cargo ->hRGB, TYPE_RGB_16,\n\t\t\t\t\t\t\t\t\t\tINTENT_RELATIVE_COLORIMETRIC, \n\t\t\t\t\t\t\t\t\t\tcmsFLAGS_NOTPRECALC);\n\n\tCargo->RGB2Lab = cmsCreateTransform(Cargo ->hRGB, TYPE_RGB_16, \n\t\t\t\t\t\t\t\t\t\tCargo ->hLab, TYPE_Lab_16, \n\t\t\t\t\t\t\t\t\t\tINTENT_RELATIVE_COLORIMETRIC, \n\t\t\t\t\t\t\t\t\t\tcmsFLAGS_NOTPRECALC);\n}",
+      "fn_code_pos": [
+        [
+          88,
+          0
+        ],
+        [
+          105,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "InitCargo",
+        "parameters": {
+          "Cargo": "LPCARGO"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid FreeCargo(LPCARGO Cargo)\n{\n\tcmsDeleteTransform(Cargo ->Lab2RGB);\n\tcmsDeleteTransform(Cargo ->RGB2Lab);\n\tcmsCloseProfile(Cargo ->hLab);\n\tcmsCloseProfile(Cargo ->hRGB);\n}",
+      "fn_code_pos": [
+        [
+          110,
+          0
+        ],
+        [
+          117,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FreeCargo",
+        "parameters": {
+          "Cargo": "LPCARGO"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(void)\n{\n\tLPLUT AToB0, BToA0;\t\n\tCARGO Cargo;\n\tcmsHPROFILE hProfile;\n\t\n\tfprintf(stderr, \"Creating lcmscmy.icm...\");\t\n\t\n\tInitCargo(&Cargo);\n\n\thProfile = cmsCreateLabProfile(NULL);\n\t\n\n    AToB0 = cmsAllocLUT();\n\tBToA0 = cmsAllocLUT();\n\n\tcmsAlloc3DGrid(AToB0, 25, 3, 3);\n\tcmsAlloc3DGrid(BToA0, 25, 3, 3);\n\t\n\t\n\tcmsSample3DGrid(AToB0, Reverse, &Cargo, 0);\n\tcmsSample3DGrid(BToA0, Forward, &Cargo, 0);\n\t\n\t\n    cmsAddTag(hProfile, icSigAToB0Tag, AToB0);\n\tcmsAddTag(hProfile, icSigBToA0Tag, BToA0);\n\n\tcmsSetColorSpace(hProfile, icSigCmyData);\n\tcmsSetDeviceClass(hProfile, icSigOutputClass);\n\n\tcmsAddTag(hProfile, icSigProfileDescriptionTag, \"CMY \");\n    cmsAddTag(hProfile, icSigCopyrightTag,          \"Copyright (c) HP, 2007. All rights reserved.\");\n    cmsAddTag(hProfile, icSigDeviceMfgDescTag,      \"Little cms\");    \n    cmsAddTag(hProfile, icSigDeviceModelDescTag,    \"CMY space\");\n\n\t_cmsSaveProfile(hProfile, \"lcmscmy.icm\");\n\t\n\t\n\tcmsFreeLUT(AToB0);\n\tcmsFreeLUT(BToA0);\n\tcmsCloseProfile(hProfile);\t\n\tFreeCargo(&Cargo);\n\tfprintf(stderr, \"Done.\\n\");\n\n\n\n\treturn 0;\n}",
+      "fn_code_pos": [
+        [
+          122,
+          0
+        ],
+        [
+          169,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n\t\t\t\tcmsHPROFILE   hLab;\n\t\t\t\tcmsHPROFILE   hRGB;\n\t\t\t\tcmsHTRANSFORM Lab2RGB;\n\t\t\t\tcmsHTRANSFORM RGB2Lab;\n\n\t\t\t\t} CARGO, FAR* LPCARGO;",
+      {
+        "hLab": "cmsHPROFILE",
+        "hRGB": "cmsHPROFILE",
+        "Lab2RGB": "cmsHTRANSFORM",
+        "RGB2Lab": "cmsHTRANSFORM"
+      },
+      "CARGO",
+      [
+        31,
+        0
+      ],
+      [
+        37,
+        26
+      ]
+    ],
+    [
+      "typedef struct {\n\t\t\t\tcmsHPROFILE   hLab;\n\t\t\t\tcmsHPROFILE   hRGB;\n\t\t\t\tcmsHTRANSFORM Lab2RGB;\n\t\t\t\tcmsHTRANSFORM RGB2Lab;\n\n\t\t\t\t} CARGO, FAR* LPCARGO;",
+      {
+        "hLab": "cmsHPROFILE",
+        "hRGB": "cmsHPROFILE",
+        "Lab2RGB": "cmsHTRANSFORM",
+        "RGB2Lab": "cmsHTRANSFORM"
+      },
+      "FAR",
+      [
+        31,
+        0
+      ],
+      [
+        37,
+        26
+      ]
+    ],
+    [
+      "typedef struct {\n\t\t\t\tcmsHPROFILE   hLab;\n\t\t\t\tcmsHPROFILE   hRGB;\n\t\t\t\tcmsHTRANSFORM Lab2RGB;\n\t\t\t\tcmsHTRANSFORM RGB2Lab;\n\n\t\t\t\t} CARGO, FAR* LPCARGO;",
+      {
+        "hLab": "cmsHPROFILE",
+        "hRGB": "cmsHPROFILE",
+        "Lab2RGB": "cmsHTRANSFORM",
+        "RGB2Lab": "cmsHTRANSFORM"
+      },
+      "LPCARGO",
+      [
+        31,
+        0
+      ],
+      [
+        37,
+        26
+      ]
+    ],
+    [
+      "typedef struct {\n\t\t\t\tcmsHPROFILE   hLab;\n\t\t\t\tcmsHPROFILE   hRGB;\n\t\t\t\tcmsHTRANSFORM Lab2RGB;\n\t\t\t\tcmsHTRANSFORM RGB2Lab;\n\n\t\t\t\t} CARGO, FAR* LPCARGO;",
+      {
+        "hLab": "cmsHPROFILE",
+        "hRGB": "cmsHPROFILE",
+        "Lab2RGB": "cmsHTRANSFORM",
+        "RGB2Lab": "cmsHTRANSFORM"
+      },
+      "CARGO",
+      [
+        31,
+        0
+      ],
+      [
+        37,
+        26
+      ]
+    ],
+    [
+      "typedef struct {\n\t\t\t\tcmsHPROFILE   hLab;\n\t\t\t\tcmsHPROFILE   hRGB;\n\t\t\t\tcmsHTRANSFORM Lab2RGB;\n\t\t\t\tcmsHTRANSFORM RGB2Lab;\n\n\t\t\t\t} CARGO, FAR* LPCARGO;",
+      {
+        "hLab": "cmsHPROFILE",
+        "hRGB": "cmsHPROFILE",
+        "Lab2RGB": "cmsHTRANSFORM",
+        "RGB2Lab": "cmsHTRANSFORM"
+      },
+      "FAR",
+      [
+        31,
+        0
+      ],
+      [
+        37,
+        26
+      ]
+    ],
+    [
+      "typedef struct {\n\t\t\t\tcmsHPROFILE   hLab;\n\t\t\t\tcmsHPROFILE   hRGB;\n\t\t\t\tcmsHTRANSFORM Lab2RGB;\n\t\t\t\tcmsHTRANSFORM RGB2Lab;\n\n\t\t\t\t} CARGO, FAR* LPCARGO;",
+      {
+        "hLab": "cmsHPROFILE",
+        "hRGB": "cmsHPROFILE",
+        "Lab2RGB": "cmsHTRANSFORM",
+        "RGB2Lab": "cmsHTRANSFORM"
+      },
+      "LPCARGO",
+      [
+        31,
+        0
+      ],
+      [
+        37,
+        26
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"lcms.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

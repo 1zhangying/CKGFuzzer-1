@@ -1,0 +1,989 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char **argv)\n{\n  ares_channel channel;\n  int c, i, optmask = ARES_OPT_FLAGS, dnsclass = C_IN, type = T_A;\n  int status, nfds, count;\n  int use_ptr_helper = 0;\n  struct ares_options options;\n  struct hostent *hostent;\n  fd_set read_fds, write_fds;\n  struct timeval *tvp, tv;\n  struct ares_addr_node *srvr, *servers = NULL;\n\n#ifdef USE_WINSOCK\n  WORD wVersionRequested = MAKEWORD(USE_WINSOCK,USE_WINSOCK);\n  WSADATA wsaData;\n  WSAStartup(wVersionRequested, &wsaData);\n#endif\n\n  status = ares_library_init(ARES_LIB_INIT_ALL);\n  if (status != ARES_SUCCESS)\n    {\n      fprintf(stderr, \"ares_library_init: %s\\n\", ares_strerror(status));\n      return 1;\n    }\n\n  options.flags = ARES_FLAG_NOCHECKRESP;\n  options.servers = NULL;\n  options.nservers = 0;\n  while ((c = ares_getopt(argc, argv, \"dh?f:s:c:t:T:U:x\")) != -1)\n    {\n      switch (c)\n        {\n        case 'd':\n#ifdef WATT32\n          dbug_init();\n#endif\n          break;\n        case 'h':\n          print_help_info_adig();\n          break;\n        case '?':\n          print_help_info_adig();\n          break;\n        case 'f':\n          /* Add a flag. */\n          for (i = 0; i < nflags; i++)\n            {\n              if (strcmp(flags[i].name, optarg) == 0)\n                break;\n            }\n          if (i < nflags)\n            options.flags |= flags[i].value;\n          else\n            usage();\n          break;\n\n        case 's':\n          /* User-specified name servers override default ones. */\n          srvr = malloc(sizeof(struct ares_addr_node));\n          if (!srvr)\n            {\n              fprintf(stderr, \"Out of memory!\\n\");\n              destroy_addr_list(servers);\n              return 1;\n            }\n          append_addr_list(&servers, srvr);\n          if (ares_inet_pton(AF_INET, optarg, &srvr->addr.addr4) > 0)\n            srvr->family = AF_INET;\n          else if (ares_inet_pton(AF_INET6, optarg, &srvr->addr.addr6) > 0)\n            srvr->family = AF_INET6;\n          else\n            {\n              hostent = gethostbyname(optarg);\n              if (!hostent)\n                {\n                  fprintf(stderr, \"adig: server %s not found.\\n\", optarg);\n                  destroy_addr_list(servers);\n                  return 1;\n                }\n              switch (hostent->h_addrtype)\n                {\n                  case AF_INET:\n                    srvr->family = AF_INET;\n                    memcpy(&srvr->addr.addr4, hostent->h_addr,\n                           sizeof(srvr->addr.addr4));\n                    break;\n                  case AF_INET6:\n                    srvr->family = AF_INET6;\n                    memcpy(&srvr->addr.addr6, hostent->h_addr,\n                           sizeof(srvr->addr.addr6));\n                    break;\n                  default:\n                    fprintf(stderr,\n                      \"adig: server %s unsupported address family.\\n\", optarg);\n                    destroy_addr_list(servers);\n                    return 1;\n                }\n            }\n          /* Notice that calling ares_init_options() without servers in the\n           * options struct and with ARES_OPT_SERVERS set simultaneously in\n           * the options mask, results in an initialization with no servers.\n           * When alternative name servers have been specified these are set\n           * later calling ares_set_servers() overriding any existing server\n           * configuration. To prevent initial configuration with default\n           * servers that will be discarded later, ARES_OPT_SERVERS is set.\n           * If this flag is not set here the result shall be the same but\n           * ares_init_options() will do needless work. */\n          optmask |= ARES_OPT_SERVERS;\n          break;\n\n        case 'c':\n          /* Set the query class. */\n          for (i = 0; i < nclasses; i++)\n            {\n              if (strcasecmp(classes[i].name, optarg) == 0)\n                break;\n            }\n          if (i < nclasses)\n            dnsclass = classes[i].value;\n          else\n            usage();\n          break;\n\n        case 't':\n          /* Set the query type. */\n          for (i = 0; i < ntypes; i++)\n            {\n              if (strcasecmp(types[i].name, optarg) == 0)\n                break;\n            }\n          if (i < ntypes)\n            type = types[i].value;\n          else\n            usage();\n          break;\n\n        case 'T':\n          /* Set the TCP port number. */\n          if (!ISDIGIT(*optarg))\n            usage();\n          options.tcp_port = (unsigned short)strtol(optarg, NULL, 0);\n          optmask |= ARES_OPT_TCP_PORT;\n          break;\n\n        case 'U':\n          /* Set the UDP port number. */\n          if (!ISDIGIT(*optarg))\n            usage();\n          options.udp_port = (unsigned short)strtol(optarg, NULL, 0);\n          optmask |= ARES_OPT_UDP_PORT;\n          break;\n\n        case 'x':\n          use_ptr_helper++;\n          break;\n        }\n    }\n  argc -= optind;\n  argv += optind;\n  if (argc == 0)\n    usage();\n\n  status = ares_init_options(&channel, &options, optmask);\n\n  if (status != ARES_SUCCESS)\n    {\n      fprintf(stderr, \"ares_init_options: %s\\n\",\n              ares_strerror(status));\n      return 1;\n    }\n\n  if(servers)\n    {\n      status = ares_set_servers(channel, servers);\n      destroy_addr_list(servers);\n      if (status != ARES_SUCCESS)\n        {\n          fprintf(stderr, \"ares_init_options: %s\\n\",\n                  ares_strerror(status));\n          return 1;\n        }\n    }\n\n  /* Initiate the queries, one per command-line argument.  If there is\n   * only one query to do, supply NULL as the callback argument;\n   * otherwise, supply the query name as an argument so we can\n   * distinguish responses for the user when printing them out.\n   */\n  for (i = 1; *argv; i++, argv++)\n    {\n      char *query = *argv;\n\n      if (type == T_PTR && dnsclass == C_IN && use_ptr_helper)\n         if (!convert_query (&query, use_ptr_helper >= 2))\n            continue;\n\n      ares_query(channel, query, dnsclass, type, callback, i < argc-1 ? (void*)query : NULL);\n    }\n\n  /* Wait for all queries to complete. */\n  for (;;)\n    {\n      FD_ZERO(&read_fds);\n      FD_ZERO(&write_fds);\n      nfds = ares_fds(channel, &read_fds, &write_fds);\n      if (nfds == 0)\n        break;\n      tvp = ares_timeout(channel, NULL, &tv);\n      count = select(nfds, &read_fds, &write_fds, NULL, tvp);\n      if (count < 0 && (status = SOCKERRNO) != EINVAL)\n        {\n          printf(\"select fail: %d\", status);\n          return 1;\n        }\n      ares_process(channel, &read_fds, &write_fds);\n    }\n\n  ares_destroy(channel);\n\n  ares_library_cleanup();\n\n#ifdef USE_WINSOCK\n  WSACleanup();\n#endif\n\n  return 0;\n}",
+      "fn_code_pos": [
+        [
+          157,
+          0
+        ],
+        [
+          383,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void callback(void *arg, int status, int timeouts,\n                     unsigned char *abuf, int alen)\n{\n  char *name = (char *) arg;\n  int id, qr, opcode, aa, tc, rd, ra, rcode;\n  unsigned int qdcount, ancount, nscount, arcount, i;\n  const unsigned char *aptr;\n\n  (void) timeouts;\n\n  /* Display the query name if given. */\n  if (name)\n    printf(\"Answer for query %s:\\n\", name);\n\n  /* Display an error message if there was an error, but only stop if\n   * we actually didn't get an answer buffer.\n   */\n  if (status != ARES_SUCCESS)\n    {\n      printf(\"%s\\n\", ares_strerror(status));\n      if (!abuf)\n        return;\n    }\n\n  /* Won't happen, but check anyway, for safety. */\n  if (alen < HFIXEDSZ)\n    return;\n\n  /* Parse the answer header. */\n  id = DNS_HEADER_QID(abuf);\n  qr = DNS_HEADER_QR(abuf);\n  opcode = DNS_HEADER_OPCODE(abuf);\n  aa = DNS_HEADER_AA(abuf);\n  tc = DNS_HEADER_TC(abuf);\n  rd = DNS_HEADER_RD(abuf);\n  ra = DNS_HEADER_RA(abuf);\n  rcode = DNS_HEADER_RCODE(abuf);\n  qdcount = DNS_HEADER_QDCOUNT(abuf);\n  ancount = DNS_HEADER_ANCOUNT(abuf);\n  nscount = DNS_HEADER_NSCOUNT(abuf);\n  arcount = DNS_HEADER_ARCOUNT(abuf);\n\n  /* Display the answer header. */\n  printf(\"id: %d\\n\", id);\n  printf(\"flags: %s%s%s%s%s\\n\",\n         qr ? \"qr \" : \"\",\n         aa ? \"aa \" : \"\",\n         tc ? \"tc \" : \"\",\n         rd ? \"rd \" : \"\",\n         ra ? \"ra \" : \"\");\n  printf(\"opcode: %s\\n\", opcodes[opcode]);\n  printf(\"rcode: %s\\n\", rcodes[rcode]);\n\n  /* Display the questions. */\n  printf(\"Questions:\\n\");\n  aptr = abuf + HFIXEDSZ;\n  for (i = 0; i < qdcount; i++)\n    {\n      aptr = display_question(aptr, abuf, alen);\n      if (aptr == NULL)\n        return;\n    }\n\n  /* Display the answers. */\n  printf(\"Answers:\\n\");\n  for (i = 0; i < ancount; i++)\n    {\n      aptr = display_rr(aptr, abuf, alen);\n      if (aptr == NULL)\n        return;\n    }\n\n  /* Display the NS records. */\n  printf(\"NS records:\\n\");\n  for (i = 0; i < nscount; i++)\n    {\n      aptr = display_rr(aptr, abuf, alen);\n      if (aptr == NULL)\n        return;\n    }\n\n  /* Display the additional records. */\n  printf(\"Additional records:\\n\");\n  for (i = 0; i < arcount; i++)\n    {\n      aptr = display_rr(aptr, abuf, alen);\n      if (aptr == NULL)\n        return;\n    }\n}",
+      "fn_code_pos": [
+        [
+          385,
+          0
+        ],
+        [
+          474,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "callback",
+        "parameters": {
+          "arg": "void",
+          "status": "int",
+          "timeouts": "int",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static const unsigned char *display_question(const unsigned char *aptr,\n                                             const unsigned char *abuf,\n                                             int alen)\n{\n  char *name;\n  int type, dnsclass, status;\n  long len;\n\n  /* Parse the question name. */\n  status = ares_expand_name(aptr, abuf, alen, &name, &len);\n  if (status != ARES_SUCCESS)\n    return NULL;\n  aptr += len;\n\n  /* Make sure there's enough data after the name for the fixed part\n   * of the question.\n   */\n  if (aptr + QFIXEDSZ > abuf + alen)\n    {\n      ares_free_string(name);\n      return NULL;\n    }\n\n  /* Parse the question type and class. */\n  type = DNS_QUESTION_TYPE(aptr);\n  dnsclass = DNS_QUESTION_CLASS(aptr);\n  aptr += QFIXEDSZ;\n\n  /* Display the question, in a format sort of similar to how we will\n   * display RRs.\n   */\n  printf(\"\\t%-15s.\\t\", name);\n  if (dnsclass != C_IN)\n    printf(\"\\t%s\", class_name(dnsclass));\n  printf(\"\\t%s\\n\", type_name(type));\n  ares_free_string(name);\n  return aptr;\n}",
+      "fn_code_pos": [
+        [
+          476,
+          0
+        ],
+        [
+          513,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "display_question",
+        "parameters": {
+          "aptr": "unsigned char",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static const unsigned char *display_rr(const unsigned char *aptr,\n                                       const unsigned char *abuf, int alen)\n{\n  const unsigned char *p;\n  int type, dnsclass, ttl, dlen, status, i;\n  long len;\n  int vlen;\n  char addr[46];\n  union {\n    unsigned char * as_uchar;\n             char * as_char;\n  } name;\n\n  /* Parse the RR name. */\n  status = ares_expand_name(aptr, abuf, alen, &name.as_char, &len);\n  if (status != ARES_SUCCESS)\n    return NULL;\n  aptr += len;\n\n  /* Make sure there is enough data after the RR name for the fixed\n   * part of the RR.\n   */\n  if (aptr + RRFIXEDSZ > abuf + alen)\n    {\n      ares_free_string(name.as_char);\n      return NULL;\n    }\n\n  /* Parse the fixed part of the RR, and advance to the RR data\n   * field. */\n  type = DNS_RR_TYPE(aptr);\n  dnsclass = DNS_RR_CLASS(aptr);\n  ttl = DNS_RR_TTL(aptr);\n  dlen = DNS_RR_LEN(aptr);\n  aptr += RRFIXEDSZ;\n  if (aptr + dlen > abuf + alen)\n    {\n      ares_free_string(name.as_char);\n      return NULL;\n    }\n\n  /* Display the RR name, class, and type. */\n  printf(\"\\t%-15s.\\t%d\", name.as_char, ttl);\n  if (dnsclass != C_IN)\n    printf(\"\\t%s\", class_name(dnsclass));\n  printf(\"\\t%s\", type_name(type));\n  ares_free_string(name.as_char);\n\n  /* Display the RR data.  Don't touch aptr. */\n  switch (type)\n    {\n    case T_CNAME:\n    case T_MB:\n    case T_MD:\n    case T_MF:\n    case T_MG:\n    case T_MR:\n    case T_NS:\n    case T_PTR:\n      /* For these types, the RR data is just a domain name. */\n      status = ares_expand_name(aptr, abuf, alen, &name.as_char, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t%s.\", name.as_char);\n      ares_free_string(name.as_char);\n      break;\n\n    case T_HINFO:\n      /* The RR data is two length-counted character strings. */\n      p = aptr;\n      len = *p;\n      if (p + len + 1 > aptr + dlen)\n        return NULL;\n      status = ares_expand_string(p, abuf, alen, &name.as_uchar, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t%s\", name.as_char);\n      ares_free_string(name.as_char);\n      p += len;\n      len = *p;\n      if (p + len + 1 > aptr + dlen)\n        return NULL;\n      status = ares_expand_string(p, abuf, alen, &name.as_uchar, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t%s\", name.as_char);\n      ares_free_string(name.as_char);\n      break;\n\n    case T_MINFO:\n      /* The RR data is two domain names. */\n      p = aptr;\n      status = ares_expand_name(p, abuf, alen, &name.as_char, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t%s.\", name.as_char);\n      ares_free_string(name.as_char);\n      p += len;\n      status = ares_expand_name(p, abuf, alen, &name.as_char, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t%s.\", name.as_char);\n      ares_free_string(name.as_char);\n      break;\n\n    case T_MX:\n      /* The RR data is two bytes giving a preference ordering, and\n       * then a domain name.\n       */\n      if (dlen < 2)\n        return NULL;\n      printf(\"\\t%d\", (int)DNS__16BIT(aptr));\n      status = ares_expand_name(aptr + 2, abuf, alen, &name.as_char, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t%s.\", name.as_char);\n      ares_free_string(name.as_char);\n      break;\n\n    case T_SOA:\n      /* The RR data is two domain names and then five four-byte\n       * numbers giving the serial number and some timeouts.\n       */\n      p = aptr;\n      status = ares_expand_name(p, abuf, alen, &name.as_char, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t%s.\\n\", name.as_char);\n      ares_free_string(name.as_char);\n      p += len;\n      status = ares_expand_name(p, abuf, alen, &name.as_char, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t\\t\\t\\t\\t\\t%s.\\n\", name.as_char);\n      ares_free_string(name.as_char);\n      p += len;\n      if (p + 20 > aptr + dlen)\n        return NULL;\n      printf(\"\\t\\t\\t\\t\\t\\t( %u %u %u %u %u )\",\n             DNS__32BIT(p), DNS__32BIT(p+4),\n             DNS__32BIT(p+8), DNS__32BIT(p+12),\n             DNS__32BIT(p+16));\n      break;\n\n    case T_TXT:\n      /* The RR data is one or more length-counted character\n       * strings. */\n      p = aptr;\n      while (p < aptr + dlen)\n        {\n          len = *p;\n          if (p + len + 1 > aptr + dlen)\n            return NULL;\n          status = ares_expand_string(p, abuf, alen, &name.as_uchar, &len);\n          if (status != ARES_SUCCESS)\n            return NULL;\n          printf(\"\\t%s\", name.as_char);\n          ares_free_string(name.as_char);\n          p += len;\n        }\n      break;\n\n    case T_CAA:\n\n      p = aptr;\n\n      /* Flags */\n      printf(\" %u\", (int)*p);\n      p += 1;\n\n      /* Remainder of record */\n      vlen = (int)dlen - ((char)*p) - 2;\n\n      /* The Property identifier, one of:\n          - \"issue\",\n          - \"iodef\", or\n          - \"issuewild\" */\n      status = ares_expand_string(p, abuf, alen, &name.as_uchar, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\" %s\", name.as_char);\n      ares_free_string(name.as_char);\n      p += len;\n\n      if (p + vlen > abuf + alen)\n        return NULL;\n\n      /* A sequence of octets representing the Property Value */\n      printf(\" %.*s\", vlen, p);\n      break;\n\n    case T_A:\n      /* The RR data is a four-byte Internet address. */\n      if (dlen != 4)\n        return NULL;\n      printf(\"\\t%s\", ares_inet_ntop(AF_INET,aptr,addr,sizeof(addr)));\n      break;\n\n    case T_AAAA:\n      /* The RR data is a 16-byte IPv6 address. */\n      if (dlen != 16)\n        return NULL;\n      printf(\"\\t%s\", ares_inet_ntop(AF_INET6,aptr,addr,sizeof(addr)));\n      break;\n\n    case T_WKS:\n      /* Not implemented yet */\n      break;\n\n    case T_SRV:\n      /* The RR data is three two-byte numbers representing the\n       * priority, weight, and port, followed by a domain name.\n       */\n\n      printf(\"\\t%d\", (int)DNS__16BIT(aptr));\n      printf(\" %d\", (int)DNS__16BIT(aptr + 2));\n      printf(\" %d\", (int)DNS__16BIT(aptr + 4));\n\n      status = ares_expand_name(aptr + 6, abuf, alen, &name.as_char, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t%s.\", name.as_char);\n      ares_free_string(name.as_char);\n      break;\n\n    case T_URI:\n      /* The RR data is two two-byte numbers representing the\n       * priority and weight, followed by a target.\n       */\n\n      printf(\"\\t%d \", (int)DNS__16BIT(aptr));\n      printf(\"%d \\t\\t\", (int)DNS__16BIT(aptr+2));\n      p = aptr +4;\n      for (i=0; i <dlen-4; ++i)\n        printf(\"%c\",p[i]);\n      break;\n\n    case T_NAPTR:\n\n      printf(\"\\t%d\", (int)DNS__16BIT(aptr)); /* order */\n      printf(\" %d\\n\", (int)DNS__16BIT(aptr + 2)); /* preference */\n\n      p = aptr + 4;\n      status = ares_expand_string(p, abuf, alen, &name.as_uchar, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t\\t\\t\\t\\t\\t%s\\n\", name.as_char);\n      ares_free_string(name.as_char);\n      p += len;\n\n      status = ares_expand_string(p, abuf, alen, &name.as_uchar, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t\\t\\t\\t\\t\\t%s\\n\", name.as_char);\n      ares_free_string(name.as_char);\n      p += len;\n\n      status = ares_expand_string(p, abuf, alen, &name.as_uchar, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t\\t\\t\\t\\t\\t%s\\n\", name.as_char);\n      ares_free_string(name.as_char);\n      p += len;\n\n      status = ares_expand_name(p, abuf, alen, &name.as_char, &len);\n      if (status != ARES_SUCCESS)\n        return NULL;\n      printf(\"\\t\\t\\t\\t\\t\\t%s\", name.as_char);\n      ares_free_string(name.as_char);\n      break;\n\n    case T_DS:\n    case T_SSHFP:\n    case T_RRSIG:\n    case T_NSEC:\n    case T_DNSKEY:\n      printf(\"\\t[RR type parsing unavailable]\");\n      break;\n\n    default:\n      printf(\"\\t[Unknown RR; cannot parse]\");\n      break;\n    }\n  printf(\"\\n\");\n\n  return aptr + dlen;\n}",
+      "fn_code_pos": [
+        [
+          515,
+          0
+        ],
+        [
+          801,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "display_rr",
+        "parameters": {
+          "aptr": "unsigned char",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static int convert_query (char **name_p, int use_bitstring)\n{\n#ifndef MAX_IP6_RR\n#define MAX_IP6_RR  (16*sizeof(\".x.x\") + sizeof(\".IP6.ARPA\") + 1)\n#endif\n\n#ifdef HAVE_INET_PTON\n #define ACCEPTED_RETVAL4 1\n #define ACCEPTED_RETVAL6 1\n#else\n #define ACCEPTED_RETVAL4 32\n #define ACCEPTED_RETVAL6 128\n#endif\n\n  static char new_name [MAX_IP6_RR];\n  static const char hex_chars[] = \"0123456789ABCDEF\";\n\n  union {\n    struct in_addr       addr4;\n    struct ares_in6_addr addr6;\n  } addr;\n\n  if (ares_inet_pton (AF_INET, *name_p, &addr.addr4) == 1)\n    {\n       unsigned long laddr = ntohl(addr.addr4.s_addr);\n       unsigned long a1 = (laddr >> 24UL) & 0xFFUL;\n       unsigned long a2 = (laddr >> 16UL) & 0xFFUL;\n       unsigned long a3 = (laddr >>  8UL) & 0xFFUL;\n       unsigned long a4 = laddr & 0xFFUL;\n\n       snprintf(new_name, sizeof(new_name), \"%lu.%lu.%lu.%lu.in-addr.arpa\", a4, a3, a2, a1);\n       *name_p = new_name;\n       return (1);\n    }\n\n  if (ares_inet_pton(AF_INET6, *name_p, &addr.addr6) == 1)\n    {\n       char *c = new_name;\n       const unsigned char *ip = (const unsigned char*) &addr.addr6;\n       int   max_i = (int)sizeof(addr.addr6) - 1;\n       int   i, hi, lo;\n\n       /* Use the more compact RFC-2673 notation?\n        * Currently doesn't work or unsupported by the DNS-servers I've tested against.\n        */\n       if (use_bitstring)\n       {\n         *c++ = '\\\\';\n         *c++ = '[';\n         *c++ = 'x';\n         for (i = max_i; i >= 0; i--)\n         {\n           hi = ip[i] >> 4;\n           lo = ip[i] & 15;\n           *c++ = hex_chars [lo];\n           *c++ = hex_chars [hi];\n         }\n         strcpy (c, \"].IP6.ARPA\");\n       }\n       else\n       {\n         for (i = max_i; i >= 0; i--)\n         {\n           hi = ip[i] >> 4;\n           lo = ip[i] & 15;\n           *c++ = hex_chars [lo];\n           *c++ = '.';\n           *c++ = hex_chars [hi];\n           *c++ = '.';\n         }\n         strcpy (c, \"IP6.ARPA\");\n       }\n       *name_p = new_name;\n       return (1);\n    }\n  printf(\"Address %s was not legal for this query.\\n\", *name_p);\n  return (0);\n}",
+      "fn_code_pos": [
+        [
+          822,
+          0
+        ],
+        [
+          899,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "convert_query",
+        "parameters": {
+          "name_p": "char",
+          "use_bitstring": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static const char *type_name(int type)\n{\n  int i;\n\n  for (i = 0; i < ntypes; i++)\n    {\n      if (types[i].value == type)\n        return types[i].name;\n    }\n  return \"(unknown)\";\n}",
+      "fn_code_pos": [
+        [
+          901,
+          0
+        ],
+        [
+          911,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "type_name",
+        "parameters": {
+          "type": "int"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static const char *class_name(int dnsclass)\n{\n  int i;\n\n  for (i = 0; i < nclasses; i++)\n    {\n      if (classes[i].value == dnsclass)\n        return classes[i].name;\n    }\n  return \"(unknown)\";\n}",
+      "fn_code_pos": [
+        [
+          913,
+          0
+        ],
+        [
+          923,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "class_name",
+        "parameters": {
+          "dnsclass": "int"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static void usage(void)\n{\n  fprintf(stderr, \"usage: adig [-h] [-d] [-f flag] [-s server] [-c class] \"\n          \"[-t type] [-T|U port] [-x|-xx] name ...\\n\");\n  exit(1);\n}",
+      "fn_code_pos": [
+        [
+          925,
+          0
+        ],
+        [
+          930,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void destroy_addr_list(struct ares_addr_node *head)\n{\n  while(head)\n    {\n      struct ares_addr_node *detached = head;\n      head = head->next;\n      free(detached);\n    }\n}",
+      "fn_code_pos": [
+        [
+          932,
+          0
+        ],
+        [
+          940,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "destroy_addr_list",
+        "parameters": {
+          "head": "struct ares_addr_node"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void append_addr_list(struct ares_addr_node **head,\n                             struct ares_addr_node *node)\n{\n  struct ares_addr_node *last;\n  node->next = NULL;\n  if(*head)\n    {\n      last = *head;\n      while(last->next)\n        last = last->next;\n      last->next = node;\n    }\n  else\n    *head = node;\n}",
+      "fn_code_pos": [
+        [
+          942,
+          0
+        ],
+        [
+          956,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "append_addr_list",
+        "parameters": {
+          "head": "struct ares_addr_node",
+          "node": "struct ares_addr_node"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void print_help_info_adig(void) {\n    printf(\"adig, version %s \\n\\n\", ARES_VERSION_STR);\n    printf(\"usage: adig [-h] [-d] [-f flag] [-s server] [-c class] [-t type] [-T|U port] [-x | -xx] name ...\\n\\n\"\n    \"  d : Print some extra debugging output.\\n\"\n    \"  f : Add a flag. Possible values for flag are igntc, noaliases, norecurse, primary, stayopen, usevc.\\n\"\n    \"  h : Display this help and exit.\\n\\n\"\n    \"  T port   : Use specified TCP port to connect to DNS server.\\n\"\n    \"  U port   : Use specified UDP port to connect to DNS server.\\n\"\n    \"  c class  : Set the query class. Possible values for class are NY, CHAOS, HS, IN  (default).\\n\"\n    \"  s server : Connect to specified DNS server, instead of the system's default one(s).\\n\"\n    \"  t type   : Query records of specified type.  \\n\"\n    \"              Possible values for type are A  \\n\"\n    \"              (default), AAAA, AFSDB,  ANY,\\n\"\n    \"              AXFR, CNAME, GPOS, HINFO, ISDN,\\n\"\n    \"              KEY, LOC, MAILA, MAILB, MB, MD,\\n\"\n    \"              MF, MG, MINFO, MR, MX, NAPTR, NS,\\n\"\n    \"              NSAP, NSAP_PTR, NULL, PTR, PX, RP,\\n\"\n    \"              RT,  SIG,  SOA, SRV, TXT, URI, WKS, X25\\n\\n\"\n    \" -x  : For a '-t PTR a.b.c.d' lookup, query for 'd.c.b.a.in-addr.arpa.'\\n\"\n    \" -xx : As above, but for IPv6, compact the format into a bitstring like\\n\"\n    \"       '[xabcdef00000000000000000000000000].IP6.ARPA.'\\n\");\n    exit(0);\n}",
+      "fn_code_pos": [
+        [
+          960,
+          0
+        ],
+        [
+          982,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_help_info_adig",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "callback(void *arg, int status, int timeouts,\n                     unsigned char *abuf, int alen)",
+      "fn_dec_pos": [
+        [
+          141,
+          12
+        ],
+        [
+          142,
+          51
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "callback",
+        "parameters": {
+          "arg": "void",
+          "status": "int",
+          "timeouts": "int",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "display_question(const unsigned char *aptr,\n                                             const unsigned char *abuf,\n                                             int alen)",
+      "fn_dec_pos": [
+        [
+          143,
+          28
+        ],
+        [
+          145,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "display_question",
+        "parameters": {
+          "aptr": "unsigned char",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "display_rr(const unsigned char *aptr,\n                                       const unsigned char *abuf, int alen)",
+      "fn_dec_pos": [
+        [
+          146,
+          28
+        ],
+        [
+          147,
+          75
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "display_rr",
+        "parameters": {
+          "aptr": "unsigned char",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "convert_query (char **name, int use_bitstring)",
+      "fn_dec_pos": [
+        [
+          148,
+          11
+        ],
+        [
+          148,
+          57
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "convert_query",
+        "parameters": {
+          "name": "char",
+          "use_bitstring": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "type_name(int type)",
+      "fn_dec_pos": [
+        [
+          149,
+          19
+        ],
+        [
+          149,
+          38
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "type_name",
+        "parameters": {
+          "type": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "class_name(int dnsclass)",
+      "fn_dec_pos": [
+        [
+          150,
+          19
+        ],
+        [
+          150,
+          43
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "class_name",
+        "parameters": {
+          "dnsclass": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "usage(void)",
+      "fn_dec_pos": [
+        [
+          151,
+          12
+        ],
+        [
+          151,
+          23
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "destroy_addr_list(struct ares_addr_node *head)",
+      "fn_dec_pos": [
+        [
+          152,
+          12
+        ],
+        [
+          152,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "destroy_addr_list",
+        "parameters": {
+          "head": "struct ares_addr_node"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "append_addr_list(struct ares_addr_node **head,\n                             struct ares_addr_node *node)",
+      "fn_dec_pos": [
+        [
+          153,
+          12
+        ],
+        [
+          154,
+          57
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "append_addr_list",
+        "parameters": {
+          "head": "struct ares_addr_node",
+          "node": "struct ares_addr_node"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "print_help_info_adig(void)",
+      "fn_dec_pos": [
+        [
+          155,
+          12
+        ],
+        [
+          155,
+          38
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_help_info_adig",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "display_question(const unsigned char *aptr,\n                                             const unsigned char *abuf,\n                                             int alen)",
+      "fn_dec_pos": [
+        [
+          476,
+          28
+        ],
+        [
+          478,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "display_question",
+        "parameters": {
+          "aptr": "unsigned char",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "display_rr(const unsigned char *aptr,\n                                       const unsigned char *abuf, int alen)",
+      "fn_dec_pos": [
+        [
+          515,
+          28
+        ],
+        [
+          516,
+          75
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "display_rr",
+        "parameters": {
+          "aptr": "unsigned char",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "type_name(int type)",
+      "fn_dec_pos": [
+        [
+          901,
+          19
+        ],
+        [
+          901,
+          38
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "type_name",
+        "parameters": {
+          "type": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "class_name(int dnsclass)",
+      "fn_dec_pos": [
+        [
+          913,
+          19
+        ],
+        [
+          913,
+          43
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "class_name",
+        "parameters": {
+          "dnsclass": "int"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct nv {\n  const char *name;\n  int value;\n}",
+      {
+        "char": "const",
+        "value": "int"
+      },
+      "nv",
+      [
+        59,
+        0
+      ],
+      [
+        62,
+        1
+      ]
+    ],
+    [
+      "struct nv {\n  const char *name;\n  int value;\n}",
+      {
+        "char": "const",
+        "value": "int"
+      },
+      "nv",
+      [
+        59,
+        0
+      ],
+      [
+        62,
+        1
+      ]
+    ],
+    [
+      "struct nv",
+      {},
+      "",
+      [
+        64,
+        13
+      ],
+      [
+        64,
+        22
+      ]
+    ],
+    [
+      "struct nv",
+      {},
+      "",
+      [
+        74,
+        13
+      ],
+      [
+        74,
+        22
+      ]
+    ],
+    [
+      "struct nv",
+      {},
+      "",
+      [
+        82,
+        13
+      ],
+      [
+        82,
+        22
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        152,
+        30
+      ],
+      [
+        152,
+        51
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        153,
+        29
+      ],
+      [
+        153,
+        50
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        154,
+        29
+      ],
+      [
+        154,
+        50
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        163,
+        2
+      ],
+      [
+        163,
+        21
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        164,
+        2
+      ],
+      [
+        164,
+        16
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        166,
+        2
+      ],
+      [
+        166,
+        16
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        167,
+        2
+      ],
+      [
+        167,
+        23
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        215,
+        31
+      ],
+      [
+        215,
+        52
+      ]
+    ],
+    [
+      "struct in_addr",
+      {},
+      "",
+      [
+        840,
+        4
+      ],
+      [
+        840,
+        18
+      ]
+    ],
+    [
+      "struct ares_in6_addr",
+      {},
+      "",
+      [
+        841,
+        4
+      ],
+      [
+        841,
+        24
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        932,
+        30
+      ],
+      [
+        932,
+        51
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        936,
+        6
+      ],
+      [
+        936,
+        27
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        942,
+        29
+      ],
+      [
+        942,
+        50
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        943,
+        29
+      ],
+      [
+        943,
+        50
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        945,
+        2
+      ],
+      [
+        945,
+        23
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#  include <netdb.h>\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#  include <strings.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_dns.h\"\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_getopt.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nowarn.h\"\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ],
+    [
+      "#  include \"ares_strdup.h\"\n",
+      [
+        40,
+        0
+      ],
+      [
+        41,
+        0
+      ]
+    ],
+    [
+      "#  include \"ares_strcasecmp.h\"\n",
+      [
+        45,
+        0
+      ],
+      [
+        46,
+        0
+      ]
+    ],
+    [
+      "#  include \"ares_strcasecmp.h\"\n",
+      [
+        50,
+        0
+      ],
+      [
+        51,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

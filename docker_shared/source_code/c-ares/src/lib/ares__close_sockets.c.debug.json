@@ -1,0 +1,94 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void ares__close_sockets(ares_channel channel, struct server_state *server)\n{\n  struct send_request *sendreq;\n\n  /* Free all pending output buffers. */\n  while (server->qhead)\n    {\n      /* Advance server->qhead; pull out query as we go. */\n      sendreq = server->qhead;\n      server->qhead = sendreq->next;\n      if (sendreq->data_storage != NULL)\n        ares_free(sendreq->data_storage);\n      ares_free(sendreq);\n    }\n  server->qtail = NULL;\n\n  /* Reset any existing input buffer. */\n  if (server->tcp_buffer)\n    ares_free(server->tcp_buffer);\n  server->tcp_buffer = NULL;\n  server->tcp_lenbuf_pos = 0;\n\n  /* Reset brokenness */\n  server->is_broken = 0;\n\n  /* Close the TCP and UDP sockets. */\n  if (server->tcp_socket != ARES_SOCKET_BAD)\n    {\n      SOCK_STATE_CALLBACK(channel, server->tcp_socket, 0, 0);\n      ares__close_socket(channel, server->tcp_socket);\n      server->tcp_socket = ARES_SOCKET_BAD;\n      server->tcp_connection_generation = ++channel->tcp_connection_generation;\n    }\n  if (server->udp_socket != ARES_SOCKET_BAD)\n    {\n      SOCK_STATE_CALLBACK(channel, server->udp_socket, 0, 0);\n      ares__close_socket(channel, server->udp_socket);\n      server->udp_socket = ARES_SOCKET_BAD;\n    }\n}",
+      "fn_code_pos": [
+        [
+          21,
+          0
+        ],
+        [
+          60,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__close_sockets",
+        "parameters": {
+          "channel": "ares_channel",
+          "server": "struct server_state"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct server_state",
+      {},
+      "",
+      [
+        21,
+        47
+      ],
+      [
+        21,
+        66
+      ]
+    ],
+    [
+      "struct send_request",
+      {},
+      "",
+      [
+        23,
+        2
+      ],
+      [
+        23,
+        21
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        18,
+        0
+      ],
+      [
+        19,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

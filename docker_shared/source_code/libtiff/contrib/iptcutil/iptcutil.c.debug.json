@@ -1,0 +1,417 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void formatString(FILE *ofile, const char *s, int len)\n{\n    putc('\"', ofile);\n    for (; len > 0; --len, ++s)\n    {\n        int c = *s;\n        switch (c)\n        {\n            case '&':\n                fputs(\"&amp;\", ofile);\n                break;\n#ifdef HANDLE_GT_LT\n            case '<':\n                fputs(\"&lt;\", ofile);\n                break;\n            case '>':\n                fputs(\"&gt;\", ofile);\n                break;\n#endif\n            case '\"':\n                fputs(\"&quot;\", ofile);\n                break;\n            default:\n                if (iscntrl(c))\n                    fprintf(ofile, \"&#%d;\", c);\n                else\n                    putc(*s, ofile);\n                break;\n        }\n    }\n    fputs(\"\\\"\\n\", ofile);\n}",
+      "fn_code_pos": [
+        [
+          89,
+          0
+        ],
+        [
+          120,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "formatString",
+        "parameters": {
+          "ofile": "FILE",
+          "s": "char",
+          "len": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int convertHTMLcodes(char *s, int len)\n{\n    if (len <= 0 || s == (char *)NULL || *s == '\\0')\n        return 0;\n\n    if (s[1] == '#')\n    {\n        int val, o;\n\n        if (sscanf(s, \"&#%d;\", &val) == 1)\n        {\n            o = 3;\n            while (s[o] != ';')\n            {\n                o++;\n                if (o > 5)\n                    break;\n            }\n            if (o < 5)\n                strcpy(s + 1, s + 1 + o);\n            *s = val;\n            return o;\n        }\n    }\n    else\n    {\n        int i, codes = sizeof(html_codes) / sizeof(html_code);\n\n        for (i = 0; i < codes; i++)\n        {\n            if (html_codes[i].len <= len)\n                if (STRNICMP(s, html_codes[i].code, html_codes[i].len) == 0)\n                {\n                    strcpy(s + 1, s + html_codes[i].len);\n                    *s = html_codes[i].val;\n                    return html_codes[i].len - 1;\n                }\n        }\n    }\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          141,
+          0
+        ],
+        [
+          182,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "convertHTMLcodes",
+        "parameters": {
+          "s": "char",
+          "len": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int formatIPTC(FILE *ifile, FILE *ofile)\n{\n    unsigned int foundiptc, tagsfound;\n\n    char *readable, *str;\n\n    long tagindx, taglen;\n\n    int i, tagcount = sizeof(tags) / sizeof(tag_spec);\n\n    int c, dataset, recnum;\n\n    foundiptc = 0; /* found the IPTC-Header */\n    tagsfound = 0; /* number of tags found */\n\n    c = getc(ifile);\n    while (c != EOF)\n    {\n        if (c == 0x1c)\n            foundiptc = 1;\n        else\n        {\n            if (foundiptc)\n            {\n                return -1;\n            }\n            else\n            {\n                c = getc(ifile);\n                continue;\n            }\n        }\n\n        /* we found the 0x1c tag and now grab the dataset and record number tags\n         */\n        dataset = getc(ifile);\n        if (dataset == EOF)\n            return -1;\n        recnum = getc(ifile);\n        if (recnum == EOF)\n            return -1;\n        /* try to match this record to one of the ones in our named table */\n        for (i = 0; i < tagcount; i++)\n        {\n            if (tags[i].id == recnum)\n                break;\n        }\n        if (i < tagcount)\n            readable = tags[i].name;\n        else\n            readable = \"\";\n\n        /* then we decode the length of the block that follows - long or short\n         * fmt */\n        c = getc(ifile);\n        if (c == EOF)\n            return 0;\n        if (c & (unsigned char)0x80)\n        {\n            unsigned char buffer[4];\n\n            for (i = 0; i < 4; i++)\n            {\n                c = getc(ifile);\n                if (c == EOF)\n                    return -1;\n                buffer[i] = c;\n            }\n            taglen = (((long)buffer[0]) << 24) | (((long)buffer[1]) << 16) |\n                     (((long)buffer[2]) << 8) | (((long)buffer[3]));\n        }\n        else\n        {\n            int x = c;\n\n            taglen = x << 8;\n            x = getc(ifile);\n            if (x == EOF)\n                return -1;\n            taglen |= (long)x;\n        }\n        /* Place limits on tag length */\n        if ((taglen <= 0) || (taglen > 1048576))\n        {\n            printf(\"Inappropriate IPTC tag length %ld\\n\", taglen);\n            return -1;\n        }\n        /* make a buffer to hold the tag data and snag it from the input stream\n         */\n        str = (char *)malloc((unsigned int)(taglen + 1));\n        if (str == (char *)NULL)\n        {\n            printf(\"Memory allocation failed\");\n            return 0;\n        }\n        for (tagindx = 0; tagindx < taglen; tagindx++)\n        {\n            c = getc(ifile);\n            if (c == EOF)\n            {\n                free(str);\n                return -1;\n            }\n            str[tagindx] = c;\n        }\n        str[taglen] = 0;\n\n        /* now finish up by formatting this binary data into ASCII equivalent */\n        if (strlen(readable) > 0)\n            fprintf(ofile, \"%d#%d#%s=\", (unsigned int)dataset,\n                    (unsigned int)recnum, readable);\n        else\n            fprintf(ofile, \"%d#%d=\", (unsigned int)dataset,\n                    (unsigned int)recnum);\n        formatString(ofile, str, taglen);\n        free(str);\n\n        tagsfound++;\n\n        c = getc(ifile);\n    }\n    return tagsfound;\n}",
+      "fn_code_pos": [
+        [
+          184,
+          0
+        ],
+        [
+          306,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "formatIPTC",
+        "parameters": {
+          "ifile": "FILE",
+          "ofile": "FILE"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "char *super_fgets(char *b, int *blen, FILE *file)\n{\n    int c, len;\n\n    char *q;\n\n    len = *blen;\n    for (q = b;; q++)\n    {\n        c = fgetc(file);\n        if (c == EOF || c == '\\n')\n            break;\n        if ((int)(q - b + 1) >= len)\n        {\n            long tlen;\n\n            tlen = (int)(q - b);\n            len <<= 1;\n            b = (char *)realloc((char *)b, (len + 2));\n            if ((char *)b == (char *)NULL)\n                break;\n            q = b + tlen;\n        }\n        *q = (unsigned char)c;\n    }\n    *blen = 0;\n    if ((unsigned char *)b != (unsigned char *)NULL)\n    {\n        int tlen;\n\n        tlen = (int)(q - b);\n        if (tlen == 0)\n            return (char *)NULL;\n        b[tlen] = '\\0';\n        *blen = ++tlen;\n    }\n    return b;\n}",
+      "fn_code_pos": [
+        [
+          312,
+          0
+        ],
+        [
+          349,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "super_fgets",
+        "parameters": {
+          "b": "char",
+          "blen": "int",
+          "file": "FILE"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    /* unsigned int */\n    /*   length; */\n\n    /*unsigned char\n     *buffer;*/\n\n    int i, mode; /* iptc binary, or iptc text */\n\n    FILE *ifile = stdin, *ofile = stdout;\n\n    char c,\n        *usage = \"usage: iptcutil -t | -b [-i file] [-o file] <input >output\";\n\n    if (argc < 2)\n    {\n        puts(usage);\n        return 1;\n    }\n\n    mode = 0;\n    /* length = -1; */\n    /* buffer = (unsigned char *)NULL; */\n\n    for (i = 1; i < argc; i++)\n    {\n        c = argv[i][0];\n        if (c == '-' || c == '/')\n        {\n            c = argv[i][1];\n            switch (c)\n            {\n                case 't':\n                    mode = 1;\n#ifdef _WIN32\n                    /* Set \"stdout\" to binary mode: */\n                    _setmode(_fileno(ofile), _O_BINARY);\n#endif\n                    break;\n                case 'b':\n                    mode = 0;\n#ifdef _WIN32\n                    /* Set \"stdin\" to binary mode: */\n                    _setmode(_fileno(ifile), _O_BINARY);\n#endif\n                    break;\n                case 'i':\n                    if (mode == 0)\n                        ifile = fopen(argv[++i], \"rb\");\n                    else\n                        ifile = fopen(argv[++i], \"rt\");\n                    if (ifile == (FILE *)NULL)\n                    {\n                        printf(\"Unable to open: %s\\n\", argv[i]);\n                        return 1;\n                    }\n                    break;\n                case 'o':\n                    if (mode == 0)\n                        ofile = fopen(argv[++i], \"wt\");\n                    else\n                        ofile = fopen(argv[++i], \"wb\");\n                    if (ofile == (FILE *)NULL)\n                    {\n                        printf(\"Unable to open: %s\\n\", argv[i]);\n                        return 1;\n                    }\n                    break;\n                default:\n                    printf(\"Unknown option: %s\\n\", argv[i]);\n                    return 1;\n            }\n        }\n        else\n        {\n            puts(usage);\n            return 1;\n        }\n    }\n\n    if (mode == 0) /* handle binary iptc info */\n        formatIPTC(ifile, ofile);\n\n    if (mode == 1) /* handle text form of iptc info */\n    {\n        char brkused, quoted, *line, *token, *newstr;\n\n        int state, next;\n\n        unsigned char recnum = 0, dataset = 0;\n\n        int inputlen = BUFFER_SZ;\n\n        line = (char *)malloc(inputlen);\n        while ((line = super_fgets(line, &inputlen, ifile)) != NULL)\n        {\n            state = 0;\n            next = 0;\n\n            token = (char *)malloc(inputlen);\n            newstr = (char *)malloc(inputlen);\n            while (tokenizer(0, token, inputlen, line, \"\", \"=\", \"\\\"\", 0,\n                             &brkused, &next, &quoted) == 0)\n            {\n                if (state == 0)\n                {\n                    int state2, next2;\n\n                    char brkused2, quoted2;\n\n                    state2 = 0;\n                    next2 = 0;\n                    while (tokenizer(0, newstr, inputlen, token, \"\", \"#\", \"\", 0,\n                                     &brkused2, &next2, &quoted2) == 0)\n                    {\n                        if (state2 == 0)\n                            dataset = (unsigned char)atoi(newstr);\n                        else if (state2 == 1)\n                            recnum = (unsigned char)atoi(newstr);\n                        state2++;\n                    }\n                }\n                else if (state == 1)\n                {\n                    int next2;\n\n                    unsigned long len;\n\n                    char brkused2, quoted2;\n\n                    next2 = 0;\n                    len = (unsigned long)strlen(token);\n                    while (tokenizer(0, newstr, inputlen, token, \"\", \"&\", \"\", 0,\n                                     &brkused2, &next2, &quoted2) == 0)\n                    {\n                        if (brkused2 && next2 > 0)\n                        {\n                            char *s = &token[next2 - 1];\n\n                            len -= convertHTMLcodes(s, (int)strlen(s));\n                        }\n                    }\n\n                    fputc(0x1c, ofile);\n                    fputc(dataset, ofile);\n                    fputc(recnum, ofile);\n                    if (len < 0x10000)\n                    {\n                        fputc((len >> 8) & 255, ofile);\n                        fputc(len & 255, ofile);\n                    }\n                    else\n                    {\n                        fputc(((len >> 24) & 255) | 0x80, ofile);\n                        fputc((len >> 16) & 255, ofile);\n                        fputc((len >> 8) & 255, ofile);\n                        fputc(len & 255, ofile);\n                    }\n                    next2 = 0;\n                    while (len--)\n                        fputc(token[next2++], ofile);\n                }\n                state++;\n            }\n            free(token);\n            free(newstr);\n        }\n        free(line);\n\n        fclose(ifile);\n        fclose(ofile);\n    }\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          353,
+          0
+        ],
+        [
+          528,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int sindex(char ch, char *string)\n{\n    char *cp;\n    for (cp = string; *cp; ++cp)\n        if (ch == *cp)\n            return (int)(cp - string); /* return position of character */\n    return -1;                         /* eol ... no match found */\n}",
+      "fn_code_pos": [
+        [
+          727,
+          0
+        ],
+        [
+          734,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "sindex",
+        "parameters": {
+          "ch": "char",
+          "string": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void chstore(char *string, int max, char ch)\n{\n    char c;\n    if (_p_tokpos >= 0 && _p_tokpos < max - 1)\n    {\n        if (_p_state == IN_QUOTE)\n            c = ch;\n        else\n            switch (_p_flag & 3)\n            {\n                case 1: /* convert to upper */\n                    c = toupper((int)ch);\n                    break;\n\n                case 2: /* convert to lower */\n                    c = tolower((int)ch);\n                    break;\n\n                default: /* use as is */\n                    c = ch;\n                    break;\n            }\n        string[_p_tokpos++] = c;\n    }\n    return;\n}",
+      "fn_code_pos": [
+        [
+          738,
+          0
+        ],
+        [
+          763,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "chstore",
+        "parameters": {
+          "string": "char",
+          "max": "int",
+          "ch": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int tokenizer(unsigned inflag, char *token, int tokmax, char *line, char *white,\n              char *brkchar, char *quote, char eschar, char *brkused, int *next,\n              char *quoted)\n{\n    int qp;\n    char c, nc;\n\n    *brkused = 0; /* initialize to null */\n    *quoted = 0;  /* assume not quoted  */\n\n    if (!line[*next]) /* if we're at end of line, indicate such */\n        return 1;\n\n    _p_state = IN_WHITE; /* initialize state */\n    _p_curquote = 0;     /* initialize previous quote char */\n    _p_flag = inflag;    /* set option flag */\n\n    for (_p_tokpos = 0; (c = line[*next]); ++(*next)) /* main loop */\n    {\n        if ((qp = sindex(c, brkchar)) >= 0) /* break */\n        {\n            switch (_p_state)\n            {\n                case IN_WHITE: /* these are the same here ...\t*/\n                case IN_TOKEN: /* ... just get out\t\t*/\n                case IN_OZONE: /* ditto\t\t\t*/\n                    ++(*next);\n                    *brkused = brkchar[qp];\n                    goto byebye;\n\n                case IN_QUOTE: /* just keep going */\n                    chstore(token, tokmax, c);\n                    break;\n            }\n        }\n        else if ((qp = sindex(c, quote)) >= 0) /* quote */\n        {\n            switch (_p_state)\n            {\n                case IN_WHITE:               /* these are identical, */\n                    _p_state = IN_QUOTE;     /* change states   */\n                    _p_curquote = quote[qp]; /* save quote char */\n                    *quoted =\n                        1; /* set to true as long as something is in quotes */\n                    break;\n\n                case IN_QUOTE:\n                    if (quote[qp] ==\n                        _p_curquote) /* same as the beginning quote? */\n                    {\n                        _p_state = IN_OZONE;\n                        _p_curquote = 0;\n                    }\n                    else\n                        chstore(token, tokmax, c); /* treat as regular char */\n                    break;\n\n                case IN_TOKEN:\n                case IN_OZONE:\n                    *brkused = c; /* uses quote as break char */\n                    goto byebye;\n            }\n        }\n        else if ((qp = sindex(c, white)) >= 0) /* white */\n        {\n            switch (_p_state)\n            {\n                case IN_WHITE:\n                case IN_OZONE:\n                    break; /* keep going */\n\n                case IN_TOKEN:\n                    _p_state = IN_OZONE;\n                    break;\n\n                case IN_QUOTE:\n                    chstore(token, tokmax, c); /* it's valid here */\n                    break;\n            }\n        }\n        else if (c == eschar) /* escape */\n        {\n            nc = line[(*next) + 1];\n            if (nc == 0) /* end of line */\n            {\n                *brkused = 0;\n                chstore(token, tokmax, c);\n                ++(*next);\n                goto byebye;\n            }\n            switch (_p_state)\n            {\n                case IN_WHITE:\n                    --(*next);\n                    _p_state = IN_TOKEN;\n                    break;\n\n                case IN_TOKEN:\n                case IN_QUOTE:\n                    ++(*next);\n                    chstore(token, tokmax, nc);\n                    break;\n\n                case IN_OZONE:\n                    goto byebye;\n            }\n        }\n        else /* anything else is just a real character */\n        {\n            switch (_p_state)\n            {\n                case IN_WHITE:\n                    _p_state = IN_TOKEN; /* switch states */\n                                         /* Fall through */\n\n                case IN_TOKEN: /* these 2 are     */\n                case IN_QUOTE: /*  identical here */\n                    chstore(token, tokmax, c);\n                    break;\n\n                case IN_OZONE:\n                    goto byebye;\n            }\n        }\n    } /* end of main loop */\n\nbyebye:\n    token[_p_tokpos] = 0; /* make sure token ends with EOS */\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          765,
+          0
+        ],
+        [
+          895,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tokenizer",
+        "parameters": {
+          "inflag": "unsigned",
+          "token": "char",
+          "tokmax": "int",
+          "line": "char",
+          "white": "char",
+          "brkchar": "char",
+          "quote": "char",
+          "eschar": "char",
+          "brkused": "char",
+          "next": "int",
+          "quoted": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "tokenizer(unsigned inflag, char *token, int tokmax, char *line, char *white,\n              char *brkchar, char *quote, char eschar, char *brkused, int *next,\n              char *quoted)",
+      "fn_dec_pos": [
+        [
+          308,
+          4
+        ],
+        [
+          310,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tokenizer",
+        "parameters": {
+          "inflag": "unsigned",
+          "token": "char",
+          "tokmax": "int",
+          "line": "char",
+          "white": "char",
+          "brkchar": "char",
+          "quote": "char",
+          "eschar": "char",
+          "brkused": "char",
+          "next": "int",
+          "quoted": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "super_fgets(char *b, int *blen, FILE *file)",
+      "fn_dec_pos": [
+        [
+          312,
+          6
+        ],
+        [
+          312,
+          49
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "super_fgets",
+        "parameters": {
+          "b": "char",
+          "blen": "int",
+          "file": "FILE"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct _tag_spec\n{\n    short id;\n\n    char *name;\n} tag_spec;",
+      {
+        "id": "short",
+        "*name": "char"
+      },
+      "tag_spec",
+      [
+        25,
+        0
+      ],
+      [
+        30,
+        11
+      ]
+    ],
+    [
+      "typedef struct _html_code\n{\n    short len;\n    const char *code, val;\n} html_code;",
+      {
+        "len": "short",
+        "char": "const"
+      },
+      "html_code",
+      [
+        122,
+        0
+      ],
+      [
+        126,
+        12
+      ]
+    ],
+    [
+      "typedef struct _tag_spec\n{\n    short id;\n\n    char *name;\n} tag_spec;",
+      {
+        "id": "short",
+        "*name": "char"
+      },
+      "tag_spec",
+      [
+        25,
+        0
+      ],
+      [
+        30,
+        11
+      ]
+    ],
+    [
+      "typedef struct _html_code\n{\n    short len;\n    const char *code, val;\n} html_code;",
+      {
+        "len": "short",
+        "char": "const"
+      },
+      "html_code",
+      [
+        122,
+        0
+      ],
+      [
+        126,
+        12
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    [
+      "#include <ctype.h>\n",
+      [
+        2,
+        0
+      ],
+      [
+        3,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        3,
+        0
+      ],
+      [
+        4,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        5,
+        0
+      ],
+      [
+        6,
+        0
+      ]
+    ],
+    [
+      "#include <strings.h>\n",
+      [
+        8,
+        0
+      ],
+      [
+        9,
+        0
+      ]
+    ],
+    [
+      "#include <io.h>\n",
+      [
+        12,
+        0
+      ],
+      [
+        13,
+        0
+      ]
+    ],
+    [
+      "#include <fcntl.h>\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

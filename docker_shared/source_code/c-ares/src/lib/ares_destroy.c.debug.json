@@ -1,0 +1,187 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void ares_destroy_options(struct ares_options *options)\n{\n  int i;\n\n  if(options->servers)\n    ares_free(options->servers);\n  for (i = 0; i < options->ndomains; i++)\n    ares_free(options->domains[i]);\n  if(options->domains)\n    ares_free(options->domains);\n  if(options->sortlist)\n    ares_free(options->sortlist);\n  if(options->lookups)\n    ares_free(options->lookups);\n  if(options->resolvconf_path)\n    ares_free(options->resolvconf_path);\n}",
+      "fn_code_pos": [
+        [
+          24,
+          0
+        ],
+        [
+          40,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_destroy_options",
+        "parameters": {
+          "options": "struct ares_options"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void ares_destroy(ares_channel channel)\n{\n  int i;\n  struct query *query;\n  struct list_node* list_head;\n  struct list_node* list_node;\n\n  if (!channel)\n    return;\n\n  list_head = &(channel->all_queries);\n  for (list_node = list_head->next; list_node != list_head; )\n    {\n      query = list_node->data;\n      list_node = list_node->next;  /* since we're deleting the query */\n      query->callback(query->arg, ARES_EDESTRUCTION, 0, NULL, 0);\n      ares__free_query(query);\n    }\n#ifndef NDEBUG\n  /* Freeing the query should remove it from all the lists in which it sits,\n   * so all query lists should be empty now.\n   */\n  assert(ares__is_list_empty(&(channel->all_queries)));\n  for (i = 0; i < ARES_QID_TABLE_SIZE; i++)\n    {\n      assert(ares__is_list_empty(&(channel->queries_by_qid[i])));\n    }\n  for (i = 0; i < ARES_TIMEOUT_TABLE_SIZE; i++)\n    {\n      assert(ares__is_list_empty(&(channel->queries_by_timeout[i])));\n    }\n#endif\n\n  ares__destroy_servers_state(channel);\n\n  if (channel->domains) {\n    for (i = 0; i < channel->ndomains; i++)\n      ares_free(channel->domains[i]);\n    ares_free(channel->domains);\n  }\n\n  if(channel->sortlist)\n    ares_free(channel->sortlist);\n\n  if (channel->lookups)\n    ares_free(channel->lookups);\n\n  if (channel->resolvconf_path)\n    ares_free(channel->resolvconf_path);\n\n  ares_free(channel);\n}",
+      "fn_code_pos": [
+        [
+          42,
+          0
+        ],
+        [
+          93,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_destroy",
+        "parameters": {
+          "channel": "ares_channel"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void ares__destroy_servers_state(ares_channel channel)\n{\n  struct server_state *server;\n  int i;\n\n  if (channel->servers)\n    {\n      for (i = 0; i < channel->nservers; i++)\n        {\n          server = &channel->servers[i];\n          ares__close_sockets(channel, server);\n          assert(ares__is_list_empty(&server->queries_to_server));\n        }\n      ares_free(channel->servers);\n      channel->servers = NULL;\n    }\n  channel->nservers = -1;\n}",
+      "fn_code_pos": [
+        [
+          95,
+          0
+        ],
+        [
+          112,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__destroy_servers_state",
+        "parameters": {
+          "channel": "ares_channel"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        24,
+        26
+      ],
+      [
+        24,
+        45
+      ]
+    ],
+    [
+      "struct query",
+      {},
+      "",
+      [
+        45,
+        2
+      ],
+      [
+        45,
+        14
+      ]
+    ],
+    [
+      "struct list_node",
+      {},
+      "",
+      [
+        46,
+        2
+      ],
+      [
+        46,
+        18
+      ]
+    ],
+    [
+      "struct list_node",
+      {},
+      "",
+      [
+        47,
+        2
+      ],
+      [
+        47,
+        18
+      ]
+    ],
+    [
+      "struct server_state",
+      {},
+      "",
+      [
+        97,
+        2
+      ],
+      [
+        97,
+        21
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        0
+      ]
+    ],
+    [
+      "#include <assert.h>\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

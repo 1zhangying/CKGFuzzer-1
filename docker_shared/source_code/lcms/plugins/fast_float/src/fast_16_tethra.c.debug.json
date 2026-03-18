@@ -1,0 +1,220 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nPerformance16Data* Performance16alloc(cmsContext ContextID, const cmsInterpParams* p)\n{\n    Performance16Data* p16;\n\n    p16 = (Performance16Data*) _cmsMallocZero(ContextID, sizeof(Performance16Data));\n    if (p16 == NULL) return NULL;\n    \n    p16 ->ContextID = ContextID;\n    p16 ->p = p;\n\n    return p16;\n}",
+      "fn_code_pos": [
+        [
+          43,
+          0
+        ],
+        [
+          55,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Performance16alloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "p": "cmsInterpParams"
+        },
+        "return_type": "Performance16Data"
+      }
+    },
+    {
+      "fn_code": "static\nvoid Performance16free(cmsContext ContextID, void* ptr)\n{   \n    _cmsFree(ContextID, ptr);\n}",
+      "fn_code_pos": [
+        [
+          57,
+          0
+        ],
+        [
+          61,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Performance16free",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "ptr": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid PerformanceEval16(struct _cmstransform_struct *CMMcargo,\n                      const void* Input,\n                      void* Output,\n                      cmsUInt32Number PixelsPerLine,\n                      cmsUInt32Number LineCount,\n                      const cmsStride* Stride)\n{\n\n       cmsUInt16Number        r, g, b;\n       int                    x0, y0, z0;\n       cmsS15Fixed16Number    rx, ry, rz;\n       cmsS15Fixed16Number    fx, fy, fz;\n       cmsS15Fixed16Number    c0, c1, c2, c3, Rest;\n       cmsUInt32Number        OutChan, TotalPlusAlpha;\n       cmsS15Fixed16Number    X0, X1, Y0, Y1, Z0, Z1;\n       Performance16Data*     p16 = (Performance16Data*)_cmsGetTransformUserData(CMMcargo);\n       const cmsInterpParams* p = p16->p;\n       cmsUInt32Number        TotalOut = p->nOutputs;\n       const cmsUInt16Number* BaseTable = (const cmsUInt16Number*)p->Table;\n       const cmsUInt16Number* LutTable;\n\n       cmsUInt8Number* out[cmsMAXCHANNELS];\n       cmsUInt16Number res16;\n\n       cmsUInt32Number i, ii;\n\n       cmsUInt32Number SourceStartingOrder[cmsMAXCHANNELS];\n       cmsUInt32Number SourceIncrements[cmsMAXCHANNELS];\n       cmsUInt32Number DestStartingOrder[cmsMAXCHANNELS];\n       cmsUInt32Number DestIncrements[cmsMAXCHANNELS];\n\n       const cmsUInt8Number* rin;\n       const cmsUInt8Number* gin;\n       const cmsUInt8Number* bin;\n       const cmsUInt8Number* ain = NULL;\n\n       int    in16, out16;  // Used by macros!\n\n       cmsUInt32Number nalpha, strideIn, strideOut;\n          \n       cmsUInt32Number dwInFormat = cmsGetTransformInputFormat((cmsHTRANSFORM)CMMcargo);\n       cmsUInt32Number dwOutFormat = cmsGetTransformOutputFormat((cmsHTRANSFORM)CMMcargo);\n       \n       _cmsComputeComponentIncrements(dwInFormat, Stride->BytesPerPlaneIn, NULL, &nalpha, SourceStartingOrder, SourceIncrements);\n       _cmsComputeComponentIncrements(dwOutFormat, Stride->BytesPerPlaneOut, NULL, &nalpha, DestStartingOrder, DestIncrements);\n\n       in16  = (T_BYTES(dwInFormat) == 2);\n       out16 = (T_BYTES(dwOutFormat) == 2);\n\n       if (!(_cmsGetTransformFlags((cmsHTRANSFORM)CMMcargo) & cmsFLAGS_COPY_ALPHA))\n           nalpha = 0;\n\n       strideIn = strideOut = 0;\n       for (i = 0; i < LineCount; i++) {\n\n              rin = (const cmsUInt8Number*)Input + SourceStartingOrder[0] + strideIn;\n              gin = (const cmsUInt8Number*)Input + SourceStartingOrder[1] + strideIn;\n              bin = (const cmsUInt8Number*)Input + SourceStartingOrder[2] + strideIn;\n              if (nalpha)\n                     ain = (const cmsUInt8Number*)Input + SourceStartingOrder[3] + strideIn;\n\n              TotalPlusAlpha = TotalOut;\n              if (ain) TotalPlusAlpha++;\n\n              for (OutChan = 0; OutChan < TotalPlusAlpha; OutChan++) {\n                     out[OutChan] = (cmsUInt8Number*)Output + DestStartingOrder[OutChan] + strideOut;\n              }\n\n\n              for (ii = 0; ii < PixelsPerLine; ii++) {\n\n                  r = FROM_INPUT(rin); \n                  g = FROM_INPUT(gin);\n                  b = FROM_INPUT(bin);\n\n                  rin += SourceIncrements[0];\n                  gin += SourceIncrements[1];\n                  bin += SourceIncrements[2];\n\n                  fx = _cmsToFixedDomain((int)r * p->Domain[0]);\n                  fy = _cmsToFixedDomain((int)g * p->Domain[1]);\n                  fz = _cmsToFixedDomain((int)b * p->Domain[2]);\n\n                  x0 = FIXED_TO_INT(fx);\n                  y0 = FIXED_TO_INT(fy);\n                  z0 = FIXED_TO_INT(fz);\n\n                  rx = FIXED_REST_TO_INT(fx);\n                  ry = FIXED_REST_TO_INT(fy);\n                  rz = FIXED_REST_TO_INT(fz);\n\n                  X0 = p->opta[2] * x0;\n                  X1 = (r == 0xFFFFU ? 0 : p->opta[2]);\n\n                  Y0 = p->opta[1] * y0;\n                  Y1 = (g == 0xFFFFU ? 0 : p->opta[1]);\n\n                  Z0 = p->opta[0] * z0;\n                  Z1 = (b == 0xFFFFU ? 0 : p->opta[0]);\n\n\n                  LutTable = &BaseTable[X0 + Y0 + Z0];\n\n                  // Output should be computed as x = ROUND_FIXED_TO_INT(_cmsToFixedDomain(Rest))\n                  // which expands as: x = (Rest + ((Rest+0x7fff)/0xFFFF) + 0x8000)>>16\n                  // This can be replaced by: t = Rest+0x8001, x = (t + (t>>16))>>16\n                  // at the cost of being off by one at 7fff and 17ffe.\n\n                  if (rx >= ry) {\n                      if (ry >= rz) {\n                          Y1 += X1;\n                          Z1 += Y1;\n                          for (OutChan = 0; OutChan < TotalOut; OutChan++) {\n                              c1 = LutTable[X1];\n                              c2 = LutTable[Y1];\n                              c3 = LutTable[Z1];\n                              c0 = *LutTable++;\n                              c3 -= c2;\n                              c2 -= c1;\n                              c1 -= c0;\n                              Rest = c1 * rx + c2 * ry + c3 * rz + 0x8001;\n                              res16 = (cmsUInt16Number)c0 + ((Rest + (Rest >> 16)) >> 16);\n                              TO_OUTPUT(out[OutChan], res16);\n                              out[OutChan] += DestIncrements[OutChan];\n                          }\n                      }\n                      else if (rz >= rx) {\n                          X1 += Z1;\n                          Y1 += X1;\n                          for (OutChan = 0; OutChan < TotalOut; OutChan++) {\n                              c1 = LutTable[X1];\n                              c2 = LutTable[Y1];\n                              c3 = LutTable[Z1];\n                              c0 = *LutTable++;\n                              c2 -= c1;\n                              c1 -= c3;\n                              c3 -= c0;\n                              Rest = c1 * rx + c2 * ry + c3 * rz + 0x8001;\n                              res16 = (cmsUInt16Number)c0 + ((Rest + (Rest >> 16)) >> 16);\n                              TO_OUTPUT(out[OutChan], res16);\n                              out[OutChan] += DestIncrements[OutChan];\n                          }\n                      }\n                      else {\n                          Z1 += X1;\n                          Y1 += Z1;\n                          for (OutChan = 0; OutChan < TotalOut; OutChan++) {\n                              c1 = LutTable[X1];\n                              c2 = LutTable[Y1];\n                              c3 = LutTable[Z1];\n                              c0 = *LutTable++;\n                              c2 -= c3;\n                              c3 -= c1;\n                              c1 -= c0;\n                              Rest = c1 * rx + c2 * ry + c3 * rz + 0x8001;\n                              res16 = (cmsUInt16Number)c0 + ((Rest + (Rest >> 16)) >> 16);\n                              TO_OUTPUT(out[OutChan], res16);\n                              out[OutChan] += DestIncrements[OutChan];\n                          }\n                      }\n                  }\n                  else {\n                      if (rx >= rz) {\n                          X1 += Y1;\n                          Z1 += X1;\n                          for (OutChan = 0; OutChan < TotalOut; OutChan++) {\n                              c1 = LutTable[X1];\n                              c2 = LutTable[Y1];\n                              c3 = LutTable[Z1];\n                              c0 = *LutTable++;\n                              c3 -= c1;\n                              c1 -= c2;\n                              c2 -= c0;\n                              Rest = c1 * rx + c2 * ry + c3 * rz + 0x8001;\n                              res16 = (cmsUInt16Number)c0 + ((Rest + (Rest >> 16)) >> 16);\n                              TO_OUTPUT(out[OutChan], res16);\n                              out[OutChan] += DestIncrements[OutChan];\n                          }\n                      }\n                      else if (ry >= rz) {\n                          Z1 += Y1;\n                          X1 += Z1;\n                          for (OutChan = 0; OutChan < TotalOut; OutChan++) {\n                              c1 = LutTable[X1];\n                              c2 = LutTable[Y1];\n                              c3 = LutTable[Z1];\n                              c0 = *LutTable++;\n                              c1 -= c3;\n                              c3 -= c2;\n                              c2 -= c0;\n                              Rest = c1 * rx + c2 * ry + c3 * rz + 0x8001;\n                              res16 = (cmsUInt16Number)c0 + ((Rest + (Rest >> 16)) >> 16);\n                              TO_OUTPUT(out[OutChan], res16);\n                              out[OutChan] += DestIncrements[OutChan];\n                          }\n                      }\n                      else {\n                          Y1 += Z1;\n                          X1 += Y1;\n                          for (OutChan = 0; OutChan < TotalOut; OutChan++) {\n                              c1 = LutTable[X1];\n                              c2 = LutTable[Y1];\n                              c3 = LutTable[Z1];\n                              c0 = *LutTable++;\n                              c1 -= c2;\n                              c2 -= c3;\n                              c3 -= c0;\n                              Rest = c1 * rx + c2 * ry + c3 * rz + 0x8001;                              \n                              res16 = (cmsUInt16Number)c0 + ((Rest + (Rest >> 16)) >> 16);\n                              TO_OUTPUT(out[OutChan], res16);\n                              out[OutChan] += DestIncrements[OutChan];\n                          }\n                      }\n                  }\n\n                  if (ain)\n                  {\n                      res16 = *(const cmsUInt16Number*)ain;\n                      TO_OUTPUT(out[TotalOut], res16);\n                      ain += SourceIncrements[3];\n                      out[TotalOut] += DestIncrements[TotalOut];\n                  }\n\n              }\n\n              strideIn += Stride->BytesPerLineIn;\n              strideOut += Stride->BytesPerLineOut;\n       }\n}",
+      "fn_code_pos": [
+        [
+          75,
+          0
+        ],
+        [
+          304,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PerformanceEval16",
+        "parameters": {
+          "CMMcargo": "struct _cmstransform_struct",
+          "Input": "void",
+          "Output": "void",
+          "PixelsPerLine": "cmsUInt32Number",
+          "LineCount": "cmsUInt32Number",
+          "Stride": "cmsStride"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool Optimize16BitRGBTransform(_cmsTransform2Fn* TransformFn,\n                                  void** UserData,\n                                  _cmsFreeUserDataFn* FreeDataFn,\n                                  cmsPipeline** Lut, \n                                  cmsUInt32Number* InputFormat, \n                                  cmsUInt32Number* OutputFormat, \n                                  cmsUInt32Number* dwFlags)      \n{\n    Performance16Data* p16;\n    cmsContext ContextID;\n    _cmsStageCLutData* data;\n    cmsUInt32Number newFlags;\n    cmsStage* OptimizedCLUTmpe;\n\n\n    // For empty transforms, do nothing\n    if (*Lut == NULL) return FALSE;\n\n    // This is a lossy optimization! does not apply in floating-point cases\n    if (T_FLOAT(*InputFormat) || T_FLOAT(*OutputFormat)) return FALSE;\n\n    // Only on 16-bit\n    if (T_BYTES(*InputFormat) != 2 || T_BYTES(*OutputFormat) != 2) return FALSE;\n\n    // Only real 16 bits\n    if (T_BIT15(*InputFormat) != 0 || T_BIT15(*OutputFormat) != 0) return FALSE;\n\n\t// Swap endian is not supported\n    if (T_ENDIAN16(*InputFormat) != 0 || T_ENDIAN16(*OutputFormat) != 0) return FALSE;\n\n    // Only on input RGB\n    if (T_COLORSPACE(*InputFormat)  != PT_RGB) return FALSE;\n    \n\n    // If this is a matrix-shaper, the default does already a good job\n    if (cmsPipelineCheckAndRetreiveStages(*Lut, 4,\n        cmsSigCurveSetElemType, cmsSigMatrixElemType, cmsSigMatrixElemType, cmsSigCurveSetElemType,\n        NULL, NULL, NULL, NULL)) return FALSE;\n\n    if (cmsPipelineCheckAndRetreiveStages(*Lut, 2,\n        cmsSigCurveSetElemType, cmsSigCurveSetElemType,\n        NULL, NULL)) return FALSE;\n\n   \n    ContextID = cmsGetPipelineContextID(*Lut);\n    newFlags = *dwFlags | cmsFLAGS_FORCE_CLUT;\n\n    if (!_cmsOptimizePipeline(ContextID,\n                               Lut,\n                               INTENT_PERCEPTUAL,  // Dont care\n                               InputFormat,\n                               OutputFormat,\n                               &newFlags)) return FALSE;\n\n    OptimizedCLUTmpe = cmsPipelineGetPtrToFirstStage(*Lut);\n\n    // Set the evaluator   \n    data = (_cmsStageCLutData*)cmsStageData(OptimizedCLUTmpe);\n\n    p16 = Performance16alloc(ContextID, data->Params);\n    if (p16 == NULL) return FALSE;\n\n    *TransformFn = PerformanceEval16;\n    *UserData   = p16;\n    *FreeDataFn = Performance16free;\n    *InputFormat  |= 0x02000000;\n    *OutputFormat |= 0x02000000;\n    *dwFlags |= cmsFLAGS_CAN_CHANGE_FORMATTER;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          312,
+          0
+        ],
+        [
+          382,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Optimize16BitRGBTransform",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeDataFn": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "_cmsOptimizePipeline(cmsContext ContextID,\n                              cmsPipeline** Lut,\n                              cmsUInt32Number  Intent,\n                              cmsUInt32Number* InputFormat,\n                              cmsUInt32Number* OutputFormat,\n                              cmsUInt32Number* dwFlags)",
+      "fn_dec_pos": [
+        [
+          24,
+          26
+        ],
+        [
+          29,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsOptimizePipeline",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Lut": "cmsPipeline",
+          "Intent": "cmsUInt32Number",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "CMSAPI"
+      }
+    },
+    {
+      "fn_code": "Performance16alloc(cmsContext ContextID, const cmsInterpParams* p)",
+      "fn_dec_pos": [
+        [
+          44,
+          19
+        ],
+        [
+          44,
+          85
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Performance16alloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "p": "cmsInterpParams"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n\n    cmsContext ContextID;\n\n    const cmsInterpParams* p;   // Tetrahedrical interpolation parameters. This is a not-owned pointer.    \n\n} Performance16Data;",
+      {
+        "ContextID": "cmsContext",
+        "cmsInterpParams": "const"
+      },
+      "Performance16Data",
+      [
+        33,
+        0
+      ],
+      [
+        39,
+        20
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsContext ContextID;\n\n    const cmsInterpParams* p;   // Tetrahedrical interpolation parameters. This is a not-owned pointer.    \n\n} Performance16Data;",
+      {
+        "ContextID": "cmsContext",
+        "cmsInterpParams": "const"
+      },
+      "Performance16Data",
+      [
+        33,
+        0
+      ],
+      [
+        39,
+        20
+      ]
+    ],
+    [
+      "struct _cmstransform_struct",
+      {},
+      "",
+      [
+        76,
+        23
+      ],
+      [
+        76,
+        50
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"fast_float_internal.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

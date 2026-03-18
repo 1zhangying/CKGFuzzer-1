@@ -1,0 +1,865 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static inline thandle_t thandle_from_int(int ifd)\n{\n    return (thandle_t)(intptr_t)ifd;\n}",
+      "fn_code_pos": [
+        [
+          56,
+          0
+        ],
+        [
+          59,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "thandle_from_int",
+        "parameters": {
+          "ifd": "int"
+        },
+        "return_type": "thandle_t"
+      }
+    },
+    {
+      "fn_code": "static inline int thandle_to_int(thandle_t fd) { return (int)(intptr_t)fd; }",
+      "fn_code_pos": [
+        [
+          61,
+          0
+        ],
+        [
+          61,
+          76
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "thandle_to_int",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static tmsize_t _tiffReadProc(thandle_t fd, void *buf, tmsize_t size)\n{\n    /* tmsize_t is 64bit on 64bit systems, but the WinAPI ReadFile takes\n     * 32bit sizes, so we loop through the data in suitable 32bit sized\n     * chunks */\n    uint8_t *ma;\n    uint64_t mb;\n    DWORD n;\n    DWORD o;\n    tmsize_t p;\n    ma = (uint8_t *)buf;\n    mb = size;\n    p = 0;\n    while (mb > 0)\n    {\n        n = 0x80000000UL;\n        if ((uint64_t)n > mb)\n            n = (DWORD)mb;\n        if (!ReadFile(fd, (LPVOID)ma, n, &o, NULL))\n            return (0);\n        ma += o;\n        mb -= o;\n        p += o;\n        if (o != n)\n            break;\n    }\n    return (p);\n}",
+      "fn_code_pos": [
+        [
+          63,
+          0
+        ],
+        [
+          90,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffReadProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "buf": "void",
+          "size": "tmsize_t"
+        },
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "static tmsize_t _tiffWriteProc(thandle_t fd, void *buf, tmsize_t size)\n{\n    /* tmsize_t is 64bit on 64bit systems, but the WinAPI WriteFile takes\n     * 32bit sizes, so we loop through the data in suitable 32bit sized\n     * chunks */\n    uint8_t *ma;\n    uint64_t mb;\n    DWORD n;\n    DWORD o;\n    tmsize_t p;\n    ma = (uint8_t *)buf;\n    mb = size;\n    p = 0;\n    while (mb > 0)\n    {\n        n = 0x80000000UL;\n        if ((uint64_t)n > mb)\n            n = (DWORD)mb;\n        if (!WriteFile(fd, (LPVOID)ma, n, &o, NULL))\n            return (0);\n        ma += o;\n        mb -= o;\n        p += o;\n        if (o != n)\n            break;\n    }\n    return (p);\n}",
+      "fn_code_pos": [
+        [
+          92,
+          0
+        ],
+        [
+          119,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffWriteProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "buf": "void",
+          "size": "tmsize_t"
+        },
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "static uint64_t _tiffSeekProc(thandle_t fd, uint64_t off, int whence)\n{\n    LARGE_INTEGER offli;\n    DWORD dwMoveMethod;\n    offli.QuadPart = off;\n    switch (whence)\n    {\n        case SEEK_SET:\n            dwMoveMethod = FILE_BEGIN;\n            break;\n        case SEEK_CUR:\n            dwMoveMethod = FILE_CURRENT;\n            break;\n        case SEEK_END:\n            dwMoveMethod = FILE_END;\n            break;\n        default:\n            dwMoveMethod = FILE_BEGIN;\n            break;\n    }\n    offli.LowPart =\n        SetFilePointer(fd, offli.LowPart, &offli.HighPart, dwMoveMethod);\n    if ((offli.LowPart == INVALID_SET_FILE_POINTER) &&\n        (GetLastError() != NO_ERROR))\n        offli.QuadPart = 0;\n    return (offli.QuadPart);\n}",
+      "fn_code_pos": [
+        [
+          121,
+          0
+        ],
+        [
+          147,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffSeekProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "off": "uint64_t",
+          "whence": "int"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "static int _tiffCloseProc(thandle_t fd) { return (CloseHandle(fd) ? 0 : -1); }",
+      "fn_code_pos": [
+        [
+          149,
+          0
+        ],
+        [
+          149,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffCloseProc",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static uint64_t _tiffSizeProc(thandle_t fd)\n{\n    LARGE_INTEGER m;\n    if (GetFileSizeEx(fd, &m))\n        return (m.QuadPart);\n    else\n        return (0);\n}",
+      "fn_code_pos": [
+        [
+          151,
+          0
+        ],
+        [
+          158,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffSizeProc",
+        "parameters": {
+          "fd": "thandle_t"
+        },
+        "return_type": "uint64_t"
+      }
+    },
+    {
+      "fn_code": "static int _tiffDummyMapProc(thandle_t fd, void **pbase, toff_t *psize)\n{\n    (void)fd;\n    (void)pbase;\n    (void)psize;\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          160,
+          0
+        ],
+        [
+          166,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffDummyMapProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "pbase": "void",
+          "psize": "toff_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int _tiffMapProc(thandle_t fd, void **pbase, toff_t *psize)\n{\n    uint64_t size;\n    tmsize_t sizem;\n    HANDLE hMapFile;\n\n    size = _tiffSizeProc(fd);\n    sizem = (tmsize_t)size;\n    if (!size || (uint64_t)sizem != size)\n        return (0);\n\n    /* By passing in 0 for the maximum file size, it specifies that we\n       create a file mapping object for the full file size. */\n    hMapFile = CreateFileMapping(fd, NULL, PAGE_READONLY, 0, 0, NULL);\n    if (hMapFile == NULL)\n        return (0);\n    *pbase = MapViewOfFile(hMapFile, FILE_MAP_READ, 0, 0, 0);\n    CloseHandle(hMapFile);\n    if (*pbase == NULL)\n        return (0);\n    *psize = size;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          179,
+          0
+        ],
+        [
+          201,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffMapProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "pbase": "void",
+          "psize": "toff_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void _tiffDummyUnmapProc(thandle_t fd, void *base, toff_t size)\n{\n    (void)fd;\n    (void)base;\n    (void)size;\n}",
+      "fn_code_pos": [
+        [
+          203,
+          0
+        ],
+        [
+          208,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffDummyUnmapProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "base": "void",
+          "size": "toff_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void _tiffUnmapProc(thandle_t fd, void *base, toff_t size)\n{\n    (void)fd;\n    (void)size;\n    UnmapViewOfFile(base);\n}",
+      "fn_code_pos": [
+        [
+          210,
+          0
+        ],
+        [
+          215,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_tiffUnmapProc",
+        "parameters": {
+          "fd": "thandle_t",
+          "base": "void",
+          "size": "toff_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFFdOpen(int ifd, const char *name, const char *mode)\n{\n    return TIFFFdOpenExt(ifd, name, mode, NULL);\n}",
+      "fn_code_pos": [
+        [
+          222,
+          0
+        ],
+        [
+          225,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFdOpen",
+        "parameters": {
+          "ifd": "int",
+          "name": "char",
+          "mode": "char"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFFdOpenExt(int ifd, const char *name, const char *mode,\n                    TIFFOpenOptions *opts)\n{\n    TIFF *tif;\n    int fSuppressMap;\n    int m;\n\n    fSuppressMap = 0;\n    for (m = 0; mode[m] != 0; m++)\n    {\n        if (mode[m] == 'u')\n        {\n            fSuppressMap = 1;\n            break;\n        }\n    }\n\n    tif = TIFFClientOpenExt(\n        name, mode, thandle_from_int(ifd), _tiffReadProc, _tiffWriteProc,\n        _tiffSeekProc, _tiffCloseProc, _tiffSizeProc,\n        fSuppressMap ? _tiffDummyMapProc : _tiffMapProc,\n        fSuppressMap ? _tiffDummyUnmapProc : _tiffUnmapProc, opts);\n    if (tif)\n        tif->tif_fd = ifd;\n    return (tif);\n}",
+      "fn_code_pos": [
+        [
+          227,
+          0
+        ],
+        [
+          252,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFdOpenExt",
+        "parameters": {
+          "ifd": "int",
+          "name": "char",
+          "mode": "char",
+          "opts": "TIFFOpenOptions"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFOpen(const char *name, const char *mode)\n{\n    return TIFFOpenExt(name, mode, NULL);\n}",
+      "fn_code_pos": [
+        [
+          259,
+          0
+        ],
+        [
+          262,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpen",
+        "parameters": {
+          "name": "char",
+          "mode": "char"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFOpenExt(const char *name, const char *mode, TIFFOpenOptions *opts)\n{\n    static const char module[] = \"TIFFOpen\";\n    thandle_t fd;\n    int m;\n    DWORD dwMode;\n    TIFF *tif;\n\n    m = _TIFFgetMode(opts, NULL, mode, module);\n\n    switch (m)\n    {\n        case O_RDONLY:\n            dwMode = OPEN_EXISTING;\n            break;\n        case O_RDWR:\n            dwMode = OPEN_EXISTING;\n            break;\n        case O_RDWR | O_CREAT:\n            dwMode = OPEN_ALWAYS;\n            break;\n        case O_RDWR | O_TRUNC:\n            dwMode = CREATE_ALWAYS;\n            break;\n        case O_RDWR | O_CREAT | O_TRUNC:\n            dwMode = CREATE_ALWAYS;\n            break;\n        default:\n            return ((TIFF *)0);\n    }\n\n    fd = (thandle_t)CreateFileA(\n        name, (m == O_RDONLY) ? GENERIC_READ : (GENERIC_READ | GENERIC_WRITE),\n        FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, dwMode,\n        (m == O_RDONLY) ? FILE_ATTRIBUTE_READONLY : FILE_ATTRIBUTE_NORMAL,\n        NULL);\n    if (fd == INVALID_HANDLE_VALUE)\n    {\n        _TIFFErrorEarly(opts, NULL, module, \"%s: Cannot open\", name);\n        return ((TIFF *)0);\n    }\n\n    tif = TIFFFdOpenExt(thandle_to_int(fd), name, mode, opts);\n    if (!tif)\n        CloseHandle(fd);\n    return tif;\n}",
+      "fn_code_pos": [
+        [
+          264,
+          0
+        ],
+        [
+          310,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpenExt",
+        "parameters": {
+          "name": "char",
+          "mode": "char",
+          "opts": "TIFFOpenOptions"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFOpenW(const wchar_t *name, const char *mode)\n{\n    return TIFFOpenWExt(name, mode, NULL);\n}",
+      "fn_code_pos": [
+        [
+          315,
+          0
+        ],
+        [
+          318,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpenW",
+        "parameters": {
+          "name": "wchar_t",
+          "mode": "char"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *TIFFOpenWExt(const wchar_t *name, const char *mode, TIFFOpenOptions *opts)\n{\n    static const char module[] = \"TIFFOpenW\";\n    thandle_t fd;\n    int m;\n    DWORD dwMode;\n    int mbsize;\n    char *mbname;\n    TIFF *tif;\n\n    m = _TIFFgetMode(opts, NULL, mode, module);\n\n    switch (m)\n    {\n        case O_RDONLY:\n            dwMode = OPEN_EXISTING;\n            break;\n        case O_RDWR:\n            dwMode = OPEN_EXISTING;\n            break;\n        case O_RDWR | O_CREAT:\n            dwMode = OPEN_ALWAYS;\n            break;\n        case O_RDWR | O_TRUNC:\n            dwMode = CREATE_ALWAYS;\n            break;\n        case O_RDWR | O_CREAT | O_TRUNC:\n            dwMode = CREATE_ALWAYS;\n            break;\n        default:\n            return ((TIFF *)0);\n    }\n\n    fd = (thandle_t)CreateFileW(\n        name, (m == O_RDONLY) ? GENERIC_READ : (GENERIC_READ | GENERIC_WRITE),\n        FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, dwMode,\n        (m == O_RDONLY) ? FILE_ATTRIBUTE_READONLY : FILE_ATTRIBUTE_NORMAL,\n        NULL);\n    if (fd == INVALID_HANDLE_VALUE)\n    {\n        _TIFFErrorEarly(opts, NULL, module, \"%S: Cannot open\", name);\n        return ((TIFF *)0);\n    }\n\n    mbname = NULL;\n    mbsize = WideCharToMultiByte(CP_ACP, 0, name, -1, NULL, 0, NULL, NULL);\n    if (mbsize > 0)\n    {\n        mbname = (char *)_TIFFmalloc(mbsize);\n        if (!mbname)\n        {\n            _TIFFErrorEarly(\n                opts, NULL, module,\n                \"Can't allocate space for filename conversion buffer\");\n            return ((TIFF *)0);\n        }\n\n        WideCharToMultiByte(CP_ACP, 0, name, -1, mbname, mbsize, NULL, NULL);\n    }\n\n    tif = TIFFFdOpenExt(thandle_to_int(fd),\n                        (mbname != NULL) ? mbname : \"<unknown>\", mode, opts);\n    if (!tif)\n        CloseHandle(fd);\n\n    _TIFFfree(mbname);\n\n    return tif;\n}",
+      "fn_code_pos": [
+        [
+          320,
+          0
+        ],
+        [
+          388,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpenWExt",
+        "parameters": {
+          "name": "wchar_t",
+          "mode": "char",
+          "opts": "TIFFOpenOptions"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "void *_TIFFmalloc(tmsize_t s)\n{\n    if (s == 0)\n        return ((void *)NULL);\n\n    return (malloc((size_t)s));\n}",
+      "fn_code_pos": [
+        [
+          392,
+          0
+        ],
+        [
+          398,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFmalloc",
+        "parameters": {
+          "s": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void *_TIFFcalloc(tmsize_t nmemb, tmsize_t siz)\n{\n    if (nmemb == 0 || siz == 0)\n        return ((void *)NULL);\n\n    return calloc((size_t)nmemb, (size_t)siz);\n}",
+      "fn_code_pos": [
+        [
+          400,
+          0
+        ],
+        [
+          406,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFcalloc",
+        "parameters": {
+          "nmemb": "tmsize_t",
+          "siz": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _TIFFfree(void *p) { free(p); }",
+      "fn_code_pos": [
+        [
+          408,
+          0
+        ],
+        [
+          408,
+          36
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFfree",
+        "parameters": {
+          "p": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void *_TIFFrealloc(void *p, tmsize_t s) { return (realloc(p, (size_t)s)); }",
+      "fn_code_pos": [
+        [
+          410,
+          0
+        ],
+        [
+          410,
+          75
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFrealloc",
+        "parameters": {
+          "p": "void",
+          "s": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _TIFFmemset(void *p, int v, tmsize_t c) { memset(p, v, (size_t)c); }",
+      "fn_code_pos": [
+        [
+          412,
+          0
+        ],
+        [
+          412,
+          73
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFmemset",
+        "parameters": {
+          "p": "void",
+          "v": "int",
+          "c": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _TIFFmemcpy(void *d, const void *s, tmsize_t c)\n{\n    memcpy(d, s, (size_t)c);\n}",
+      "fn_code_pos": [
+        [
+          414,
+          0
+        ],
+        [
+          417,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFmemcpy",
+        "parameters": {
+          "d": "void",
+          "s": "void",
+          "c": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int _TIFFmemcmp(const void *p1, const void *p2, tmsize_t c)\n{\n    return (memcmp(p1, p2, (size_t)c));\n}",
+      "fn_code_pos": [
+        [
+          419,
+          0
+        ],
+        [
+          422,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFmemcmp",
+        "parameters": {
+          "p1": "void",
+          "p2": "void",
+          "c": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void Win32WarningHandler(const char *module, const char *fmt, va_list ap)\n{\n    if (module != NULL)\n        fprintf(stderr, \"%s: \", module);\n    fprintf(stderr, \"Warning, \");\n    vfprintf(stderr, fmt, ap);\n    fprintf(stderr, \".\\n\");\n}",
+      "fn_code_pos": [
+        [
+          426,
+          0
+        ],
+        [
+          433,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Win32WarningHandler",
+        "parameters": {
+          "module": "char",
+          "fmt": "char",
+          "ap": "va_list"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void Win32ErrorHandler(const char *module, const char *fmt, va_list ap)\n{\n    if (module != NULL)\n        fprintf(stderr, \"%s: \", module);\n    vfprintf(stderr, fmt, ap);\n    fprintf(stderr, \".\\n\");\n}",
+      "fn_code_pos": [
+        [
+          436,
+          0
+        ],
+        [
+          442,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Win32ErrorHandler",
+        "parameters": {
+          "module": "char",
+          "fmt": "char",
+          "ap": "va_list"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "TIFFFdOpen(int ifd, const char *name, const char *mode)",
+      "fn_dec_pos": [
+        [
+          222,
+          6
+        ],
+        [
+          222,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFdOpen",
+        "parameters": {
+          "ifd": "int",
+          "name": "char",
+          "mode": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFFdOpenExt(int ifd, const char *name, const char *mode,\n                    TIFFOpenOptions *opts)",
+      "fn_dec_pos": [
+        [
+          227,
+          6
+        ],
+        [
+          228,
+          42
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFdOpenExt",
+        "parameters": {
+          "ifd": "int",
+          "name": "char",
+          "mode": "char",
+          "opts": "TIFFOpenOptions"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFOpen(const char *name, const char *mode)",
+      "fn_dec_pos": [
+        [
+          259,
+          6
+        ],
+        [
+          259,
+          50
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpen",
+        "parameters": {
+          "name": "char",
+          "mode": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFOpenExt(const char *name, const char *mode, TIFFOpenOptions *opts)",
+      "fn_dec_pos": [
+        [
+          264,
+          6
+        ],
+        [
+          264,
+          76
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpenExt",
+        "parameters": {
+          "name": "char",
+          "mode": "char",
+          "opts": "TIFFOpenOptions"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFOpenW(const wchar_t *name, const char *mode)",
+      "fn_dec_pos": [
+        [
+          315,
+          6
+        ],
+        [
+          315,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpenW",
+        "parameters": {
+          "name": "wchar_t",
+          "mode": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFOpenWExt(const wchar_t *name, const char *mode, TIFFOpenOptions *opts)",
+      "fn_dec_pos": [
+        [
+          320,
+          6
+        ],
+        [
+          320,
+          80
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFOpenWExt",
+        "parameters": {
+          "name": "wchar_t",
+          "mode": "char",
+          "opts": "TIFFOpenOptions"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_TIFFmalloc(tmsize_t s)",
+      "fn_dec_pos": [
+        [
+          392,
+          6
+        ],
+        [
+          392,
+          29
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFmalloc",
+        "parameters": {
+          "s": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_TIFFcalloc(tmsize_t nmemb, tmsize_t siz)",
+      "fn_dec_pos": [
+        [
+          400,
+          6
+        ],
+        [
+          400,
+          47
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFcalloc",
+        "parameters": {
+          "nmemb": "tmsize_t",
+          "siz": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_TIFFrealloc(void *p, tmsize_t s)",
+      "fn_dec_pos": [
+        [
+          410,
+          6
+        ],
+        [
+          410,
+          39
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFrealloc",
+        "parameters": {
+          "p": "void",
+          "s": "tmsize_t"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include <windows.h>\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

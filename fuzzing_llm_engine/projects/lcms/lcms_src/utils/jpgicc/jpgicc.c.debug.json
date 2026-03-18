@@ -1,0 +1,824 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nvoid my_error_exit (j_common_ptr cinfo)\n{\n  char buffer[JMSG_LENGTH_MAX];\n\n  (*cinfo->err->format_message) (cinfo, buffer);\n  FatalError(buffer);\n}",
+      "fn_code_pos": [
+        [
+          75,
+          0
+        ],
+        [
+          82,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "my_error_exit",
+        "parameters": {
+          "cinfo": "j_common_ptr"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool IsITUFax(jpeg_saved_marker_ptr ptr)\n{\n    while (ptr)\n    {\n        if (ptr -> marker == (JPEG_APP0 + 1) && ptr -> data_length > 5) {\n\n            const char* data = (const char*) ptr -> data;\n\n            if (strcmp(data, \"G3FAX\") == 0) return TRUE;\n        }\n\n        ptr = ptr -> next;\n    }\n\n    return FALSE;\n}",
+      "fn_code_pos": [
+        [
+          110,
+          0
+        ],
+        [
+          126,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "IsITUFax",
+        "parameters": {
+          "ptr": "jpeg_saved_marker_ptr"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid SetITUFax(j_compress_ptr cinfo)\n{\n    unsigned char Marker[] = \"G3FAX\\x00\\0x07\\xCA\\x00\\xC8\";\n\n    jpeg_write_marker(cinfo, (JPEG_APP0 + 1), Marker, 10);\n}",
+      "fn_code_pos": [
+        [
+          129,
+          0
+        ],
+        [
+          135,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetITUFax",
+        "parameters": {
+          "cinfo": "j_compress_ptr"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ITU2Lab(const cmsUInt16Number In[3], cmsCIELab* Lab)\n{\n    Lab -> L = (double) In[0] / 655.35;\n    Lab -> a = (double) 170.* (In[1] - 32768.) / 65535.;\n    Lab -> b = (double) 200.* (In[2] - 24576.) / 65535.;\n}",
+      "fn_code_pos": [
+        [
+          151,
+          0
+        ],
+        [
+          157,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ITU2Lab",
+        "parameters": {
+          "In": "cmsUInt16Number",
+          "Lab": "cmsCIELab"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid Lab2ITU(const cmsCIELab* Lab, cmsUInt16Number Out[3])\n{\n    Out[0] = (cmsUInt16Number) floor((double) (Lab -> L / 100.)* 65535. );\n    Out[1] = (cmsUInt16Number) floor((double) (Lab -> a / 170.)* 65535. + 32768. );\n    Out[2] = (cmsUInt16Number) floor((double) (Lab -> b / 200.)* 65535. + 24576. );\n}",
+      "fn_code_pos": [
+        [
+          159,
+          0
+        ],
+        [
+          165,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Lab2ITU",
+        "parameters": {
+          "Lab": "cmsCIELab",
+          "Out": "cmsUInt16Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nint PCS2ITU(register const cmsUInt16Number In[], register cmsUInt16Number Out[], register void*  Cargo)\n{\n    cmsCIELab Lab;\n\n    cmsLabEncoded2Float(&Lab, In);\n    cmsDesaturateLab(&Lab, 85, -85, 125, -75);    // This function does the necessary gamut remapping\n    Lab2ITU(&Lab, Out);\n    return TRUE;\n\n    UTILS_UNUSED_PARAMETER(Cargo);\n}",
+      "fn_code_pos": [
+        [
+          177,
+          0
+        ],
+        [
+          188,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PCS2ITU",
+        "parameters": {
+          "In": "cmsUInt16Number",
+          "Out": "cmsUInt16Number",
+          "Cargo": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nint ITU2PCS( register const cmsUInt16Number In[], register cmsUInt16Number Out[], register void*  Cargo)\n{\n    cmsCIELab Lab;\n\n    ITU2Lab(In, &Lab);\n    cmsFloat2LabEncoded(Out, &Lab);\n    return TRUE;\n\n    UTILS_UNUSED_PARAMETER(Cargo);\n}",
+      "fn_code_pos": [
+        [
+          191,
+          0
+        ],
+        [
+          201,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ITU2PCS",
+        "parameters": {
+          "In": "cmsUInt16Number",
+          "Out": "cmsUInt16Number",
+          "Cargo": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\ncmsHPROFILE CreateITU2PCS_ICC(void)\n{\n    cmsHPROFILE hProfile;\n    cmsPipeline* AToB0;\n    cmsStage* ColorMap;\n\n    AToB0 = cmsPipelineAlloc(0, 3, 3);\n    if (AToB0 == NULL) return NULL;\n\n    ColorMap = cmsStageAllocCLut16bit(0, GRID_POINTS, 3, 3, NULL);\n    if (ColorMap == NULL) return NULL;\n\n    cmsPipelineInsertStage(AToB0, cmsAT_BEGIN, ColorMap);\n    cmsStageSampleCLut16bit(ColorMap, ITU2PCS, NULL, 0);\n\n    hProfile = cmsCreateProfilePlaceholder(0);\n    if (hProfile == NULL) {\n        cmsPipelineFree(AToB0);\n        return NULL;\n    }\n\n    cmsWriteTag(hProfile, cmsSigAToB0Tag, AToB0);\n    cmsSetColorSpace(hProfile, cmsSigLabData);\n    cmsSetPCS(hProfile, cmsSigLabData);\n    cmsSetDeviceClass(hProfile, cmsSigColorSpaceClass);\n    cmsPipelineFree(AToB0);\n\n    return hProfile;\n}",
+      "fn_code_pos": [
+        [
+          204,
+          0
+        ],
+        [
+          233,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CreateITU2PCS_ICC",
+        "parameters": {},
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "static\ncmsHPROFILE CreatePCS2ITU_ICC(void)\n{\n    cmsHPROFILE hProfile;\n    cmsPipeline* BToA0;\n    cmsStage* ColorMap;\n\n    BToA0 = cmsPipelineAlloc(0, 3, 3);\n    if (BToA0 == NULL) return NULL;\n\n    ColorMap = cmsStageAllocCLut16bit(0, GRID_POINTS, 3, 3, NULL);\n    if (ColorMap == NULL) return NULL;\n\n    cmsPipelineInsertStage(BToA0, cmsAT_BEGIN, ColorMap);\n    cmsStageSampleCLut16bit(ColorMap, PCS2ITU, NULL, 0);\n\n    hProfile = cmsCreateProfilePlaceholder(0);\n    if (hProfile == NULL) {\n        cmsPipelineFree(BToA0);\n        return NULL;\n    }\n\n    cmsWriteTag(hProfile, cmsSigBToA0Tag, BToA0);\n    cmsSetColorSpace(hProfile, cmsSigLabData);\n    cmsSetPCS(hProfile, cmsSigLabData);\n    cmsSetDeviceClass(hProfile, cmsSigColorSpaceClass);\n\n    cmsPipelineFree(BToA0);\n\n    return hProfile;\n}",
+      "fn_code_pos": [
+        [
+          237,
+          0
+        ],
+        [
+          267,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CreatePCS2ITU_ICC",
+        "parameters": {},
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool ProcessPhotoshopAPP13(JOCTET *data, int datalen)\n{\n    int i;\n\n    for (i = 14; i < datalen; )\n    {\n        long len;\n        unsigned int type;\n\n        if (!(GETJOCTET(data[i]  ) == 0x38 &&\n              GETJOCTET(data[i+1]) == 0x42 &&\n              GETJOCTET(data[i+2]) == 0x49 &&\n              GETJOCTET(data[i+3]) == 0x4D)) break; // Not recognized\n\n        i += 4; // identifying string\n\n        type = (unsigned int) (GETJOCTET(data[i]<<8) + GETJOCTET(data[i+1]));\n\n        i += 2; // resource type\n\n        i += GETJOCTET(data[i]) + ((GETJOCTET(data[i]) & 1) ? 1 : 2);   // resource name\n\n        len = ((((GETJOCTET(data[i]<<8) + GETJOCTET(data[i+1]))<<8) +\n                         GETJOCTET(data[i+2]))<<8) + GETJOCTET(data[i+3]);\n\n        if (len < 0) return FALSE; // Keep bug hunters away\n\n        i += 4; // Size\n\n        if (type == 0x03ED && len >= 16) {\n\n            Decompressor.X_density = (UINT16) PS_FIXED_TO_FLOAT(GETJOCTET(data[i]<<8) + GETJOCTET(data[i+1]),\n                                                 GETJOCTET(data[i+2]<<8) + GETJOCTET(data[i+3]));\n            Decompressor.Y_density = (UINT16) PS_FIXED_TO_FLOAT(GETJOCTET(data[i+8]<<8) + GETJOCTET(data[i+9]),\n                                                 GETJOCTET(data[i+10]<<8) + GETJOCTET(data[i+11]));\n\n            // Set the density unit to 1 since the\n            // Vertical and Horizontal resolutions\n            // are specified in Pixels per inch\n\n            Decompressor.density_unit = 0x01;\n            return TRUE;\n\n        }\n\n        i += len + ((len & 1) ? 1 : 0);   // Alignment\n    }\n    return FALSE;\n}",
+      "fn_code_pos": [
+        [
+          273,
+          0
+        ],
+        [
+          322,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ProcessPhotoshopAPP13",
+        "parameters": {
+          "data": "JOCTET",
+          "datalen": "int"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool HandlePhotoshopAPP13(jpeg_saved_marker_ptr ptr)\n{\n    while (ptr) {\n\n        if (ptr -> marker == (JPEG_APP0 + 13) && ptr -> data_length > 9)\n        {\n            JOCTET* data = ptr -> data;\n\n            if(GETJOCTET(data[0]) == 0x50 &&\n               GETJOCTET(data[1]) == 0x68 &&\n               GETJOCTET(data[2]) == 0x6F &&\n               GETJOCTET(data[3]) == 0x74 &&\n               GETJOCTET(data[4]) == 0x6F &&\n               GETJOCTET(data[5]) == 0x73 &&\n               GETJOCTET(data[6]) == 0x68 &&\n               GETJOCTET(data[7]) == 0x6F &&\n               GETJOCTET(data[8]) == 0x70) {\n\n                ProcessPhotoshopAPP13(data, ptr -> data_length);\n                return TRUE;\n            }\n        }\n\n        ptr = ptr -> next;\n    }\n\n    return FALSE;\n}",
+      "fn_code_pos": [
+        [
+          325,
+          0
+        ],
+        [
+          353,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "HandlePhotoshopAPP13",
+        "parameters": {
+          "ptr": "jpeg_saved_marker_ptr"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid craftedFile(void)\n{\n    FatalError(\"Corrupted EXIF data\");\n}",
+      "fn_code_pos": [
+        [
+          366,
+          0
+        ],
+        [
+          370,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "craftedFile",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nuint16_t read16(uint8_t* arr, size_t pos,  int swapBytes, size_t max)\n{\n    if (pos + 2 >= max)\n    {\n        craftedFile();\n        return 0;\n    }\n    else\n    {\n        uint8_t b1 = arr[pos];\n        uint8_t b2 = arr[pos + 1];\n\n        return (swapBytes) ? ((b2 << 8) | b1) : ((b1 << 8) | b2);\n    }\n}",
+      "fn_code_pos": [
+        [
+          373,
+          0
+        ],
+        [
+          388,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "read16",
+        "parameters": {
+          "arr": "uint8_t",
+          "pos": "size_t",
+          "swapBytes": "int",
+          "max": "size_t"
+        },
+        "return_type": "uint16_t"
+      }
+    },
+    {
+      "fn_code": "static\nuint32_t read32(uint8_t* arr, size_t pos, int swapBytes, size_t max)\n{\n\n    if (pos + 4 >= max)\n    {\n        craftedFile();\n        return 0;\n    }\n    else\n    {\n        if (!swapBytes) {\n\n            return (arr[pos] << 24) | (arr[pos + 1] << 16) | (arr[pos + 2] << 8) | arr[pos + 3];\n        }\n\n        return arr[pos] | (arr[pos + 1] << 8) | (arr[pos + 2] << 16) | (arr[pos + 3] << 24); \n    }\n}",
+      "fn_code_pos": [
+        [
+          392,
+          0
+        ],
+        [
+          410,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "read32",
+        "parameters": {
+          "arr": "uint8_t",
+          "pos": "size_t",
+          "swapBytes": "int",
+          "max": "size_t"
+        },
+        "return_type": "uint32_t"
+      }
+    },
+    {
+      "fn_code": "static\nint read_tag(uint8_t* arr, int pos,  int swapBytes, void* dest, size_t max)\n{\n        // Format should be 5 over here (rational)\n    uint32_t format = read16(arr, pos + 2, swapBytes, max);\n    // Components should be 1\n    uint32_t components = read32(arr, pos + 4, swapBytes, max);\n    // Points to the value\n    uint32_t offset;\n\n    // sanity\n    if (components != 1) return 0;\n\n    if (format == 3)\n        offset = pos + 8;\n    else\n        offset =  read32(arr, pos + 8, swapBytes, max);\n\n    switch (format) {\n\n    case 5: // Rational\n          {\n          double num = read32(arr, offset, swapBytes, max);\n          double den = read32(arr, offset + 4, swapBytes, max);\n          *(double *) dest = num / den;\n          }\n          break;\n\n    case 3: // uint 16\n        *(int*) dest = read16(arr, offset, swapBytes, max);\n        break;\n\n    default:  return 0;\n    }\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          414,
+          0
+        ],
+        [
+          450,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "read_tag",
+        "parameters": {
+          "arr": "uint8_t",
+          "pos": "int",
+          "swapBytes": "int",
+          "dest": "void",
+          "max": "size_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool HandleEXIF(struct jpeg_decompress_struct* cinfo)\n{\n    jpeg_saved_marker_ptr ptr;\n    uint32_t ifd_ofs;\n    int pos = 0, swapBytes = 0;\n    uint32_t i, numEntries;\n    double XRes = -1, YRes = -1;\n    int Unit = 2; // Inches\n    \n\n    for (ptr = cinfo ->marker_list; ptr; ptr = ptr ->next) {\n\n        if ((ptr ->marker == JPEG_APP0+1) && ptr ->data_length > 6) {\n\n            JOCTET* data = ptr -> data;\n            size_t max = ptr->data_length;\n\n            if (memcmp(data, \"Exif\\0\\0\", 6) == 0) {\n\n                data += 6; // Skip EXIF marker\n\n                // 8 byte TIFF header\n                // first two determine byte order\n                pos = 0;\n                if (read16(data, pos, 0, max) == INTEL_BYTE_ORDER) {\n                    swapBytes = 1;\n                }\n\n                pos += 2;\n\n                // next two bytes are always 0x002A (TIFF version)\n                pos += 2;\n\n                // offset to Image File Directory (includes the previous 8 bytes)\n                ifd_ofs = read32(data, pos, swapBytes, max);\n\n                // Search the directory for resolution tags\n                numEntries = read16(data, ifd_ofs, swapBytes, max);\n\n                for (i=0; i < numEntries; i++) {\n\n                    uint32_t entryOffset = ifd_ofs + 2 + (12 * i);\n                    uint32_t tag = read16(data, entryOffset, swapBytes, max);\n\n                    switch (tag) {\n\n                    case RESOLUTION_UNIT:\n                        if (!read_tag(data, entryOffset, swapBytes, &Unit, max)) return FALSE;\n                        break;\n\n                    case XRESOLUTION:\n                        if (!read_tag(data, entryOffset, swapBytes, &XRes, max)) return FALSE;\n                        break;\n\n                    case YRESOLUTION:\n                        if (!read_tag(data, entryOffset, swapBytes, &YRes, max)) return FALSE;\n                        break;\n\n                    default:;\n                    }\n\n                }\n\n                // Proceed if all found\n\n                if (XRes != -1 && YRes != -1)\n                {\n\n                    // 1 = None\n                    // 2 = inches\n                    // 3 = cm\n\n                    switch (Unit) {\n\n                    case 2:\n\n                        cinfo ->X_density = (UINT16) floor(XRes + 0.5);\n                        cinfo ->Y_density = (UINT16) floor(YRes + 0.5);\n                        break;\n\n                    case 1:\n\n                        cinfo ->X_density = (UINT16) floor(XRes * 2.54 + 0.5);\n                        cinfo ->Y_density = (UINT16) floor(YRes * 2.54 + 0.5);\n                        break;\n\n                    default: return FALSE;\n                    }\n\n                    cinfo ->density_unit = 1;  /* 1 for dots/inch, or 2 for dots/cm.*/\n\n                }\n\n\n            }\n        }\n    }\n    return FALSE;\n}",
+      "fn_code_pos": [
+        [
+          455,
+          0
+        ],
+        [
+          554,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "HandleEXIF",
+        "parameters": {
+          "cinfo": "struct jpeg_decompress_struct"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool OpenInput(const char* FileName)\n{\n    int m;\n\n    lIsITUFax = FALSE;\n    InFile  = fopen(FileName, \"rb\");\n    if (InFile == NULL) {\n        FatalError(\"Cannot open '%s'\", FileName);\n    }\n\n    // Now we can initialize the JPEG decompression object.\n    Decompressor.err                 = jpeg_std_error(&ErrorHandler.pub);\n    ErrorHandler.pub.error_exit      = my_error_exit;\n    ErrorHandler.pub.output_message  = my_error_exit;\n\n    jpeg_create_decompress(&Decompressor);\n    jpeg_stdio_src(&Decompressor, InFile);\n\n    for (m = 0; m < 16; m++)\n        jpeg_save_markers(&Decompressor, JPEG_APP0 + m, 0xFFFF);\n\n    // setup_read_icc_profile(&Decompressor);\n\n    fseek(InFile, 0, SEEK_SET);\n    jpeg_read_header(&Decompressor, TRUE);\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          557,
+          0
+        ],
+        [
+          585,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OpenInput",
+        "parameters": {
+          "FileName": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool OpenOutput(const char* FileName)\n{\n\n    OutFile = fopen(FileName, \"wb\");\n    if (OutFile == NULL) {\n        FatalError(\"Cannot create '%s'\", FileName);\n\n    }\n\n    Compressor.err                   = jpeg_std_error(&ErrorHandler.pub);\n    ErrorHandler.pub.error_exit      = my_error_exit;\n    ErrorHandler.pub.output_message  = my_error_exit;\n\n    Compressor.input_components = Compressor.num_components = 4;\n\n    jpeg_create_compress(&Compressor);\n    jpeg_stdio_dest(&Compressor, OutFile);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          588,
+          0
+        ],
+        [
+          607,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OpenOutput",
+        "parameters": {
+          "FileName": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool Done(void)\n{\n    jpeg_destroy_decompress(&Decompressor);\n    jpeg_destroy_compress(&Compressor);\n    return fclose(InFile) + fclose(OutFile);\n\n}",
+      "fn_code_pos": [
+        [
+          609,
+          0
+        ],
+        [
+          616,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Done",
+        "parameters": {},
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number GetInputPixelType(void)\n{\n     int space, bps, extra, ColorChannels, Flavor;\n\n     lIsITUFax         = IsITUFax(Decompressor.marker_list);\n     lIsPhotoshopApp13 = HandlePhotoshopAPP13(Decompressor.marker_list);\n     lIsEXIF           = HandleEXIF(&Decompressor);\n\n     ColorChannels = Decompressor.num_components;\n     extra  = 0;            // Alpha = None\n     bps    = 1;            // 8 bits\n     Flavor = 0;            // Vanilla\n\n     if (lIsITUFax) {\n\n        space = PT_Lab;\n        Decompressor.out_color_space = JCS_YCbCr;  // Fake to don't touch\n     }\n     else\n     switch (Decompressor.jpeg_color_space) {\n\n     case JCS_GRAYSCALE:        // monochrome\n              space = PT_GRAY;\n              Decompressor.out_color_space = JCS_GRAYSCALE;\n              break;\n\n     case JCS_RGB:             // red/green/blue\n              space = PT_RGB;\n              Decompressor.out_color_space = JCS_RGB;\n              break;\n\n     case JCS_YCbCr:               // Y/Cb/Cr (also known as YUV)\n              space = PT_RGB;      // Let IJG code to do the conversion\n              Decompressor.out_color_space = JCS_RGB;\n              break;\n\n     case JCS_CMYK:            // C/M/Y/K\n              space = PT_CMYK;\n              Decompressor.out_color_space = JCS_CMYK;\n              if (Decompressor.saw_Adobe_marker)            // Adobe keeps CMYK inverted, so change flavor\n                                Flavor = 1;                 // from vanilla to chocolate\n              break;\n\n     case JCS_YCCK:            // Y/Cb/Cr/K\n              space = PT_CMYK;\n              Decompressor.out_color_space = JCS_CMYK;\n              if (Decompressor.saw_Adobe_marker)            // ditto\n                                Flavor = 1;\n              break;\n\n     default:\n              FatalError(\"Unsupported color space (0x%x)\", Decompressor.jpeg_color_space);\n              return 0;\n     }\n\n     return (EXTRA_SH(extra)|CHANNELS_SH(ColorChannels)|BYTES_SH(bps)|COLORSPACE_SH(space)|FLAVOR_SH(Flavor));\n}",
+      "fn_code_pos": [
+        [
+          621,
+          0
+        ],
+        [
+          678,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetInputPixelType",
+        "parameters": {},
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number ComputeOutputFormatDescriptor(cmsUInt32Number dwInput, int OutColorSpace)\n{\n    int IsPlanar  = T_PLANAR(dwInput);\n    int Channels  = 0;\n    int Flavor    = 0;\n\n    switch (OutColorSpace) {\n\n   case PT_GRAY:\n       Channels = 1;\n       break;\n   case PT_RGB:\n   case PT_CMY:\n   case PT_Lab:\n   case PT_YUV:\n   case PT_YCbCr:\n       Channels = 3;\n       break;\n\n   case PT_CMYK:\n       if (Compressor.write_Adobe_marker)   // Adobe keeps CMYK inverted, so change flavor to chocolate\n           Flavor = 1;\n       Channels = 4;\n       break;\n   default:\n       FatalError(\"Unsupported output color space\");\n    }\n\n    return (COLORSPACE_SH(OutColorSpace)|PLANAR_SH(IsPlanar)|CHANNELS_SH(Channels)|BYTES_SH(1)|FLAVOR_SH(Flavor));\n}",
+      "fn_code_pos": [
+        [
+          682,
+          0
+        ],
+        [
+          712,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComputeOutputFormatDescriptor",
+        "parameters": {
+          "dwInput": "cmsUInt32Number",
+          "OutColorSpace": "int"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nint GetProfileColorSpace(cmsHPROFILE hProfile)\n{\n    cmsColorSpaceSignature ProfileSpace = cmsGetColorSpace(hProfile);\n\n    return _cmsLCMScolorSpace(ProfileSpace);\n}",
+      "fn_code_pos": [
+        [
+          716,
+          0
+        ],
+        [
+          722,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetProfileColorSpace",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nint GetDevicelinkColorSpace(cmsHPROFILE hProfile)\n{\n    cmsColorSpaceSignature ProfileSpace = cmsGetPCS(hProfile);\n\n    return _cmsLCMScolorSpace(ProfileSpace);\n}",
+      "fn_code_pos": [
+        [
+          724,
+          0
+        ],
+        [
+          730,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetDevicelinkColorSpace",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nvoid jcopy_markers_execute(j_decompress_ptr srcinfo, j_compress_ptr dstinfo)\n{\n  jpeg_saved_marker_ptr marker;\n\n  /* In the current implementation, we don't actually need to examine the\n   * option flag here; we just copy everything that got saved.\n   * But to avoid confusion, we do not output JFIF and Adobe APP14 markers\n   * if the encoder library already wrote one.\n   */\n  for (marker = srcinfo->marker_list; marker != NULL; marker = marker->next) {\n\n    if (dstinfo->write_JFIF_header &&\n        marker->marker == JPEG_APP0 &&\n        marker->data_length >= 5 &&\n        GETJOCTET(marker->data[0]) == 0x4A &&\n        GETJOCTET(marker->data[1]) == 0x46 &&\n        GETJOCTET(marker->data[2]) == 0x49 &&\n        GETJOCTET(marker->data[3]) == 0x46 &&\n        GETJOCTET(marker->data[4]) == 0)\n                          continue;         /* reject duplicate JFIF */\n\n    if (dstinfo->write_Adobe_marker &&\n        marker->marker == JPEG_APP0+14 &&\n        marker->data_length >= 5 &&\n        GETJOCTET(marker->data[0]) == 0x41 &&\n        GETJOCTET(marker->data[1]) == 0x64 &&\n        GETJOCTET(marker->data[2]) == 0x6F &&\n        GETJOCTET(marker->data[3]) == 0x62 &&\n        GETJOCTET(marker->data[4]) == 0x65)\n                         continue;         /* reject duplicate Adobe */\n\n     jpeg_write_marker(dstinfo, marker->marker,\n                       marker->data, marker->data_length);\n  }\n}",
+      "fn_code_pos": [
+        [
+          735,
+          0
+        ],
+        [
+          770,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "jcopy_markers_execute",
+        "parameters": {
+          "srcinfo": "j_decompress_ptr",
+          "dstinfo": "j_compress_ptr"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid WriteOutputFields(int OutputColorSpace)\n{\n    J_COLOR_SPACE in_space, jpeg_space;\n    int components;\n\n    switch (OutputColorSpace) {\n\n    case PT_GRAY: in_space = jpeg_space = JCS_GRAYSCALE;\n                  components = 1;\n                  break;\n\n    case PT_RGB:  in_space = JCS_RGB;\n                  jpeg_space = JCS_YCbCr;\n                  components = 3;\n                  break;       // red/green/blue\n\n    case PT_YCbCr: in_space = jpeg_space = JCS_YCbCr;\n                   components = 3;\n                   break;               // Y/Cb/Cr (also known as YUV)\n\n    case PT_CMYK: in_space = JCS_CMYK;\n                  jpeg_space = JCS_YCCK;\n                  components = 4;\n                  break;      // C/M/Y/components\n\n    case PT_Lab:  in_space = jpeg_space = JCS_YCbCr;\n                  components = 3;\n                  break;                // Fake to don't touch\n    default:\n                 FatalError(\"Unsupported output color space\");\n                 return;\n    }\n\n\n    if (jpegQuality >= 100) {\n\n     // avoid destructive conversion when asking for lossless compression\n        jpeg_space = in_space;\n    }\n\n    Compressor.in_color_space =  in_space;\n    Compressor.jpeg_color_space = jpeg_space;\n    Compressor.input_components = Compressor.num_components = components;\n    jpeg_set_defaults(&Compressor);\n    jpeg_set_colorspace(&Compressor, jpeg_space);\n\n\n    // Make sure to pass resolution through\n    if (OutputColorSpace == PT_CMYK)\n        Compressor.write_JFIF_header = 1;\n\n    // Avoid subsampling on high quality factor\n    jpeg_set_quality(&Compressor, jpegQuality, 1);\n    if (jpegQuality >= 70) {\n\n      int i;\n      for(i=0; i < Compressor.num_components; i++) {\n\n            Compressor.comp_info[i].h_samp_factor = 1;\n            Compressor.comp_info[i].v_samp_factor = 1;\n      }\n\n    }\n\n}",
+      "fn_code_pos": [
+        [
+          772,
+          0
+        ],
+        [
+          837,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "WriteOutputFields",
+        "parameters": {
+          "OutputColorSpace": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid DoEmbedProfile(const char* ProfileFile)\n{\n    FILE* f;\n    size_t size, EmbedLen;\n    cmsUInt8Number* EmbedBuffer;\n\n        f = fopen(ProfileFile, \"rb\");\n        if (f == NULL) return;\n\n        size = cmsfilelength(f);\n        EmbedBuffer = (cmsUInt8Number*) malloc(size + 1);\n        EmbedLen = fread(EmbedBuffer, 1, size, f);\n        fclose(f);\n        EmbedBuffer[EmbedLen] = 0;\n\n        write_icc_profile (&Compressor, EmbedBuffer, (unsigned int) EmbedLen);\n        free(EmbedBuffer);\n}",
+      "fn_code_pos": [
+        [
+          840,
+          0
+        ],
+        [
+          858,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DoEmbedProfile",
+        "parameters": {
+          "ProfileFile": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nint DoTransform(cmsHTRANSFORM hXForm, int OutputColorSpace)\n{\n    JSAMPROW ScanLineIn;\n    JSAMPROW ScanLineOut;\n\n\n       //Preserve resolution values from the original\n       // (Thanks to Robert Bergs for finding out this bug)\n       Compressor.density_unit = Decompressor.density_unit;\n       Compressor.X_density    = Decompressor.X_density;\n       Compressor.Y_density    = Decompressor.Y_density;\n\n      //  Compressor.write_JFIF_header = 1;\n\n       jpeg_start_decompress(&Decompressor);\n       jpeg_start_compress(&Compressor, TRUE);\n\n        if (OutputColorSpace == PT_Lab)\n            SetITUFax(&Compressor);\n\n       // Embed the profile if needed\n       if (EmbedProfile && cOutProf)\n           DoEmbedProfile(cOutProf);\n\n       ScanLineIn  = (JSAMPROW) malloc((size_t) Decompressor.output_width * Decompressor.num_components);\n       ScanLineOut = (JSAMPROW) malloc((size_t) Compressor.image_width * Compressor.num_components);\n\n       while (Decompressor.output_scanline <\n                            Decompressor.output_height) {\n\n       jpeg_read_scanlines(&Decompressor, &ScanLineIn, 1);\n\n       cmsDoTransform(hXForm, ScanLineIn, ScanLineOut, Decompressor.output_width);\n\n       jpeg_write_scanlines(&Compressor, &ScanLineOut, 1);\n       }\n\n       free(ScanLineIn);\n       free(ScanLineOut);\n\n       jpeg_finish_decompress(&Decompressor);\n       jpeg_finish_compress(&Compressor);\n\n       return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          862,
+          0
+        ],
+        [
+          907,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DoTransform",
+        "parameters": {
+          "hXForm": "cmsHTRANSFORM",
+          "OutputColorSpace": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nint TransformImage(char *cDefInpProf, char *cOutputProf)\n{\n       cmsHPROFILE hIn, hOut, hProof;\n       cmsHTRANSFORM xform;\n       cmsUInt32Number wInput, wOutput;\n       int OutputColorSpace;\n       cmsUInt32Number dwFlags = 0;\n       cmsUInt32Number EmbedLen;\n       cmsUInt8Number* EmbedBuffer;\n\n\n       cmsSetAdaptationState(ObserverAdaptationState);\n\n       if (BlackPointCompensation) {\n\n            dwFlags |= cmsFLAGS_BLACKPOINTCOMPENSATION;\n       }\n\n\n       switch (PrecalcMode) {\n\n       case 0: dwFlags |= cmsFLAGS_NOOPTIMIZE; break;\n       case 2: dwFlags |= cmsFLAGS_HIGHRESPRECALC; break;\n       case 3: dwFlags |= cmsFLAGS_LOWRESPRECALC; break;\n       default:;\n       }\n\n\n       if (GamutCheck) {\n            dwFlags |= cmsFLAGS_GAMUTCHECK;\n            cmsSetAlarmCodes(Alarm);\n       }\n\n       // Take input color space\n       wInput = GetInputPixelType();\n\n        if (lIsDeviceLink) {\n\n            hIn = cmsOpenProfileFromFile(cDefInpProf, \"r\");\n            hOut = NULL;\n            hProof = NULL;\n       }\n        else {\n\n        if (!IgnoreEmbedded && read_icc_profile(&Decompressor, &EmbedBuffer, &EmbedLen))\n        {\n              hIn = cmsOpenProfileFromMem(EmbedBuffer, EmbedLen);\n\n               if (Verbose) {\n\n                  fprintf(stdout, \" (Embedded profile found)\\n\");\n                  PrintProfileInformation(hIn);\n                  fflush(stdout);\n              }\n\n               if (hIn != NULL && SaveEmbedded != NULL)\n                          SaveMemoryBlock(EmbedBuffer, EmbedLen, SaveEmbedded);\n\n              free(EmbedBuffer);\n        }\n        else\n        {\n            // Default for ITU/Fax\n            if (cDefInpProf == NULL && T_COLORSPACE(wInput) == PT_Lab)\n                cDefInpProf = \"*Lab\";\n\n            if (cDefInpProf != NULL && cmsstrcasecmp(cDefInpProf, \"*lab\") == 0)\n                hIn = CreateITU2PCS_ICC();\n            else\n                hIn = OpenStockProfile(0, cDefInpProf);\n       }\n\n        if (cOutputProf != NULL && cmsstrcasecmp(cOutputProf, \"*lab\") == 0)\n            hOut = CreatePCS2ITU_ICC();\n        else\n        hOut = OpenStockProfile(0, cOutputProf);\n\n       hProof = NULL;\n       if (cProofing != NULL) {\n\n           hProof = OpenStockProfile(0, cProofing);\n           if (hProof == NULL) {\n            FatalError(\"Proofing profile couldn't be read.\");\n           }\n           dwFlags |= cmsFLAGS_SOFTPROOFING;\n          }\n       }\n\n        if (!hIn)\n            FatalError(\"Input profile couldn't be read.\");\n        if (!lIsDeviceLink && !hOut)\n            FatalError(\"Output profile couldn't be read.\");\n\n       // Assure both, input profile and input JPEG are on same colorspace\n       if (cmsGetColorSpace(hIn) != _cmsICCcolorSpace(T_COLORSPACE(wInput)))\n              FatalError(\"Input profile is not operating in proper color space\");\n\n\n       // Output colorspace is given by output profile\n\n        if (lIsDeviceLink) {\n            OutputColorSpace = GetDevicelinkColorSpace(hIn);\n        }\n        else {\n            OutputColorSpace = GetProfileColorSpace(hOut);\n        }\n\n       jpeg_copy_critical_parameters(&Decompressor, &Compressor);\n\n       WriteOutputFields(OutputColorSpace);\n\n       wOutput      = ComputeOutputFormatDescriptor(wInput, OutputColorSpace);\n\n\n       xform = cmsCreateProofingTransform(hIn, wInput,\n                                          hOut, wOutput,\n                                          hProof, Intent,\n                                          ProofingIntent, dwFlags);\n       if (xform == NULL)\n                 FatalError(\"Cannot transform by using the profiles\");\n\n       DoTransform(xform, OutputColorSpace);\n\n\n       jcopy_markers_execute(&Decompressor, &Compressor);\n\n       cmsDeleteTransform(xform);\n       cmsCloseProfile(hIn);\n       cmsCloseProfile(hOut);\n       if (hProof) cmsCloseProfile(hProof);\n\n       return 1;\n}",
+      "fn_code_pos": [
+        [
+          913,
+          0
+        ],
+        [
+          1046,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TransformImage",
+        "parameters": {
+          "cDefInpProf": "char",
+          "cOutputProf": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nvoid Help(int level)\n{\n\n    UTILS_UNUSED_PARAMETER(level);\n\n    fprintf(stderr, \"usage: jpgicc [flags] input.jpg output.jpg\\n\");\n\n    fprintf(stderr, \"\\nflags:\\n\\n\");\n    fprintf(stderr, \"-v - Verbose\\n\");\n    fprintf(stderr, \"-i<profile> - Input profile (defaults to sRGB)\\n\");\n    fprintf(stderr, \"-o<profile> - Output profile (defaults to sRGB)\\n\");\n\n    PrintBuiltins();\n\n    PrintRenderingIntents();\n\n\n    fprintf(stderr, \"-b - Black point compensation\\n\");\n    fprintf(stderr, \"-d<0..1> - Observer adaptation state (abs.col. only)\\n\");\n    fprintf(stderr, \"-n - Ignore embedded profile\\n\");\n    fprintf(stderr, \"-e - Embed destination profile\\n\");\n    fprintf(stderr, \"-s<new profile> - Save embedded profile as <new profile>\\n\");\n\n    fprintf(stderr, \"\\n\");\n\n    fprintf(stderr, \"-c<0,1,2,3> - Precalculates transform (0=Off, 1=Normal, 2=Hi-res, 3=LoRes) [defaults to 1]\\n\");\n    fprintf(stderr, \"\\n\");\n\n    fprintf(stderr, \"-p<profile> - Soft proof profile\\n\");\n    fprintf(stderr, \"-m<0,1,2,3> - SoftProof intent\\n\");\n    fprintf(stderr, \"-g - Marks out-of-gamut colors on softproof\\n\");\n    fprintf(stderr, \"-!<r>,<g>,<b> - Out-of-gamut marker channel values\\n\");\n\n    fprintf(stderr, \"\\n\");\n    fprintf(stderr, \"-q<0..100> - Output JPEG quality\\n\");\n\n    fprintf(stderr, \"Examples:\\n\\n\"\n        \"To color correct from scanner to sRGB:\\n\"\n        \"\\tjpgicc -iscanner.icm in.jpg out.jpg\\n\"\n        \"To convert from monitor1 to monitor2:\\n\"\n        \"\\tjpgicc -imon1.icm -omon2.icm in.jpg out.jpg\\n\"\n        \"To make a CMYK separation:\\n\"\n        \"\\tjpgicc -oprinter.icm inrgb.jpg outcmyk.jpg\\n\"\n        \"To recover sRGB from a CMYK separation:\\n\"\n        \"\\tjpgicc -iprinter.icm incmyk.jpg outrgb.jpg\\n\"\n        \"To convert from CIELab ITU/Fax JPEG to sRGB\\n\"\n        \"\\tjpgicc in.jpg out.jpg\\n\\n\");\n\n\n    fprintf(stderr, \"This program is intended to be a demo of the Little CMS\\n\"\n        \"color engine. Both lcms and this program are open source.\\n\"\n        \"You can obtain both in source code at https://www.littlecms.com\\n\"\n        \"For suggestions, comments, bug reports etc. send mail to\\n\"\n        \"info@littlecms.com\\n\\n\");\n\n    exit(0);\n}",
+      "fn_code_pos": [
+        [
+          1049,
+          0
+        ],
+        [
+          1106,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Help",
+        "parameters": {
+          "level": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid HandleSwitches(int argc, char *argv[])\n{\n    int s;\n\n    while ((s=xgetopt(argc,argv,\"bBnNvVGgh:H:i:I:o:O:P:p:t:T:c:C:Q:q:M:m:L:l:eEs:S:!:D:d:-:\")) != EOF) {\n\n        switch (s)\n        {\n\n        case '-':\n            if (strcmp(xoptarg, \"help\") == 0)\n            {\n                Help(0);\n            }\n            else\n            {\n                FatalError(\"Unknown option - run without args to see valid ones.\\n\");\n            }\n            break;\n\n        case 'b':\n        case 'B':\n            BlackPointCompensation = TRUE;\n            break;\n\n        case 'd':\n        case 'D': ObserverAdaptationState = atof(xoptarg);\n            if (ObserverAdaptationState < 0 ||\n                ObserverAdaptationState > 1.0)\n                FatalError(\"Adaptation state should be 0..1\");\n            break;\n\n        case 'v':\n        case 'V':\n            Verbose = TRUE;\n            break;\n\n        case 'i':\n        case 'I':\n            if (lIsDeviceLink)\n                FatalError(\"Device-link already specified\");\n\n            cInpProf = xoptarg;\n            break;\n\n        case 'o':\n        case 'O':\n            if (lIsDeviceLink)\n                FatalError(\"Device-link already specified\");\n\n            cOutProf = xoptarg;\n            break;\n\n        case 'l':\n        case 'L':\n            if (cInpProf != NULL || cOutProf != NULL)\n                FatalError(\"input/output profiles already specified\");\n\n            cInpProf = xoptarg;\n            lIsDeviceLink = TRUE;\n            break;\n\n        case 'p':\n        case 'P':\n            cProofing = xoptarg;\n            break;\n\n        case 't':\n        case 'T':\n            Intent = atoi(xoptarg);\n            break;\n\n        case 'N':\n        case 'n':\n            IgnoreEmbedded = TRUE;\n            break;\n\n        case 'e':\n        case 'E':\n            EmbedProfile = TRUE;\n            break;\n\n\n        case 'g':\n        case 'G':\n            GamutCheck = TRUE;\n            break;\n\n        case 'c':\n        case 'C':\n            PrecalcMode = atoi(xoptarg);\n            if (PrecalcMode < 0 || PrecalcMode > 2)\n                FatalError(\"Unknown precalc mode '%d'\", PrecalcMode);\n            break;\n\n        case 'H':\n        case 'h':  {\n\n            int a =  atoi(xoptarg);\n            Help(a);\n                   }\n            break;\n\n        case 'q':\n        case 'Q':\n            jpegQuality = atoi(xoptarg);\n            if (jpegQuality > 100) jpegQuality = 100;\n            if (jpegQuality < 0)   jpegQuality = 0;\n            break;\n\n        case 'm':\n        case 'M':\n            ProofingIntent = atoi(xoptarg);\n            break;\n\n        case 's':\n        case 'S': SaveEmbedded = xoptarg;\n            break;\n\n        case '!':\n            if (sscanf(xoptarg, \"%hu,%hu,%hu\", &Alarm[0], &Alarm[1], &Alarm[2]) == 3) {\n                int i;\n                for (i=0; i < 3; i++) {\n                    Alarm[i] = (Alarm[i] << 8) | Alarm[i];\n                }\n            }\n            break;\n\n        default:\n\n            FatalError(\"Unknown option - run without args to see valid ones\");\n        }\n\n    }\n}",
+      "fn_code_pos": [
+        [
+          1111,
+          0
+        ],
+        [
+          1246,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "HandleSwitches",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char* argv[])\n{\n\n    fprintf(stderr, \"Little CMS ICC profile applier for JPEG - v3.4 [LittleCMS %2.2f]\\n\\n\", cmsGetEncodedCMMversion() / 1000.0);\n    fprintf(stderr, \"Copyright (c) 1998-2023 Marti Maria Saguer. See COPYING file for details.\\n\");\n    fflush(stderr);\n\n    InitUtils(\"jpgicc\");\n\n    HandleSwitches(argc, argv);\n\n    if ((argc - xoptind) != 2) {\n        Help(0);\n    }\n\n    OpenInput(argv[xoptind]);\n    OpenOutput(argv[xoptind+1]);\n\n    TransformImage(cInpProf, cOutProf);\n\n\n    if (Verbose) { fprintf(stdout, \"\\n\"); fflush(stdout); }\n\n    Done();\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          1249,
+          0
+        ],
+        [
+          1275,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct my_error_mgr {\n\n    struct  jpeg_error_mgr pub;   // \"public\" fields\n    void*   Cargo;                // \"private\" fields\n\n}",
+      {
+        "pub": "struct  jpeg_error_mgr",
+        "*   Cargo": "void"
+      },
+      "my_error_mgr",
+      [
+        64,
+        7
+      ],
+      [
+        69,
+        1
+      ]
+    ],
+    [
+      "struct jpeg_decompress_struct",
+      {},
+      "",
+      [
+        60,
+        7
+      ],
+      [
+        60,
+        36
+      ]
+    ],
+    [
+      "struct jpeg_compress_struct",
+      {},
+      "",
+      [
+        61,
+        7
+      ],
+      [
+        61,
+        34
+      ]
+    ],
+    [
+      "struct my_error_mgr {\n\n    struct  jpeg_error_mgr pub;   // \"public\" fields\n    void*   Cargo;                // \"private\" fields\n\n}",
+      {
+        "pub": "struct  jpeg_error_mgr",
+        "*   Cargo": "void"
+      },
+      "my_error_mgr",
+      [
+        64,
+        7
+      ],
+      [
+        69,
+        1
+      ]
+    ],
+    [
+      "struct  jpeg_error_mgr",
+      {},
+      "",
+      [
+        66,
+        4
+      ],
+      [
+        66,
+        26
+      ]
+    ],
+    [
+      "struct jpeg_decompress_struct",
+      {},
+      "",
+      [
+        456,
+        19
+      ],
+      [
+        456,
+        48
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"utils.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"jpeglib.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include \"iccjpeg.h\"\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

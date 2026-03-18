@@ -1,0 +1,940 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nvoid DupPluginIntentsList(struct _cmsContext_struct* ctx, \n                                               const struct _cmsContext_struct* src)\n{\n   _cmsIntentsPluginChunkType newHead = { NULL };\n   cmsIntentsList*  entry;\n   cmsIntentsList*  Anterior = NULL;\n   _cmsIntentsPluginChunkType* head = (_cmsIntentsPluginChunkType*) src->chunks[IntentPlugin];\n\n    // Walk the list copying all nodes\n   for (entry = head->Intents;\n        entry != NULL;\n        entry = entry ->Next) {\n\n            cmsIntentsList *newEntry = ( cmsIntentsList *) _cmsSubAllocDup(ctx ->MemPool, entry, sizeof(cmsIntentsList));\n   \n            if (newEntry == NULL) \n                return;\n\n            // We want to keep the linked list order, so this is a little bit tricky\n            newEntry -> Next = NULL;\n            if (Anterior)\n                Anterior -> Next = newEntry;\n     \n            Anterior = newEntry;\n\n            if (newHead.Intents == NULL)\n                newHead.Intents = newEntry;\n    }\n\n  ctx ->chunks[IntentPlugin] = _cmsSubAllocDup(ctx->MemPool, &newHead, sizeof(_cmsIntentsPluginChunkType));\n}",
+      "fn_code_pos": [
+        [
+          100,
+          0
+        ],
+        [
+          131,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DupPluginIntentsList",
+        "parameters": {
+          "ctx": "struct _cmsContext_struct",
+          "src": "struct _cmsContext_struct"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void  _cmsAllocIntentsPluginChunk(struct _cmsContext_struct* ctx, \n                                         const struct _cmsContext_struct* src)\n{\n    if (src != NULL) {\n\n        // Copy all linked list\n        DupPluginIntentsList(ctx, src);\n    }\n    else {\n        static _cmsIntentsPluginChunkType IntentsPluginChunkType = { NULL };\n        ctx ->chunks[IntentPlugin] = _cmsSubAllocDup(ctx ->MemPool, &IntentsPluginChunkType, sizeof(_cmsIntentsPluginChunkType));\n    }\n}",
+      "fn_code_pos": [
+        [
+          133,
+          0
+        ],
+        [
+          145,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsAllocIntentsPluginChunk",
+        "parameters": {
+          "ctx": "struct _cmsContext_struct",
+          "src": "struct _cmsContext_struct"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsIntentsList* SearchIntent(cmsContext ContextID, cmsUInt32Number Intent)\n{\n    _cmsIntentsPluginChunkType* ctx = ( _cmsIntentsPluginChunkType*) _cmsContextGetClientChunk(ContextID, IntentPlugin);\n    cmsIntentsList* pt;\n\n    for (pt = ctx -> Intents; pt != NULL; pt = pt -> Next)\n        if (pt ->Intent == Intent) return pt;\n\n    for (pt = DefaultIntents; pt != NULL; pt = pt -> Next)\n        if (pt ->Intent == Intent) return pt;\n\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          149,
+          0
+        ],
+        [
+          162,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SearchIntent",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Intent": "cmsUInt32Number"
+        },
+        "return_type": "cmsIntentsList"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ComputeBlackPointCompensation(const cmsCIEXYZ* BlackPointIn,\n                                   const cmsCIEXYZ* BlackPointOut,\n                                   cmsMAT3* m, cmsVEC3* off)\n{\n  cmsFloat64Number ax, ay, az, bx, by, bz, tx, ty, tz;\n\n   // Now we need to compute a matrix plus an offset m and of such of\n   // [m]*bpin + off = bpout\n   // [m]*D50  + off = D50\n   //\n   // This is a linear scaling in the form ax+b, where\n   // a = (bpout - D50) / (bpin - D50)\n   // b = - D50* (bpout - bpin) / (bpin - D50)\n\n   tx = BlackPointIn->X - cmsD50_XYZ()->X;\n   ty = BlackPointIn->Y - cmsD50_XYZ()->Y;\n   tz = BlackPointIn->Z - cmsD50_XYZ()->Z;\n\n   ax = (BlackPointOut->X - cmsD50_XYZ()->X) / tx;\n   ay = (BlackPointOut->Y - cmsD50_XYZ()->Y) / ty;\n   az = (BlackPointOut->Z - cmsD50_XYZ()->Z) / tz;\n\n   bx = - cmsD50_XYZ()-> X * (BlackPointOut->X - BlackPointIn->X) / tx;\n   by = - cmsD50_XYZ()-> Y * (BlackPointOut->Y - BlackPointIn->Y) / ty;\n   bz = - cmsD50_XYZ()-> Z * (BlackPointOut->Z - BlackPointIn->Z) / tz;\n\n   _cmsVEC3init(&m ->v[0], ax, 0,  0);\n   _cmsVEC3init(&m ->v[1], 0, ay,  0);\n   _cmsVEC3init(&m ->v[2], 0,  0,  az);\n   _cmsVEC3init(off, bx, by, bz);\n\n}",
+      "fn_code_pos": [
+        [
+          167,
+          0
+        ],
+        [
+          199,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComputeBlackPointCompensation",
+        "parameters": {
+          "BlackPointIn": "cmsCIEXYZ",
+          "BlackPointOut": "cmsCIEXYZ",
+          "m": "cmsMAT3",
+          "off": "cmsVEC3"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsFloat64Number CHAD2Temp(const cmsMAT3* Chad)\n{\n    // Convert D50 across inverse CHAD to get the absolute white point\n    cmsVEC3 d, s;\n    cmsCIEXYZ Dest;\n    cmsCIExyY DestChromaticity;\n    cmsFloat64Number TempK;\n    cmsMAT3 m1, m2;\n\n    m1 = *Chad;\n    if (!_cmsMAT3inverse(&m1, &m2)) return FALSE;\n\n    s.n[VX] = cmsD50_XYZ() -> X;\n    s.n[VY] = cmsD50_XYZ() -> Y;\n    s.n[VZ] = cmsD50_XYZ() -> Z;\n\n    _cmsMAT3eval(&d, &m2, &s);\n\n    Dest.X = d.n[VX];\n    Dest.Y = d.n[VY];\n    Dest.Z = d.n[VZ];\n\n    cmsXYZ2xyY(&DestChromaticity, &Dest);\n\n    if (!cmsTempFromWhitePoint(&TempK, &DestChromaticity))\n        return -1.0;\n\n    return TempK;\n}",
+      "fn_code_pos": [
+        [
+          203,
+          0
+        ],
+        [
+          232,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CHAD2Temp",
+        "parameters": {
+          "Chad": "cmsMAT3"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid Temp2CHAD(cmsMAT3* Chad, cmsFloat64Number Temp)\n{\n    cmsCIEXYZ White;\n    cmsCIExyY ChromaticityOfWhite;\n\n    cmsWhitePointFromTemp(&ChromaticityOfWhite, Temp);\n    cmsxyY2XYZ(&White, &ChromaticityOfWhite);\n    _cmsAdaptationMatrix(Chad, NULL, &White, cmsD50_XYZ());\n}",
+      "fn_code_pos": [
+        [
+          235,
+          0
+        ],
+        [
+          244,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Temp2CHAD",
+        "parameters": {
+          "Chad": "cmsMAT3",
+          "Temp": "cmsFloat64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool  ComputeAbsoluteIntent(cmsFloat64Number AdaptationState,\n                               const cmsCIEXYZ* WhitePointIn,\n                               const cmsMAT3* ChromaticAdaptationMatrixIn,\n                               const cmsCIEXYZ* WhitePointOut,\n                               const cmsMAT3* ChromaticAdaptationMatrixOut,\n                               cmsMAT3* m)\n{\n    cmsMAT3 Scale, m1, m2, m3, m4;\n\n    // TODO: Follow Marc Mahy's recommendation to check if CHAD is same by using M1*M2 == M2*M1. If so, do nothing.\n    // TODO: Add support for ArgyllArts tag\n\n    // Adaptation state\n    if (AdaptationState == 1.0) {\n\n        // Observer is fully adapted. Keep chromatic adaptation.\n        // That is the standard V4 behaviour\n        _cmsVEC3init(&m->v[0], WhitePointIn->X / WhitePointOut->X, 0, 0);\n        _cmsVEC3init(&m->v[1], 0, WhitePointIn->Y / WhitePointOut->Y, 0);\n        _cmsVEC3init(&m->v[2], 0, 0, WhitePointIn->Z / WhitePointOut->Z);\n\n    }\n    else  {\n\n        // Incomplete adaptation. This is an advanced feature.\n        _cmsVEC3init(&Scale.v[0], WhitePointIn->X / WhitePointOut->X, 0, 0);\n        _cmsVEC3init(&Scale.v[1], 0,  WhitePointIn->Y / WhitePointOut->Y, 0);\n        _cmsVEC3init(&Scale.v[2], 0, 0,  WhitePointIn->Z / WhitePointOut->Z);\n\n\n        if (AdaptationState == 0.0) {\n        \n            m1 = *ChromaticAdaptationMatrixOut;\n            _cmsMAT3per(&m2, &m1, &Scale);\n            // m2 holds CHAD from output white to D50 times abs. col. scaling\n\n            // Observer is not adapted, undo the chromatic adaptation\n            _cmsMAT3per(m, &m2, ChromaticAdaptationMatrixOut);\n\n            m3 = *ChromaticAdaptationMatrixIn;\n            if (!_cmsMAT3inverse(&m3, &m4)) return FALSE;\n            _cmsMAT3per(m, &m2, &m4);\n\n        } else {\n\n            cmsMAT3 MixedCHAD;\n            cmsFloat64Number TempSrc, TempDest, Temp;\n\n            m1 = *ChromaticAdaptationMatrixIn;\n            if (!_cmsMAT3inverse(&m1, &m2)) return FALSE;\n            _cmsMAT3per(&m3, &m2, &Scale);\n            // m3 holds CHAD from input white to D50 times abs. col. scaling\n\n            TempSrc  = CHAD2Temp(ChromaticAdaptationMatrixIn);\n            TempDest = CHAD2Temp(ChromaticAdaptationMatrixOut);\n\n            if (TempSrc < 0.0 || TempDest < 0.0) return FALSE; // Something went wrong\n\n            if (_cmsMAT3isIdentity(&Scale) && fabs(TempSrc - TempDest) < 0.01) {\n\n                _cmsMAT3identity(m);\n                return TRUE;\n            }\n\n            Temp = (1.0 - AdaptationState) * TempDest + AdaptationState * TempSrc;\n\n            // Get a CHAD from whatever output temperature to D50. This replaces output CHAD\n            Temp2CHAD(&MixedCHAD, Temp);\n\n            _cmsMAT3per(m, &m3, &MixedCHAD);\n        }\n\n    }\n    return TRUE;\n\n}",
+      "fn_code_pos": [
+        [
+          248,
+          0
+        ],
+        [
+          324,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComputeAbsoluteIntent",
+        "parameters": {
+          "AdaptationState": "cmsFloat64Number",
+          "WhitePointIn": "cmsCIEXYZ",
+          "ChromaticAdaptationMatrixIn": "cmsMAT3",
+          "WhitePointOut": "cmsCIEXYZ",
+          "ChromaticAdaptationMatrixOut": "cmsMAT3",
+          "m": "cmsMAT3"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool IsEmptyLayer(cmsMAT3* m, cmsVEC3* off)\n{\n    cmsFloat64Number diff = 0;\n    cmsMAT3 Ident;\n    int i;\n\n    if (m == NULL && off == NULL) return TRUE;  // NULL is allowed as an empty layer\n    if (m == NULL && off != NULL) return FALSE; // This is an internal error\n\n    _cmsMAT3identity(&Ident);\n\n    for (i=0; i < 3*3; i++)\n        diff += fabs(((cmsFloat64Number*)m)[i] - ((cmsFloat64Number*)&Ident)[i]);\n\n    for (i=0; i < 3; i++)\n        diff += fabs(((cmsFloat64Number*)off)[i]);\n\n\n    return (diff < 0.002);\n}",
+      "fn_code_pos": [
+        [
+          327,
+          0
+        ],
+        [
+          347,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "IsEmptyLayer",
+        "parameters": {
+          "m": "cmsMAT3",
+          "off": "cmsVEC3"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool ComputeConversion(cmsUInt32Number i, \n                          cmsHPROFILE hProfiles[],\n                          cmsUInt32Number Intent,\n                          cmsBool BPC,\n                          cmsFloat64Number AdaptationState,\n                          cmsMAT3* m, cmsVEC3* off)\n{\n\n    int k;\n\n    // m  and off are set to identity and this is detected latter on\n    _cmsMAT3identity(m);\n    _cmsVEC3init(off, 0, 0, 0);\n\n    // If intent is abs. colorimetric,\n    if (Intent == INTENT_ABSOLUTE_COLORIMETRIC) {\n\n        cmsCIEXYZ WhitePointIn, WhitePointOut;\n        cmsMAT3 ChromaticAdaptationMatrixIn, ChromaticAdaptationMatrixOut;\n\n        if (!_cmsReadMediaWhitePoint(&WhitePointIn, hProfiles[i - 1])) return FALSE;\n        if (!_cmsReadCHAD(&ChromaticAdaptationMatrixIn, hProfiles[i - 1])) return FALSE;\n\n        if (!_cmsReadMediaWhitePoint(&WhitePointOut, hProfiles[i])) return FALSE;\n        if (!_cmsReadCHAD(&ChromaticAdaptationMatrixOut, hProfiles[i])) return FALSE;\n\n        if (!ComputeAbsoluteIntent(AdaptationState,\n                                  &WhitePointIn,  &ChromaticAdaptationMatrixIn,\n                                  &WhitePointOut, &ChromaticAdaptationMatrixOut, m)) return FALSE;\n\n    }\n    else {\n        // Rest of intents may apply BPC.\n\n        if (BPC) {\n\n            cmsCIEXYZ BlackPointIn = { 0, 0, 0}, BlackPointOut = { 0, 0, 0 };\n\n            cmsDetectBlackPoint(&BlackPointIn,  hProfiles[i-1], Intent, 0);\n            cmsDetectDestinationBlackPoint(&BlackPointOut, hProfiles[i], Intent, 0);\n\n            // If black points are equal, then do nothing\n            if (BlackPointIn.X != BlackPointOut.X ||\n                BlackPointIn.Y != BlackPointOut.Y ||\n                BlackPointIn.Z != BlackPointOut.Z)\n                    ComputeBlackPointCompensation(&BlackPointIn, &BlackPointOut, m, off);\n        }\n    }\n\n    // Offset should be adjusted because the encoding. We encode XYZ normalized to 0..1.0,\n    // to do that, we divide by MAX_ENCODEABLE_XZY. The conversion stage goes XYZ -> XYZ so\n    // we have first to convert from encoded to XYZ and then convert back to encoded.\n    // y = Mx + Off\n    // x = x'c\n    // y = M x'c + Off\n    // y = y'c; y' = y / c\n    // y' = (Mx'c + Off) /c = Mx' + (Off / c)\n\n    for (k=0; k < 3; k++) {\n        off ->n[k] /= MAX_ENCODEABLE_XYZ;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          351,
+          0
+        ],
+        [
+          415,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComputeConversion",
+        "parameters": {
+          "i": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "Intent": "cmsUInt32Number",
+          "BPC": "cmsBool",
+          "AdaptationState": "cmsFloat64Number",
+          "m": "cmsMAT3",
+          "off": "cmsVEC3"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool AddConversion(cmsPipeline* Result, cmsColorSpaceSignature InPCS, cmsColorSpaceSignature OutPCS, cmsMAT3* m, cmsVEC3* off)\n{\n    cmsFloat64Number* m_as_dbl = (cmsFloat64Number*) m;\n    cmsFloat64Number* off_as_dbl = (cmsFloat64Number*) off;\n\n    // Handle PCS mismatches. A specialized stage is added to the LUT in such case\n    switch (InPCS) {\n\n    case cmsSigXYZData: // Input profile operates in XYZ\n\n        switch (OutPCS) {\n\n        case cmsSigXYZData:  // XYZ -> XYZ\n            if (!IsEmptyLayer(m, off) &&\n                !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result ->ContextID, 3, 3, m_as_dbl, off_as_dbl)))\n                return FALSE;\n            break;\n\n        case cmsSigLabData:  // XYZ -> Lab\n            if (!IsEmptyLayer(m, off) &&\n                !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result ->ContextID, 3, 3, m_as_dbl, off_as_dbl)))\n                return FALSE;\n            if (!cmsPipelineInsertStage(Result, cmsAT_END, _cmsStageAllocXYZ2Lab(Result ->ContextID)))\n                return FALSE;\n            break;\n\n        default:\n            return FALSE;   // Colorspace mismatch\n        }\n        break;\n\n    case cmsSigLabData: // Input profile operates in Lab\n\n        switch (OutPCS) {\n\n        case cmsSigXYZData:  // Lab -> XYZ\n\n            if (!cmsPipelineInsertStage(Result, cmsAT_END, _cmsStageAllocLab2XYZ(Result ->ContextID)))\n                return FALSE;\n            if (!IsEmptyLayer(m, off) &&\n                !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result ->ContextID, 3, 3, m_as_dbl, off_as_dbl)))\n                return FALSE;\n            break;\n\n        case cmsSigLabData:  // Lab -> Lab\n\n            if (!IsEmptyLayer(m, off)) {\n                if (!cmsPipelineInsertStage(Result, cmsAT_END, _cmsStageAllocLab2XYZ(Result ->ContextID)) ||\n                    !cmsPipelineInsertStage(Result, cmsAT_END, cmsStageAllocMatrix(Result ->ContextID, 3, 3, m_as_dbl, off_as_dbl)) ||\n                    !cmsPipelineInsertStage(Result, cmsAT_END, _cmsStageAllocXYZ2Lab(Result ->ContextID)))\n                    return FALSE;\n            }\n            break;\n\n        default:\n            return FALSE;  // Mismatch\n        }\n        break;\n\n        // On colorspaces other than PCS, check for same space\n    default:\n        if (InPCS != OutPCS) return FALSE;\n        break;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          419,
+          0
+        ],
+        [
+          486,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AddConversion",
+        "parameters": {
+          "Result": "cmsPipeline",
+          "InPCS": "cmsColorSpaceSignature",
+          "OutPCS": "cmsColorSpaceSignature",
+          "m": "cmsMAT3",
+          "off": "cmsVEC3"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool ColorSpaceIsCompatible(cmsColorSpaceSignature a, cmsColorSpaceSignature b)\n{\n    // If they are same, they are compatible.\n    if (a == b) return TRUE;\n\n    // Check for MCH4 substitution of CMYK\n    if ((a == cmsSig4colorData) && (b == cmsSigCmykData)) return TRUE;\n    if ((a == cmsSigCmykData) && (b == cmsSig4colorData)) return TRUE;\n\n    // Check for XYZ/Lab. Those spaces are interchangeable as they can be computed one from other.\n    if ((a == cmsSigXYZData) && (b == cmsSigLabData)) return TRUE;\n    if ((a == cmsSigLabData) && (b == cmsSigXYZData)) return TRUE;\n\n    return FALSE;\n}",
+      "fn_code_pos": [
+        [
+          490,
+          0
+        ],
+        [
+          505,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ColorSpaceIsCompatible",
+        "parameters": {
+          "a": "cmsColorSpaceSignature",
+          "b": "cmsColorSpaceSignature"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsPipeline* DefaultICCintents(cmsContext       ContextID,\n                               cmsUInt32Number  nProfiles,\n                               cmsUInt32Number  TheIntents[],\n                               cmsHPROFILE      hProfiles[],\n                               cmsBool          BPC[],\n                               cmsFloat64Number AdaptationStates[],\n                               cmsUInt32Number  dwFlags)\n{\n    cmsPipeline* Lut = NULL;\n    cmsPipeline* Result;\n    cmsHPROFILE hProfile;\n    cmsMAT3 m;\n    cmsVEC3 off;\n    cmsColorSpaceSignature ColorSpaceIn, ColorSpaceOut = cmsSigLabData, CurrentColorSpace;\n    cmsProfileClassSignature ClassSig;\n    cmsUInt32Number  i, Intent;\n\n    // For safety\n    if (nProfiles == 0) return NULL;\n\n    // Allocate an empty LUT for holding the result. 0 as channel count means 'undefined'\n    Result = cmsPipelineAlloc(ContextID, 0, 0);\n    if (Result == NULL) return NULL;\n\n    CurrentColorSpace = cmsGetColorSpace(hProfiles[0]);\n\n    for (i=0; i < nProfiles; i++) {\n\n        cmsBool  lIsDeviceLink, lIsInput;\n\n        hProfile      = hProfiles[i];\n        ClassSig      = cmsGetDeviceClass(hProfile);\n        lIsDeviceLink = (ClassSig == cmsSigLinkClass || ClassSig == cmsSigAbstractClass );\n\n        // First profile is used as input unless devicelink or abstract\n        if ((i == 0) && !lIsDeviceLink) {\n            lIsInput = TRUE;\n        }\n        else {\n          // Else use profile in the input direction if current space is not PCS\n        lIsInput      = (CurrentColorSpace != cmsSigXYZData) &&\n                        (CurrentColorSpace != cmsSigLabData);\n        }\n\n        Intent        = TheIntents[i];\n\n        if (lIsInput || lIsDeviceLink) {\n\n            ColorSpaceIn    = cmsGetColorSpace(hProfile);\n            ColorSpaceOut   = cmsGetPCS(hProfile);\n        }\n        else {\n\n            ColorSpaceIn    = cmsGetPCS(hProfile);\n            ColorSpaceOut   = cmsGetColorSpace(hProfile);\n        }\n\n        if (!ColorSpaceIsCompatible(ColorSpaceIn, CurrentColorSpace)) {\n\n            cmsSignalError(ContextID, cmsERROR_COLORSPACE_CHECK, \"ColorSpace mismatch\");\n            goto Error;\n        }\n\n        // If devicelink is found, then no custom intent is allowed and we can\n        // read the LUT to be applied. Settings don't apply here.\n        if (lIsDeviceLink || ((ClassSig == cmsSigNamedColorClass) && (nProfiles == 1))) {\n\n            // Get the involved LUT from the profile\n            Lut = _cmsReadDevicelinkLUT(hProfile, Intent);\n            if (Lut == NULL) goto Error;\n\n            // What about abstract profiles?\n             if (ClassSig == cmsSigAbstractClass && i > 0) {\n                if (!ComputeConversion(i, hProfiles, Intent, BPC[i], AdaptationStates[i], &m, &off)) goto Error;\n             }\n             else {\n                _cmsMAT3identity(&m);\n                _cmsVEC3init(&off, 0, 0, 0);\n             }\n\n\n            if (!AddConversion(Result, CurrentColorSpace, ColorSpaceIn, &m, &off)) goto Error;\n\n        }\n        else {\n\n            if (lIsInput) {\n                // Input direction means non-pcs connection, so proceed like devicelinks\n                Lut = _cmsReadInputLUT(hProfile, Intent);\n                if (Lut == NULL) goto Error;\n            }\n            else {\n\n                // Output direction means PCS connection. Intent may apply here\n                Lut = _cmsReadOutputLUT(hProfile, Intent);\n                if (Lut == NULL) goto Error;\n\n\n                if (!ComputeConversion(i, hProfiles, Intent, BPC[i], AdaptationStates[i], &m, &off)) goto Error;\n                if (!AddConversion(Result, CurrentColorSpace, ColorSpaceIn, &m, &off)) goto Error;\n\n            }\n        }\n\n        // Concatenate to the output LUT\n        if (!cmsPipelineCat(Result, Lut))\n            goto Error;\n\n        cmsPipelineFree(Lut);\n        Lut = NULL;\n\n        // Update current space\n        CurrentColorSpace = ColorSpaceOut;\n    }\n\n    // Check for non-negatives clip\n    if (dwFlags & cmsFLAGS_NONEGATIVES) {\n\n           if (ColorSpaceOut == cmsSigGrayData ||\n                  ColorSpaceOut == cmsSigRgbData ||\n                  ColorSpaceOut == cmsSigCmykData) {\n\n                  cmsStage* clip = _cmsStageClipNegatives(Result->ContextID, cmsChannelsOfColorSpace(ColorSpaceOut));\n                  if (clip == NULL) goto Error;\n\n                  if (!cmsPipelineInsertStage(Result, cmsAT_END, clip))\n                         goto Error;\n           }\n\n    }\n\n    return Result;\n\nError:\n\n    if (Lut != NULL) cmsPipelineFree(Lut);\n    if (Result != NULL) cmsPipelineFree(Result);\n    return NULL;\n\n    cmsUNUSED_PARAMETER(dwFlags);\n}",
+      "fn_code_pos": [
+        [
+          509,
+          0
+        ],
+        [
+          650,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DefaultICCintents",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "TheIntents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number TranslateNonICCIntents(cmsUInt32Number Intent)\n{\n    switch (Intent) {\n        case INTENT_PRESERVE_K_ONLY_PERCEPTUAL:\n        case INTENT_PRESERVE_K_PLANE_PERCEPTUAL:\n            return INTENT_PERCEPTUAL;\n\n        case INTENT_PRESERVE_K_ONLY_RELATIVE_COLORIMETRIC:\n        case INTENT_PRESERVE_K_PLANE_RELATIVE_COLORIMETRIC:\n            return INTENT_RELATIVE_COLORIMETRIC;\n\n        case INTENT_PRESERVE_K_ONLY_SATURATION:\n        case INTENT_PRESERVE_K_PLANE_SATURATION:\n            return INTENT_SATURATION;\n\n        default: return Intent;\n    }\n}",
+      "fn_code_pos": [
+        [
+          668,
+          0
+        ],
+        [
+          686,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TranslateNonICCIntents",
+        "parameters": {
+          "Intent": "cmsUInt32Number"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nint BlackPreservingGrayOnlySampler(CMSREGISTER const cmsUInt16Number In[], CMSREGISTER cmsUInt16Number Out[], CMSREGISTER void* Cargo)\n{\n    GrayOnlyParams* bp = (GrayOnlyParams*) Cargo;\n\n    // If going across black only, keep black only\n    if (In[0] == 0 && In[1] == 0 && In[2] == 0) {\n\n        // TAC does not apply because it is black ink!\n        Out[0] = Out[1] = Out[2] = 0;\n        Out[3] = cmsEvalToneCurve16(bp->KTone, In[3]);\n        return TRUE;\n    }\n\n    // Keep normal transform for other colors\n    bp ->cmyk2cmyk ->Eval16Fn(In, Out, bp ->cmyk2cmyk->Data);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          698,
+          0
+        ],
+        [
+          715,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BlackPreservingGrayOnlySampler",
+        "parameters": {
+          "In": "CMSREGISTER",
+          "Out": "CMSREGISTER",
+          "void": "CMSREGISTER"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\ncmsPipeline*  BlackPreservingKOnlyIntents(cmsContext     ContextID,\n                                          cmsUInt32Number nProfiles,\n                                          cmsUInt32Number TheIntents[],\n                                          cmsHPROFILE     hProfiles[],\n                                          cmsBool         BPC[],\n                                          cmsFloat64Number AdaptationStates[],\n                                          cmsUInt32Number dwFlags)\n{\n    GrayOnlyParams  bp;\n    cmsPipeline*    Result;\n    cmsUInt32Number ICCIntents[256];\n    cmsStage*         CLUT;\n    cmsUInt32Number i, nGridPoints;\n    cmsUInt32Number lastProfilePos;\n    cmsUInt32Number preservationProfilesCount;\n    cmsHPROFILE hLastProfile;\n\n\n    // Sanity check\n    if (nProfiles < 1 || nProfiles > 255) return NULL;\n\n    // Translate black-preserving intents to ICC ones\n    for (i=0; i < nProfiles; i++)\n        ICCIntents[i] = TranslateNonICCIntents(TheIntents[i]);\n\n\n    // Trim all CMYK devicelinks at the end  \n    lastProfilePos = nProfiles - 1;\n    hLastProfile = hProfiles[lastProfilePos];\n\n    while (lastProfilePos > 1)\n    {\n        hLastProfile = hProfiles[--lastProfilePos];\n        if (cmsGetColorSpace(hLastProfile) != cmsSigCmykData ||\n            cmsGetDeviceClass(hLastProfile) != cmsSigLinkClass)\n            break;\n    }\n\n    preservationProfilesCount = lastProfilePos + 1;\n\n    // Check for non-cmyk profiles\n    if (cmsGetColorSpace(hProfiles[0]) != cmsSigCmykData ||\n        !(cmsGetColorSpace(hLastProfile) == cmsSigCmykData ||\n        cmsGetDeviceClass(hLastProfile) == cmsSigOutputClass))\n           return DefaultICCintents(ContextID, nProfiles, ICCIntents, hProfiles, BPC, AdaptationStates, dwFlags);\n\n    // Allocate an empty LUT for holding the result\n    Result = cmsPipelineAlloc(ContextID, 4, 4);\n    if (Result == NULL) return NULL;\n\n    memset(&bp, 0, sizeof(bp));\n\n    // Create a LUT holding normal ICC transform\n    bp.cmyk2cmyk = DefaultICCintents(ContextID,\n                                     preservationProfilesCount,\n        ICCIntents,\n        hProfiles,\n        BPC,\n        AdaptationStates,\n        dwFlags);\n\n    if (bp.cmyk2cmyk == NULL) goto Error;\n\n    // Now, compute the tone curve\n    bp.KTone = _cmsBuildKToneCurve(ContextID,\n        4096,\n                                    preservationProfilesCount,\n        ICCIntents,\n        hProfiles,\n        BPC,\n        AdaptationStates,\n        dwFlags);\n\n    if (bp.KTone == NULL) goto Error;\n\n\n    // How many gridpoints are we going to use?\n    nGridPoints = _cmsReasonableGridpointsByColorspace(cmsSigCmykData, dwFlags);\n\n    // Create the CLUT. 16 bits\n    CLUT = cmsStageAllocCLut16bit(ContextID, nGridPoints, 4, 4, NULL);\n    if (CLUT == NULL) goto Error;\n\n    // This is the one and only MPE in this LUT\n    if (!cmsPipelineInsertStage(Result, cmsAT_BEGIN, CLUT))\n        goto Error;\n\n    // Sample it. We cannot afford pre/post linearization this time.\n    if (!cmsStageSampleCLut16bit(CLUT, BlackPreservingGrayOnlySampler, (void*) &bp, 0))\n        goto Error;\n\n    \n    // Insert possible devicelinks at the end\n    for (i = lastProfilePos + 1; i < nProfiles; i++)\n    {\n        cmsPipeline* devlink = _cmsReadDevicelinkLUT(hProfiles[i], ICCIntents[i]);\n        if (devlink == NULL)\n            goto Error;\n\n        if (!cmsPipelineCat(Result, devlink))\n            goto Error;\n    }\n\n\n    // Get rid of xform and tone curve\n    cmsPipelineFree(bp.cmyk2cmyk);\n    cmsFreeToneCurve(bp.KTone);\n\n    return Result;\n\nError:\n\n    if (bp.cmyk2cmyk != NULL) cmsPipelineFree(bp.cmyk2cmyk);\n    if (bp.KTone != NULL)  cmsFreeToneCurve(bp.KTone);\n    if (Result != NULL) cmsPipelineFree(Result);\n    return NULL;\n\n}",
+      "fn_code_pos": [
+        [
+          718,
+          0
+        ],
+        [
+          836,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BlackPreservingKOnlyIntents",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "TheIntents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "static\nint BlackPreservingSampler(CMSREGISTER const cmsUInt16Number In[], CMSREGISTER cmsUInt16Number Out[], CMSREGISTER void* Cargo)\n{\n    int i;\n    cmsFloat32Number Inf[4], Outf[4];\n    cmsFloat32Number LabK[4];\n    cmsFloat64Number SumCMY, SumCMYK, Error, Ratio;\n    cmsCIELab ColorimetricLab, BlackPreservingLab;\n    PreserveKPlaneParams* bp = (PreserveKPlaneParams*) Cargo;\n\n    // Convert from 16 bits to floating point\n    for (i=0; i < 4; i++)\n        Inf[i] = (cmsFloat32Number) (In[i] / 65535.0);\n\n    // Get the K across Tone curve\n    LabK[3] = cmsEvalToneCurveFloat(bp ->KTone, Inf[3]);\n\n    // If going across black only, keep black only\n    if (In[0] == 0 && In[1] == 0 && In[2] == 0) {\n\n        Out[0] = Out[1] = Out[2] = 0;\n        Out[3] = _cmsQuickSaturateWord(LabK[3] * 65535.0);\n        return TRUE;\n    }\n\n    // Try the original transform,\n    cmsPipelineEvalFloat(Inf, Outf, bp ->cmyk2cmyk);\n\n    // Store a copy of the floating point result into 16-bit\n    for (i=0; i < 4; i++)\n            Out[i] = _cmsQuickSaturateWord(Outf[i] * 65535.0);\n\n    // Maybe K is already ok (mostly on K=0)\n    if (fabsf(Outf[3] - LabK[3]) < (3.0 / 65535.0)) {\n        return TRUE;\n    }\n\n    // K differ, measure and keep Lab measurement for further usage\n    // this is done in relative colorimetric intent\n    cmsDoTransform(bp->hProofOutput, Out, &ColorimetricLab, 1);\n\n    // Is not black only and the transform doesn't keep black.\n    // Obtain the Lab of output CMYK. After that we have Lab + K\n    cmsDoTransform(bp ->cmyk2Lab, Outf, LabK, 1);\n\n    // Obtain the corresponding CMY using reverse interpolation\n    // (K is fixed in LabK[3])\n    if (!cmsPipelineEvalReverseFloat(LabK, Outf, Outf, bp ->LabK2cmyk)) {\n\n        // Cannot find a suitable value, so use colorimetric xform\n        // which is already stored in Out[]\n        return TRUE;\n    }\n\n    // Make sure to pass through K (which now is fixed)\n    Outf[3] = LabK[3];\n\n    // Apply TAC if needed\n    SumCMY   = (cmsFloat64Number) Outf[0]  + Outf[1] + Outf[2];\n    SumCMYK  = SumCMY + Outf[3];\n\n    if (SumCMYK > bp ->MaxTAC) {\n\n        Ratio = 1 - ((SumCMYK - bp->MaxTAC) / SumCMY);\n        if (Ratio < 0)\n            Ratio = 0;\n    }\n    else\n       Ratio = 1.0;\n\n    Out[0] = _cmsQuickSaturateWord(Outf[0] * Ratio * 65535.0);     // C\n    Out[1] = _cmsQuickSaturateWord(Outf[1] * Ratio * 65535.0);     // M\n    Out[2] = _cmsQuickSaturateWord(Outf[2] * Ratio * 65535.0);     // Y\n    Out[3] = _cmsQuickSaturateWord(Outf[3] * 65535.0);\n\n    // Estimate the error (this goes 16 bits to Lab DBL)\n    cmsDoTransform(bp->hProofOutput, Out, &BlackPreservingLab, 1);\n    Error = cmsDeltaE(&ColorimetricLab, &BlackPreservingLab);\n    if (Error > bp -> MaxError)\n        bp->MaxError = Error;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          857,
+          0
+        ],
+        [
+          939,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BlackPreservingSampler",
+        "parameters": {
+          "In": "CMSREGISTER",
+          "Out": "CMSREGISTER",
+          "void": "CMSREGISTER"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\ncmsPipeline* BlackPreservingKPlaneIntents(cmsContext     ContextID,\n                                          cmsUInt32Number nProfiles,\n                                          cmsUInt32Number TheIntents[],\n                                          cmsHPROFILE     hProfiles[],\n                                          cmsBool         BPC[],\n                                          cmsFloat64Number AdaptationStates[],\n                                          cmsUInt32Number dwFlags)\n{\n    PreserveKPlaneParams bp;\n\n    cmsPipeline*    Result = NULL;\n    cmsUInt32Number ICCIntents[256];\n    cmsStage*         CLUT;\n    cmsUInt32Number i, nGridPoints;\n    cmsUInt32Number lastProfilePos;\n    cmsUInt32Number preservationProfilesCount;\n    cmsHPROFILE hLastProfile;\n    cmsHPROFILE hLab;\n\n    // Sanity check\n    if (nProfiles < 1 || nProfiles > 255) return NULL;\n\n    // Translate black-preserving intents to ICC ones\n    for (i=0; i < nProfiles; i++)\n        ICCIntents[i] = TranslateNonICCIntents(TheIntents[i]);\n\n    // Trim all CMYK devicelinks at the end  \n    lastProfilePos = nProfiles - 1;\n    hLastProfile = hProfiles[lastProfilePos];\n\n    while (lastProfilePos > 1)\n    {   \n        hLastProfile = hProfiles[--lastProfilePos];\n        if (cmsGetColorSpace(hLastProfile) != cmsSigCmykData ||\n            cmsGetDeviceClass(hLastProfile) != cmsSigLinkClass)\n            break;        \n    } \n\n    preservationProfilesCount = lastProfilePos + 1;\n\n    // Check for non-cmyk profiles\n    if (cmsGetColorSpace(hProfiles[0]) != cmsSigCmykData ||\n        !(cmsGetColorSpace(hLastProfile) == cmsSigCmykData ||\n        cmsGetDeviceClass(hLastProfile) == cmsSigOutputClass))\n           return  DefaultICCintents(ContextID, nProfiles, ICCIntents, hProfiles, BPC, AdaptationStates, dwFlags);\n\n    // Allocate an empty LUT for holding the result\n    Result = cmsPipelineAlloc(ContextID, 4, 4);\n    if (Result == NULL) return NULL;\n\n    memset(&bp, 0, sizeof(bp));\n\n    // We need the input LUT of the last profile, assuming this one is responsible of\n    // black generation. This LUT will be searched in inverse order.\n    bp.LabK2cmyk = _cmsReadInputLUT(hLastProfile, INTENT_RELATIVE_COLORIMETRIC);\n    if (bp.LabK2cmyk == NULL) goto Cleanup;\n\n    // Get total area coverage (in 0..1 domain)\n    bp.MaxTAC = cmsDetectTAC(hLastProfile) / 100.0;\n    if (bp.MaxTAC <= 0) goto Cleanup;\n\n\n    // Create a LUT holding normal ICC transform\n    bp.cmyk2cmyk = DefaultICCintents(ContextID,\n                                         preservationProfilesCount,\n                                         ICCIntents,\n                                         hProfiles,\n                                         BPC,\n                                         AdaptationStates,\n                                         dwFlags);\n    if (bp.cmyk2cmyk == NULL) goto Cleanup;\n\n    // Now the tone curve\n    bp.KTone = _cmsBuildKToneCurve(ContextID, 4096, preservationProfilesCount,\n                                   ICCIntents,\n                                   hProfiles,\n                                   BPC,\n                                   AdaptationStates,\n                                   dwFlags);\n    if (bp.KTone == NULL) goto Cleanup;\n\n    // To measure the output, Last profile to Lab\n    hLab = cmsCreateLab4ProfileTHR(ContextID, NULL);\n    bp.hProofOutput = cmsCreateTransformTHR(ContextID, hLastProfile,\n                                         CHANNELS_SH(4)|BYTES_SH(2), hLab, TYPE_Lab_DBL,\n                                         INTENT_RELATIVE_COLORIMETRIC,\n                                         cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE);\n    if ( bp.hProofOutput == NULL) goto Cleanup;\n\n    // Same as anterior, but lab in the 0..1 range\n    bp.cmyk2Lab = cmsCreateTransformTHR(ContextID, hLastProfile,\n                                         FLOAT_SH(1)|CHANNELS_SH(4)|BYTES_SH(4), hLab,\n                                         FLOAT_SH(1)|CHANNELS_SH(3)|BYTES_SH(4),\n                                         INTENT_RELATIVE_COLORIMETRIC,\n                                         cmsFLAGS_NOCACHE|cmsFLAGS_NOOPTIMIZE);\n    if (bp.cmyk2Lab == NULL) goto Cleanup;\n    cmsCloseProfile(hLab);\n\n    // Error estimation (for debug only)\n    bp.MaxError = 0;\n\n    // How many gridpoints are we going to use?\n    nGridPoints = _cmsReasonableGridpointsByColorspace(cmsSigCmykData, dwFlags);\n\n\n    CLUT = cmsStageAllocCLut16bit(ContextID, nGridPoints, 4, 4, NULL);\n    if (CLUT == NULL) goto Cleanup;\n\n    if (!cmsPipelineInsertStage(Result, cmsAT_BEGIN, CLUT))\n        goto Cleanup;\n\n    cmsStageSampleCLut16bit(CLUT, BlackPreservingSampler, (void*) &bp, 0);\n\n    // Insert possible devicelinks at the end    \n    for (i = lastProfilePos + 1; i < nProfiles; i++)\n    {        \n        cmsPipeline* devlink = _cmsReadDevicelinkLUT(hProfiles[i], ICCIntents[i]);\n        if (devlink == NULL)\n            goto Cleanup;\n\n        if (!cmsPipelineCat(Result, devlink))\n            goto Cleanup;\n    }\n\n\nCleanup:\n\n    if (bp.cmyk2cmyk) cmsPipelineFree(bp.cmyk2cmyk);\n    if (bp.cmyk2Lab) cmsDeleteTransform(bp.cmyk2Lab);\n    if (bp.hProofOutput) cmsDeleteTransform(bp.hProofOutput);\n\n    if (bp.KTone) cmsFreeToneCurve(bp.KTone);\n    if (bp.LabK2cmyk) cmsPipelineFree(bp.LabK2cmyk);\n\n    return Result;\n}",
+      "fn_code_pos": [
+        [
+          944,
+          0
+        ],
+        [
+          1080,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BlackPreservingKPlaneIntents",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "TheIntents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "cmsPipeline* _cmsLinkProfiles(cmsContext     ContextID,\n                              cmsUInt32Number nProfiles,\n                              cmsUInt32Number TheIntents[],\n                              cmsHPROFILE     hProfiles[],\n                              cmsBool         BPC[],\n                              cmsFloat64Number AdaptationStates[],\n                              cmsUInt32Number dwFlags)\n{\n    cmsUInt32Number i;\n    cmsIntentsList* Intent;\n\n    // Make sure a reasonable number of profiles is provided\n    if (nProfiles <= 0 || nProfiles > 255) {\n         cmsSignalError(ContextID, cmsERROR_RANGE, \"Couldn't link '%d' profiles\", nProfiles);\n        return NULL;\n    }\n\n    for (i=0; i < nProfiles; i++) {\n\n        // Check if black point is really needed or allowed. Note that\n        // following Adobe's document:\n        // BPC does not apply to devicelink profiles, nor to abs colorimetric,\n        // and applies always on V4 perceptual and saturation.\n\n        if (TheIntents[i] == INTENT_ABSOLUTE_COLORIMETRIC)\n            BPC[i] = FALSE;\n\n        if (TheIntents[i] == INTENT_PERCEPTUAL || TheIntents[i] == INTENT_SATURATION) {\n\n            // Force BPC for V4 profiles in perceptual and saturation\n            if (cmsGetEncodedICCversion(hProfiles[i]) >= 0x4000000)\n                BPC[i] = TRUE;\n        }\n    }\n\n    // Search for a handler. The first intent in the chain defines the handler. That would\n    // prevent using multiple custom intents in a multiintent chain, but the behaviour of\n    // this case would present some issues if the custom intent tries to do things like\n    // preserve primaries. This solution is not perfect, but works well on most cases.\n\n    Intent = SearchIntent(ContextID, TheIntents[0]);\n    if (Intent == NULL) {\n        cmsSignalError(ContextID, cmsERROR_UNKNOWN_EXTENSION, \"Unsupported intent '%d'\", TheIntents[0]);\n        return NULL;\n    }\n\n    // Call the handler\n    return Intent ->Link(ContextID, nProfiles, TheIntents, hProfiles, BPC, AdaptationStates, dwFlags);\n}",
+      "fn_code_pos": [
+        [
+          1089,
+          0
+        ],
+        [
+          1137,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsLinkProfiles",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "TheIntents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsGetSupportedIntentsTHR(cmsContext ContextID, cmsUInt32Number nMax, cmsUInt32Number* Codes, char** Descriptions)\n{\n    _cmsIntentsPluginChunkType* ctx = ( _cmsIntentsPluginChunkType*) _cmsContextGetClientChunk(ContextID, IntentPlugin);\n    cmsIntentsList* pt;\n    cmsUInt32Number nIntents;\n\n\n    for (nIntents=0, pt = ctx->Intents; pt != NULL; pt = pt -> Next)\n    {\n        if (nIntents < nMax) {\n            if (Codes != NULL)\n                Codes[nIntents] = pt ->Intent;\n\n            if (Descriptions != NULL)\n                Descriptions[nIntents] = pt ->Description;\n        }\n\n        nIntents++;\n    }\n\n    for (nIntents=0, pt = DefaultIntents; pt != NULL; pt = pt -> Next)\n    {\n        if (nIntents < nMax) {\n            if (Codes != NULL)\n                Codes[nIntents] = pt ->Intent;\n\n            if (Descriptions != NULL)\n                Descriptions[nIntents] = pt ->Description;\n        }\n\n        nIntents++;\n    }\n    return nIntents;\n}",
+      "fn_code_pos": [
+        [
+          1144,
+          0
+        ],
+        [
+          1177,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetSupportedIntentsTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nMax": "cmsUInt32Number",
+          "Codes": "cmsUInt32Number",
+          "Descriptions": "char"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsGetSupportedIntents(cmsUInt32Number nMax, cmsUInt32Number* Codes, char** Descriptions)\n{\n    return cmsGetSupportedIntentsTHR(NULL, nMax, Codes, Descriptions);\n}",
+      "fn_code_pos": [
+        [
+          1179,
+          0
+        ],
+        [
+          1182,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetSupportedIntents",
+        "parameters": {
+          "nMax": "cmsUInt32Number",
+          "Codes": "cmsUInt32Number",
+          "Descriptions": "char"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsBool  _cmsRegisterRenderingIntentPlugin(cmsContext id, cmsPluginBase* Data)\n{\n    _cmsIntentsPluginChunkType* ctx = ( _cmsIntentsPluginChunkType*) _cmsContextGetClientChunk(id, IntentPlugin);\n    cmsPluginRenderingIntent* Plugin = (cmsPluginRenderingIntent*) Data;\n    cmsIntentsList* fl;\n\n    // Do we have to reset the custom intents?\n    if (Data == NULL) {\n\n        ctx->Intents = NULL;\n        return TRUE;\n    }\n\n    fl = (cmsIntentsList*) _cmsPluginMalloc(id, sizeof(cmsIntentsList));\n    if (fl == NULL) return FALSE;\n\n\n    fl ->Intent  = Plugin ->Intent;\n    strncpy(fl ->Description, Plugin ->Description, sizeof(fl ->Description)-1);\n    fl ->Description[sizeof(fl ->Description)-1] = 0;\n\n    fl ->Link    = Plugin ->Link;\n\n    fl ->Next = ctx ->Intents;\n    ctx ->Intents = fl;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1185,
+          0
+        ],
+        [
+          1212,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsRegisterRenderingIntentPlugin",
+        "parameters": {
+          "id": "cmsContext",
+          "Data": "cmsPluginBase"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "DefaultICCintents(cmsContext     ContextID,\n                               cmsUInt32Number nProfiles,\n                               cmsUInt32Number Intents[],\n                               cmsHPROFILE     hProfiles[],\n                               cmsBool         BPC[],\n                               cmsFloat64Number AdaptationStates[],\n                               cmsUInt32Number dwFlags)",
+      "fn_dec_pos": [
+        [
+          32,
+          13
+        ],
+        [
+          38,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DefaultICCintents",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "Intents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "BlackPreservingKOnlyIntents(cmsContext     ContextID,\n                                          cmsUInt32Number nProfiles,\n                                          cmsUInt32Number Intents[],\n                                          cmsHPROFILE     hProfiles[],\n                                          cmsBool         BPC[],\n                                          cmsFloat64Number AdaptationStates[],\n                                          cmsUInt32Number dwFlags)",
+      "fn_dec_pos": [
+        [
+          45,
+          14
+        ],
+        [
+          51,
+          66
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BlackPreservingKOnlyIntents",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "Intents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "BlackPreservingKPlaneIntents(cmsContext     ContextID,\n                                           cmsUInt32Number nProfiles,\n                                           cmsUInt32Number Intents[],\n                                           cmsHPROFILE     hProfiles[],\n                                           cmsBool         BPC[],\n                                           cmsFloat64Number AdaptationStates[],\n                                           cmsUInt32Number dwFlags)",
+      "fn_dec_pos": [
+        [
+          58,
+          14
+        ],
+        [
+          64,
+          67
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BlackPreservingKPlaneIntents",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "Intents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "SearchIntent(cmsContext ContextID, cmsUInt32Number Intent)",
+      "fn_dec_pos": [
+        [
+          150,
+          16
+        ],
+        [
+          150,
+          74
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SearchIntent",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "Intent": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "DefaultICCintents(cmsContext       ContextID,\n                               cmsUInt32Number  nProfiles,\n                               cmsUInt32Number  TheIntents[],\n                               cmsHPROFILE      hProfiles[],\n                               cmsBool          BPC[],\n                               cmsFloat64Number AdaptationStates[],\n                               cmsUInt32Number  dwFlags)",
+      "fn_dec_pos": [
+        [
+          510,
+          13
+        ],
+        [
+          516,
+          56
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DefaultICCintents",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "TheIntents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "BlackPreservingKOnlyIntents(cmsContext     ContextID,\n                                          cmsUInt32Number nProfiles,\n                                          cmsUInt32Number TheIntents[],\n                                          cmsHPROFILE     hProfiles[],\n                                          cmsBool         BPC[],\n                                          cmsFloat64Number AdaptationStates[],\n                                          cmsUInt32Number dwFlags)",
+      "fn_dec_pos": [
+        [
+          719,
+          14
+        ],
+        [
+          725,
+          66
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BlackPreservingKOnlyIntents",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "TheIntents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "BlackPreservingKPlaneIntents(cmsContext     ContextID,\n                                          cmsUInt32Number nProfiles,\n                                          cmsUInt32Number TheIntents[],\n                                          cmsHPROFILE     hProfiles[],\n                                          cmsBool         BPC[],\n                                          cmsFloat64Number AdaptationStates[],\n                                          cmsUInt32Number dwFlags)",
+      "fn_dec_pos": [
+        [
+          945,
+          13
+        ],
+        [
+          951,
+          66
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BlackPreservingKPlaneIntents",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "TheIntents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsLinkProfiles(cmsContext     ContextID,\n                              cmsUInt32Number nProfiles,\n                              cmsUInt32Number TheIntents[],\n                              cmsHPROFILE     hProfiles[],\n                              cmsBool         BPC[],\n                              cmsFloat64Number AdaptationStates[],\n                              cmsUInt32Number dwFlags)",
+      "fn_dec_pos": [
+        [
+          1089,
+          13
+        ],
+        [
+          1095,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsLinkProfiles",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "TheIntents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct _cms_intents_list {\n\n    cmsUInt32Number Intent;\n    char            Description[256];\n    cmsIntentFn     Link;\n    struct _cms_intents_list*  Next;\n\n} cmsIntentsList;",
+      {
+        "Intent": "cmsUInt32Number",
+        "Description[256]": "char",
+        "Link": "cmsIntentFn",
+        "*  Next": "struct _cms_intents_list"
+      },
+      "cmsIntentsList",
+      [
+        70,
+        0
+      ],
+      [
+        77,
+        17
+      ]
+    ],
+    [
+      "typedef struct {\n    cmsPipeline*    cmyk2cmyk;      // The original transform\n    cmsToneCurve*   KTone;          // Black-to-black tone curve\n\n} GrayOnlyParams;",
+      {
+        "*    cmyk2cmyk": "cmsPipeline",
+        "*   KTone": "cmsToneCurve"
+      },
+      "GrayOnlyParams",
+      [
+        690,
+        0
+      ],
+      [
+        694,
+        17
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsPipeline*     cmyk2cmyk;     // The original transform\n    cmsHTRANSFORM    hProofOutput;  // Output CMYK to Lab (last profile)\n    cmsHTRANSFORM    cmyk2Lab;      // The input chain\n    cmsToneCurve*    KTone;         // Black-to-black tone curve\n    cmsPipeline*     LabK2cmyk;     // The output profile\n    cmsFloat64Number MaxError;\n\n    cmsHTRANSFORM    hRoundTrip;\n    cmsFloat64Number MaxTAC;\n\n\n} PreserveKPlaneParams;",
+      {
+        "*     cmyk2cmyk": "cmsPipeline",
+        "hProofOutput": "cmsHTRANSFORM",
+        "cmyk2Lab": "cmsHTRANSFORM",
+        "*    KTone": "cmsToneCurve",
+        "*     LabK2cmyk": "cmsPipeline",
+        "MaxError": "cmsFloat64Number",
+        "hRoundTrip": "cmsHTRANSFORM",
+        "MaxTAC": "cmsFloat64Number"
+      },
+      "PreserveKPlaneParams",
+      [
+        840,
+        0
+      ],
+      [
+        853,
+        23
+      ]
+    ],
+    [
+      "typedef struct _cms_intents_list {\n\n    cmsUInt32Number Intent;\n    char            Description[256];\n    cmsIntentFn     Link;\n    struct _cms_intents_list*  Next;\n\n} cmsIntentsList;",
+      {
+        "Intent": "cmsUInt32Number",
+        "Description[256]": "char",
+        "Link": "cmsIntentFn",
+        "*  Next": "struct _cms_intents_list"
+      },
+      "cmsIntentsList",
+      [
+        70,
+        0
+      ],
+      [
+        77,
+        17
+      ]
+    ],
+    [
+      "struct _cms_intents_list",
+      {},
+      "",
+      [
+        75,
+        4
+      ],
+      [
+        75,
+        28
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        101,
+        26
+      ],
+      [
+        101,
+        51
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        102,
+        53
+      ],
+      [
+        102,
+        78
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        133,
+        34
+      ],
+      [
+        133,
+        59
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        134,
+        47
+      ],
+      [
+        134,
+        72
+      ]
+    ],
+    [
+      "typedef struct {\n    cmsPipeline*    cmyk2cmyk;      // The original transform\n    cmsToneCurve*   KTone;          // Black-to-black tone curve\n\n} GrayOnlyParams;",
+      {
+        "*    cmyk2cmyk": "cmsPipeline",
+        "*   KTone": "cmsToneCurve"
+      },
+      "GrayOnlyParams",
+      [
+        690,
+        0
+      ],
+      [
+        694,
+        17
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsPipeline*     cmyk2cmyk;     // The original transform\n    cmsHTRANSFORM    hProofOutput;  // Output CMYK to Lab (last profile)\n    cmsHTRANSFORM    cmyk2Lab;      // The input chain\n    cmsToneCurve*    KTone;         // Black-to-black tone curve\n    cmsPipeline*     LabK2cmyk;     // The output profile\n    cmsFloat64Number MaxError;\n\n    cmsHTRANSFORM    hRoundTrip;\n    cmsFloat64Number MaxTAC;\n\n\n} PreserveKPlaneParams;",
+      {
+        "*     cmyk2cmyk": "cmsPipeline",
+        "hProofOutput": "cmsHTRANSFORM",
+        "cmyk2Lab": "cmsHTRANSFORM",
+        "*    KTone": "cmsToneCurve",
+        "*     LabK2cmyk": "cmsPipeline",
+        "MaxError": "cmsFloat64Number",
+        "hRoundTrip": "cmsHTRANSFORM",
+        "MaxTAC": "cmsFloat64Number"
+      },
+      "PreserveKPlaneParams",
+      [
+        840,
+        0
+      ],
+      [
+        853,
+        23
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"lcms2_internal.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

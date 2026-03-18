@@ -1,0 +1,204 @@
+Line	Count	Source	
+1		/*	
+2		* Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")	
+3		* Copyright (c) 1996-1999 by Internet Software Consortium.	
+4		*	
+5		* Permission to use, copy, modify, and distribute this software for any	
+6		* purpose with or without fee is hereby granted, provided that the above	
+7		* copyright notice and this permission notice appear in all copies.	
+8		*	
+9		* THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES	
+10		* WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF	
+11		* MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL ISC BE LIABLE FOR	
+12		* ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES	
+13		* WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN	
+14		* ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT	
+15		* OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.	
+16		*/	
+17			
+18		#include "ares_setup.h"	
+19			
+20		#ifdef HAVE_NETINET_IN_H	
+21		#  include <netinet/in.h>	
+22		#endif	
+23		#ifdef HAVE_ARPA_INET_H	
+24		#  include <arpa/inet.h>	
+25		#endif	
+26			
+27		#include "ares_nameser.h"	
+28			
+29		#include "ares.h"	
+30		#include "ares_ipv6.h"	
+31			
+32		#ifndef HAVE_INET_NTOP	
+33			
+34		/*	
+35		* WARNING: Don't even consider trying to compile this on a system where	
+36		* sizeof(int) < 4.  sizeof(int) > 4 is fine; all the world's not a VAX.	
+37		*/	
+38			
+39		static const char *inet_ntop4(const unsigned char *src, char *dst, size_t size);	
+40		static const char *inet_ntop6(const unsigned char *src, char *dst, size_t size);	
+41			
+42		/* char *	
+43		* inet_ntop(af, src, dst, size)	
+44		*     convert a network format address to presentation format.	
+45		* return:	
+46		*     pointer to presentation format address (`dst'), or NULL (see errno).	
+47		* note:	
+48		*     On Windows we store the error in the thread errno, not	
+49		*     in the winsock error code. This is to avoid loosing the	
+50		*     actual last winsock error. So use macro ERRNO to fetch the	
+51		*     errno this function sets when returning NULL, not SOCKERRNO.	
+52		* author:	
+53		*     Paul Vixie, 1996.	
+54		*/	
+55		const char *	
+56		ares_inet_ntop(int af, const void *src, char *dst, ares_socklen_t size)	
+57		{	
+58		switch (af) {	
+59		case AF_INET:	
+60		return (inet_ntop4(src, dst, (size_t)size));	
+61		case AF_INET6:	
+62		return (inet_ntop6(src, dst, (size_t)size));	
+63		default:	
+64		SET_ERRNO(EAFNOSUPPORT);	
+65		return (NULL);	
+66		}	
+67		/* NOTREACHED */	
+68		}	
+69			
+70		/* const char *	
+71		* inet_ntop4(src, dst, size)	
+72		*     format an IPv4 address	
+73		* return:	
+74		*     `dst' (as a const)	
+75		* notes:	
+76		*     (1) uses no statics	
+77		*     (2) takes a unsigned char* not an in_addr as input	
+78		* author:	
+79		*     Paul Vixie, 1996.	
+80		*/	
+81		static const char *	
+82		inet_ntop4(const unsigned char *src, char *dst, size_t size)	
+83		{	
+84		static const char fmt[] = "%u.%u.%u.%u";	
+85		char tmp[sizeof("255.255.255.255")];	
+86			
+87		if ((size_t)sprintf(tmp, fmt, src[0], src[1], src[2], src[3]) >= size) {	
+88		SET_ERRNO(ENOSPC);	
+89		return (NULL);	
+90		}	
+91		strcpy(dst, tmp);	
+92		return (dst);	
+93		}	
+94			
+95		/* const char *	
+96		* inet_ntop6(src, dst, size)	
+97		*     convert IPv6 binary address into presentation (printable) format	
+98		* author:	
+99		*     Paul Vixie, 1996.	
+100		*/	
+101		static const char *	
+102		inet_ntop6(const unsigned char *src, char *dst, size_t size)	
+103		{	
+104		/*	
+105		* Note that int32_t and int16_t need only be "at least" large enough	
+106		* to contain a value of the specified size.  On some systems, like	
+107		* Crays, there is no such thing as an integer variable with 16 bits.	
+108		* Keep this in mind if you think this function should have been coded	
+109		* to use pointer overlays.  All the world's not a VAX.	
+110		*/	
+111		char tmp[sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255")];	
+112		char *tp;	
+113		struct { int base, len; } best, cur;	
+114		unsigned int words[NS_IN6ADDRSZ / NS_INT16SZ];	
+115		int i;	
+116			
+117		/*	
+118		* Preprocess:	
+119		*  Copy the input (bytewise) array into a wordwise array.	
+120		*  Find the longest run of 0x00's in src[] for :: shorthanding.	
+121		*/	
+122		memset(words, '\0', sizeof(words));	
+123		for (i = 0; i < NS_IN6ADDRSZ; i++)	
+124		words[i / 2] |= (src[i] << ((1 - (i % 2)) << 3));	
+125		best.base = -1;	
+126		best.len = 0;	
+127		cur.base = -1;	
+128		cur.len = 0;	
+129		for (i = 0; i < (NS_IN6ADDRSZ / NS_INT16SZ); i++) {	
+130		if (words[i] == 0) {	
+131		if (cur.base == -1)	
+132		cur.base = i, cur.len = 1;	
+133		else	
+134		cur.len++;	
+135		} else {	
+136		if (cur.base != -1) {	
+137		if (best.base == -1 || cur.len > best.len)	
+138		best = cur;	
+139		cur.base = -1;	
+140		}	
+141		}	
+142		}	
+143		if (cur.base != -1) {	
+144		if (best.base == -1 || cur.len > best.len)	
+145		best = cur;	
+146		}	
+147		if (best.base != -1 && best.len < 2)	
+148		best.base = -1;	
+149			
+150		/*	
+151		* Format the result.	
+152		*/	
+153		tp = tmp;	
+154		for (i = 0; i < (NS_IN6ADDRSZ / NS_INT16SZ); i++) {	
+155		/* Are we inside the best run of 0x00's? */	
+156		if (best.base != -1 && i >= best.base &&	
+157		i < (best.base + best.len)) {	
+158		if (i == best.base)	
+159		*tp++ = ':';	
+160		continue;	
+161		}	
+162		/* Are we following an initial run of 0x00s or any real hex? */	
+163		if (i != 0)	
+164		*tp++ = ':';	
+165		/* Is this address an encapsulated IPv4? */	
+166		if (i == 6 && best.base == 0 && (best.len == 6 ||	
+167		(best.len == 7 && words[7] != 0x0001) ||	
+168		(best.len == 5 && words[5] == 0xffff))) {	
+169		if (!inet_ntop4(src+12, tp, sizeof(tmp) - (tp - tmp)))	
+170		return (NULL);	
+171		tp += strlen(tp);	
+172		break;	
+173		}	
+174		tp += sprintf(tp, "%x", words[i]);	
+175		}	
+176		/* Was it a trailing run of 0x00's? */	
+177		if (best.base != -1 && (best.base + best.len) == (NS_IN6ADDRSZ / NS_INT16SZ))	
+178		*tp++ = ':';	
+179		*tp++ = '\0';	
+180			
+181		/*	
+182		* Check for overflow, copy, and we're done.	
+183		*/	
+184		if ((size_t)(tp - tmp) > size) {	
+185		SET_ERRNO(ENOSPC);	
+186		return (NULL);	
+187		}	
+188		strcpy(dst, tmp);	
+189		return (dst);	
+190		}	
+191			
+192		#else /* HAVE_INET_NTOP */	
+193			
+194		const char *	
+195		ares_inet_ntop(int af, const void *src, char *dst, ares_socklen_t size)	
+196	0	{	
+197		/* just relay this to the underlying function */	
+198	0	return inet_ntop(af, src, dst, size);	
+199	0	}	
+200			
+201		#endif /* HAVE_INET_NTOP */	
+
+

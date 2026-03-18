@@ -25,6 +25,82 @@ import zipfile
 
 from . import static_analysis_agent
 
+# def convert_escape_to_bytes(text):
+#     """
+#     将包含转义序列的文本字符串转换为真正的二进制字节。
+#     例如: "\\x01\\x00" (6个字符) -> b"\x01\x00" (2个字节)
+#     同时清理 markdown 代码块标记。
+#     """
+#     import codecs
+    
+#     # 1. 清理 markdown 代码块标记
+#     text = text.strip()
+#     if text.startswith('```'):
+#         # 移除开头的 ```xxx\n
+#         first_newline = text.find('\n')
+#         if first_newline != -1:
+#             text = text[first_newline + 1:]
+#         else:
+#             text = text[3:]
+#     if text.endswith('```'):
+#         text = text[:-3]
+#     text = text.strip()
+    
+#     # 2. 尝试将转义序列转换为真正的字节
+#     try:
+#         # 使用 unicode_escape 解码 \xNN 格式
+#         # 先编码为 latin-1，再用 unicode_escape 解码
+#         decoded = codecs.decode(text, 'unicode_escape')
+#         return decoded.encode('latin-1')
+#     except Exception:
+#         # 如果转换失败，直接返回原始文本的 UTF-8 编码
+#         return text.encode('utf-8')
+def convert_escape_to_bytes(text):
+    """
+    将包含转义序列或十六进制字符串的文本转换为真正的二进制字节。
+    支持格式:
+    1. "\\x01\\x00" -> b"\x01\x00"
+    2. "0100000002000000" (纯十六进制) -> b"\x01\x00\x00\x00\x02..."
+    3. 带 markdown 代码块标记
+    """
+    import codecs
+    import re
+    
+    # 1. 清理 markdown 代码块标记
+    text = text.strip()
+    if text.startswith('```'):
+        first_newline = text.find('\n')
+        if first_newline != -1:
+            text = text[first_newline + 1:]
+        else:
+            text = text[3:]
+    if text.endswith('```'):
+        text = text[:-3]
+    text = text.strip()
+    
+    # 移除可能的换行符
+    text = text.replace('\n', '').replace('\r', '').replace(' ', '')
+    
+    # 2. 检测格式并转换
+    # 格式A: 纯十六进制字符串 (如 "0100000002000000")
+    if re.match(r'^[0-9a-fA-F]+$', text) and len(text) % 2 == 0:
+        try:
+            return bytes.fromhex(text)
+        except ValueError:
+            pass
+    
+    # 格式B: 带 \x 前缀的转义序列 (如 "\x01\x00")
+    if '\\x' in text or '\\0' in text:
+        try:
+            decoded = codecs.decode(text, 'unicode_escape')
+            return decoded.encode('latin-1')
+        except Exception:
+            pass
+    
+    # 格式C: 直接返回 UTF-8 编码
+    return text.encode('utf-8')
+
+
 def generate_hash(file_name):
     # Get the current time
     current_time = time.time()
@@ -199,13 +275,28 @@ class InputGenerationAgent:
             fuzzer_name = os.path.splitext(file_name)[0]
             logger.info(f"================ {fuzzer_name}")
             
+            # corpus_folder = os.path.join(self.output_dir, f"{fuzzer_name}_corpus")
+            # os.makedirs(corpus_folder, exist_ok=True)
+            
+            # hash_code_file = generate_hash(f"{fuzzer_name}_corpus.txt")
+            # with open(os.path.join(corpus_folder, f"{hash_code_file}.txt"), 'w', encoding='utf-8') as f:
+            #     f.write(input_seed)
+
+
             corpus_folder = os.path.join(self.output_dir, f"{fuzzer_name}_corpus")
             os.makedirs(corpus_folder, exist_ok=True)
             
-            hash_code_file = generate_hash(f"{fuzzer_name}_corpus.txt")
-            with open(os.path.join(corpus_folder, f"{hash_code_file}.txt"), 'w', encoding='utf-8') as f:
-                f.write(input_seed)
-
+            hash_code_file = generate_hash(f"{fuzzer_name}_corpus")
+            seed_file_path = os.path.join(corpus_folder, hash_code_file)  # 去掉 .txt 后缀
+            
+            # 将转义字符串转换为真正的二进制字节
+            seed_bytes = convert_escape_to_bytes(input_seed)
+            
+            # 以二进制模式写入
+            with open(seed_file_path, 'wb') as f:
+                f.write(seed_bytes)
+            
+            logger.info(f"Seed saved to: {seed_file_path}, size: {len(seed_bytes)} bytes")
             
             
         

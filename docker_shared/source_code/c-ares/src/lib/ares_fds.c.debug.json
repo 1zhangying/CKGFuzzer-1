@@ -1,0 +1,93 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int ares_fds(ares_channel channel, fd_set *read_fds, fd_set *write_fds)\n{\n  struct server_state *server;\n  ares_socket_t nfds;\n  int i;\n\n  /* Are there any active queries? */\n  int active_queries = !ares__is_list_empty(&(channel->all_queries));\n\n  nfds = 0;\n  for (i = 0; i < channel->nservers; i++)\n    {\n      server = &channel->servers[i];\n      /* We only need to register interest in UDP sockets if we have\n       * outstanding queries.\n       */\n      if (active_queries && server->udp_socket != ARES_SOCKET_BAD)\n        {\n          FD_SET(server->udp_socket, read_fds);\n          if (server->udp_socket >= nfds)\n            nfds = server->udp_socket + 1;\n        }\n      /* We always register for TCP events, because we want to know\n       * when the other side closes the connection, so we don't waste\n       * time trying to use a broken connection.\n       */\n      if (server->tcp_socket != ARES_SOCKET_BAD)\n       {\n         FD_SET(server->tcp_socket, read_fds);\n         if (server->qhead)\n           FD_SET(server->tcp_socket, write_fds);\n         if (server->tcp_socket >= nfds)\n           nfds = server->tcp_socket + 1;\n\t}\n    }\n  return (int)nfds;\n}",
+      "fn_code_pos": [
+        [
+          22,
+          0
+        ],
+        [
+          58,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_fds",
+        "parameters": {
+          "channel": "ares_channel",
+          "read_fds": "fd_set",
+          "write_fds": "fd_set"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct server_state",
+      {},
+      "",
+      [
+        24,
+        2
+      ],
+      [
+        24,
+        21
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        18,
+        0
+      ],
+      [
+        19,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nowarn.h\"\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        20,
+        0
+      ],
+      [
+        21,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

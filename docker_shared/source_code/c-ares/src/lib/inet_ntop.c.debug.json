@@ -1,0 +1,353 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "const char *\nares_inet_ntop(int af, const void *src, char *dst, ares_socklen_t size)\n{\n  switch (af) {\n  case AF_INET:\n    return (inet_ntop4(src, dst, (size_t)size));\n  case AF_INET6:\n    return (inet_ntop6(src, dst, (size_t)size));\n  default:\n    SET_ERRNO(EAFNOSUPPORT);\n    return (NULL);\n  }\n  /* NOTREACHED */\n}",
+      "fn_code_pos": [
+        [
+          54,
+          0
+        ],
+        [
+          67,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_inet_ntop",
+        "parameters": {
+          "af": "int",
+          "src": "void",
+          "dst": "char",
+          "size": "ares_socklen_t"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static const char *\ninet_ntop4(const unsigned char *src, char *dst, size_t size)\n{\n  static const char fmt[] = \"%u.%u.%u.%u\";\n  char tmp[sizeof(\"255.255.255.255\")];\n\n  if ((size_t)sprintf(tmp, fmt, src[0], src[1], src[2], src[3]) >= size) {\n    SET_ERRNO(ENOSPC);\n    return (NULL);\n  }\n  strcpy(dst, tmp);\n  return (dst);\n}",
+      "fn_code_pos": [
+        [
+          80,
+          0
+        ],
+        [
+          92,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "inet_ntop4",
+        "parameters": {
+          "src": "unsigned char",
+          "dst": "char",
+          "size": "size_t"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static const char *\ninet_ntop6(const unsigned char *src, char *dst, size_t size)\n{\n  /*\n   * Note that int32_t and int16_t need only be \"at least\" large enough\n   * to contain a value of the specified size.  On some systems, like\n   * Crays, there is no such thing as an integer variable with 16 bits.\n   * Keep this in mind if you think this function should have been coded\n   * to use pointer overlays.  All the world's not a VAX.\n   */\n  char tmp[sizeof(\"ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255\")];\n  char *tp;\n  struct { int base, len; } best, cur;\n  unsigned int words[NS_IN6ADDRSZ / NS_INT16SZ];\n  int i;\n\n  /*\n   * Preprocess:\n   *  Copy the input (bytewise) array into a wordwise array.\n   *  Find the longest run of 0x00's in src[] for :: shorthanding.\n   */\n  memset(words, '\\0', sizeof(words));\n  for (i = 0; i < NS_IN6ADDRSZ; i++)\n    words[i / 2] |= (src[i] << ((1 - (i % 2)) << 3));\n  best.base = -1;\n  best.len = 0;\n  cur.base = -1;\n  cur.len = 0;\n  for (i = 0; i < (NS_IN6ADDRSZ / NS_INT16SZ); i++) {\n    if (words[i] == 0) {\n      if (cur.base == -1)\n        cur.base = i, cur.len = 1;\n      else\n        cur.len++;\n    } else {\n      if (cur.base != -1) {\n        if (best.base == -1 || cur.len > best.len)\n          best = cur;\n        cur.base = -1;\n      }\n    }\n  }\n  if (cur.base != -1) {\n    if (best.base == -1 || cur.len > best.len)\n      best = cur;\n  }\n  if (best.base != -1 && best.len < 2)\n    best.base = -1;\n\n  /*\n   * Format the result.\n   */\n  tp = tmp;\n  for (i = 0; i < (NS_IN6ADDRSZ / NS_INT16SZ); i++) {\n    /* Are we inside the best run of 0x00's? */\n    if (best.base != -1 && i >= best.base &&\n        i < (best.base + best.len)) {\n      if (i == best.base)\n        *tp++ = ':';\n      continue;\n    }\n    /* Are we following an initial run of 0x00s or any real hex? */\n    if (i != 0)\n      *tp++ = ':';\n    /* Is this address an encapsulated IPv4? */\n    if (i == 6 && best.base == 0 && (best.len == 6 ||\n        (best.len == 7 && words[7] != 0x0001) ||\n        (best.len == 5 && words[5] == 0xffff))) {\n      if (!inet_ntop4(src+12, tp, sizeof(tmp) - (tp - tmp)))\n        return (NULL);\n      tp += strlen(tp);\n      break;\n    }\n    tp += sprintf(tp, \"%x\", words[i]);\n  }\n  /* Was it a trailing run of 0x00's? */\n  if (best.base != -1 && (best.base + best.len) == (NS_IN6ADDRSZ / NS_INT16SZ))\n    *tp++ = ':';\n  *tp++ = '\\0';\n\n  /*\n   * Check for overflow, copy, and we're done.\n   */\n  if ((size_t)(tp - tmp) > size) {\n    SET_ERRNO(ENOSPC);\n    return (NULL);\n  }\n  strcpy(dst, tmp);\n  return (dst);\n}",
+      "fn_code_pos": [
+        [
+          100,
+          0
+        ],
+        [
+          189,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "inet_ntop6",
+        "parameters": {
+          "src": "unsigned char",
+          "dst": "char",
+          "size": "size_t"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "const char *\nares_inet_ntop(int af, const void *src, char *dst, ares_socklen_t size)\n{\n  /* just relay this to the underlying function */\n  return inet_ntop(af, src, dst, size);\n}",
+      "fn_code_pos": [
+        [
+          193,
+          0
+        ],
+        [
+          198,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_inet_ntop",
+        "parameters": {
+          "af": "int",
+          "src": "void",
+          "dst": "char",
+          "size": "ares_socklen_t"
+        },
+        "return_type": "char"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "inet_ntop4(const unsigned char *src, char *dst, size_t size)",
+      "fn_dec_pos": [
+        [
+          38,
+          19
+        ],
+        [
+          38,
+          79
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "inet_ntop4",
+        "parameters": {
+          "src": "unsigned char",
+          "dst": "char",
+          "size": "size_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "inet_ntop6(const unsigned char *src, char *dst, size_t size)",
+      "fn_dec_pos": [
+        [
+          39,
+          19
+        ],
+        [
+          39,
+          79
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "inet_ntop6",
+        "parameters": {
+          "src": "unsigned char",
+          "dst": "char",
+          "size": "size_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "ares_inet_ntop(int af, const void *src, char *dst, ares_socklen_t size)",
+      "fn_dec_pos": [
+        [
+          55,
+          0
+        ],
+        [
+          55,
+          71
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_inet_ntop",
+        "parameters": {
+          "af": "int",
+          "src": "void",
+          "dst": "char",
+          "size": "ares_socklen_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "inet_ntop4(const unsigned char *src, char *dst, size_t size)",
+      "fn_dec_pos": [
+        [
+          81,
+          0
+        ],
+        [
+          81,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "inet_ntop4",
+        "parameters": {
+          "src": "unsigned char",
+          "dst": "char",
+          "size": "size_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "inet_ntop6(const unsigned char *src, char *dst, size_t size)",
+      "fn_dec_pos": [
+        [
+          101,
+          0
+        ],
+        [
+          101,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "inet_ntop6",
+        "parameters": {
+          "src": "unsigned char",
+          "dst": "char",
+          "size": "size_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "ares_inet_ntop(int af, const void *src, char *dst, ares_socklen_t size)",
+      "fn_dec_pos": [
+        [
+          194,
+          0
+        ],
+        [
+          194,
+          71
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_inet_ntop",
+        "parameters": {
+          "af": "int",
+          "src": "void",
+          "dst": "char",
+          "size": "ares_socklen_t"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct { int base, len; }",
+      {
+        "base": "int"
+      },
+      "",
+      [
+        112,
+        2
+      ],
+      [
+        112,
+        27
+      ]
+    ],
+    [
+      "struct { int base, len; }",
+      {
+        "base": "int"
+      },
+      "",
+      [
+        112,
+        2
+      ],
+      [
+        112,
+        27
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        20,
+        0
+      ],
+      [
+        21,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_ipv6.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

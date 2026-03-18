@@ -1,0 +1,353 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseRootName) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\".\", T_A))\n    .add_answer(new DNSARR(\".\", 100, {0x02, 0x03, 0x04, 0x05}));\n  std::vector<byte> data = pkt.data();\n\n  struct hostent *host = nullptr;\n  struct ares_addrttl info[2];\n  int count = 2;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_a_reply(data.data(), data.size(),\n                                             &host, info, &count));\n  EXPECT_EQ(1, count);\n  std::stringstream ss;\n  ss << HostEnt(host);\n  EXPECT_EQ(\"{'' aliases=[] addrs=[2.3.4.5]}\", ss.str());\n  ares_free_hostent(host);\n}",
+      "fn_code_pos": [
+        [
+          9,
+          0
+        ],
+        [
+          26,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseIndirectRootName) {\n  std::vector<byte> data = {\n    0x12, 0x34,  // qid\n    0x84, // response + query + AA + not-TC + not-RD\n    0x00, // not-RA + not-Z + not-AD + not-CD + rc=NoError\n    0x00, 0x01,  // num questions\n    0x00, 0x01,  // num answer RRs\n    0x00, 0x00,  // num authority RRs\n    0x00, 0x00,  // num additional RRs\n    // Question\n    0xC0, 0x04,  // weird: pointer to a random zero earlier in the message\n    0x00, 0x01,  // type A\n    0x00, 0x01,  // class IN\n    // Answer 1\n    0xC0, 0x04,\n    0x00, 0x01,  // RR type\n    0x00, 0x01,  // class IN\n    0x01, 0x02, 0x03, 0x04, // TTL\n    0x00, 0x04,  // rdata length\n    0x02, 0x03, 0x04, 0x05,\n  };\n\n  struct hostent *host = nullptr;\n  struct ares_addrttl info[2];\n  int count = 2;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_a_reply(data.data(), data.size(),\n                                             &host, info, &count));\n  EXPECT_EQ(1, count);\n  std::stringstream ss;\n  ss << HostEnt(host);\n  EXPECT_EQ(\"{'' aliases=[] addrs=[2.3.4.5]}\", ss.str());\n  ares_free_hostent(host);\n}",
+      "fn_code_pos": [
+        [
+          28,
+          0
+        ],
+        [
+          60,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseEscapedName) {\n  std::vector<byte> data = {\n    0x12, 0x34,  // qid\n    0x84, // response + query + AA + not-TC + not-RD\n    0x00, // not-RA + not-Z + not-AD + not-CD + rc=NoError\n    0x00, 0x01,  // num questions\n    0x00, 0x01,  // num answer RRs\n    0x00, 0x00,  // num authority RRs\n    0x00, 0x00,  // num additional RRs\n    // Question\n    0x05, 'a', '\\\\', 'b', '.', 'c',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x00, 0x01,  // type A\n    0x00, 0x01,  // class IN\n    // Answer 1\n    0x05, 'a', '\\\\', 'b', '.', 'c',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x00, 0x01,  // RR type\n    0x00, 0x01,  // class IN\n    0x01, 0x02, 0x03, 0x04, // TTL\n    0x00, 0x04,  // rdata length\n    0x02, 0x03, 0x04, 0x05,\n  };\n  struct hostent *host = nullptr;\n  struct ares_addrttl info[2];\n  int count = 2;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_a_reply(data.data(), data.size(),\n                                             &host, info, &count));\n  EXPECT_EQ(1, count);\n  HostEnt hent(host);\n  std::stringstream ss;\n  ss << hent;\n  // The printable name is expanded with escapes.\n  EXPECT_EQ(11, hent.name_.size());\n  EXPECT_EQ('a', hent.name_[0]);\n  EXPECT_EQ('\\\\', hent.name_[1]);\n  EXPECT_EQ('\\\\', hent.name_[2]);\n  EXPECT_EQ('b', hent.name_[3]);\n  EXPECT_EQ('\\\\', hent.name_[4]);\n  EXPECT_EQ('.', hent.name_[5]);\n  EXPECT_EQ('c', hent.name_[6]);\n  ares_free_hostent(host);\n}",
+      "fn_code_pos": [
+        [
+          64,
+          0
+        ],
+        [
+          108,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParsePartialCompressedName) {\n  std::vector<byte> data = {\n    0x12, 0x34,  // qid\n    0x84, // response + query + AA + not-TC + not-RD\n    0x00, // not-RA + not-Z + not-AD + not-CD + rc=NoError\n    0x00, 0x01,  // num questions\n    0x00, 0x01,  // num answer RRs\n    0x00, 0x00,  // num authority RRs\n    0x00, 0x00,  // num additional RRs\n    // Question\n    0x03, 'w', 'w', 'w',\n    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x00, 0x01,  // type A\n    0x00, 0x01,  // class IN\n    // Answer 1\n    0x03, 'w', 'w', 'w',\n    0xc0, 0x10,  // offset 16\n    0x00, 0x01,  // RR type\n    0x00, 0x01,  // class IN\n    0x01, 0x02, 0x03, 0x04, // TTL\n    0x00, 0x04,  // rdata length\n    0x02, 0x03, 0x04, 0x05,\n  };\n  struct hostent *host = nullptr;\n  struct ares_addrttl info[2];\n  int count = 2;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_a_reply(data.data(), data.size(),\n                                             &host, info, &count));\n  ASSERT_NE(nullptr, host);\n  std::stringstream ss;\n  ss << HostEnt(host);\n  EXPECT_EQ(\"{'www.example.com' aliases=[] addrs=[2.3.4.5]}\", ss.str());\n  ares_free_hostent(host);\n}",
+      "fn_code_pos": [
+        [
+          111,
+          0
+        ],
+        [
+          146,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseFullyCompressedName) {\n  std::vector<byte> data = {\n    0x12, 0x34,  // qid\n    0x84, // response + query + AA + not-TC + not-RD\n    0x00, // not-RA + not-Z + not-AD + not-CD + rc=NoError\n    0x00, 0x01,  // num questions\n    0x00, 0x01,  // num answer RRs\n    0x00, 0x00,  // num authority RRs\n    0x00, 0x00,  // num additional RRs\n    // Question\n    0x03, 'w', 'w', 'w',\n    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x00, 0x01,  // type A\n    0x00, 0x01,  // class IN\n    // Answer 1\n    0xc0, 0x0c,  // offset 12\n    0x00, 0x01,  // RR type\n    0x00, 0x01,  // class IN\n    0x01, 0x02, 0x03, 0x04, // TTL\n    0x00, 0x04,  // rdata length\n    0x02, 0x03, 0x04, 0x05,\n  };\n  struct hostent *host = nullptr;\n  struct ares_addrttl info[2];\n  int count = 2;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_a_reply(data.data(), data.size(),\n                                             &host, info, &count));\n  ASSERT_NE(nullptr, host);\n  std::stringstream ss;\n  ss << HostEnt(host);\n  EXPECT_EQ(\"{'www.example.com' aliases=[] addrs=[2.3.4.5]}\", ss.str());\n  ares_free_hostent(host);\n}",
+      "fn_code_pos": [
+        [
+          148,
+          0
+        ],
+        [
+          182,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseFullyCompressedName2) {\n  std::vector<byte> data = {\n    0x12, 0x34,  // qid\n    0x84, // response + query + AA + not-TC + not-RD\n    0x00, // not-RA + not-Z + not-AD + not-CD + rc=NoError\n    0x00, 0x01,  // num questions\n    0x00, 0x01,  // num answer RRs\n    0x00, 0x00,  // num authority RRs\n    0x00, 0x00,  // num additional RRs\n    // Question\n    0xC0, 0x12,  // pointer to later in message\n    0x00, 0x01,  // type A\n    0x00, 0x01,  // class IN\n    // Answer 1\n    0x03, 'w', 'w', 'w',\n    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x00, 0x01,  // RR type\n    0x00, 0x01,  // class IN\n    0x01, 0x02, 0x03, 0x04, // TTL\n    0x00, 0x04,  // rdata length\n    0x02, 0x03, 0x04, 0x05,\n  };\n  struct hostent *host = nullptr;\n  struct ares_addrttl info[2];\n  int count = 2;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_a_reply(data.data(), data.size(),\n                                             &host, info, &count));\n  ASSERT_NE(nullptr, host);\n  std::stringstream ss;\n  ss << HostEnt(host);\n  EXPECT_EQ(\"{'www.example.com' aliases=[] addrs=[2.3.4.5]}\", ss.str());\n  ares_free_hostent(host);\n}",
+      "fn_code_pos": [
+        [
+          184,
+          0
+        ],
+        [
+          218,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "hent(host)",
+      "fn_dec_pos": [
+        [
+          95,
+          10
+        ],
+        [
+          95,
+          20
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "hent",
+        "parameters": {},
+        "return_type": "HostEnt"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        16,
+        2
+      ],
+      [
+        16,
+        16
+      ]
+    ],
+    [
+      "struct ares_addrttl",
+      {},
+      "",
+      [
+        17,
+        2
+      ],
+      [
+        17,
+        21
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        50,
+        2
+      ],
+      [
+        50,
+        16
+      ]
+    ],
+    [
+      "struct ares_addrttl",
+      {},
+      "",
+      [
+        51,
+        2
+      ],
+      [
+        51,
+        21
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        89,
+        2
+      ],
+      [
+        89,
+        16
+      ]
+    ],
+    [
+      "struct ares_addrttl",
+      {},
+      "",
+      [
+        90,
+        2
+      ],
+      [
+        90,
+        21
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        136,
+        2
+      ],
+      [
+        136,
+        16
+      ]
+    ],
+    [
+      "struct ares_addrttl",
+      {},
+      "",
+      [
+        137,
+        2
+      ],
+      [
+        137,
+        21
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        172,
+        2
+      ],
+      [
+        172,
+        16
+      ]
+    ],
+    [
+      "struct ares_addrttl",
+      {},
+      "",
+      [
+        173,
+        2
+      ],
+      [
+        173,
+        21
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        208,
+        2
+      ],
+      [
+        208,
+        16
+      ]
+    ],
+    [
+      "struct ares_addrttl",
+      {},
+      "",
+      [
+        209,
+        2
+      ],
+      [
+        209,
+        21
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares-test.h\"\n",
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    [
+      "#include \"dns-proto.h\"\n",
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    [
+      "#include <sstream>\n",
+      [
+        3,
+        0
+      ],
+      [
+        4,
+        0
+      ]
+    ],
+    [
+      "#include <vector>\n",
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

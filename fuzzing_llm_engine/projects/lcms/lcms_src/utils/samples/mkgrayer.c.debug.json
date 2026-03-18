@@ -1,0 +1,69 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nint Forward(register WORD In[], register WORD Out[], register LPVOID Cargo)\n{\t\n    cmsCIELab Lab;\n\n\n    cmsLabEncoded2Float(&Lab, In);\n\n\tif (fabs(Lab.a) < 3 && fabs(Lab.b) < 3) {\n\t\t\n\t\tdouble L_01 = Lab.L / 100.0;\n\t    WORD K;\n\n\t\tif (L_01 > 1) L_01 = 1;\n\t\tK = (WORD) floor(L_01* 65535.0 + 0.5);\n\n\t\tOut[0] = Out[1] = Out[2] = K; \n\t}\n\telse {\n\t\tOut[0] = 0xFFFF; Out[1] = 0; Out[2] = 0; \n\t}\n\n\treturn TRUE;\n}",
+      "fn_code_pos": [
+        [
+          27,
+          0
+        ],
+        [
+          50,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Forward",
+        "parameters": {
+          "In": "WORD",
+          "Out": "WORD",
+          "Cargo": "LPVOID"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n\tLPLUT BToA0;\n\tcmsHPROFILE hProfile;\n\n\tfprintf(stderr, \"Creating interpol2.icc...\");\n\n\tunlink(\"interpol2.icc\");\n\thProfile = cmsOpenProfileFromFile(\"interpol2.icc\", \"w8\");\n\n\n    BToA0 = cmsAllocLUT();\n\n\tcmsAlloc3DGrid(BToA0, 17, 3, 3);\n\t    \n\tcmsSample3DGrid(BToA0, Forward, NULL, 0);\n\t\t\t\n    cmsAddTag(hProfile, icSigBToA0Tag, BToA0);\n\t                                \n\tcmsSetColorSpace(hProfile, icSigRgbData);\n    cmsSetPCS(hProfile, icSigLabData);\n    cmsSetDeviceClass(hProfile, icSigOutputClass);\n\n\tcmsAddTag(hProfile, icSigProfileDescriptionTag, \"Interpolation test\");\n    cmsAddTag(hProfile, icSigCopyrightTag,          \"Copyright (c) HP 2007. All rights reserved.\");\n    cmsAddTag(hProfile, icSigDeviceMfgDescTag,      \"Little cms\");    \n    cmsAddTag(hProfile, icSigDeviceModelDescTag,    \"Interpolation test profile\");\n\n\t\n\tcmsCloseProfile(hProfile);\n    \n\tcmsFreeLUT(BToA0);\n\t\n\tfprintf(stderr, \"Done.\\n\");\n\n\treturn 0;\n}",
+      "fn_code_pos": [
+        [
+          56,
+          0
+        ],
+        [
+          92,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"lcms.h\"\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

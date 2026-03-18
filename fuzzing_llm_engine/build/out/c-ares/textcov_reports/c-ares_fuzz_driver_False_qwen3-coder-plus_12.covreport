@@ -1,0 +1,3681 @@
+ares__close_sockets:
+   23|     10|{
+   24|     10|  struct send_request *sendreq;
+   25|       |
+   26|       |  /* Free all pending output buffers. */
+   27|     10|  while (server->qhead)
+  ------------------
+  |  Branch (27:10): [True: 0, False: 10]
+  ------------------
+   28|      0|    {
+   29|       |      /* Advance server->qhead; pull out query as we go. */
+   30|      0|      sendreq = server->qhead;
+   31|      0|      server->qhead = sendreq->next;
+   32|      0|      if (sendreq->data_storage != NULL)
+  ------------------
+  |  Branch (32:11): [True: 0, False: 0]
+  ------------------
+   33|      0|        ares_free(sendreq->data_storage);
+   34|      0|      ares_free(sendreq);
+   35|      0|    }
+   36|     10|  server->qtail = NULL;
+   37|       |
+   38|       |  /* Reset any existing input buffer. */
+   39|     10|  if (server->tcp_buffer)
+  ------------------
+  |  Branch (39:7): [True: 0, False: 10]
+  ------------------
+   40|      0|    ares_free(server->tcp_buffer);
+   41|     10|  server->tcp_buffer = NULL;
+   42|     10|  server->tcp_lenbuf_pos = 0;
+   43|       |
+   44|       |  /* Reset brokenness */
+   45|     10|  server->is_broken = 0;
+   46|       |
+   47|       |  /* Close the TCP and UDP sockets. */
+   48|     10|  if (server->tcp_socket != ARES_SOCKET_BAD)
+  ------------------
+  |  |  231|     10|#define ARES_SOCKET_BAD -1
+  ------------------
+  |  Branch (48:7): [True: 0, False: 10]
+  ------------------
+   49|      0|    {
+   50|      0|      SOCK_STATE_CALLBACK(channel, server->tcp_socket, 0, 0);
+  ------------------
+  |  |  432|      0|  do {                                                                  \
+  |  |  433|      0|    if ((c)->sock_state_cb)                                             \
+  |  |  ------------------
+  |  |  |  Branch (433:9): [True: 0, False: 0]
+  |  |  ------------------
+  |  |  434|      0|      (c)->sock_state_cb((c)->sock_state_cb_data, (s), (r), (w));       \
+  |  |  435|      0|  } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+   51|      0|      ares__close_socket(channel, server->tcp_socket);
+   52|      0|      server->tcp_socket = ARES_SOCKET_BAD;
+  ------------------
+  |  |  231|      0|#define ARES_SOCKET_BAD -1
+  ------------------
+   53|      0|      server->tcp_connection_generation = ++channel->tcp_connection_generation;
+   54|      0|    }
+   55|     10|  if (server->udp_socket != ARES_SOCKET_BAD)
+  ------------------
+  |  |  231|     10|#define ARES_SOCKET_BAD -1
+  ------------------
+  |  Branch (55:7): [True: 0, False: 10]
+  ------------------
+   56|      0|    {
+   57|      0|      SOCK_STATE_CALLBACK(channel, server->udp_socket, 0, 0);
+  ------------------
+  |  |  432|      0|  do {                                                                  \
+  |  |  433|      0|    if ((c)->sock_state_cb)                                             \
+  |  |  ------------------
+  |  |  |  Branch (433:9): [True: 0, False: 0]
+  |  |  ------------------
+  |  |  434|      0|      (c)->sock_state_cb((c)->sock_state_cb_data, (s), (r), (w));       \
+  |  |  435|      0|  } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+   58|      0|      ares__close_socket(channel, server->udp_socket);
+   59|      0|      server->udp_socket = ARES_SOCKET_BAD;
+  ------------------
+  |  |  231|      0|#define ARES_SOCKET_BAD -1
+  ------------------
+   60|      0|    }
+   61|     10|}
+
+ares__read_line:
+   32|    400|{
+   33|    400|  char *newbuf;
+   34|    400|  size_t offset = 0;
+   35|    400|  size_t len;
+   36|       |
+   37|    400|  if (*buf == NULL)
+  ------------------
+  |  Branch (37:7): [True: 10, False: 390]
+  ------------------
+   38|     10|    {
+   39|     10|      *buf = ares_malloc(128);
+   40|     10|      if (!*buf)
+  ------------------
+  |  Branch (40:11): [True: 0, False: 10]
+  ------------------
+   41|      0|        return ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+   42|     10|      *bufsize = 128;
+   43|     10|    }
+   44|       |
+   45|    400|  for (;;)
+   46|    400|    {
+   47|    400|      int bytestoread = aresx_uztosi(*bufsize - offset);
+   48|       |
+   49|    400|      if (!fgets(*buf + offset, bytestoread, fp))
+  ------------------
+  |  Branch (49:11): [True: 20, False: 380]
+  ------------------
+   50|     20|        return (offset != 0) ? 0 : (ferror(fp)) ? ARES_EFILE : ARES_EOF;
+  ------------------
+  |  |  116|      0|#define ARES_EFILE              14
+  ------------------
+                      return (offset != 0) ? 0 : (ferror(fp)) ? ARES_EFILE : ARES_EOF;
+  ------------------
+  |  |  115|     20|#define ARES_EOF                13
+  ------------------
+  |  Branch (50:16): [True: 0, False: 20]
+  |  Branch (50:36): [True: 0, False: 20]
+  ------------------
+   51|    380|      len = offset + strlen(*buf + offset);
+   52|    380|      if ((*buf)[len - 1] == '\n')
+  ------------------
+  |  Branch (52:11): [True: 380, False: 0]
+  ------------------
+   53|    380|        {
+   54|    380|          (*buf)[len - 1] = 0;
+   55|    380|          break;
+   56|    380|        }
+   57|      0|      offset = len;
+   58|      0|      if(len < *bufsize - 1)
+  ------------------
+  |  Branch (58:10): [True: 0, False: 0]
+  ------------------
+   59|      0|        continue;
+   60|       |
+   61|       |      /* Allocate more space. */
+   62|      0|      newbuf = ares_realloc(*buf, *bufsize * 2);
+   63|      0|      if (!newbuf)
+  ------------------
+  |  Branch (63:11): [True: 0, False: 0]
+  ------------------
+   64|      0|        {
+   65|      0|          ares_free(*buf);
+   66|      0|          *buf = NULL;
+   67|      0|          return ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+   68|      0|        }
+   69|      0|      *buf = newbuf;
+   70|      0|      *bufsize *= 2;
+   71|      0|    }
+   72|    380|  return ARES_SUCCESS;
+  ------------------
+  |  |   98|    380|#define ARES_SUCCESS            0
+  ------------------
+   73|    400|}
+
+ares__tvnow:
+   38|     20|{
+   39|       |  /*
+   40|       |  ** clock_gettime() is granted to be increased monotonically when the
+   41|       |  ** monotonic clock is queried. Time starting point is unspecified, it
+   42|       |  ** could be the system start-up time, the Epoch, or something else,
+   43|       |  ** in any case the time starting point does not change once that the
+   44|       |  ** system has started up.
+   45|       |  */
+   46|     20|  struct timeval now;
+   47|     20|  struct timespec tsnow;
+   48|     20|  if(0 == clock_gettime(CLOCK_MONOTONIC, &tsnow)) {
+  ------------------
+  |  Branch (48:6): [True: 20, False: 0]
+  ------------------
+   49|     20|    now.tv_sec = tsnow.tv_sec;
+   50|     20|    now.tv_usec = tsnow.tv_nsec / 1000;
+   51|     20|  }
+   52|       |  /*
+   53|       |  ** Even when the configure process has truly detected monotonic clock
+   54|       |  ** availability, it might happen that it is not actually available at
+   55|       |  ** run-time. When this occurs simply fallback to other time source.
+   56|       |  */
+   57|      0|#ifdef HAVE_GETTIMEOFDAY
+   58|      0|  else
+   59|      0|    (void)gettimeofday(&now, NULL);  /* LCOV_EXCL_LINE */
+   60|       |#else
+   61|       |  else {
+   62|       |    now.tv_sec = (long)time(NULL);
+   63|       |    now.tv_usec = 0;
+   64|       |  }
+   65|       |#endif
+   66|     20|  return now;
+   67|     20|}
+
+ares_free_data:
+   42|      9|{
+   43|      9|  while (dataptr != NULL) {
+  ------------------
+  |  Branch (43:10): [True: 0, False: 9]
+  ------------------
+   44|      0|    struct ares_data *ptr;
+   45|      0|    void *next_data = NULL;
+   46|       |
+   47|       |#ifdef __INTEL_COMPILER
+   48|       |#  pragma warning(push)
+   49|       |#  pragma warning(disable:1684)
+   50|       |   /* 1684: conversion from pointer to same-sized integral type */
+   51|       |#endif
+   52|       |
+   53|      0|    ptr = (void *)((char *)dataptr - offsetof(struct ares_data, data));
+   54|       |
+   55|       |#ifdef __INTEL_COMPILER
+   56|       |#  pragma warning(pop)
+   57|       |#endif
+   58|       |
+   59|      0|    if (ptr->mark != ARES_DATATYPE_MARK)
+  ------------------
+  |  |   38|      0|#define ARES_DATATYPE_MARK 0xbead
+  ------------------
+  |  Branch (59:9): [True: 0, False: 0]
+  ------------------
+   60|      0|      return;
+   61|       |
+   62|      0|    switch (ptr->type)
+   63|      0|      {
+   64|      0|        case ARES_DATATYPE_MX_REPLY:
+  ------------------
+  |  Branch (64:9): [True: 0, False: 0]
+  ------------------
+   65|       |
+   66|      0|          if (ptr->data.mx_reply.next)
+  ------------------
+  |  Branch (66:15): [True: 0, False: 0]
+  ------------------
+   67|      0|            next_data = ptr->data.mx_reply.next;
+   68|      0|          if (ptr->data.mx_reply.host)
+  ------------------
+  |  Branch (68:15): [True: 0, False: 0]
+  ------------------
+   69|      0|            ares_free(ptr->data.mx_reply.host);
+   70|      0|          break;
+   71|       |
+   72|      0|        case ARES_DATATYPE_SRV_REPLY:
+  ------------------
+  |  Branch (72:9): [True: 0, False: 0]
+  ------------------
+   73|       |
+   74|      0|          if (ptr->data.srv_reply.next)
+  ------------------
+  |  Branch (74:15): [True: 0, False: 0]
+  ------------------
+   75|      0|            next_data = ptr->data.srv_reply.next;
+   76|      0|          if (ptr->data.srv_reply.host)
+  ------------------
+  |  Branch (76:15): [True: 0, False: 0]
+  ------------------
+   77|      0|            ares_free(ptr->data.srv_reply.host);
+   78|      0|          break;
+   79|       |
+   80|      0|        case ARES_DATATYPE_URI_REPLY:
+  ------------------
+  |  Branch (80:9): [True: 0, False: 0]
+  ------------------
+   81|       |
+   82|      0|          if (ptr->data.uri_reply.next)
+  ------------------
+  |  Branch (82:15): [True: 0, False: 0]
+  ------------------
+   83|      0|            next_data = ptr->data.uri_reply.next;
+   84|      0|          if (ptr->data.uri_reply.uri)
+  ------------------
+  |  Branch (84:15): [True: 0, False: 0]
+  ------------------
+   85|      0|            ares_free(ptr->data.uri_reply.uri);
+   86|      0|          break;
+   87|       |
+   88|      0|        case ARES_DATATYPE_TXT_REPLY:
+  ------------------
+  |  Branch (88:9): [True: 0, False: 0]
+  ------------------
+   89|      0|        case ARES_DATATYPE_TXT_EXT:
+  ------------------
+  |  Branch (89:9): [True: 0, False: 0]
+  ------------------
+   90|       |
+   91|      0|          if (ptr->data.txt_reply.next)
+  ------------------
+  |  Branch (91:15): [True: 0, False: 0]
+  ------------------
+   92|      0|            next_data = ptr->data.txt_reply.next;
+   93|      0|          if (ptr->data.txt_reply.txt)
+  ------------------
+  |  Branch (93:15): [True: 0, False: 0]
+  ------------------
+   94|      0|            ares_free(ptr->data.txt_reply.txt);
+   95|      0|          break;
+   96|       |
+   97|      0|        case ARES_DATATYPE_ADDR_NODE:
+  ------------------
+  |  Branch (97:9): [True: 0, False: 0]
+  ------------------
+   98|       |
+   99|      0|          if (ptr->data.addr_node.next)
+  ------------------
+  |  Branch (99:15): [True: 0, False: 0]
+  ------------------
+  100|      0|            next_data = ptr->data.addr_node.next;
+  101|      0|          break;
+  102|       |
+  103|      0|        case ARES_DATATYPE_ADDR_PORT_NODE:
+  ------------------
+  |  Branch (103:9): [True: 0, False: 0]
+  ------------------
+  104|       |
+  105|      0|          if (ptr->data.addr_port_node.next)
+  ------------------
+  |  Branch (105:15): [True: 0, False: 0]
+  ------------------
+  106|      0|            next_data = ptr->data.addr_port_node.next;
+  107|      0|          break;
+  108|       |
+  109|      0|        case ARES_DATATYPE_NAPTR_REPLY:
+  ------------------
+  |  Branch (109:9): [True: 0, False: 0]
+  ------------------
+  110|       |
+  111|      0|          if (ptr->data.naptr_reply.next)
+  ------------------
+  |  Branch (111:15): [True: 0, False: 0]
+  ------------------
+  112|      0|            next_data = ptr->data.naptr_reply.next;
+  113|      0|          if (ptr->data.naptr_reply.flags)
+  ------------------
+  |  Branch (113:15): [True: 0, False: 0]
+  ------------------
+  114|      0|            ares_free(ptr->data.naptr_reply.flags);
+  115|      0|          if (ptr->data.naptr_reply.service)
+  ------------------
+  |  Branch (115:15): [True: 0, False: 0]
+  ------------------
+  116|      0|            ares_free(ptr->data.naptr_reply.service);
+  117|      0|          if (ptr->data.naptr_reply.regexp)
+  ------------------
+  |  Branch (117:15): [True: 0, False: 0]
+  ------------------
+  118|      0|            ares_free(ptr->data.naptr_reply.regexp);
+  119|      0|          if (ptr->data.naptr_reply.replacement)
+  ------------------
+  |  Branch (119:15): [True: 0, False: 0]
+  ------------------
+  120|      0|            ares_free(ptr->data.naptr_reply.replacement);
+  121|      0|          break;
+  122|       |
+  123|      0|        case ARES_DATATYPE_SOA_REPLY:
+  ------------------
+  |  Branch (123:9): [True: 0, False: 0]
+  ------------------
+  124|      0|          if (ptr->data.soa_reply.nsname)
+  ------------------
+  |  Branch (124:15): [True: 0, False: 0]
+  ------------------
+  125|      0|            ares_free(ptr->data.soa_reply.nsname);
+  126|      0|          if (ptr->data.soa_reply.hostmaster)
+  ------------------
+  |  Branch (126:15): [True: 0, False: 0]
+  ------------------
+  127|      0|            ares_free(ptr->data.soa_reply.hostmaster);
+  128|      0|          break;
+  129|       |
+  130|      0|        case ARES_DATATYPE_CAA_REPLY:
+  ------------------
+  |  Branch (130:9): [True: 0, False: 0]
+  ------------------
+  131|       | 
+  132|      0|          if (ptr->data.caa_reply.next)
+  ------------------
+  |  Branch (132:15): [True: 0, False: 0]
+  ------------------
+  133|      0|            next_data = ptr->data.caa_reply.next;
+  134|      0|          if (ptr->data.caa_reply.property)
+  ------------------
+  |  Branch (134:15): [True: 0, False: 0]
+  ------------------
+  135|      0|            ares_free(ptr->data.caa_reply.property);
+  136|      0|          if (ptr->data.caa_reply.value)
+  ------------------
+  |  Branch (136:15): [True: 0, False: 0]
+  ------------------
+  137|      0|            ares_free(ptr->data.caa_reply.value);
+  138|      0|          break;
+  139|       |
+  140|      0|        default:
+  ------------------
+  |  Branch (140:9): [True: 0, False: 0]
+  ------------------
+  141|      0|          return;
+  142|      0|      }
+  143|       |
+  144|      0|    ares_free(ptr);
+  145|      0|    dataptr = next_data;
+  146|      0|  }
+  147|      9|}
+
+ares_destroy:
+   44|     10|{
+   45|     10|  int i;
+   46|     10|  struct query *query;
+   47|     10|  struct list_node* list_head;
+   48|     10|  struct list_node* list_node;
+   49|       |
+   50|     10|  if (!channel)
+  ------------------
+  |  Branch (50:7): [True: 0, False: 10]
+  ------------------
+   51|      0|    return;
+   52|       |
+   53|     10|  list_head = &(channel->all_queries);
+   54|     10|  for (list_node = list_head->next; list_node != list_head; )
+  ------------------
+  |  Branch (54:37): [True: 0, False: 10]
+  ------------------
+   55|      0|    {
+   56|      0|      query = list_node->data;
+   57|      0|      list_node = list_node->next;  /* since we're deleting the query */
+   58|      0|      query->callback(query->arg, ARES_EDESTRUCTION, 0, NULL, 0);
+  ------------------
+  |  |  118|      0|#define ARES_EDESTRUCTION       16
+  ------------------
+   59|      0|      ares__free_query(query);
+   60|      0|    }
+   61|     10|#ifndef NDEBUG
+   62|       |  /* Freeing the query should remove it from all the lists in which it sits,
+   63|       |   * so all query lists should be empty now.
+   64|       |   */
+   65|     10|  assert(ares__is_list_empty(&(channel->all_queries)));
+  ------------------
+  |  Branch (65:3): [True: 0, False: 10]
+  |  Branch (65:3): [True: 10, False: 0]
+  ------------------
+   66|  20.4k|  for (i = 0; i < ARES_QID_TABLE_SIZE; i++)
+  ------------------
+  |  |  322|  20.4k|#define ARES_QID_TABLE_SIZE 2048
+  ------------------
+  |  Branch (66:15): [True: 20.4k, False: 10]
+  ------------------
+   67|  20.4k|    {
+   68|  20.4k|      assert(ares__is_list_empty(&(channel->queries_by_qid[i])));
+  ------------------
+  |  Branch (68:7): [True: 0, False: 20.4k]
+  |  Branch (68:7): [True: 20.4k, False: 0]
+  ------------------
+   69|  20.4k|    }
+   70|  10.2k|  for (i = 0; i < ARES_TIMEOUT_TABLE_SIZE; i++)
+  ------------------
+  |  |  325|  10.2k|#define ARES_TIMEOUT_TABLE_SIZE 1024
+  ------------------
+  |  Branch (70:15): [True: 10.2k, False: 10]
+  ------------------
+   71|  10.2k|    {
+   72|  10.2k|      assert(ares__is_list_empty(&(channel->queries_by_timeout[i])));
+  ------------------
+  |  Branch (72:7): [True: 0, False: 10.2k]
+  |  Branch (72:7): [True: 10.2k, False: 0]
+  ------------------
+   73|  10.2k|    }
+   74|     10|#endif
+   75|       |
+   76|     10|  ares__destroy_servers_state(channel);
+   77|       |
+   78|     10|  if (channel->domains) {
+  ------------------
+  |  Branch (78:7): [True: 10, False: 0]
+  ------------------
+   79|     20|    for (i = 0; i < channel->ndomains; i++)
+  ------------------
+  |  Branch (79:17): [True: 10, False: 10]
+  ------------------
+   80|     10|      ares_free(channel->domains[i]);
+   81|     10|    ares_free(channel->domains);
+   82|     10|  }
+   83|       |
+   84|     10|  if(channel->sortlist)
+  ------------------
+  |  Branch (84:6): [True: 0, False: 10]
+  ------------------
+   85|      0|    ares_free(channel->sortlist);
+   86|       |
+   87|     10|  if (channel->lookups)
+  ------------------
+  |  Branch (87:7): [True: 10, False: 0]
+  ------------------
+   88|     10|    ares_free(channel->lookups);
+   89|       |
+   90|     10|  if (channel->resolvconf_path)
+  ------------------
+  |  Branch (90:7): [True: 0, False: 10]
+  ------------------
+   91|      0|    ares_free(channel->resolvconf_path);
+   92|       |
+   93|     10|  ares_free(channel);
+   94|     10|}
+ares__destroy_servers_state:
+   97|     10|{
+   98|     10|  struct server_state *server;
+   99|     10|  int i;
+  100|       |
+  101|     10|  if (channel->servers)
+  ------------------
+  |  Branch (101:7): [True: 10, False: 0]
+  ------------------
+  102|     10|    {
+  103|     20|      for (i = 0; i < channel->nservers; i++)
+  ------------------
+  |  Branch (103:19): [True: 10, False: 10]
+  ------------------
+  104|     10|        {
+  105|     10|          server = &channel->servers[i];
+  106|     10|          ares__close_sockets(channel, server);
+  107|     10|          assert(ares__is_list_empty(&server->queries_to_server));
+  ------------------
+  |  Branch (107:11): [True: 0, False: 10]
+  |  Branch (107:11): [True: 10, False: 0]
+  ------------------
+  108|     10|        }
+  109|     10|      ares_free(channel->servers);
+  110|     10|      channel->servers = NULL;
+  111|     10|    }
+  112|     10|  channel->nservers = -1;
+  113|     10|}
+
+ares_init:
+   99|     10|{
+  100|       |  return ares_init_options(channelptr, NULL, 0);
+  101|     10|}
+ares_init_options:
+  105|     10|{
+  106|     10|  ares_channel channel;
+  107|     10|  int i;
+  108|     10|  int status = ARES_SUCCESS;
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  109|     10|  struct timeval now;
+  110|       |
+  111|     10|  if (ares_library_initialized() != ARES_SUCCESS)
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (111:7): [True: 0, False: 10]
+  ------------------
+  112|      0|    return ARES_ENOTINITIALIZED;  /* LCOV_EXCL_LINE: n/a on non-WinSock */
+  ------------------
+  |  |  129|      0|#define ARES_ENOTINITIALIZED    21          /* introduced in 1.7.0 */
+  ------------------
+  113|       |
+  114|     10|  channel = ares_malloc(sizeof(struct ares_channeldata));
+  115|     10|  if (!channel) {
+  ------------------
+  |  Branch (115:7): [True: 0, False: 10]
+  ------------------
+  116|      0|    *channelptr = NULL;
+  117|      0|    return ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+  118|      0|  }
+  119|       |
+  120|     10|  now = ares__tvnow();
+  121|       |
+  122|       |  /* Set everything to distinguished values so we know they haven't
+  123|       |   * been set yet.
+  124|       |   */
+  125|     10|  channel->flags = -1;
+  126|     10|  channel->timeout = -1;
+  127|     10|  channel->tries = -1;
+  128|     10|  channel->ndots = -1;
+  129|     10|  channel->rotate = -1;
+  130|     10|  channel->udp_port = -1;
+  131|     10|  channel->tcp_port = -1;
+  132|     10|  channel->ednspsz = -1;
+  133|     10|  channel->socket_send_buffer_size = -1;
+  134|     10|  channel->socket_receive_buffer_size = -1;
+  135|     10|  channel->nservers = -1;
+  136|     10|  channel->ndomains = -1;
+  137|     10|  channel->nsort = -1;
+  138|     10|  channel->tcp_connection_generation = 0;
+  139|     10|  channel->lookups = NULL;
+  140|     10|  channel->domains = NULL;
+  141|     10|  channel->sortlist = NULL;
+  142|     10|  channel->servers = NULL;
+  143|     10|  channel->sock_state_cb = NULL;
+  144|     10|  channel->sock_state_cb_data = NULL;
+  145|     10|  channel->sock_create_cb = NULL;
+  146|     10|  channel->sock_create_cb_data = NULL;
+  147|     10|  channel->sock_config_cb = NULL;
+  148|     10|  channel->sock_config_cb_data = NULL;
+  149|     10|  channel->sock_funcs = NULL;
+  150|     10|  channel->sock_func_cb_data = NULL;
+  151|     10|  channel->resolvconf_path = NULL;
+  152|       |
+  153|     10|  channel->last_server = 0;
+  154|     10|  channel->last_timeout_processed = (time_t)now.tv_sec;
+  155|       |
+  156|     10|  memset(&channel->local_dev_name, 0, sizeof(channel->local_dev_name));
+  157|     10|  channel->local_ip4 = 0;
+  158|     10|  memset(&channel->local_ip6, 0, sizeof(channel->local_ip6));
+  159|       |
+  160|       |  /* Initialize our lists of queries */
+  161|     10|  ares__init_list_head(&(channel->all_queries));
+  162|  20.4k|  for (i = 0; i < ARES_QID_TABLE_SIZE; i++)
+  ------------------
+  |  |  322|  20.4k|#define ARES_QID_TABLE_SIZE 2048
+  ------------------
+  |  Branch (162:15): [True: 20.4k, False: 10]
+  ------------------
+  163|  20.4k|    {
+  164|  20.4k|      ares__init_list_head(&(channel->queries_by_qid[i]));
+  165|  20.4k|    }
+  166|  10.2k|  for (i = 0; i < ARES_TIMEOUT_TABLE_SIZE; i++)
+  ------------------
+  |  |  325|  10.2k|#define ARES_TIMEOUT_TABLE_SIZE 1024
+  ------------------
+  |  Branch (166:15): [True: 10.2k, False: 10]
+  ------------------
+  167|  10.2k|    {
+  168|  10.2k|      ares__init_list_head(&(channel->queries_by_timeout[i]));
+  169|  10.2k|    }
+  170|       |
+  171|       |  /* Initialize configuration by each of the four sources, from highest
+  172|       |   * precedence to lowest.
+  173|       |   */
+  174|       |
+  175|     10|  status = init_by_options(channel, options, optmask);
+  176|     10|  if (status != ARES_SUCCESS) {
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (176:7): [True: 0, False: 10]
+  ------------------
+  177|      0|    DEBUGF(fprintf(stderr, "Error: init_by_options failed: %s\n",
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+  178|      0|                   ares_strerror(status)));
+  179|       |    /* If we fail to apply user-specified options, fail the whole init process */
+  180|      0|    goto done;
+  181|      0|  }
+  182|     10|  status = init_by_environment(channel);
+  183|     10|  if (status != ARES_SUCCESS)
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (183:7): [True: 0, False: 10]
+  ------------------
+  184|      0|    DEBUGF(fprintf(stderr, "Error: init_by_environment failed: %s\n",
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+  185|     10|                   ares_strerror(status)));
+  186|     10|  if (status == ARES_SUCCESS) {
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (186:7): [True: 10, False: 0]
+  ------------------
+  187|     10|    status = init_by_resolv_conf(channel);
+  188|     10|    if (status != ARES_SUCCESS)
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (188:9): [True: 0, False: 10]
+  ------------------
+  189|      0|      DEBUGF(fprintf(stderr, "Error: init_by_resolv_conf failed: %s\n",
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+  190|     10|                     ares_strerror(status)));
+  191|     10|  }
+  192|       |
+  193|       |  /*
+  194|       |   * No matter what failed or succeeded, seed defaults to provide
+  195|       |   * useful behavior for things that we missed.
+  196|       |   */
+  197|     10|  status = init_by_defaults(channel);
+  198|     10|  if (status != ARES_SUCCESS)
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (198:7): [True: 0, False: 10]
+  ------------------
+  199|      0|    DEBUGF(fprintf(stderr, "Error: init_by_defaults failed: %s\n",
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+  200|     10|                   ares_strerror(status)));
+  201|       |
+  202|       |  /* Generate random key */
+  203|       |
+  204|     10|  if (status == ARES_SUCCESS) {
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (204:7): [True: 10, False: 0]
+  ------------------
+  205|     10|    status = init_id_key(&channel->id_key, ARES_ID_KEY_LEN);
+  ------------------
+  |  |  104|     10|#define ARES_ID_KEY_LEN 31
+  ------------------
+  206|     10|    if (status == ARES_SUCCESS)
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (206:9): [True: 10, False: 0]
+  ------------------
+  207|     10|      channel->next_id = ares__generate_new_id(&channel->id_key);
+  208|      0|    else
+  209|      0|      DEBUGF(fprintf(stderr, "Error: init_id_key failed: %s\n",
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+  210|     10|                     ares_strerror(status)));
+  211|     10|  }
+  212|       |
+  213|     10|done:
+  214|     10|  if (status != ARES_SUCCESS)
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (214:7): [True: 0, False: 10]
+  ------------------
+  215|      0|    {
+  216|       |      /* Something failed; clean up memory we may have allocated. */
+  217|      0|      if (channel->servers)
+  ------------------
+  |  Branch (217:11): [True: 0, False: 0]
+  ------------------
+  218|      0|        ares_free(channel->servers);
+  219|      0|      if (channel->ndomains != -1)
+  ------------------
+  |  Branch (219:11): [True: 0, False: 0]
+  ------------------
+  220|      0|        ares_strsplit_free(channel->domains, channel->ndomains);
+  221|      0|      if (channel->sortlist)
+  ------------------
+  |  Branch (221:11): [True: 0, False: 0]
+  ------------------
+  222|      0|        ares_free(channel->sortlist);
+  223|      0|      if(channel->lookups)
+  ------------------
+  |  Branch (223:10): [True: 0, False: 0]
+  ------------------
+  224|      0|        ares_free(channel->lookups);
+  225|      0|      if(channel->resolvconf_path)
+  ------------------
+  |  Branch (225:10): [True: 0, False: 0]
+  ------------------
+  226|      0|        ares_free(channel->resolvconf_path);
+  227|      0|      ares_free(channel);
+  228|      0|      return status;
+  229|      0|    }
+  230|       |
+  231|       |  /* Trim to one server if ARES_FLAG_PRIMARY is set. */
+  232|     10|  if ((channel->flags & ARES_FLAG_PRIMARY) && channel->nservers > 1)
+  ------------------
+  |  |  143|     10|#define ARES_FLAG_PRIMARY       (1 << 1)
+  ------------------
+  |  Branch (232:7): [True: 0, False: 10]
+  |  Branch (232:47): [True: 0, False: 0]
+  ------------------
+  233|      0|    channel->nservers = 1;
+  234|       |
+  235|     10|  ares__init_servers_state(channel);
+  236|       |
+  237|     10|  *channelptr = channel;
+  238|     10|  return ARES_SUCCESS;
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  239|     10|}
+ares__init_servers_state:
+ 2634|     10|{
+ 2635|     10|  struct server_state *server;
+ 2636|     10|  int i;
+ 2637|       |
+ 2638|     20|  for (i = 0; i < channel->nservers; i++)
+  ------------------
+  |  Branch (2638:15): [True: 10, False: 10]
+  ------------------
+ 2639|     10|    {
+ 2640|     10|      server = &channel->servers[i];
+ 2641|     10|      server->udp_socket = ARES_SOCKET_BAD;
+  ------------------
+  |  |  231|     10|#define ARES_SOCKET_BAD -1
+  ------------------
+ 2642|     10|      server->tcp_socket = ARES_SOCKET_BAD;
+  ------------------
+  |  |  231|     10|#define ARES_SOCKET_BAD -1
+  ------------------
+ 2643|     10|      server->tcp_connection_generation = ++channel->tcp_connection_generation;
+ 2644|     10|      server->tcp_lenbuf_pos = 0;
+ 2645|     10|      server->tcp_buffer_pos = 0;
+ 2646|     10|      server->tcp_buffer = NULL;
+ 2647|     10|      server->tcp_length = 0;
+ 2648|     10|      server->qhead = NULL;
+ 2649|       |      server->qtail = NULL;
+ 2650|     10|      ares__init_list_head(&server->queries_to_server);
+ 2651|     10|      server->channel = channel;
+ 2652|     10|      server->is_broken = 0;
+ 2653|     10|    }
+ 2654|     10|}
+ares_init.c:init_by_options:
+  423|     10|{
+  424|     10|  int i;
+  425|       |
+  426|       |  /* Easy stuff. */
+  427|     10|  if ((optmask & ARES_OPT_FLAGS) && channel->flags == -1)
+  ------------------
+  |  |  153|     10|#define ARES_OPT_FLAGS          (1 << 0)
+  ------------------
+  |  Branch (427:7): [True: 0, False: 10]
+  |  Branch (427:37): [True: 0, False: 0]
+  ------------------
+  428|      0|    channel->flags = options->flags;
+  429|     10|  if ((optmask & ARES_OPT_TIMEOUTMS) && channel->timeout == -1)
+  ------------------
+  |  |  166|     10|#define ARES_OPT_TIMEOUTMS      (1 << 13)
+  ------------------
+  |  Branch (429:7): [True: 0, False: 10]
+  |  Branch (429:41): [True: 0, False: 0]
+  ------------------
+  430|      0|    channel->timeout = options->timeout;
+  431|     10|  else if ((optmask & ARES_OPT_TIMEOUT) && channel->timeout == -1)
+  ------------------
+  |  |  154|     10|#define ARES_OPT_TIMEOUT        (1 << 1)
+  ------------------
+  |  Branch (431:12): [True: 0, False: 10]
+  |  Branch (431:44): [True: 0, False: 0]
+  ------------------
+  432|      0|    channel->timeout = options->timeout * 1000;
+  433|     10|  if ((optmask & ARES_OPT_TRIES) && channel->tries == -1)
+  ------------------
+  |  |  155|     10|#define ARES_OPT_TRIES          (1 << 2)
+  ------------------
+  |  Branch (433:7): [True: 0, False: 10]
+  |  Branch (433:37): [True: 0, False: 0]
+  ------------------
+  434|      0|    channel->tries = options->tries;
+  435|     10|  if ((optmask & ARES_OPT_NDOTS) && channel->ndots == -1)
+  ------------------
+  |  |  156|     10|#define ARES_OPT_NDOTS          (1 << 3)
+  ------------------
+  |  Branch (435:7): [True: 0, False: 10]
+  |  Branch (435:37): [True: 0, False: 0]
+  ------------------
+  436|      0|    channel->ndots = options->ndots;
+  437|     10|  if ((optmask & ARES_OPT_ROTATE) && channel->rotate == -1)
+  ------------------
+  |  |  167|     10|#define ARES_OPT_ROTATE         (1 << 14)
+  ------------------
+  |  Branch (437:7): [True: 0, False: 10]
+  |  Branch (437:38): [True: 0, False: 0]
+  ------------------
+  438|      0|    channel->rotate = 1;
+  439|     10|  if ((optmask & ARES_OPT_NOROTATE) && channel->rotate == -1)
+  ------------------
+  |  |  169|     10|#define ARES_OPT_NOROTATE       (1 << 16)
+  ------------------
+  |  Branch (439:7): [True: 0, False: 10]
+  |  Branch (439:40): [True: 0, False: 0]
+  ------------------
+  440|      0|    channel->rotate = 0;
+  441|     10|  if ((optmask & ARES_OPT_UDP_PORT) && channel->udp_port == -1)
+  ------------------
+  |  |  157|     10|#define ARES_OPT_UDP_PORT       (1 << 4)
+  ------------------
+  |  Branch (441:7): [True: 0, False: 10]
+  |  Branch (441:40): [True: 0, False: 0]
+  ------------------
+  442|      0|    channel->udp_port = htons(options->udp_port);
+  443|     10|  if ((optmask & ARES_OPT_TCP_PORT) && channel->tcp_port == -1)
+  ------------------
+  |  |  158|     10|#define ARES_OPT_TCP_PORT       (1 << 5)
+  ------------------
+  |  Branch (443:7): [True: 0, False: 10]
+  |  Branch (443:40): [True: 0, False: 0]
+  ------------------
+  444|      0|    channel->tcp_port = htons(options->tcp_port);
+  445|     10|  if ((optmask & ARES_OPT_SOCK_STATE_CB) && channel->sock_state_cb == NULL)
+  ------------------
+  |  |  162|     10|#define ARES_OPT_SOCK_STATE_CB  (1 << 9)
+  ------------------
+  |  Branch (445:7): [True: 0, False: 10]
+  |  Branch (445:45): [True: 0, False: 0]
+  ------------------
+  446|      0|    {
+  447|      0|      channel->sock_state_cb = options->sock_state_cb;
+  448|      0|      channel->sock_state_cb_data = options->sock_state_cb_data;
+  449|      0|    }
+  450|     10|  if ((optmask & ARES_OPT_SOCK_SNDBUF)
+  ------------------
+  |  |  164|     10|#define ARES_OPT_SOCK_SNDBUF    (1 << 11)
+  ------------------
+  |  Branch (450:7): [True: 0, False: 10]
+  ------------------
+  451|      0|      && channel->socket_send_buffer_size == -1)
+  ------------------
+  |  Branch (451:10): [True: 0, False: 0]
+  ------------------
+  452|      0|    channel->socket_send_buffer_size = options->socket_send_buffer_size;
+  453|     10|  if ((optmask & ARES_OPT_SOCK_RCVBUF)
+  ------------------
+  |  |  165|     10|#define ARES_OPT_SOCK_RCVBUF    (1 << 12)
+  ------------------
+  |  Branch (453:7): [True: 0, False: 10]
+  ------------------
+  454|      0|      && channel->socket_receive_buffer_size == -1)
+  ------------------
+  |  Branch (454:10): [True: 0, False: 0]
+  ------------------
+  455|      0|    channel->socket_receive_buffer_size = options->socket_receive_buffer_size;
+  456|       |
+  457|     10|  if ((optmask & ARES_OPT_EDNSPSZ) && channel->ednspsz == -1)
+  ------------------
+  |  |  168|     10|#define ARES_OPT_EDNSPSZ        (1 << 15)
+  ------------------
+  |  Branch (457:7): [True: 0, False: 10]
+  |  Branch (457:39): [True: 0, False: 0]
+  ------------------
+  458|      0|    channel->ednspsz = options->ednspsz;
+  459|       |
+  460|       |  /* Copy the IPv4 servers, if given. */
+  461|     10|  if ((optmask & ARES_OPT_SERVERS) && channel->nservers == -1)
+  ------------------
+  |  |  159|     10|#define ARES_OPT_SERVERS        (1 << 6)
+  ------------------
+  |  Branch (461:7): [True: 0, False: 10]
+  |  Branch (461:39): [True: 0, False: 0]
+  ------------------
+  462|      0|    {
+  463|       |      /* Avoid zero size allocations at any cost */
+  464|      0|      if (options->nservers > 0)
+  ------------------
+  |  Branch (464:11): [True: 0, False: 0]
+  ------------------
+  465|      0|        {
+  466|      0|          channel->servers =
+  467|      0|            ares_malloc(options->nservers * sizeof(struct server_state));
+  468|      0|          if (!channel->servers)
+  ------------------
+  |  Branch (468:15): [True: 0, False: 0]
+  ------------------
+  469|      0|            return ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+  470|      0|          for (i = 0; i < options->nservers; i++)
+  ------------------
+  |  Branch (470:23): [True: 0, False: 0]
+  ------------------
+  471|      0|            {
+  472|      0|              channel->servers[i].addr.family = AF_INET;
+  473|      0|              channel->servers[i].addr.udp_port = 0;
+  474|      0|              channel->servers[i].addr.tcp_port = 0;
+  475|      0|              memcpy(&channel->servers[i].addr.addrV4,
+  ------------------
+  |  |  148|      0|#define addrV4 addr.addr4
+  ------------------
+  476|      0|                     &options->servers[i],
+  477|      0|                     sizeof(channel->servers[i].addr.addrV4));
+  ------------------
+  |  |  148|      0|#define addrV4 addr.addr4
+  ------------------
+  478|      0|            }
+  479|      0|        }
+  480|      0|      channel->nservers = options->nservers;
+  481|      0|    }
+  482|       |
+  483|       |  /* Copy the domains, if given.  Keep channel->ndomains consistent so
+  484|       |   * we can clean up in case of error.
+  485|       |   */
+  486|     10|  if ((optmask & ARES_OPT_DOMAINS) && channel->ndomains == -1)
+  ------------------
+  |  |  160|     10|#define ARES_OPT_DOMAINS        (1 << 7)
+  ------------------
+  |  Branch (486:7): [True: 0, False: 10]
+  |  Branch (486:39): [True: 0, False: 0]
+  ------------------
+  487|      0|    {
+  488|       |      /* Avoid zero size allocations at any cost */
+  489|      0|      if (options->ndomains > 0)
+  ------------------
+  |  Branch (489:11): [True: 0, False: 0]
+  ------------------
+  490|      0|      {
+  491|      0|        channel->domains = ares_malloc(options->ndomains * sizeof(char *));
+  492|      0|        if (!channel->domains)
+  ------------------
+  |  Branch (492:13): [True: 0, False: 0]
+  ------------------
+  493|      0|          return ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+  494|      0|        for (i = 0; i < options->ndomains; i++)
+  ------------------
+  |  Branch (494:21): [True: 0, False: 0]
+  ------------------
+  495|      0|          {
+  496|      0|            channel->ndomains = i;
+  497|      0|            channel->domains[i] = ares_strdup(options->domains[i]);
+  498|      0|            if (!channel->domains[i])
+  ------------------
+  |  Branch (498:17): [True: 0, False: 0]
+  ------------------
+  499|      0|              return ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+  500|      0|          }
+  501|      0|      }
+  502|      0|      channel->ndomains = options->ndomains;
+  503|      0|    }
+  504|       |
+  505|       |  /* Set lookups, if given. */
+  506|     10|  if ((optmask & ARES_OPT_LOOKUPS) && !channel->lookups)
+  ------------------
+  |  |  161|     10|#define ARES_OPT_LOOKUPS        (1 << 8)
+  ------------------
+  |  Branch (506:7): [True: 0, False: 10]
+  |  Branch (506:39): [True: 0, False: 0]
+  ------------------
+  507|      0|    {
+  508|      0|      channel->lookups = ares_strdup(options->lookups);
+  509|      0|      if (!channel->lookups)
+  ------------------
+  |  Branch (509:11): [True: 0, False: 0]
+  ------------------
+  510|      0|        return ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+  511|      0|    }
+  512|       |
+  513|       |  /* copy sortlist */
+  514|     10|  if ((optmask & ARES_OPT_SORTLIST) && (channel->nsort == -1)) {
+  ------------------
+  |  |  163|     10|#define ARES_OPT_SORTLIST       (1 << 10)
+  ------------------
+  |  Branch (514:7): [True: 0, False: 10]
+  |  Branch (514:40): [True: 0, False: 0]
+  ------------------
+  515|      0|    if (options->nsort > 0) {
+  ------------------
+  |  Branch (515:9): [True: 0, False: 0]
+  ------------------
+  516|      0|      channel->sortlist = ares_malloc(options->nsort * sizeof(struct apattern));
+  517|      0|      if (!channel->sortlist)
+  ------------------
+  |  Branch (517:11): [True: 0, False: 0]
+  ------------------
+  518|      0|        return ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+  519|      0|      for (i = 0; i < options->nsort; i++)
+  ------------------
+  |  Branch (519:19): [True: 0, False: 0]
+  ------------------
+  520|      0|        channel->sortlist[i] = options->sortlist[i];
+  521|      0|    }
+  522|      0|    channel->nsort = options->nsort;
+  523|      0|  }
+  524|       |
+  525|       |  /* Set path for resolv.conf file, if given. */
+  526|     10|  if ((optmask & ARES_OPT_RESOLVCONF) && !channel->resolvconf_path)
+  ------------------
+  |  |  170|     10|#define ARES_OPT_RESOLVCONF     (1 << 17)
+  ------------------
+  |  Branch (526:7): [True: 0, False: 10]
+  |  Branch (526:42): [True: 0, False: 0]
+  ------------------
+  527|      0|    {
+  528|      0|      channel->resolvconf_path = ares_strdup(options->resolvconf_path);
+  529|      0|      if (!channel->resolvconf_path && options->resolvconf_path)
+  ------------------
+  |  Branch (529:11): [True: 0, False: 0]
+  |  Branch (529:40): [True: 0, False: 0]
+  ------------------
+  530|      0|        return ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+  531|      0|    }
+  532|       |
+  533|     10|  channel->optmask = optmask;
+  534|       |
+  535|     10|  return ARES_SUCCESS;
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  536|     10|}
+ares_init.c:init_by_environment:
+  539|     10|{
+  540|     10|  const char *localdomain, *res_options;
+  541|     10|  int status;
+  542|       |
+  543|     10|  localdomain = getenv("LOCALDOMAIN");
+  544|     10|  if (localdomain && channel->ndomains == -1)
+  ------------------
+  |  Branch (544:7): [True: 0, False: 10]
+  |  Branch (544:22): [True: 0, False: 0]
+  ------------------
+  545|      0|    {
+  546|      0|      status = set_search(channel, localdomain);
+  547|      0|      if (status != ARES_SUCCESS)
+  ------------------
+  |  |   98|      0|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (547:11): [True: 0, False: 0]
+  ------------------
+  548|      0|        return status;
+  549|      0|    }
+  550|       |
+  551|     10|  res_options = getenv("RES_OPTIONS");
+  552|     10|  if (res_options)
+  ------------------
+  |  Branch (552:7): [True: 0, False: 10]
+  ------------------
+  553|      0|    {
+  554|      0|      status = set_options(channel, res_options);
+  555|      0|      if (status != ARES_SUCCESS)
+  ------------------
+  |  |   98|      0|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (555:11): [True: 0, False: 0]
+  ------------------
+  556|      0|        return status;  /* LCOV_EXCL_LINE: set_options() never fails */
+  557|      0|    }
+  558|       |
+  559|     10|  return ARES_SUCCESS;
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  560|     10|}
+ares_init.c:set_search:
+ 2322|     10|{
+ 2323|     10|  size_t cnt;
+ 2324|       |
+ 2325|     10|  if(channel->ndomains != -1) {
+  ------------------
+  |  Branch (2325:6): [True: 0, False: 10]
+  ------------------
+ 2326|       |    /* LCOV_EXCL_START: all callers check ndomains == -1 */
+ 2327|       |    /* if we already have some domains present, free them first */
+ 2328|      0|    ares_strsplit_free(channel->domains, channel->ndomains);
+ 2329|      0|    channel->domains = NULL;
+ 2330|      0|    channel->ndomains = -1;
+ 2331|      0|  } /* LCOV_EXCL_STOP */
+ 2332|       |
+ 2333|     10|  channel->domains  = ares_strsplit(str, ", ", 1, &cnt);
+ 2334|     10|  channel->ndomains = (int)cnt;
+ 2335|     10|  if (channel->domains == NULL || channel->ndomains == 0) {
+  ------------------
+  |  Branch (2335:7): [True: 0, False: 10]
+  |  Branch (2335:35): [True: 0, False: 10]
+  ------------------
+ 2336|      0|    channel->domains  = NULL;
+ 2337|      0|    channel->ndomains = -1;
+ 2338|      0|  }
+ 2339|       |
+ 2340|     10|  return ARES_SUCCESS;
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+ 2341|     10|}
+ares_init.c:init_by_resolv_conf:
+ 1436|     10|{
+ 1437|     10|#if !defined(ANDROID) && !defined(__ANDROID__) && !defined(WATT32) && \
+ 1438|     10|    !defined(CARES_USE_LIBRESOLV)
+ 1439|     10|  char *line = NULL;
+ 1440|     10|#endif
+ 1441|     10|  int status = -1, nservers = 0, nsort = 0;
+ 1442|     10|  struct server_state *servers = NULL;
+ 1443|     10|  struct apattern *sortlist = NULL;
+ 1444|       |
+ 1445|       |#ifdef WIN32
+ 1446|       |
+ 1447|       |  if (channel->nservers > -1)  /* don't override ARES_OPT_SERVER */
+ 1448|       |     return ARES_SUCCESS;
+ 1449|       |
+ 1450|       |  if (get_DNS_Windows(&line))
+ 1451|       |  {
+ 1452|       |    status = config_nameserver(&servers, &nservers, line);
+ 1453|       |    ares_free(line);
+ 1454|       |  }
+ 1455|       |
+ 1456|       |  if (channel->ndomains == -1 && get_SuffixList_Windows(&line))
+ 1457|       |  {
+ 1458|       |      status = set_search(channel, line);
+ 1459|       |      ares_free(line);
+ 1460|       |  }
+ 1461|       |
+ 1462|       |  if (status == ARES_SUCCESS)
+ 1463|       |    status = ARES_EOF;
+ 1464|       |  else
+ 1465|       |    /* Catch the case when all the above checks fail (which happens when there
+ 1466|       |       is no network card or the cable is unplugged) */
+ 1467|       |    status = ARES_EFILE;
+ 1468|       |#elif defined(__MVS__)
+ 1469|       |
+ 1470|       |  struct __res_state *res = 0;
+ 1471|       |  int count4, count6;
+ 1472|       |  __STATEEXTIPV6 *v6;
+ 1473|       |  struct server_state *pserver;
+ 1474|       |  if (0 == res) {
+ 1475|       |    int rc = res_init();
+ 1476|       |    while (rc == -1 && h_errno == TRY_AGAIN) {
+ 1477|       |      rc = res_init();
+ 1478|       |    }
+ 1479|       |    if (rc == -1) {
+ 1480|       |      return ARES_ENOMEM;
+ 1481|       |    }
+ 1482|       |    res = __res();
+ 1483|       |  }
+ 1484|       |
+ 1485|       |  v6 = res->__res_extIPv6;
+ 1486|       |  count4 = res->nscount;
+ 1487|       |  if (v6) {
+ 1488|       |    count6 = v6->__stat_nscount;
+ 1489|       |  } else {
+ 1490|       |    count6 = 0;
+ 1491|       |  }
+ 1492|       |
+ 1493|       |  nservers = count4 + count6;
+ 1494|       |  servers = ares_malloc(nservers * sizeof(struct server_state));
+ 1495|       |  if (!servers)
+ 1496|       |    return ARES_ENOMEM;
+ 1497|       |
+ 1498|       |  memset(servers, 0, nservers * sizeof(struct server_state));
+ 1499|       |
+ 1500|       |  pserver = servers;
+ 1501|       |  for (int i = 0; i < count4; ++i, ++pserver) {
+ 1502|       |    struct sockaddr_in *addr_in = &(res->nsaddr_list[i]);
+ 1503|       |    pserver->addr.addrV4.s_addr = addr_in->sin_addr.s_addr;
+ 1504|       |    pserver->addr.family = AF_INET;
+ 1505|       |    pserver->addr.udp_port = addr_in->sin_port;
+ 1506|       |    pserver->addr.tcp_port = addr_in->sin_port;
+ 1507|       |  }
+ 1508|       |
+ 1509|       |  for (int j = 0; j < count6; ++j, ++pserver) {
+ 1510|       |    struct sockaddr_in6 *addr_in = &(v6->__stat_nsaddr_list[j]);
+ 1511|       |    memcpy(&(pserver->addr.addr.addr6), &(addr_in->sin6_addr),
+ 1512|       |           sizeof(addr_in->sin6_addr));
+ 1513|       |    pserver->addr.family = AF_INET6;
+ 1514|       |    pserver->addr.udp_port = addr_in->sin6_port;
+ 1515|       |    pserver->addr.tcp_port = addr_in->sin6_port;
+ 1516|       |  }
+ 1517|       |
+ 1518|       |  status = ARES_EOF;
+ 1519|       |
+ 1520|       |#elif defined(__riscos__)
+ 1521|       |
+ 1522|       |  /* Under RISC OS, name servers are listed in the
+ 1523|       |     system variable Inet$Resolvers, space separated. */
+ 1524|       |
+ 1525|       |  line = getenv("Inet$Resolvers");
+ 1526|       |  status = ARES_EOF;
+ 1527|       |  if (line) {
+ 1528|       |    char *resolvers = ares_strdup(line), *pos, *space;
+ 1529|       |
+ 1530|       |    if (!resolvers)
+ 1531|       |      return ARES_ENOMEM;
+ 1532|       |
+ 1533|       |    pos = resolvers;
+ 1534|       |    do {
+ 1535|       |      space = strchr(pos, ' ');
+ 1536|       |      if (space)
+ 1537|       |        *space = '\0';
+ 1538|       |      status = config_nameserver(&servers, &nservers, pos);
+ 1539|       |      if (status != ARES_SUCCESS)
+ 1540|       |        break;
+ 1541|       |      pos = space + 1;
+ 1542|       |    } while (space);
+ 1543|       |
+ 1544|       |    if (status == ARES_SUCCESS)
+ 1545|       |      status = ARES_EOF;
+ 1546|       |
+ 1547|       |    ares_free(resolvers);
+ 1548|       |  }
+ 1549|       |
+ 1550|       |#elif defined(WATT32)
+ 1551|       |  int i;
+ 1552|       |
+ 1553|       |  sock_init();
+ 1554|       |  for (i = 0; def_nameservers[i]; i++)
+ 1555|       |      ;
+ 1556|       |  if (i == 0)
+ 1557|       |    return ARES_SUCCESS; /* use localhost DNS server */
+ 1558|       |
+ 1559|       |  nservers = i;
+ 1560|       |  servers = ares_malloc(sizeof(struct server_state));
+ 1561|       |  if (!servers)
+ 1562|       |     return ARES_ENOMEM;
+ 1563|       |  memset(servers, 0, sizeof(struct server_state));
+ 1564|       |
+ 1565|       |  for (i = 0; def_nameservers[i]; i++)
+ 1566|       |  {
+ 1567|       |    servers[i].addr.addrV4.s_addr = htonl(def_nameservers[i]);
+ 1568|       |    servers[i].addr.family = AF_INET;
+ 1569|       |    servers[i].addr.udp_port = 0;
+ 1570|       |    servers[i].addr.tcp_port = 0;
+ 1571|       |  }
+ 1572|       |  status = ARES_EOF;
+ 1573|       |
+ 1574|       |#elif defined(ANDROID) || defined(__ANDROID__)
+ 1575|       |  unsigned int i;
+ 1576|       |  char **dns_servers;
+ 1577|       |  char *domains;
+ 1578|       |  size_t num_servers;
+ 1579|       |
+ 1580|       |  /* Use the Android connectivity manager to get a list
+ 1581|       |   * of DNS servers. As of Android 8 (Oreo) net.dns#
+ 1582|       |   * system properties are no longer available. Google claims this
+ 1583|       |   * improves privacy. Apps now need the ACCESS_NETWORK_STATE
+ 1584|       |   * permission and must use the ConnectivityManager which
+ 1585|       |   * is Java only. */
+ 1586|       |  dns_servers = ares_get_android_server_list(MAX_DNS_PROPERTIES, &num_servers);
+ 1587|       |  if (dns_servers != NULL)
+ 1588|       |  {
+ 1589|       |    for (i = 0; i < num_servers; i++)
+ 1590|       |    {
+ 1591|       |      status = config_nameserver(&servers, &nservers, dns_servers[i]);
+ 1592|       |      if (status != ARES_SUCCESS)
+ 1593|       |        break;
+ 1594|       |      status = ARES_EOF;
+ 1595|       |    }
+ 1596|       |    for (i = 0; i < num_servers; i++)
+ 1597|       |    {
+ 1598|       |      ares_free(dns_servers[i]);
+ 1599|       |    }
+ 1600|       |    ares_free(dns_servers);
+ 1601|       |  }
+ 1602|       |  if (channel->ndomains == -1)
+ 1603|       |  {
+ 1604|       |    domains = ares_get_android_search_domains_list();
+ 1605|       |    set_search(channel, domains);
+ 1606|       |    ares_free(domains);
+ 1607|       |  }
+ 1608|       |
+ 1609|       |#  ifdef HAVE___SYSTEM_PROPERTY_GET
+ 1610|       |  /* Old way using the system property still in place as
+ 1611|       |   * a fallback. Older android versions can still use this.
+ 1612|       |   * it's possible for older apps not not have added the new
+ 1613|       |   * permission and we want to try to avoid breaking those.
+ 1614|       |   *
+ 1615|       |   * We'll only run this if we don't have any dns servers
+ 1616|       |   * because this will get the same ones (if it works). */
+ 1617|       |  if (status != ARES_EOF) {
+ 1618|       |    char propname[PROP_NAME_MAX];
+ 1619|       |    char propvalue[PROP_VALUE_MAX]="";
+ 1620|       |    for (i = 1; i <= MAX_DNS_PROPERTIES; i++) {
+ 1621|       |      snprintf(propname, sizeof(propname), "%s%u", DNS_PROP_NAME_PREFIX, i);
+ 1622|       |      if (__system_property_get(propname, propvalue) < 1) {
+ 1623|       |        status = ARES_EOF;
+ 1624|       |        break;
+ 1625|       |      }
+ 1626|       |
+ 1627|       |      status = config_nameserver(&servers, &nservers, propvalue);
+ 1628|       |      if (status != ARES_SUCCESS)
+ 1629|       |        break;
+ 1630|       |      status = ARES_EOF;
+ 1631|       |    }
+ 1632|       |  }
+ 1633|       |#  endif /* HAVE___SYSTEM_PROPERTY_GET */
+ 1634|       |#elif defined(CARES_USE_LIBRESOLV)
+ 1635|       |  struct __res_state res;
+ 1636|       |  memset(&res, 0, sizeof(res));
+ 1637|       |  int result = res_ninit(&res);
+ 1638|       |  if (result == 0 && (res.options & RES_INIT)) {
+ 1639|       |    status = ARES_EOF;
+ 1640|       |
+ 1641|       |    if (channel->nservers == -1) {
+ 1642|       |      union res_sockaddr_union addr[MAXNS];
+ 1643|       |      int nscount = res_getservers(&res, addr, MAXNS);
+ 1644|       |      int i;
+ 1645|       |      for (i = 0; i < nscount; ++i) {
+ 1646|       |        char str[INET6_ADDRSTRLEN];
+ 1647|       |        int config_status;
+ 1648|       |        sa_family_t family = addr[i].sin.sin_family;
+ 1649|       |        if (family == AF_INET) {
+ 1650|       |          ares_inet_ntop(family, &addr[i].sin.sin_addr, str, sizeof(str));
+ 1651|       |        } else if (family == AF_INET6) {
+ 1652|       |          ares_inet_ntop(family, &addr[i].sin6.sin6_addr, str, sizeof(str));
+ 1653|       |        } else {
+ 1654|       |          continue;
+ 1655|       |        }
+ 1656|       |
+ 1657|       |        config_status = config_nameserver(&servers, &nservers, str);
+ 1658|       |        if (config_status != ARES_SUCCESS) {
+ 1659|       |          status = config_status;
+ 1660|       |          break;
+ 1661|       |        }
+ 1662|       |      }
+ 1663|       |    }
+ 1664|       |    if (channel->ndomains == -1) {
+ 1665|       |      int entries = 0;
+ 1666|       |      while ((entries < MAXDNSRCH) && res.dnsrch[entries])
+ 1667|       |        entries++;
+ 1668|       |      if(entries) {
+ 1669|       |        channel->domains = ares_malloc(entries * sizeof(char *));
+ 1670|       |        if (!channel->domains) {
+ 1671|       |          status = ARES_ENOMEM;
+ 1672|       |        } else {
+ 1673|       |          int i;
+ 1674|       |          channel->ndomains = entries;
+ 1675|       |          for (i = 0; i < channel->ndomains; ++i) {
+ 1676|       |            channel->domains[i] = ares_strdup(res.dnsrch[i]);
+ 1677|       |            if (!channel->domains[i])
+ 1678|       |              status = ARES_ENOMEM;
+ 1679|       |          }
+ 1680|       |        }
+ 1681|       |      }
+ 1682|       |    }
+ 1683|       |    if (channel->ndots == -1)
+ 1684|       |      channel->ndots = res.ndots;
+ 1685|       |    if (channel->tries == -1)
+ 1686|       |      channel->tries = res.retry;
+ 1687|       |    if (channel->rotate == -1)
+ 1688|       |      channel->rotate = res.options & RES_ROTATE;
+ 1689|       |    if (channel->timeout == -1)
+ 1690|       |      channel->timeout = res.retrans * 1000;
+ 1691|       |
+ 1692|       |    res_ndestroy(&res);
+ 1693|       |  }
+ 1694|       |#else
+ 1695|     10|  {
+ 1696|     10|    char *p;
+ 1697|     10|    FILE *fp;
+ 1698|     10|    size_t linesize;
+ 1699|     10|    int error;
+ 1700|     10|    int update_domains;
+ 1701|     10|    const char *resolvconf_path;
+ 1702|       |
+ 1703|       |    /* Don't read resolv.conf and friends if we don't have to */
+ 1704|     10|    if (ARES_CONFIG_CHECK(channel))
+  ------------------
+  |  |   92|     10|#define ARES_CONFIG_CHECK(x) (x->lookups && x->nsort > -1 && \
+  |  |  ------------------
+  |  |  |  Branch (92:31): [True: 0, False: 10]
+  |  |  |  Branch (92:45): [True: 0, False: 0]
+  |  |  ------------------
+  |  |   93|     10|                             x->nservers > -1 && \
+  |  |  ------------------
+  |  |  |  Branch (93:30): [True: 0, False: 0]
+  |  |  ------------------
+  |  |   94|     10|                             x->ndomains > -1 && \
+  |  |  ------------------
+  |  |  |  Branch (94:30): [True: 0, False: 0]
+  |  |  ------------------
+  |  |   95|     10|                             x->ndots > -1 && x->timeout > -1 && \
+  |  |  ------------------
+  |  |  |  Branch (95:30): [True: 0, False: 0]
+  |  |  |  Branch (95:47): [True: 0, False: 0]
+  |  |  ------------------
+  |  |   96|     10|                             x->tries > -1)
+  |  |  ------------------
+  |  |  |  Branch (96:30): [True: 0, False: 0]
+  |  |  ------------------
+  ------------------
+ 1705|      0|        return ARES_SUCCESS;
+  ------------------
+  |  |   98|      0|#define ARES_SUCCESS            0
+  ------------------
+ 1706|       |
+ 1707|       |    /* Only update search domains if they're not already specified */
+ 1708|     10|    update_domains = (channel->ndomains == -1);
+ 1709|       |
+ 1710|       |    /* Support path for resolvconf filename set by ares_init_options */
+ 1711|     10|    if(channel->resolvconf_path) {
+  ------------------
+  |  Branch (1711:8): [True: 0, False: 10]
+  ------------------
+ 1712|      0|      resolvconf_path = channel->resolvconf_path;
+ 1713|     10|    } else {
+ 1714|     10|      resolvconf_path = PATH_RESOLV_CONF;
+  ------------------
+  |  |   95|     10|#define PATH_RESOLV_CONF        "/etc/resolv.conf"
+  ------------------
+ 1715|     10|    }
+ 1716|       |
+ 1717|     10|    fp = fopen(resolvconf_path, "r");
+ 1718|     10|    if (fp) {
+  ------------------
+  |  Branch (1718:9): [True: 10, False: 0]
+  ------------------
+ 1719|    190|      while ((status = ares__read_line(fp, &line, &linesize)) == ARES_SUCCESS)
+  ------------------
+  |  |   98|    190|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (1719:14): [True: 180, False: 10]
+  ------------------
+ 1720|    180|      {
+ 1721|    180|        if ((p = try_config(line, "domain", ';')) && update_domains)
+  ------------------
+  |  Branch (1721:13): [True: 0, False: 180]
+  |  Branch (1721:54): [True: 0, False: 0]
+  ------------------
+ 1722|      0|          status = config_domain(channel, p);
+ 1723|    180|        else if ((p = try_config(line, "lookup", ';')) && !channel->lookups)
+  ------------------
+  |  Branch (1723:18): [True: 0, False: 180]
+  |  Branch (1723:59): [True: 0, False: 0]
+  ------------------
+ 1724|      0|          status = config_lookup(channel, p, "bind", NULL, "file");
+ 1725|    180|        else if ((p = try_config(line, "search", ';')) && update_domains)
+  ------------------
+  |  Branch (1725:18): [True: 10, False: 170]
+  |  Branch (1725:59): [True: 10, False: 0]
+  ------------------
+ 1726|     10|          status = set_search(channel, p);
+ 1727|    170|        else if ((p = try_config(line, "nameserver", ';')) &&
+  ------------------
+  |  Branch (1727:18): [True: 10, False: 160]
+  ------------------
+ 1728|     10|                channel->nservers == -1)
+  ------------------
+  |  Branch (1728:17): [True: 10, False: 0]
+  ------------------
+ 1729|     10|          status = config_nameserver(&servers, &nservers, p);
+ 1730|    160|        else if ((p = try_config(line, "sortlist", ';')) &&
+  ------------------
+  |  Branch (1730:18): [True: 0, False: 160]
+  ------------------
+ 1731|      0|                channel->nsort == -1)
+  ------------------
+  |  Branch (1731:17): [True: 0, False: 0]
+  ------------------
+ 1732|      0|          status = config_sortlist(&sortlist, &nsort, p);
+ 1733|    160|        else if ((p = try_config(line, "options", ';')))
+  ------------------
+  |  Branch (1733:18): [True: 0, False: 160]
+  ------------------
+ 1734|      0|          status = set_options(channel, p);
+ 1735|    160|        else
+ 1736|    160|          status = ARES_SUCCESS;
+  ------------------
+  |  |   98|    160|#define ARES_SUCCESS            0
+  ------------------
+ 1737|    180|        if (status != ARES_SUCCESS)
+  ------------------
+  |  |   98|    180|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (1737:13): [True: 0, False: 180]
+  ------------------
+ 1738|      0|          break;
+ 1739|    180|      }
+ 1740|     10|      fclose(fp);
+ 1741|     10|    }
+ 1742|      0|    else {
+ 1743|      0|      error = ERRNO;
+  ------------------
+  |  |  440|      0|#define ERRNO         (errno)
+  ------------------
+ 1744|      0|      switch(error) {
+ 1745|      0|      case ENOENT:
+  ------------------
+  |  Branch (1745:7): [True: 0, False: 0]
+  ------------------
+ 1746|      0|      case ESRCH:
+  ------------------
+  |  Branch (1746:7): [True: 0, False: 0]
+  ------------------
+ 1747|      0|        status = ARES_EOF;
+  ------------------
+  |  |  115|      0|#define ARES_EOF                13
+  ------------------
+ 1748|      0|        break;
+ 1749|      0|      default:
+  ------------------
+  |  Branch (1749:7): [True: 0, False: 0]
+  ------------------
+ 1750|      0|        DEBUGF(fprintf(stderr, "fopen() failed with error: %d %s\n",
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+ 1751|      0|                      error, strerror(error)));
+ 1752|      0|        DEBUGF(fprintf(stderr, "Error opening file: %s\n", PATH_RESOLV_CONF));
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+ 1753|      0|        status = ARES_EFILE;
+  ------------------
+  |  |  116|      0|#define ARES_EFILE              14
+  ------------------
+ 1754|      0|      }
+ 1755|      0|    }
+ 1756|       |
+ 1757|     10|    if ((status == ARES_EOF) && (!channel->lookups)) {
+  ------------------
+  |  |  115|     10|#define ARES_EOF                13
+  ------------------
+  |  Branch (1757:9): [True: 10, False: 0]
+  |  Branch (1757:33): [True: 10, False: 0]
+  ------------------
+ 1758|       |      /* Many systems (Solaris, Linux, BSD's) use nsswitch.conf */
+ 1759|     10|      fp = fopen("/etc/nsswitch.conf", "r");
+ 1760|     10|      if (fp) {
+  ------------------
+  |  Branch (1760:11): [True: 10, False: 0]
+  ------------------
+ 1761|    210|        while ((status = ares__read_line(fp, &line, &linesize)) ==
+  ------------------
+  |  Branch (1761:16): [True: 200, False: 10]
+  ------------------
+ 1762|    210|               ARES_SUCCESS)
+  ------------------
+  |  |   98|    210|#define ARES_SUCCESS            0
+  ------------------
+ 1763|    200|        {
+ 1764|    200|          if ((p = try_config(line, "hosts:", '\0')) && !channel->lookups)
+  ------------------
+  |  Branch (1764:15): [True: 10, False: 190]
+  |  Branch (1764:57): [True: 10, False: 0]
+  ------------------
+ 1765|     10|            (void)config_lookup(channel, p, "dns", "resolve", "files");
+ 1766|    200|        }
+ 1767|     10|        fclose(fp);
+ 1768|     10|      }
+ 1769|      0|      else {
+ 1770|      0|        error = ERRNO;
+  ------------------
+  |  |  440|      0|#define ERRNO         (errno)
+  ------------------
+ 1771|      0|        switch(error) {
+ 1772|      0|        case ENOENT:
+  ------------------
+  |  Branch (1772:9): [True: 0, False: 0]
+  ------------------
+ 1773|      0|        case ESRCH:
+  ------------------
+  |  Branch (1773:9): [True: 0, False: 0]
+  ------------------
+ 1774|      0|          break;
+ 1775|      0|        default:
+  ------------------
+  |  Branch (1775:9): [True: 0, False: 0]
+  ------------------
+ 1776|      0|          DEBUGF(fprintf(stderr, "fopen() failed with error: %d %s\n",
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+ 1777|      0|                         error, strerror(error)));
+ 1778|      0|          DEBUGF(fprintf(stderr, "Error opening file: %s\n",
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+ 1779|      0|                         "/etc/nsswitch.conf"));
+ 1780|      0|        }
+ 1781|       |
+ 1782|       |        /* ignore error, maybe we will get luck in next if clause */
+ 1783|      0|        status = ARES_EOF;
+  ------------------
+  |  |  115|      0|#define ARES_EOF                13
+  ------------------
+ 1784|      0|      }
+ 1785|     10|    }
+ 1786|       |
+ 1787|     10|    if ((status == ARES_EOF) && (!channel->lookups)) {
+  ------------------
+  |  |  115|     10|#define ARES_EOF                13
+  ------------------
+  |  Branch (1787:9): [True: 10, False: 0]
+  |  Branch (1787:33): [True: 0, False: 10]
+  ------------------
+ 1788|       |      /* Linux / GNU libc 2.x and possibly others have host.conf */
+ 1789|      0|      fp = fopen("/etc/host.conf", "r");
+ 1790|      0|      if (fp) {
+  ------------------
+  |  Branch (1790:11): [True: 0, False: 0]
+  ------------------
+ 1791|      0|        while ((status = ares__read_line(fp, &line, &linesize)) ==
+  ------------------
+  |  Branch (1791:16): [True: 0, False: 0]
+  ------------------
+ 1792|      0|               ARES_SUCCESS)
+  ------------------
+  |  |   98|      0|#define ARES_SUCCESS            0
+  ------------------
+ 1793|      0|        {
+ 1794|      0|          if ((p = try_config(line, "order", '\0')) && !channel->lookups)
+  ------------------
+  |  Branch (1794:15): [True: 0, False: 0]
+  |  Branch (1794:56): [True: 0, False: 0]
+  ------------------
+ 1795|       |            /* ignore errors */
+ 1796|      0|            (void)config_lookup(channel, p, "bind", NULL, "hosts");
+ 1797|      0|        }
+ 1798|      0|        fclose(fp);
+ 1799|      0|      }
+ 1800|      0|      else {
+ 1801|      0|        error = ERRNO;
+  ------------------
+  |  |  440|      0|#define ERRNO         (errno)
+  ------------------
+ 1802|      0|        switch(error) {
+ 1803|      0|        case ENOENT:
+  ------------------
+  |  Branch (1803:9): [True: 0, False: 0]
+  ------------------
+ 1804|      0|        case ESRCH:
+  ------------------
+  |  Branch (1804:9): [True: 0, False: 0]
+  ------------------
+ 1805|      0|          break;
+ 1806|      0|        default:
+  ------------------
+  |  Branch (1806:9): [True: 0, False: 0]
+  ------------------
+ 1807|      0|          DEBUGF(fprintf(stderr, "fopen() failed with error: %d %s\n",
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+ 1808|      0|                         error, strerror(error)));
+ 1809|      0|          DEBUGF(fprintf(stderr, "Error opening file: %s\n",
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+ 1810|      0|                         "/etc/host.conf"));
+ 1811|      0|        }
+ 1812|       |
+ 1813|       |        /* ignore error, maybe we will get luck in next if clause */
+ 1814|      0|        status = ARES_EOF;
+  ------------------
+  |  |  115|      0|#define ARES_EOF                13
+  ------------------
+ 1815|      0|      }
+ 1816|      0|    }
+ 1817|       |
+ 1818|     10|    if ((status == ARES_EOF) && (!channel->lookups)) {
+  ------------------
+  |  |  115|     10|#define ARES_EOF                13
+  ------------------
+  |  Branch (1818:9): [True: 10, False: 0]
+  |  Branch (1818:33): [True: 0, False: 10]
+  ------------------
+ 1819|       |      /* Tru64 uses /etc/svc.conf */
+ 1820|      0|      fp = fopen("/etc/svc.conf", "r");
+ 1821|      0|      if (fp) {
+  ------------------
+  |  Branch (1821:11): [True: 0, False: 0]
+  ------------------
+ 1822|      0|        while ((status = ares__read_line(fp, &line, &linesize)) ==
+  ------------------
+  |  Branch (1822:16): [True: 0, False: 0]
+  ------------------
+ 1823|      0|               ARES_SUCCESS)
+  ------------------
+  |  |   98|      0|#define ARES_SUCCESS            0
+  ------------------
+ 1824|      0|        {
+ 1825|      0|          if ((p = try_config(line, "hosts=", '\0')) && !channel->lookups)
+  ------------------
+  |  Branch (1825:15): [True: 0, False: 0]
+  |  Branch (1825:57): [True: 0, False: 0]
+  ------------------
+ 1826|       |            /* ignore errors */
+ 1827|      0|            (void)config_lookup(channel, p, "bind", NULL, "local");
+ 1828|      0|        }
+ 1829|      0|        fclose(fp);
+ 1830|      0|      }
+ 1831|      0|      else {
+ 1832|      0|        error = ERRNO;
+  ------------------
+  |  |  440|      0|#define ERRNO         (errno)
+  ------------------
+ 1833|      0|        switch(error) {
+ 1834|      0|        case ENOENT:
+  ------------------
+  |  Branch (1834:9): [True: 0, False: 0]
+  ------------------
+ 1835|      0|        case ESRCH:
+  ------------------
+  |  Branch (1835:9): [True: 0, False: 0]
+  ------------------
+ 1836|      0|          break;
+ 1837|      0|        default:
+  ------------------
+  |  Branch (1837:9): [True: 0, False: 0]
+  ------------------
+ 1838|      0|          DEBUGF(fprintf(stderr, "fopen() failed with error: %d %s\n",
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+ 1839|      0|                         error, strerror(error)));
+ 1840|      0|          DEBUGF(fprintf(stderr, "Error opening file: %s\n", "/etc/svc.conf"));
+  ------------------
+  |  |  402|      0|#define DEBUGF(x) do { } WHILE_FALSE
+  |  |  ------------------
+  |  |  |  |  349|      0|#define WHILE_FALSE  while(0)
+  |  |  |  |  ------------------
+  |  |  |  |  |  Branch (349:28): [Folded, False: 0]
+  |  |  |  |  ------------------
+  |  |  ------------------
+  ------------------
+ 1841|      0|        }
+ 1842|       |
+ 1843|       |        /* ignore error, default value will be chosen for `channel->lookups` */
+ 1844|      0|        status = ARES_EOF;
+  ------------------
+  |  |  115|      0|#define ARES_EOF                13
+  ------------------
+ 1845|      0|      }
+ 1846|      0|    }
+ 1847|       |
+ 1848|     10|    if(line)
+  ------------------
+  |  Branch (1848:8): [True: 10, False: 0]
+  ------------------
+ 1849|     10|      ares_free(line);
+ 1850|     10|  }
+ 1851|       |
+ 1852|      0|#endif
+ 1853|       |
+ 1854|       |  /* Handle errors. */
+ 1855|     10|  if (status != ARES_EOF)
+  ------------------
+  |  |  115|     10|#define ARES_EOF                13
+  ------------------
+  |  Branch (1855:7): [True: 0, False: 10]
+  ------------------
+ 1856|      0|    {
+ 1857|      0|      if (servers != NULL)
+  ------------------
+  |  Branch (1857:11): [True: 0, False: 0]
+  ------------------
+ 1858|      0|        ares_free(servers);
+ 1859|      0|      if (sortlist != NULL)
+  ------------------
+  |  Branch (1859:11): [True: 0, False: 0]
+  ------------------
+ 1860|      0|        ares_free(sortlist);
+ 1861|      0|      return status;
+ 1862|      0|    }
+ 1863|       |
+ 1864|       |  /* If we got any name server entries, fill them in. */
+ 1865|     10|  if (servers)
+  ------------------
+  |  Branch (1865:7): [True: 10, False: 0]
+  ------------------
+ 1866|     10|    {
+ 1867|     10|      channel->servers = servers;
+ 1868|     10|      channel->nservers = nservers;
+ 1869|     10|    }
+ 1870|       |
+ 1871|       |  /* If we got any sortlist entries, fill them in. */
+ 1872|     10|  if (sortlist)
+  ------------------
+  |  Branch (1872:7): [True: 0, False: 10]
+  ------------------
+ 1873|      0|    {
+ 1874|      0|      channel->sortlist = sortlist;
+ 1875|      0|      channel->nsort = nsort;
+ 1876|      0|    }
+ 1877|       |
+ 1878|     10|  return ARES_SUCCESS;
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+ 1879|     10|}
+ares_init.c:try_config:
+ 2382|  1.23k|{
+ 2383|  1.23k|  size_t len;
+ 2384|  1.23k|  char *p;
+ 2385|  1.23k|  char *q;
+ 2386|       |
+ 2387|  1.23k|  if (!s || !opt)
+  ------------------
+  |  Branch (2387:7): [True: 0, False: 1.23k]
+  |  Branch (2387:13): [True: 0, False: 1.23k]
+  ------------------
+ 2388|       |    /* no line or no option */
+ 2389|      0|    return NULL;  /* LCOV_EXCL_LINE */
+ 2390|       |
+ 2391|       |  /* Hash '#' character is always used as primary comment char, additionally
+ 2392|       |     a not-NUL secondary comment char will be considered when specified. */
+ 2393|       |
+ 2394|       |  /* trim line comment */
+ 2395|  1.23k|  p = s;
+ 2396|  1.23k|  if(scc)
+  ------------------
+  |  Branch (2396:6): [True: 1.03k, False: 200]
+  ------------------
+ 2397|  2.15k|    while (*p && (*p != '#') && (*p != scc))
+  ------------------
+  |  Branch (2397:12): [True: 1.27k, False: 880]
+  |  Branch (2397:18): [True: 1.12k, False: 150]
+  |  Branch (2397:33): [True: 1.12k, False: 0]
+  ------------------
+ 2398|  1.12k|      p++;
+ 2399|    200|  else
+ 2400|  2.65k|    while (*p && (*p != '#'))
+  ------------------
+  |  Branch (2400:12): [True: 2.50k, False: 150]
+  |  Branch (2400:18): [True: 2.45k, False: 50]
+  ------------------
+ 2401|  2.45k|      p++;
+ 2402|  1.23k|  *p = '\0';
+ 2403|       |
+ 2404|       |  /* trim trailing whitespace */
+ 2405|  1.23k|  q = p - 1;
+ 2406|  1.23k|  while ((q >= s) && ISSPACE(*q))
+  ------------------
+  |  |  275|    180|#define ISSPACE(x)  (isspace((int)  ((unsigned char)x)))
+  |  |  ------------------
+  |  |  |  Branch (275:21): [True: 0, False: 180]
+  |  |  ------------------
+  ------------------
+  |  Branch (2406:10): [True: 180, False: 1.05k]
+  ------------------
+ 2407|      0|    q--;
+ 2408|  1.23k|  *++q = '\0';
+ 2409|       |
+ 2410|       |  /* skip leading whitespace */
+ 2411|  1.23k|  p = s;
+ 2412|  1.23k|  while (*p && ISSPACE(*p))
+  ------------------
+  |  |  275|    180|#define ISSPACE(x)  (isspace((int)  ((unsigned char)x)))
+  |  |  ------------------
+  |  |  |  Branch (275:21): [True: 0, False: 180]
+  |  |  ------------------
+  ------------------
+  |  Branch (2412:10): [True: 180, False: 1.05k]
+  ------------------
+ 2413|      0|    p++;
+ 2414|       |
+ 2415|  1.23k|  if (!*p)
+  ------------------
+  |  Branch (2415:7): [True: 1.05k, False: 180]
+  ------------------
+ 2416|       |    /* empty line */
+ 2417|  1.05k|    return NULL;
+ 2418|       |
+ 2419|    180|  if ((len = strlen(opt)) == 0)
+  ------------------
+  |  Branch (2419:7): [True: 0, False: 180]
+  ------------------
+ 2420|       |    /* empty option */
+ 2421|      0|    return NULL;  /* LCOV_EXCL_LINE */
+ 2422|       |
+ 2423|    180|  if (strncmp(p, opt, len) != 0)
+  ------------------
+  |  Branch (2423:7): [True: 150, False: 30]
+  ------------------
+ 2424|       |    /* line and option do not match */
+ 2425|    150|    return NULL;
+ 2426|       |
+ 2427|       |  /* skip over given option name */
+ 2428|     30|  p += len;
+ 2429|       |
+ 2430|     30|  if (!*p)
+  ------------------
+  |  Branch (2430:7): [True: 0, False: 30]
+  ------------------
+ 2431|       |    /* no option value */
+ 2432|      0|    return NULL;  /* LCOV_EXCL_LINE */
+ 2433|       |
+ 2434|     30|  if ((opt[len-1] != ':') && (opt[len-1] != '=') && !ISSPACE(*p))
+  ------------------
+  |  |  275|     20|#define ISSPACE(x)  (isspace((int)  ((unsigned char)x)))
+  ------------------
+  |  Branch (2434:7): [True: 20, False: 10]
+  |  Branch (2434:30): [True: 20, False: 0]
+  |  Branch (2434:53): [True: 0, False: 20]
+  ------------------
+ 2435|       |    /* whitespace between option name and value is mandatory
+ 2436|       |       for given option names which do not end with ':' or '=' */
+ 2437|      0|    return NULL;
+ 2438|       |
+ 2439|       |  /* skip over whitespace */
+ 2440|    150|  while (*p && ISSPACE(*p))
+  ------------------
+  |  |  275|    150|#define ISSPACE(x)  (isspace((int)  ((unsigned char)x)))
+  |  |  ------------------
+  |  |  |  Branch (275:21): [True: 120, False: 30]
+  |  |  ------------------
+  ------------------
+  |  Branch (2440:10): [True: 150, False: 0]
+  ------------------
+ 2441|    120|    p++;
+ 2442|       |
+ 2443|     30|  if (!*p)
+  ------------------
+  |  Branch (2443:7): [True: 0, False: 30]
+  ------------------
+ 2444|       |    /* no option value */
+ 2445|      0|    return NULL;
+ 2446|       |
+ 2447|       |  /* return pointer to option value */
+ 2448|     30|  return p;
+ 2449|     30|}
+ares_init.c:config_lookup:
+ 2057|     10|{
+ 2058|     10|  char lookups[3], *l;
+ 2059|     10|  const char *vqualifier p;
+ 2060|     10|  int found;
+ 2061|       |
+ 2062|     10|  if (altbindch == NULL)
+  ------------------
+  |  Branch (2062:7): [True: 0, False: 10]
+  ------------------
+ 2063|      0|    altbindch = bindch;
+ 2064|       |
+ 2065|       |  /* Set the lookup order.  Only the first letter of each work
+ 2066|       |   * is relevant, and it has to be "b" for DNS or "f" for the
+ 2067|       |   * host file.  Ignore everything else.
+ 2068|       |   */
+ 2069|     10|  l = lookups;
+ 2070|     10|  p = str;
+ 2071|     10|  found = 0;
+ 2072|     30|  while (*p)
+  ------------------
+  |  Branch (2072:10): [True: 20, False: 10]
+  ------------------
+ 2073|     20|    {
+ 2074|     20|      if ((*p == *bindch || *p == *altbindch || *p == *filech) && l < lookups + 2) {
+  ------------------
+  |  Branch (2074:12): [True: 10, False: 10]
+  |  Branch (2074:29): [True: 0, False: 10]
+  |  Branch (2074:49): [True: 10, False: 0]
+  |  Branch (2074:67): [True: 20, False: 0]
+  ------------------
+ 2075|     20|        if (*p == *bindch || *p == *altbindch) *l++ = 'b';
+  ------------------
+  |  Branch (2075:13): [True: 10, False: 10]
+  |  Branch (2075:30): [True: 0, False: 10]
+  ------------------
+ 2076|     10|        else *l++ = 'f';
+ 2077|     20|        found = 1;
+ 2078|     20|      }
+ 2079|    100|      while (*p && !ISSPACE(*p) && (*p != ','))
+  ------------------
+  |  |  275|    190|#define ISSPACE(x)  (isspace((int)  ((unsigned char)x)))
+  ------------------
+  |  Branch (2079:14): [True: 90, False: 10]
+  |  Branch (2079:20): [True: 80, False: 10]
+  |  Branch (2079:36): [True: 80, False: 0]
+  ------------------
+ 2080|     80|        p++;
+ 2081|     30|      while (*p && (ISSPACE(*p) || (*p == ',')))
+  ------------------
+  |  |  275|     40|#define ISSPACE(x)  (isspace((int)  ((unsigned char)x)))
+  |  |  ------------------
+  |  |  |  Branch (275:21): [True: 10, False: 10]
+  |  |  ------------------
+  ------------------
+  |  Branch (2081:14): [True: 20, False: 10]
+  |  Branch (2081:36): [True: 0, False: 10]
+  ------------------
+ 2082|     10|        p++;
+ 2083|     20|    }
+ 2084|     10|  if (!found)
+  ------------------
+  |  Branch (2084:7): [True: 0, False: 10]
+  ------------------
+ 2085|      0|    return ARES_ENOTINITIALIZED;
+  ------------------
+  |  |  129|      0|#define ARES_ENOTINITIALIZED    21          /* introduced in 1.7.0 */
+  ------------------
+ 2086|     10|  *l = '\0';
+ 2087|     10|  channel->lookups = ares_strdup(lookups);
+ 2088|     10|  return (channel->lookups) ? ARES_SUCCESS : ARES_ENOMEM;
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+                return (channel->lookups) ? ARES_SUCCESS : ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+  |  Branch (2088:10): [True: 10, False: 0]
+  ------------------
+ 2089|     10|}
+ares_init.c:config_nameserver:
+ 2165|     10|{
+ 2166|     10|  struct ares_addr host;
+ 2167|     10|  struct server_state *newserv;
+ 2168|     10|  char *p, *txtaddr;
+ 2169|       |  /* On Windows, there may be more than one nameserver specified in the same
+ 2170|       |   * registry key, so we parse input as a space or comma seperated list.
+ 2171|       |   */
+ 2172|     20|  for (p = str; p;)
+  ------------------
+  |  Branch (2172:17): [True: 10, False: 10]
+  ------------------
+ 2173|     10|    {
+ 2174|       |      /* Skip whitespace and commas. */
+ 2175|     10|      while (*p && (ISSPACE(*p) || (*p == ',')))
+  ------------------
+  |  |  275|     20|#define ISSPACE(x)  (isspace((int)  ((unsigned char)x)))
+  |  |  ------------------
+  |  |  |  Branch (275:21): [True: 0, False: 10]
+  |  |  ------------------
+  ------------------
+  |  Branch (2175:14): [True: 10, False: 0]
+  |  Branch (2175:36): [True: 0, False: 10]
+  ------------------
+ 2176|      0|        p++;
+ 2177|     10|      if (!*p)
+  ------------------
+  |  Branch (2177:11): [True: 0, False: 10]
+  ------------------
+ 2178|       |        /* No more input, done. */
+ 2179|      0|        break;
+ 2180|       |
+ 2181|       |      /* Pointer to start of IPv4 or IPv6 address part. */
+ 2182|     10|      txtaddr = p;
+ 2183|       |
+ 2184|       |      /* Advance past this address. */
+ 2185|    120|      while (*p && !ISSPACE(*p) && (*p != ','))
+  ------------------
+  |  |  275|    230|#define ISSPACE(x)  (isspace((int)  ((unsigned char)x)))
+  ------------------
+  |  Branch (2185:14): [True: 110, False: 10]
+  |  Branch (2185:20): [True: 110, False: 0]
+  |  Branch (2185:36): [True: 110, False: 0]
+  ------------------
+ 2186|    110|        p++;
+ 2187|     10|      if (*p)
+  ------------------
+  |  Branch (2187:11): [True: 0, False: 10]
+  ------------------
+ 2188|       |        /* Null terminate this address. */
+ 2189|      0|        *p++ = '\0';
+ 2190|     10|      else
+ 2191|       |        /* Reached end of input, done when this address is processed. */
+ 2192|     10|        p = NULL;
+ 2193|       |
+ 2194|       |      /* Convert textual address to binary format. */
+ 2195|     10|      if (ares_inet_pton(AF_INET, txtaddr, &host.addrV4) == 1)
+  ------------------
+  |  |  148|     10|#define addrV4 addr.addr4
+  ------------------
+  |  Branch (2195:11): [True: 10, False: 0]
+  ------------------
+ 2196|     10|        host.family = AF_INET;
+ 2197|      0|      else if (ares_inet_pton(AF_INET6, txtaddr, &host.addrV6) == 1
+  ------------------
+  |  |  149|      0|#define addrV6 addr.addr6
+  ------------------
+  |  Branch (2197:16): [True: 0, False: 0]
+  ------------------
+ 2198|       |               /* Silently skip blacklisted IPv6 servers. */
+ 2199|      0|               && !ares_ipv6_server_blacklisted(
+  ------------------
+  |  Branch (2199:19): [True: 0, False: 0]
+  ------------------
+ 2200|      0|                    (const unsigned char *)&host.addrV6))
+  ------------------
+  |  |  149|      0|#define addrV6 addr.addr6
+  ------------------
+ 2201|      0|        host.family = AF_INET6;
+ 2202|      0|      else
+ 2203|      0|        continue;
+ 2204|       |
+ 2205|       |      /* Resize servers state array. */
+ 2206|     10|      newserv = ares_realloc(*servers, (*nservers + 1) *
+ 2207|     10|                             sizeof(struct server_state));
+ 2208|     10|      if (!newserv)
+  ------------------
+  |  Branch (2208:11): [True: 0, False: 10]
+  ------------------
+ 2209|      0|        return ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+ 2210|       |
+ 2211|       |      /* Store address data. */
+ 2212|     10|      newserv[*nservers].addr.family = host.family;
+ 2213|     10|      newserv[*nservers].addr.udp_port = 0;
+ 2214|     10|      newserv[*nservers].addr.tcp_port = 0;
+ 2215|     10|      if (host.family == AF_INET)
+  ------------------
+  |  Branch (2215:11): [True: 10, False: 0]
+  ------------------
+ 2216|     10|        memcpy(&newserv[*nservers].addr.addrV4, &host.addrV4,
+  ------------------
+  |  |  148|     10|#define addrV4 addr.addr4
+  ------------------
+                      memcpy(&newserv[*nservers].addr.addrV4, &host.addrV4,
+  ------------------
+  |  |  148|     10|#define addrV4 addr.addr4
+  ------------------
+ 2217|     10|               sizeof(host.addrV4));
+  ------------------
+  |  |  148|     10|#define addrV4 addr.addr4
+  ------------------
+ 2218|      0|      else
+ 2219|      0|        memcpy(&newserv[*nservers].addr.addrV6, &host.addrV6,
+  ------------------
+  |  |  149|      0|#define addrV6 addr.addr6
+  ------------------
+                      memcpy(&newserv[*nservers].addr.addrV6, &host.addrV6,
+  ------------------
+  |  |  149|      0|#define addrV6 addr.addr6
+  ------------------
+ 2220|      0|               sizeof(host.addrV6));
+  ------------------
+  |  |  149|      0|#define addrV6 addr.addr6
+  ------------------
+ 2221|       |
+ 2222|       |      /* Update arguments. */
+ 2223|     10|      *servers = newserv;
+ 2224|     10|      *nservers += 1;
+ 2225|     10|    }
+ 2226|       |
+ 2227|     10|  return ARES_SUCCESS;
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+ 2228|     10|}
+ares_init.c:init_by_defaults:
+ 1882|     10|{
+ 1883|     10|  char *hostname = NULL;
+ 1884|     10|  int rc = ARES_SUCCESS;
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+ 1885|     10|#ifdef HAVE_GETHOSTNAME
+ 1886|     10|  char *dot;
+ 1887|     10|#endif
+ 1888|       |
+ 1889|     10|  if (channel->flags == -1)
+  ------------------
+  |  Branch (1889:7): [True: 10, False: 0]
+  ------------------
+ 1890|     10|    channel->flags = 0;
+ 1891|     10|  if (channel->timeout == -1)
+  ------------------
+  |  Branch (1891:7): [True: 10, False: 0]
+  ------------------
+ 1892|     10|    channel->timeout = DEFAULT_TIMEOUT;
+  ------------------
+  |  |   40|     10|#define DEFAULT_TIMEOUT         5000 /* milliseconds */
+  ------------------
+ 1893|     10|  if (channel->tries == -1)
+  ------------------
+  |  Branch (1893:7): [True: 10, False: 0]
+  ------------------
+ 1894|     10|    channel->tries = DEFAULT_TRIES;
+  ------------------
+  |  |   41|     10|#define DEFAULT_TRIES           4
+  ------------------
+ 1895|     10|  if (channel->ndots == -1)
+  ------------------
+  |  Branch (1895:7): [True: 10, False: 0]
+  ------------------
+ 1896|     10|    channel->ndots = 1;
+ 1897|     10|  if (channel->rotate == -1)
+  ------------------
+  |  Branch (1897:7): [True: 10, False: 0]
+  ------------------
+ 1898|     10|    channel->rotate = 0;
+ 1899|     10|  if (channel->udp_port == -1)
+  ------------------
+  |  Branch (1899:7): [True: 10, False: 0]
+  ------------------
+ 1900|     10|    channel->udp_port = htons(NAMESERVER_PORT);
+ 1901|     10|  if (channel->tcp_port == -1)
+  ------------------
+  |  Branch (1901:7): [True: 10, False: 0]
+  ------------------
+ 1902|     10|    channel->tcp_port = htons(NAMESERVER_PORT);
+ 1903|       |
+ 1904|     10|  if (channel->ednspsz == -1)
+  ------------------
+  |  Branch (1904:7): [True: 10, False: 0]
+  ------------------
+ 1905|     10|    channel->ednspsz = EDNSPACKETSZ;
+  ------------------
+  |  |  133|     10|#define EDNSPACKETSZ   1280  /* Reasonable UDP payload size, as suggested
+  ------------------
+ 1906|       |
+ 1907|     10|  if (channel->nservers == -1) {
+  ------------------
+  |  Branch (1907:7): [True: 0, False: 10]
+  ------------------
+ 1908|       |    /* If nobody specified servers, try a local named. */
+ 1909|      0|    channel->servers = ares_malloc(sizeof(struct server_state));
+ 1910|      0|    if (!channel->servers) {
+  ------------------
+  |  Branch (1910:9): [True: 0, False: 0]
+  ------------------
+ 1911|      0|      rc = ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+ 1912|      0|      goto error;
+ 1913|      0|    }
+ 1914|      0|    channel->servers[0].addr.family = AF_INET;
+ 1915|      0|    channel->servers[0].addr.addrV4.s_addr = htonl(INADDR_LOOPBACK);
+  ------------------
+  |  |  148|      0|#define addrV4 addr.addr4
+  ------------------
+ 1916|      0|    channel->servers[0].addr.udp_port = 0;
+ 1917|      0|    channel->servers[0].addr.tcp_port = 0;
+ 1918|      0|    channel->nservers = 1;
+ 1919|      0|  }
+ 1920|       |
+ 1921|       |#if defined(USE_WINSOCK)
+ 1922|       |#define toolong(x) (x == -1) &&  (SOCKERRNO == WSAEFAULT)
+ 1923|       |#elif defined(ENAMETOOLONG)
+ 1924|       |#define toolong(x) (x == -1) && ((SOCKERRNO == ENAMETOOLONG) || \
+ 1925|     10|                                 (SOCKERRNO == EINVAL))
+ 1926|       |#else
+ 1927|       |#define toolong(x) (x == -1) &&  (SOCKERRNO == EINVAL)
+ 1928|       |#endif
+ 1929|       |
+ 1930|     10|  if (channel->ndomains == -1) {
+  ------------------
+  |  Branch (1930:7): [True: 0, False: 10]
+  ------------------
+ 1931|       |    /* Derive a default domain search list from the kernel hostname,
+ 1932|       |     * or set it to empty if the hostname isn't helpful.
+ 1933|       |     */
+ 1934|       |#ifndef HAVE_GETHOSTNAME
+ 1935|       |    channel->ndomains = 0; /* default to none */
+ 1936|       |#else
+ 1937|      0|    GETHOSTNAME_TYPE_ARG2 lenv = 64;
+  ------------------
+  |  |   32|      0|#define GETHOSTNAME_TYPE_ARG2 size_t
+  ------------------
+ 1938|      0|    size_t len = 64;
+ 1939|      0|    int res;
+ 1940|      0|    channel->ndomains = 0; /* default to none */
+ 1941|       |
+ 1942|      0|    hostname = ares_malloc(len);
+ 1943|      0|    if(!hostname) {
+  ------------------
+  |  Branch (1943:8): [True: 0, False: 0]
+  ------------------
+ 1944|      0|      rc = ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+ 1945|      0|      goto error;
+ 1946|      0|    }
+ 1947|       |
+ 1948|      0|    do {
+ 1949|      0|      res = gethostname(hostname, lenv);
+ 1950|       |
+ 1951|      0|      if(toolong(res)) {
+  ------------------
+  |  | 1924|      0|#define toolong(x) (x == -1) && ((SOCKERRNO == ENAMETOOLONG) || \
+  |  |  ------------------
+  |  |  |  |  426|      0|#define SOCKERRNO         (errno)
+  |  |  ------------------
+  |  |  |  Branch (1924:20): [True: 0, False: 0]
+  |  |  |  Branch (1924:34): [True: 0, False: 0]
+  |  |  ------------------
+  |  | 1925|      0|                                 (SOCKERRNO == EINVAL))
+  |  |  ------------------
+  |  |  |  |  426|      0|#define SOCKERRNO         (errno)
+  |  |  ------------------
+  |  |  |  Branch (1925:34): [True: 0, False: 0]
+  |  |  ------------------
+  ------------------
+ 1952|      0|        char *p;
+ 1953|      0|        len *= 2;
+ 1954|      0|        lenv *= 2;
+ 1955|      0|        p = ares_realloc(hostname, len);
+ 1956|      0|        if(!p) {
+  ------------------
+  |  Branch (1956:12): [True: 0, False: 0]
+  ------------------
+ 1957|      0|          rc = ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+ 1958|      0|          goto error;
+ 1959|      0|        }
+ 1960|      0|        hostname = p;
+ 1961|      0|        continue;
+ 1962|      0|      }
+ 1963|      0|      else if(res) {
+  ------------------
+  |  Branch (1963:15): [True: 0, False: 0]
+  ------------------
+ 1964|       |        /* Lets not treat a gethostname failure as critical, since we
+ 1965|       |         * are ok if gethostname doesn't even exist */
+ 1966|      0|        *hostname = '\0';
+ 1967|      0|        break;
+ 1968|      0|      }
+ 1969|       |
+ 1970|      0|    } while (res != 0);
+  ------------------
+  |  Branch (1970:14): [True: 0, False: 0]
+  ------------------
+ 1971|       |
+ 1972|      0|    dot = strchr(hostname, '.');
+ 1973|      0|    if (dot) {
+  ------------------
+  |  Branch (1973:9): [True: 0, False: 0]
+  ------------------
+ 1974|       |      /* a dot was found */
+ 1975|      0|      channel->domains = ares_malloc(sizeof(char *));
+ 1976|      0|      if (!channel->domains) {
+  ------------------
+  |  Branch (1976:11): [True: 0, False: 0]
+  ------------------
+ 1977|      0|        rc = ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+ 1978|      0|        goto error;
+ 1979|      0|      }
+ 1980|      0|      channel->domains[0] = ares_strdup(dot + 1);
+ 1981|      0|      if (!channel->domains[0]) {
+  ------------------
+  |  Branch (1981:11): [True: 0, False: 0]
+  ------------------
+ 1982|      0|        rc = ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+ 1983|      0|        goto error;
+ 1984|      0|      }
+ 1985|      0|      channel->ndomains = 1;
+ 1986|      0|    }
+ 1987|      0|#endif
+ 1988|      0|  }
+ 1989|       |
+ 1990|     10|  if (channel->nsort == -1) {
+  ------------------
+  |  Branch (1990:7): [True: 10, False: 0]
+  ------------------
+ 1991|     10|    channel->sortlist = NULL;
+ 1992|     10|    channel->nsort = 0;
+ 1993|     10|  }
+ 1994|       |
+ 1995|     10|  if (!channel->lookups) {
+  ------------------
+  |  Branch (1995:7): [True: 0, False: 10]
+  ------------------
+ 1996|      0|    channel->lookups = ares_strdup("fb");
+ 1997|      0|    if (!channel->lookups)
+  ------------------
+  |  Branch (1997:9): [True: 0, False: 0]
+  ------------------
+ 1998|      0|      rc = ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+ 1999|      0|  }
+ 2000|       |
+ 2001|     10|  error:
+ 2002|     10|  if(rc) {
+  ------------------
+  |  Branch (2002:6): [True: 0, False: 10]
+  ------------------
+ 2003|      0|    if(channel->servers) {
+  ------------------
+  |  Branch (2003:8): [True: 0, False: 0]
+  ------------------
+ 2004|      0|      ares_free(channel->servers);
+ 2005|      0|      channel->servers = NULL;
+ 2006|      0|    }
+ 2007|       |
+ 2008|      0|    if(channel->domains && channel->domains[0])
+  ------------------
+  |  Branch (2008:8): [True: 0, False: 0]
+  |  Branch (2008:28): [True: 0, False: 0]
+  ------------------
+ 2009|      0|      ares_free(channel->domains[0]);
+ 2010|      0|    if(channel->domains) {
+  ------------------
+  |  Branch (2010:8): [True: 0, False: 0]
+  ------------------
+ 2011|      0|      ares_free(channel->domains);
+ 2012|      0|      channel->domains = NULL;
+ 2013|      0|    }
+ 2014|       |
+ 2015|      0|    if(channel->lookups) {
+  ------------------
+  |  Branch (2015:8): [True: 0, False: 0]
+  ------------------
+ 2016|      0|      ares_free(channel->lookups);
+ 2017|      0|      channel->lookups = NULL;
+ 2018|      0|    }
+ 2019|       |
+ 2020|      0|    if(channel->resolvconf_path) {
+  ------------------
+  |  Branch (2020:8): [True: 0, False: 0]
+  ------------------
+ 2021|      0|      ares_free(channel->resolvconf_path);
+ 2022|      0|      channel->resolvconf_path = NULL;
+ 2023|      0|    }
+ 2024|      0|  }
+ 2025|       |
+ 2026|     10|  if(hostname)
+  ------------------
+  |  Branch (2026:6): [True: 0, False: 10]
+  ------------------
+ 2027|      0|    ares_free(hostname);
+ 2028|       |
+ 2029|     10|  return rc;
+ 2030|     10|}
+ares_init.c:init_id_key:
+ 2535|     10|{
+ 2536|     10|  unsigned char index1;
+ 2537|     10|  unsigned char index2;
+ 2538|     10|  unsigned char* state;
+ 2539|     10|  short counter;
+ 2540|     10|  unsigned char *key_data_ptr = 0;
+ 2541|       |
+ 2542|     10|  key_data_ptr = ares_malloc(key_data_len);
+ 2543|     10|  if (!key_data_ptr)
+  ------------------
+  |  Branch (2543:7): [True: 0, False: 10]
+  ------------------
+ 2544|      0|    return ARES_ENOMEM;
+  ------------------
+  |  |  117|      0|#define ARES_ENOMEM             15
+  ------------------
+ 2545|     10|  memset(key_data_ptr, 0, key_data_len);
+ 2546|       |
+ 2547|     10|  state = &key->state[0];
+ 2548|  2.57k|  for(counter = 0; counter < 256; counter++)
+  ------------------
+  |  Branch (2548:20): [True: 2.56k, False: 10]
+  ------------------
+ 2549|       |    /* unnecessary AND but it keeps some compilers happier */
+ 2550|  2.56k|    state[counter] = (unsigned char)(counter & 0xff);
+ 2551|     10|  randomize_key(key->state,key_data_len);
+ 2552|     10|  key->x = 0;
+ 2553|     10|  key->y = 0;
+ 2554|     10|  index1 = 0;
+ 2555|     10|  index2 = 0;
+ 2556|  2.57k|  for(counter = 0; counter < 256; counter++)
+  ------------------
+  |  Branch (2556:20): [True: 2.56k, False: 10]
+  ------------------
+ 2557|  2.56k|  {
+ 2558|  2.56k|    index2 = (unsigned char)((key_data_ptr[index1] + state[counter] +
+ 2559|  2.56k|                              index2) % 256);
+ 2560|  2.56k|    ARES_SWAP_BYTE(&state[counter], &state[index2]);
+  ------------------
+  |  |  429|  2.56k|  { unsigned char swapByte = *(a);  *(a) = *(b);  *(b) = swapByte; }
+  ------------------
+ 2561|       |
+ 2562|  2.56k|    index1 = (unsigned char)((index1 + 1) % key_data_len);
+ 2563|  2.56k|  }
+ 2564|     10|  ares_free(key_data_ptr);
+ 2565|     10|  return ARES_SUCCESS;
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+ 2566|     10|}
+ares_init.c:randomize_key:
+ 2506|     10|{
+ 2507|     10|  int randomized = 0;
+ 2508|     10|  int counter=0;
+ 2509|       |#ifdef WIN32
+ 2510|       |  BOOLEAN res;
+ 2511|       |  if (ares_fpSystemFunction036)
+ 2512|       |    {
+ 2513|       |      res = (*ares_fpSystemFunction036) (key, key_data_len);
+ 2514|       |      if (res)
+ 2515|       |        randomized = 1;
+ 2516|       |    }
+ 2517|       |#else /* !WIN32 */
+ 2518|     10|#ifdef CARES_RANDOM_FILE
+ 2519|     10|  FILE *f = fopen(CARES_RANDOM_FILE, "rb");
+  ------------------
+  |  |   14|     10|#define CARES_RANDOM_FILE "/dev/urandom"
+  ------------------
+ 2520|     10|  if(f) {
+  ------------------
+  |  Branch (2520:6): [True: 10, False: 0]
+  ------------------
+ 2521|     10|    setvbuf(f, NULL, _IONBF, 0);
+ 2522|     10|    counter = aresx_uztosi(fread(key, 1, key_data_len, f));
+ 2523|     10|    fclose(f);
+ 2524|     10|  }
+ 2525|     10|#endif
+ 2526|     10|#endif /* WIN32 */
+ 2527|       |
+ 2528|     10|  if (!randomized) {
+  ------------------
+  |  Branch (2528:7): [True: 10, False: 0]
+  ------------------
+ 2529|     10|    for (;counter<key_data_len;counter++)
+  ------------------
+  |  Branch (2529:11): [True: 0, False: 10]
+  ------------------
+ 2530|      0|      key[counter]=(unsigned char)(rand() % 256);  /* LCOV_EXCL_LINE */
+ 2531|     10|  }
+ 2532|     10|}
+
+ares_library_init:
+  134|     10|{
+  135|     10|  int res;
+  136|       |
+  137|     10|  if (ares_initialized)
+  ------------------
+  |  Branch (137:7): [True: 0, False: 10]
+  ------------------
+  138|      0|    {
+  139|      0|      ares_initialized++;
+  140|      0|      return ARES_SUCCESS;
+  ------------------
+  |  |   98|      0|#define ARES_SUCCESS            0
+  ------------------
+  141|      0|    }
+  142|     10|  ares_initialized++;
+  143|       |
+  144|     10|  if (flags & ARES_LIB_INIT_WIN32)
+  ------------------
+  |  |  217|     10|#define ARES_LIB_INIT_WIN32  (1 << 0)
+  ------------------
+  |  Branch (144:7): [True: 0, False: 10]
+  ------------------
+  145|      0|    {
+  146|      0|      res = ares_win32_init();
+  147|      0|      if (res != ARES_SUCCESS)
+  ------------------
+  |  |   98|      0|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (147:11): [True: 0, False: 0]
+  ------------------
+  148|      0|        return res;  /* LCOV_EXCL_LINE: can't test Win32 init failure */
+  149|      0|    }
+  150|       |
+  151|     10|  ares_init_flags = flags;
+  152|       |
+  153|     10|  return ARES_SUCCESS;
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  154|     10|}
+ares_library_cleanup:
+  172|     10|{
+  173|     10|  if (!ares_initialized)
+  ------------------
+  |  Branch (173:7): [True: 0, False: 10]
+  ------------------
+  174|      0|    return;
+  175|     10|  ares_initialized--;
+  176|     10|  if (ares_initialized)
+  ------------------
+  |  Branch (176:7): [True: 0, False: 10]
+  ------------------
+  177|      0|    return;
+  178|       |
+  179|     10|  if (ares_init_flags & ARES_LIB_INIT_WIN32)
+  ------------------
+  |  |  217|     10|#define ARES_LIB_INIT_WIN32  (1 << 0)
+  ------------------
+  |  Branch (179:7): [True: 0, False: 10]
+  ------------------
+  180|      0|    ares_win32_cleanup();
+  181|       |
+  182|       |#if defined(ANDROID) || defined(__ANDROID__)
+  183|       |  ares_library_cleanup_android();
+  184|       |#endif
+  185|       |
+  186|     10|  ares_init_flags = ARES_LIB_INIT_NONE;
+  ------------------
+  |  |  216|     10|#define ARES_LIB_INIT_NONE   (0)
+  ------------------
+  187|     10|  ares_malloc = malloc;
+  188|     10|  ares_realloc = realloc;
+  189|     10|  ares_free = free;
+  190|     10|}
+ares_library_initialized:
+  194|     10|{
+  195|       |#ifdef USE_WINSOCK
+  196|       |  if (!ares_initialized)
+  197|       |    return ARES_ENOTINITIALIZED;
+  198|       |#endif
+  199|     10|  return ARES_SUCCESS;
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  200|     10|}
+ares_library_init.c:default_malloc:
+   48|      8|static void *default_malloc(size_t size) { if (size == 0) { return NULL; } return malloc(size); }
+  ------------------
+  |  Branch (48:48): [True: 0, False: 8]
+  ------------------
+
+ares__init_list_head:
+   27|  30.7k|void ares__init_list_head(struct list_node* head) {
+   28|  30.7k|  head->prev = head;
+   29|  30.7k|  head->next = head;
+   30|       |  head->data = NULL;
+   31|  30.7k|}
+ares__is_list_empty:
+   41|  30.7k|int ares__is_list_empty(struct list_node* head) {
+   42|  30.7k|  return ((head->next == head) && (head->prev == head));
+  ------------------
+  |  Branch (42:11): [True: 30.7k, False: 0]
+  |  Branch (42:35): [True: 30.7k, False: 0]
+  ------------------
+   43|  30.7k|}
+
+aresx_uztosi:
+   84|    410|{
+   85|       |#ifdef __INTEL_COMPILER
+   86|       |#  pragma warning(push)
+   87|       |#  pragma warning(disable:810) /* conversion may lose significant bits */
+   88|       |#endif
+   89|       |
+   90|    410|  return (int)(uznum & (size_t) CARES_MASK_SINT);
+  ------------------
+  |  |   55|    410|#  define CARES_MASK_SINT    INT_MAX
+  ------------------
+   91|       |
+   92|       |#ifdef __INTEL_COMPILER
+   93|       |#  pragma warning(pop)
+   94|       |#endif
+   95|    410|}
+
+ares_process_fd:
+  146|     10|{
+  147|     10|  processfds(channel, NULL, read_fd, NULL, write_fd);
+  148|     10|}
+ares_process.c:processfds:
+  121|     10|{
+  122|     10|  struct timeval now = ares__tvnow();
+  123|       |
+  124|     10|  write_tcp_data(channel, write_fds, write_fd, &now);
+  125|     10|  read_tcp_data(channel, read_fds, read_fd, &now);
+  126|     10|  read_udp_packets(channel, read_fds, read_fd, &now);
+  127|     10|  process_timeouts(channel, &now);
+  128|     10|  process_broken_connections(channel, &now);
+  129|     10|}
+ares_process.c:write_tcp_data:
+  204|     10|{
+  205|     10|  struct server_state *server;
+  206|     10|  struct send_request *sendreq;
+  207|     10|  struct iovec *vec;
+  208|     10|  int i;
+  209|     10|  ares_ssize_t scount;
+  210|     10|  ares_ssize_t wcount;
+  211|     10|  size_t n;
+  212|       |
+  213|     10|  if(!write_fds && (write_fd == ARES_SOCKET_BAD))
+  ------------------
+  |  |  231|     10|#define ARES_SOCKET_BAD -1
+  ------------------
+  |  Branch (213:6): [True: 10, False: 0]
+  |  Branch (213:20): [True: 3, False: 7]
+  ------------------
+  214|       |    /* no possible action */
+  215|      3|    return;
+  216|       |
+  217|     14|  for (i = 0; i < channel->nservers; i++)
+  ------------------
+  |  Branch (217:15): [True: 7, False: 7]
+  ------------------
+  218|      7|    {
+  219|       |      /* Make sure server has data to send and is selected in write_fds or
+  220|       |         write_fd. */
+  221|      7|      server = &channel->servers[i];
+  222|      7|      if (!server->qhead || server->tcp_socket == ARES_SOCKET_BAD ||
+  ------------------
+  |  |  231|      7|#define ARES_SOCKET_BAD -1
+  ------------------
+  |  Branch (222:11): [True: 7, False: 0]
+  |  Branch (222:29): [True: 0, False: 0]
+  ------------------
+  223|      0|          server->is_broken)
+  ------------------
+  |  Branch (223:11): [True: 0, False: 0]
+  ------------------
+  224|      7|        continue;
+  225|       |
+  226|      0|      if(write_fds) {
+  ------------------
+  |  Branch (226:10): [True: 0, False: 0]
+  ------------------
+  227|      0|        if(!FD_ISSET(server->tcp_socket, write_fds))
+  ------------------
+  |  Branch (227:12): [True: 0, False: 0]
+  ------------------
+  228|      0|          continue;
+  229|      0|      }
+  230|      0|      else {
+  231|      0|        if(server->tcp_socket != write_fd)
+  ------------------
+  |  Branch (231:12): [True: 0, False: 0]
+  ------------------
+  232|      0|          continue;
+  233|      0|      }
+  234|       |
+  235|      0|      if(write_fds)
+  ------------------
+  |  Branch (235:10): [True: 0, False: 0]
+  ------------------
+  236|       |        /* If there's an error and we close this socket, then open
+  237|       |         * another with the same fd to talk to another server, then we
+  238|       |         * don't want to think that it was the new socket that was
+  239|       |         * ready. This is not disastrous, but is likely to result in
+  240|       |         * extra system calls and confusion. */
+  241|      0|        FD_CLR(server->tcp_socket, write_fds);
+  242|       |
+  243|       |      /* Count the number of send queue items. */
+  244|      0|      n = 0;
+  245|      0|      for (sendreq = server->qhead; sendreq; sendreq = sendreq->next)
+  ------------------
+  |  Branch (245:37): [True: 0, False: 0]
+  ------------------
+  246|      0|        n++;
+  247|       |
+  248|       |      /* Allocate iovecs so we can send all our data at once. */
+  249|      0|      vec = ares_malloc(n * sizeof(struct iovec));
+  250|      0|      if (vec)
+  ------------------
+  |  Branch (250:11): [True: 0, False: 0]
+  ------------------
+  251|      0|        {
+  252|       |          /* Fill in the iovecs and send. */
+  253|      0|          n = 0;
+  254|      0|          for (sendreq = server->qhead; sendreq; sendreq = sendreq->next)
+  ------------------
+  |  Branch (254:41): [True: 0, False: 0]
+  ------------------
+  255|      0|            {
+  256|      0|              vec[n].iov_base = (char *) sendreq->data;
+  257|      0|              vec[n].iov_len = sendreq->len;
+  258|      0|              n++;
+  259|      0|            }
+  260|      0|          wcount = socket_writev(channel, server->tcp_socket, vec, (int)n);
+  261|      0|          ares_free(vec);
+  262|      0|          if (wcount < 0)
+  ------------------
+  |  Branch (262:15): [True: 0, False: 0]
+  ------------------
+  263|      0|            {
+  264|      0|              if (!try_again(SOCKERRNO))
+  ------------------
+  |  |  426|      0|#define SOCKERRNO         (errno)
+  ------------------
+  |  Branch (264:19): [True: 0, False: 0]
+  ------------------
+  265|      0|                handle_error(channel, i, now);
+  266|      0|              continue;
+  267|      0|            }
+  268|       |
+  269|       |          /* Advance the send queue by as many bytes as we sent. */
+  270|      0|          advance_tcp_send_queue(channel, i, wcount);
+  271|      0|        }
+  272|      0|      else
+  273|      0|        {
+  274|       |          /* Can't allocate iovecs; just send the first request. */
+  275|      0|          sendreq = server->qhead;
+  276|       |
+  277|      0|          scount = socket_write(channel, server->tcp_socket, sendreq->data, sendreq->len);
+  278|      0|          if (scount < 0)
+  ------------------
+  |  Branch (278:15): [True: 0, False: 0]
+  ------------------
+  279|      0|            {
+  280|      0|              if (!try_again(SOCKERRNO))
+  ------------------
+  |  |  426|      0|#define SOCKERRNO         (errno)
+  ------------------
+  |  Branch (280:19): [True: 0, False: 0]
+  ------------------
+  281|      0|                handle_error(channel, i, now);
+  282|      0|              continue;
+  283|      0|            }
+  284|       |
+  285|       |          /* Advance the send queue by as many bytes as we sent. */
+  286|      0|          advance_tcp_send_queue(channel, i, scount);
+  287|      0|        }
+  288|      0|    }
+  289|      7|}
+ares_process.c:read_tcp_data:
+  359|     10|{
+  360|     10|  struct server_state *server;
+  361|     10|  int i;
+  362|     10|  ares_ssize_t count;
+  363|       |
+  364|     10|  if(!read_fds && (read_fd == ARES_SOCKET_BAD))
+  ------------------
+  |  |  231|     10|#define ARES_SOCKET_BAD -1
+  ------------------
+  |  Branch (364:6): [True: 10, False: 0]
+  |  Branch (364:19): [True: 3, False: 7]
+  ------------------
+  365|       |    /* no possible action */
+  366|      3|    return;
+  367|       |
+  368|     14|  for (i = 0; i < channel->nservers; i++)
+  ------------------
+  |  Branch (368:15): [True: 7, False: 7]
+  ------------------
+  369|      7|    {
+  370|       |      /* Make sure the server has a socket and is selected in read_fds. */
+  371|      7|      server = &channel->servers[i];
+  372|      7|      if (server->tcp_socket == ARES_SOCKET_BAD || server->is_broken)
+  ------------------
+  |  |  231|     14|#define ARES_SOCKET_BAD -1
+  ------------------
+  |  Branch (372:11): [True: 7, False: 0]
+  |  Branch (372:52): [True: 0, False: 0]
+  ------------------
+  373|      7|        continue;
+  374|       |
+  375|      0|      if(read_fds) {
+  ------------------
+  |  Branch (375:10): [True: 0, False: 0]
+  ------------------
+  376|      0|        if(!FD_ISSET(server->tcp_socket, read_fds))
+  ------------------
+  |  Branch (376:12): [True: 0, False: 0]
+  ------------------
+  377|      0|          continue;
+  378|      0|      }
+  379|      0|      else {
+  380|      0|        if(server->tcp_socket != read_fd)
+  ------------------
+  |  Branch (380:12): [True: 0, False: 0]
+  ------------------
+  381|      0|          continue;
+  382|      0|      }
+  383|       |
+  384|      0|      if(read_fds)
+  ------------------
+  |  Branch (384:10): [True: 0, False: 0]
+  ------------------
+  385|       |        /* If there's an error and we close this socket, then open another
+  386|       |         * with the same fd to talk to another server, then we don't want to
+  387|       |         * think that it was the new socket that was ready. This is not
+  388|       |         * disastrous, but is likely to result in extra system calls and
+  389|       |         * confusion. */
+  390|      0|        FD_CLR(server->tcp_socket, read_fds);
+  391|       |
+  392|      0|      if (server->tcp_lenbuf_pos != 2)
+  ------------------
+  |  Branch (392:11): [True: 0, False: 0]
+  ------------------
+  393|      0|        {
+  394|       |          /* We haven't yet read a length word, so read that (or
+  395|       |           * what's left to read of it).
+  396|       |           */
+  397|      0|          count = socket_recv(channel, server->tcp_socket,
+  398|      0|			      server->tcp_lenbuf + server->tcp_lenbuf_pos,
+  399|      0|			      2 - server->tcp_lenbuf_pos);
+  400|      0|          if (count <= 0)
+  ------------------
+  |  Branch (400:15): [True: 0, False: 0]
+  ------------------
+  401|      0|            {
+  402|      0|              if (!(count == -1 && try_again(SOCKERRNO)))
+  ------------------
+  |  |  426|      0|#define SOCKERRNO         (errno)
+  ------------------
+  |  Branch (402:21): [True: 0, False: 0]
+  |  Branch (402:36): [True: 0, False: 0]
+  ------------------
+  403|      0|                handle_error(channel, i, now);
+  404|      0|              continue;
+  405|      0|            }
+  406|       |
+  407|      0|          server->tcp_lenbuf_pos += (int)count;
+  408|      0|          if (server->tcp_lenbuf_pos == 2)
+  ------------------
+  |  Branch (408:15): [True: 0, False: 0]
+  ------------------
+  409|      0|            {
+  410|       |              /* We finished reading the length word.  Decode the
+  411|       |               * length and allocate a buffer for the data.
+  412|       |               */
+  413|      0|              server->tcp_length = server->tcp_lenbuf[0] << 8
+  414|      0|                | server->tcp_lenbuf[1];
+  415|      0|              server->tcp_buffer = ares_malloc(server->tcp_length);
+  416|      0|              if (!server->tcp_buffer) {
+  ------------------
+  |  Branch (416:19): [True: 0, False: 0]
+  ------------------
+  417|      0|                handle_error(channel, i, now);
+  418|      0|                return; /* bail out on malloc failure. TODO: make this
+  419|       |                           function return error codes */
+  420|      0|              }
+  421|      0|              server->tcp_buffer_pos = 0;
+  422|      0|            }
+  423|      0|        }
+  424|      0|      else
+  425|      0|        {
+  426|       |          /* Read data into the allocated buffer. */
+  427|      0|          count = socket_recv(channel, server->tcp_socket,
+  428|      0|			      server->tcp_buffer + server->tcp_buffer_pos,
+  429|      0|			      server->tcp_length - server->tcp_buffer_pos);
+  430|      0|          if (count <= 0)
+  ------------------
+  |  Branch (430:15): [True: 0, False: 0]
+  ------------------
+  431|      0|            {
+  432|      0|              if (!(count == -1 && try_again(SOCKERRNO)))
+  ------------------
+  |  |  426|      0|#define SOCKERRNO         (errno)
+  ------------------
+  |  Branch (432:21): [True: 0, False: 0]
+  |  Branch (432:36): [True: 0, False: 0]
+  ------------------
+  433|      0|                handle_error(channel, i, now);
+  434|      0|              continue;
+  435|      0|            }
+  436|       |
+  437|      0|          server->tcp_buffer_pos += (int)count;
+  438|      0|          if (server->tcp_buffer_pos == server->tcp_length)
+  ------------------
+  |  Branch (438:15): [True: 0, False: 0]
+  ------------------
+  439|      0|            {
+  440|       |              /* We finished reading this answer; process it and
+  441|       |               * prepare to read another length word.
+  442|       |               */
+  443|      0|              process_answer(channel, server->tcp_buffer, server->tcp_length,
+  444|      0|                             i, 1, now);
+  445|      0|              ares_free(server->tcp_buffer);
+  446|       |              server->tcp_buffer = NULL;
+  447|      0|              server->tcp_lenbuf_pos = 0;
+  448|      0|              server->tcp_buffer_pos = 0;
+  449|      0|            }
+  450|      0|        }
+  451|      0|    }
+  452|      7|}
+ares_process.c:read_udp_packets:
+  457|     10|{
+  458|     10|  struct server_state *server;
+  459|     10|  int i;
+  460|     10|  ares_ssize_t count;
+  461|     10|  unsigned char buf[MAXENDSSZ + 1];
+  462|     10|#ifdef HAVE_RECVFROM
+  463|     10|  ares_socklen_t fromlen;
+  464|     10|  union {
+  465|     10|    struct sockaddr     sa;
+  466|     10|    struct sockaddr_in  sa4;
+  467|     10|    struct sockaddr_in6 sa6;
+  468|     10|  } from;
+  469|     10|#endif
+  470|       |
+  471|     10|  if(!read_fds && (read_fd == ARES_SOCKET_BAD))
+  ------------------
+  |  |  231|     10|#define ARES_SOCKET_BAD -1
+  ------------------
+  |  Branch (471:6): [True: 10, False: 0]
+  |  Branch (471:19): [True: 3, False: 7]
+  ------------------
+  472|       |    /* no possible action */
+  473|      3|    return;
+  474|       |
+  475|     14|  for (i = 0; i < channel->nservers; i++)
+  ------------------
+  |  Branch (475:15): [True: 7, False: 7]
+  ------------------
+  476|      7|    {
+  477|       |      /* Make sure the server has a socket and is selected in read_fds. */
+  478|      7|      server = &channel->servers[i];
+  479|       |
+  480|      7|      if (server->udp_socket == ARES_SOCKET_BAD || server->is_broken)
+  ------------------
+  |  |  231|     14|#define ARES_SOCKET_BAD -1
+  ------------------
+  |  Branch (480:11): [True: 7, False: 0]
+  |  Branch (480:52): [True: 0, False: 0]
+  ------------------
+  481|      7|        continue;
+  482|       |
+  483|      0|      if(read_fds) {
+  ------------------
+  |  Branch (483:10): [True: 0, False: 0]
+  ------------------
+  484|      0|        if(!FD_ISSET(server->udp_socket, read_fds))
+  ------------------
+  |  Branch (484:12): [True: 0, False: 0]
+  ------------------
+  485|      0|          continue;
+  486|      0|      }
+  487|      0|      else {
+  488|      0|        if(server->udp_socket != read_fd)
+  ------------------
+  |  Branch (488:12): [True: 0, False: 0]
+  ------------------
+  489|      0|          continue;
+  490|      0|      }
+  491|       |
+  492|      0|      if(read_fds)
+  ------------------
+  |  Branch (492:10): [True: 0, False: 0]
+  ------------------
+  493|       |        /* If there's an error and we close this socket, then open
+  494|       |         * another with the same fd to talk to another server, then we
+  495|       |         * don't want to think that it was the new socket that was
+  496|       |         * ready. This is not disastrous, but is likely to result in
+  497|       |         * extra system calls and confusion. */
+  498|      0|        FD_CLR(server->udp_socket, read_fds);
+  499|       |
+  500|       |      /* To reduce event loop overhead, read and process as many
+  501|       |       * packets as we can. */
+  502|      0|      do {
+  503|      0|        if (server->udp_socket == ARES_SOCKET_BAD)
+  ------------------
+  |  |  231|      0|#define ARES_SOCKET_BAD -1
+  ------------------
+  |  Branch (503:13): [True: 0, False: 0]
+  ------------------
+  504|      0|          count = 0;
+  505|       |
+  506|      0|        else {
+  507|      0|          if (server->addr.family == AF_INET)
+  ------------------
+  |  Branch (507:15): [True: 0, False: 0]
+  ------------------
+  508|      0|            fromlen = sizeof(from.sa4);
+  509|      0|          else
+  510|      0|            fromlen = sizeof(from.sa6);
+  511|      0|          count = socket_recvfrom(channel, server->udp_socket, (void *)buf,
+  512|      0|                                  sizeof(buf), 0, &from.sa, &fromlen);
+  513|      0|        }
+  514|       |
+  515|      0|        if (count == -1 && try_again(SOCKERRNO))
+  ------------------
+  |  |  426|      0|#define SOCKERRNO         (errno)
+  ------------------
+  |  Branch (515:13): [True: 0, False: 0]
+  |  Branch (515:28): [True: 0, False: 0]
+  ------------------
+  516|      0|          continue;
+  517|      0|        else if (count <= 0)
+  ------------------
+  |  Branch (517:18): [True: 0, False: 0]
+  ------------------
+  518|      0|          handle_error(channel, i, now);
+  519|      0|#ifdef HAVE_RECVFROM
+  520|      0|        else if (!same_address(&from.sa, &server->addr))
+  ------------------
+  |  Branch (520:18): [True: 0, False: 0]
+  ------------------
+  521|       |          /* The address the response comes from does not match the address we
+  522|       |           * sent the request to. Someone may be attempting to perform a cache
+  523|       |           * poisoning attack. */
+  524|      0|          break;
+  525|      0|#endif
+  526|      0|        else
+  527|      0|          process_answer(channel, buf, (int)count, i, 0, now);
+  528|      0|       } while (count > 0);
+  ------------------
+  |  Branch (528:17): [True: 0, False: 0]
+  ------------------
+  529|      0|    }
+  530|      7|}
+ares_process.c:process_timeouts:
+  534|     10|{
+  535|     10|  time_t t;  /* the time of the timeouts we're processing */
+  536|     10|  struct query *query;
+  537|     10|  struct list_node* list_head;
+  538|     10|  struct list_node* list_node;
+  539|       |
+  540|       |  /* Process all the timeouts that have fired since the last time we processed
+  541|       |   * timeouts. If things are going well, then we'll have hundreds/thousands of
+  542|       |   * queries that fall into future buckets, and only a handful of requests
+  543|       |   * that fall into the "now" bucket, so this should be quite quick.
+  544|       |   */
+  545|     20|  for (t = channel->last_timeout_processed; t <= now->tv_sec; t++)
+  ------------------
+  |  Branch (545:45): [True: 10, False: 10]
+  ------------------
+  546|     10|    {
+  547|     10|      list_head = &(channel->queries_by_timeout[t % ARES_TIMEOUT_TABLE_SIZE]);
+  ------------------
+  |  |  325|     10|#define ARES_TIMEOUT_TABLE_SIZE 1024
+  ------------------
+  548|     10|      for (list_node = list_head->next; list_node != list_head; )
+  ------------------
+  |  Branch (548:41): [True: 0, False: 10]
+  ------------------
+  549|      0|        {
+  550|      0|          query = list_node->data;
+  551|      0|          list_node = list_node->next;  /* in case the query gets deleted */
+  552|      0|          if (query->timeout.tv_sec && ares__timedout(now, &query->timeout))
+  ------------------
+  |  Branch (552:15): [True: 0, False: 0]
+  |  Branch (552:40): [True: 0, False: 0]
+  ------------------
+  553|      0|            {
+  554|      0|              query->error_status = ARES_ETIMEOUT;
+  ------------------
+  |  |  114|      0|#define ARES_ETIMEOUT           12
+  ------------------
+  555|      0|              ++query->timeouts;
+  556|      0|              next_server(channel, query, now);
+  557|      0|            }
+  558|      0|        }
+  559|     10|     }
+  560|     10|  channel->last_timeout_processed = now->tv_sec;
+  561|     10|}
+ares_process.c:process_broken_connections:
+  668|     10|{
+  669|     10|  int i;
+  670|     20|  for (i = 0; i < channel->nservers; i++)
+  ------------------
+  |  Branch (670:15): [True: 10, False: 10]
+  ------------------
+  671|     10|    {
+  672|     10|      struct server_state *server = &channel->servers[i];
+  673|     10|      if (server->is_broken)
+  ------------------
+  |  Branch (673:11): [True: 0, False: 10]
+  ------------------
+  674|      0|        {
+  675|      0|          handle_error(channel, i, now);
+  676|      0|        }
+  677|     10|    }
+  678|     10|}
+
+ares__generate_new_id:
+   99|     10|{
+  100|     10|  unsigned short r=0;
+  101|     10|  rc4(key, (unsigned char *)&r, sizeof(r));
+  102|     10|  return r;
+  103|     10|}
+ares_query.c:rc4:
+   37|     10|{
+   38|     10|  unsigned char x;
+   39|     10|  unsigned char y;
+   40|     10|  unsigned char* state;
+   41|     10|  unsigned char xorIndex;
+   42|     10|  int counter;
+   43|       |
+   44|     10|  x = key->x;
+   45|     10|  y = key->y;
+   46|       |
+   47|     10|  state = &key->state[0];
+   48|     30|  for(counter = 0; counter < buffer_len; counter ++)
+  ------------------
+  |  Branch (48:20): [True: 20, False: 10]
+  ------------------
+   49|     20|  {
+   50|     20|    x = (unsigned char)((x + 1) % 256);
+   51|     20|    y = (unsigned char)((state[x] + y) % 256);
+   52|     20|    ARES_SWAP_BYTE(&state[x], &state[y]);
+  ------------------
+  |  |  429|     20|  { unsigned char swapByte = *(a);  *(a) = *(b);  *(b) = swapByte; }
+  ------------------
+   53|       |
+   54|     20|    xorIndex = (unsigned char)((state[x] + state[y]) % 256);
+   55|       |
+   56|     20|    buffer_ptr[counter] = (unsigned char)(buffer_ptr[counter]^state[xorIndex]);
+   57|     20|  }
+   58|     10|  key->x = x;
+   59|     10|  key->y = y;
+   60|     10|}
+
+ares_strdup:
+   24|     30|{
+   25|     30|  size_t sz;
+   26|     30|  char * s2;
+   27|       |
+   28|     30|  if(s1) {
+  ------------------
+  |  Branch (28:6): [True: 30, False: 0]
+  ------------------
+   29|     30|    sz = strlen(s1);
+   30|     30|    if(sz < (size_t)-1) {
+  ------------------
+  |  Branch (30:8): [True: 30, False: 0]
+  ------------------
+   31|     30|      sz++;
+   32|     30|      if(sz < ((size_t)-1)) {
+  ------------------
+  |  Branch (32:10): [True: 30, False: 0]
+  ------------------
+   33|     30|        s2 = ares_malloc(sz);
+   34|     30|        if(s2) {
+  ------------------
+  |  Branch (34:12): [True: 30, False: 0]
+  ------------------
+   35|     30|          memcpy(s2, s1, sz);
+   36|     30|          return s2;
+   37|     30|        }
+   38|     30|      }
+   39|     30|    }
+   40|     30|  }
+   41|      0|  return (char *)NULL;
+   42|     30|}
+
+ares_strsplit:
+   79|     10|{
+   80|     10|  char *parsestr;
+   81|     10|  char **temp;
+   82|     10|  char **out;
+   83|     10|  size_t cnt;
+   84|     10|  size_t nelms;
+   85|     10|  size_t in_len;
+   86|     10|  size_t num_delims;
+   87|     10|  size_t i;
+   88|       |
+   89|     10|  if (in == NULL || delms == NULL || num_elm == NULL)
+  ------------------
+  |  Branch (89:7): [True: 0, False: 10]
+  |  Branch (89:21): [True: 0, False: 10]
+  |  Branch (89:38): [True: 0, False: 10]
+  ------------------
+   90|      0|    return NULL;
+   91|       |
+   92|     10|  *num_elm = 0;
+   93|       |
+   94|     10|  in_len = strlen(in);
+   95|     10|  num_delims = strlen(delms);
+   96|       |
+   97|       |  /* Figure out how many elements. */
+   98|     10|  nelms = 1;
+   99|     20|  for (i=0; i<in_len; i++)
+  ------------------
+  |  Branch (99:13): [True: 10, False: 10]
+  ------------------
+  100|     10|  {
+  101|     10|    if (is_delim(in[i], delms, num_delims))
+  ------------------
+  |  Branch (101:9): [True: 0, False: 10]
+  ------------------
+  102|      0|    {
+  103|      0|      nelms++;
+  104|      0|    }
+  105|     10|  }
+  106|       |
+  107|       |  /* Copy of input so we can cut it up. */
+  108|     10|  parsestr = ares_strdup(in);
+  109|     10|  if (parsestr == NULL)
+  ------------------
+  |  Branch (109:7): [True: 0, False: 10]
+  ------------------
+  110|      0|    return NULL;
+  111|       |
+  112|       |  /* Temporary array to store locations of start of each element
+  113|       |   * within parsestr. */
+  114|     10|  temp = ares_malloc(nelms * sizeof(*temp));
+  115|     10|  if (temp == NULL)
+  ------------------
+  |  Branch (115:7): [True: 0, False: 10]
+  ------------------
+  116|      0|  {
+  117|      0|    ares_free(parsestr);
+  118|      0|    return NULL;
+  119|      0|  }
+  120|     10|  temp[0] = parsestr;
+  121|     10|  cnt = 1;
+  122|     10|  for (i=0; i<in_len && cnt<nelms; i++)
+  ------------------
+  |  Branch (122:13): [True: 10, False: 0]
+  |  Branch (122:25): [True: 0, False: 10]
+  ------------------
+  123|      0|  {
+  124|      0|    if (!is_delim(parsestr[i], delms, num_delims))
+  ------------------
+  |  Branch (124:9): [True: 0, False: 0]
+  ------------------
+  125|      0|      continue;
+  126|       |
+  127|       |    /* Replace sep with NULL. */
+  128|      0|    parsestr[i] = '\0';
+  129|       |    /* Add the pointer to the array of elements */
+  130|      0|    temp[cnt] = parsestr+i+1;
+  131|      0|    cnt++;
+  132|      0|  }
+  133|       |
+  134|       |  /* Copy each element to our output array. */
+  135|     10|  out = ares_malloc(nelms * sizeof(*out));
+  136|     10|  if (out == NULL)
+  ------------------
+  |  Branch (136:7): [True: 0, False: 10]
+  ------------------
+  137|      0|  {
+  138|      0|    ares_free(parsestr);
+  139|      0|    ares_free(temp);
+  140|      0|    return NULL;
+  141|      0|  }
+  142|       |
+  143|     10|  nelms = 0;
+  144|     20|  for (i=0; i<cnt; i++)
+  ------------------
+  |  Branch (144:13): [True: 10, False: 10]
+  ------------------
+  145|     10|  {
+  146|     10|    if (temp[i][0] == '\0')
+  ------------------
+  |  Branch (146:9): [True: 0, False: 10]
+  ------------------
+  147|      0|      continue;
+  148|       |
+  149|     10|    if (make_set && list_contains(out, nelms, temp[i], 1))
+  ------------------
+  |  Branch (149:9): [True: 10, False: 0]
+  |  Branch (149:21): [True: 0, False: 10]
+  ------------------
+  150|      0|      continue;
+  151|       |
+  152|     10|    out[nelms] = ares_strdup(temp[i]);
+  153|     10|    if (out[nelms] == NULL)
+  ------------------
+  |  Branch (153:9): [True: 0, False: 10]
+  ------------------
+  154|      0|    {
+  155|      0|      ares_strsplit_free(out, nelms);
+  156|      0|      ares_free(parsestr);
+  157|      0|      ares_free(temp);
+  158|      0|      return NULL;
+  159|      0|    }
+  160|     10|    nelms++;
+  161|     10|  }
+  162|       |
+  163|       |
+  164|       |  /* If there are no elements don't return an empty allocated
+  165|       |   * array. */
+  166|     10|  if (nelms == 0)
+  ------------------
+  |  Branch (166:7): [True: 0, False: 10]
+  ------------------
+  167|      0|  {
+  168|      0|    ares_strsplit_free(out, nelms);
+  169|      0|    out = NULL;
+  170|      0|  }
+  171|       |
+  172|       |  /* Get the true number of elements (recalculated because of make_set) */
+  173|     10|  *num_elm = nelms;
+  174|       |
+  175|     10|  ares_free(parsestr);
+  176|     10|  ares_free(temp);
+  177|     10|  return out;
+  178|     10|}
+ares_strsplit.c:is_delim:
+   53|     10|{
+   54|     10|  size_t i;
+   55|       |
+   56|     30|  for (i=0; i<num_delims; i++)
+  ------------------
+  |  Branch (56:13): [True: 20, False: 10]
+  ------------------
+   57|     20|  {
+   58|     20|    if (c == delims[i])
+  ------------------
+  |  Branch (58:9): [True: 0, False: 20]
+  ------------------
+   59|      0|      return 1;
+   60|     20|  }
+   61|     10|  return 0;
+   62|     10|}
+ares_strsplit.c:list_contains:
+   26|     10|{
+   27|     10|  size_t len;
+   28|     10|  size_t i;
+   29|       |
+   30|     10|  len = strlen(str);
+   31|     10|  for (i=0; i<num_elem; i++)
+  ------------------
+  |  Branch (31:13): [True: 0, False: 10]
+  ------------------
+   32|      0|  {
+   33|      0|    if (insensitive)
+  ------------------
+  |  Branch (33:9): [True: 0, False: 0]
+  ------------------
+   34|      0|    {
+   35|       |#ifdef WIN32
+   36|       |      if (strnicmp(list[i], str, len) == 0)
+   37|       |#else
+   38|      0|      if (strncasecmp(list[i], str, len) == 0)
+  ------------------
+  |  Branch (38:11): [True: 0, False: 0]
+  ------------------
+   39|      0|#endif
+   40|      0|        return 1;
+   41|      0|    }
+   42|      0|    else
+   43|      0|    {
+   44|      0|      if (strncmp(list[i], str, len) == 0)
+  ------------------
+  |  Branch (44:11): [True: 0, False: 0]
+  ------------------
+   45|      0|        return 1;
+   46|      0|    }
+   47|      0|  }
+   48|       |
+   49|     10|  return 0;
+   50|     10|}
+
+ares_inet_pton:
+  439|     10|{
+  440|       |  /* just relay this to the underlying function */
+  441|     10|  return inet_pton(af, src, dst);
+  442|     10|}
+
+LLVMFuzzerTestOneInput:
+   12|     10|extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+   13|       |    // Initialize the c-ares library
+   14|     10|    int init_result = ares_library_init(0);
+   15|     10|    if (init_result != ARES_SUCCESS) {
+  ------------------
+  |  |   98|     10|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (15:9): [True: 0, False: 10]
+  ------------------
+   16|      0|        return 0;  // Early exit if library initialization fails
+   17|      0|    }
+   18|       |
+   19|       |    // Declare channel pointer
+   20|     10|    ares_channel channel = nullptr;
+   21|       |    
+   22|       |    // Initialize ares channel
+   23|     10|    int result = ares_init(&channel);
+   24|     10|    if (result != ARES_SUCCESS || channel == nullptr) {
+  ------------------
+  |  |   98|     20|#define ARES_SUCCESS            0
+  ------------------
+  |  Branch (24:9): [True: 0, False: 10]
+  |  Branch (24:35): [True: 0, False: 10]
+  ------------------
+   25|      0|        ares_library_cleanup();
+   26|      0|        return 0;
+   27|      0|    }
+   28|       |
+   29|       |    // Process fuzz input data to extract parameters for ares_process_fd
+   30|     10|    if (size >= sizeof(ares_socket_t) * 2) {
+  ------------------
+  |  Branch (30:9): [True: 6, False: 4]
+  ------------------
+   31|       |        // Extract two socket file descriptors from input data
+   32|      6|        ares_socket_t read_fd = 0;
+   33|      6|        ares_socket_t write_fd = 0;
+   34|       |        
+   35|       |        // Copy first sizeof(ares_socket_t) bytes for read_fd
+   36|      6|        memcpy(&read_fd, data, sizeof(ares_socket_t));
+   37|       |        
+   38|       |        // Copy next sizeof(ares_socket_t) bytes for write_fd
+   39|      6|        memcpy(&write_fd, data + sizeof(ares_socket_t), sizeof(ares_socket_t));
+   40|       |        
+   41|       |        // Call ares_process_fd with extracted file descriptors
+   42|      6|        ares_process_fd(channel, read_fd, write_fd);
+   43|      6|    } else if (size >= sizeof(ares_socket_t)) {
+  ------------------
+  |  Branch (43:16): [True: 1, False: 3]
+  ------------------
+   44|       |        // If only one socket value available, use it for both read and write
+   45|      1|        ares_socket_t fd = 0;
+   46|      1|        memcpy(&fd, data, sizeof(ares_socket_t));
+   47|       |        
+   48|       |        // Call ares_process_fd with same fd for both read and write
+   49|      1|        ares_process_fd(channel, fd, fd);
+   50|      3|    } else {
+   51|       |        // If insufficient data, call with invalid file descriptors
+   52|      3|        ares_process_fd(channel, ARES_SOCKET_BAD, ARES_SOCKET_BAD);
+  ------------------
+  |  |  231|      3|#define ARES_SOCKET_BAD -1
+  ------------------
+                      ares_process_fd(channel, ARES_SOCKET_BAD, ARES_SOCKET_BAD);
+  ------------------
+  |  |  231|      3|#define ARES_SOCKET_BAD -1
+  ------------------
+   53|      3|    }
+   54|       |
+   55|       |    // Example of using ares_free_data - creating dummy data structure for testing
+   56|       |    // Since we don't have actual DNS reply data from this context, we'll skip complex parsing
+   57|       |    // But demonstrate the pattern for when we do have parsed data
+   58|     10|    if (size > 0 && data[0] % 2 == 0) {  // Conditional execution based on input
+  ------------------
+  |  Branch (58:9): [True: 10, False: 0]
+  |  Branch (58:21): [True: 9, False: 1]
+  ------------------
+   59|       |        // In real usage, this would be populated by parsing DNS response
+   60|       |        // Here we just demonstrate the API call pattern
+   61|      9|        void *dummy_data = nullptr;
+   62|      9|        ares_free_data(dummy_data);  // Safe to call with nullptr
+   63|      9|    }
+   64|       |
+   65|       |    // Clean up the channel
+   66|     10|    if (channel) {
+  ------------------
+  |  Branch (66:9): [True: 10, False: 0]
+  ------------------
+   67|     10|        ares_destroy(channel);
+   68|     10|    }
+   69|       |
+   70|       |    // Clean up the library
+   71|     10|    ares_library_cleanup();
+   72|       |
+   73|     10|    return 0;
+   74|     10|}
+

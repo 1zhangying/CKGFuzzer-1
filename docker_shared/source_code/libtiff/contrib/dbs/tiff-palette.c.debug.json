@@ -1,0 +1,119 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char **argv)\n{\n    int bits_per_pixel = 8, cmsize, i, j, k, cmap_index, chunk_size = 32,\n        nchunks = 16;\n    unsigned char *scan_line;\n    uint16_t *red, *green, *blue;\n    TIFF *tif;\n\n    programName = argv[0];\n\n    if (argc != 4)\n        Usage();\n\n    if (!strcmp(argv[1], \"-depth\"))\n        bits_per_pixel = atoi(argv[2]);\n    else\n        Usage();\n\n    switch (bits_per_pixel)\n    {\n        case 8:\n            nchunks = 16;\n            chunk_size = 32;\n            break;\n        case 4:\n            nchunks = 4;\n            chunk_size = 128;\n            break;\n        case 2:\n            nchunks = 2;\n            chunk_size = 256;\n            break;\n        case 1:\n            nchunks = 2;\n            chunk_size = 256;\n            break;\n        default:\n            Usage();\n    }\n\n    if (bits_per_pixel != 1)\n    {\n        cmsize = nchunks * nchunks;\n    }\n    else\n    {\n        cmsize = 2;\n    }\n    red = (uint16_t *)malloc(cmsize * sizeof(uint16_t));\n    green = (uint16_t *)malloc(cmsize * sizeof(uint16_t));\n    blue = (uint16_t *)malloc(cmsize * sizeof(uint16_t));\n\n    switch (bits_per_pixel)\n    {\n        case 8:\n            for (i = 0; i < cmsize; i++)\n            {\n                if (i < 32)\n                    red[i] = 0;\n                else if (i < 64)\n                    red[i] = SCALE(36);\n                else if (i < 96)\n                    red[i] = SCALE(73);\n                else if (i < 128)\n                    red[i] = SCALE(109);\n                else if (i < 160)\n                    red[i] = SCALE(146);\n                else if (i < 192)\n                    red[i] = SCALE(182);\n                else if (i < 224)\n                    red[i] = SCALE(219);\n                else if (i < 256)\n                    red[i] = SCALE(255);\n\n                if ((i % 32) < 4)\n                    green[i] = 0;\n                else if (i < 8)\n                    green[i] = SCALE(36);\n                else if ((i % 32) < 12)\n                    green[i] = SCALE(73);\n                else if ((i % 32) < 16)\n                    green[i] = SCALE(109);\n                else if ((i % 32) < 20)\n                    green[i] = SCALE(146);\n                else if ((i % 32) < 24)\n                    green[i] = SCALE(182);\n                else if ((i % 32) < 28)\n                    green[i] = SCALE(219);\n                else if ((i % 32) < 32)\n                    green[i] = SCALE(255);\n\n                if ((i % 4) == 0)\n                    blue[i] = SCALE(0);\n                else if ((i % 4) == 1)\n                    blue[i] = SCALE(85);\n                else if ((i % 4) == 2)\n                    blue[i] = SCALE(170);\n                else if ((i % 4) == 3)\n                    blue[i] = SCALE(255);\n            }\n            break;\n        case 4:\n            red[0] = SCALE(255);\n            green[0] = 0;\n            blue[0] = 0;\n\n            red[1] = 0;\n            green[1] = SCALE(255);\n            blue[1] = 0;\n\n            red[2] = 0;\n            green[2] = 0;\n            blue[2] = SCALE(255);\n\n            red[3] = SCALE(255);\n            green[3] = SCALE(255);\n            blue[3] = SCALE(255);\n\n            red[4] = 0;\n            green[4] = SCALE(255);\n            blue[4] = SCALE(255);\n\n            red[5] = SCALE(255);\n            green[5] = 0;\n            blue[5] = SCALE(255);\n\n            red[6] = SCALE(255);\n            green[6] = SCALE(255);\n            blue[6] = 0;\n\n            red[7] = 0;\n            green[7] = 0;\n            blue[7] = 0;\n\n            red[8] = SCALE(176);\n            green[8] = SCALE(224);\n            blue[8] = SCALE(230);\n            red[9] = SCALE(100);\n            green[9] = SCALE(149);\n            blue[9] = SCALE(237);\n            red[10] = SCALE(46);\n            green[10] = SCALE(139);\n            blue[10] = SCALE(87);\n            red[11] = SCALE(160);\n            green[11] = SCALE(82);\n            blue[11] = SCALE(45);\n            red[12] = SCALE(238);\n            green[12] = SCALE(130);\n            blue[12] = SCALE(238);\n            red[13] = SCALE(176);\n            green[13] = SCALE(48);\n            blue[13] = SCALE(96);\n            red[14] = SCALE(50);\n            green[14] = SCALE(205);\n            blue[14] = SCALE(50);\n            red[15] = SCALE(240);\n            green[15] = SCALE(152);\n            blue[15] = SCALE(35);\n            break;\n        case 2:\n            red[0] = SCALE(255);\n            green[0] = 0;\n            blue[0] = 0;\n\n            red[1] = 0;\n            green[1] = SCALE(255);\n            blue[1] = 0;\n\n            red[2] = 0;\n            green[2] = 0;\n            blue[2] = SCALE(255);\n            red[3] = SCALE(255);\n            green[3] = SCALE(255);\n            blue[3] = SCALE(255);\n            break;\n        case 1:\n            red[0] = 0;\n            green[0] = 0;\n            blue[0] = 0;\n\n            red[1] = SCALE(255);\n            green[1] = SCALE(255);\n            blue[1] = SCALE(255);\n            break;\n    }\n\n    if ((tif = TIFFOpen(argv[3], \"w\")) == NULL)\n    {\n        fprintf(stderr, \"can't open %s as a TIFF file\\n\", argv[3]);\n        free(red);\n        free(green);\n        free(blue);\n        return 0;\n    }\n\n    TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, WIDTH);\n    TIFFSetField(tif, TIFFTAG_IMAGELENGTH, HEIGHT);\n    TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, bits_per_pixel);\n    TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_NONE);\n    TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_PALETTE);\n    TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);\n    TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, 1);\n    TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);\n    TIFFSetField(tif, TIFFTAG_RESOLUTIONUNIT, RESUNIT_NONE);\n    TIFFSetField(tif, TIFFTAG_COLORMAP, red, green, blue);\n\n    scan_line = (unsigned char *)malloc(WIDTH / (8 / bits_per_pixel));\n\n    for (i = 0; i < HEIGHT; i++)\n    {\n        for (j = 0, k = 0; j < WIDTH;)\n        {\n            cmap_index = (j / chunk_size) + ((i / chunk_size) * nchunks);\n\n            switch (bits_per_pixel)\n            {\n                case 8:\n                    scan_line[k++] = cmap_index;\n                    j++;\n                    break;\n                case 4:\n                    scan_line[k++] = (cmap_index << 4) + cmap_index;\n                    j += 2;\n                    break;\n                case 2:\n                    scan_line[k++] = (cmap_index << 6) + (cmap_index << 4) +\n                                     (cmap_index << 2) + cmap_index;\n                    j += 4;\n                    break;\n                case 1:\n                    scan_line[k++] =\n                        ((j / chunk_size) == (i / chunk_size)) ? 0x00 : 0xff;\n                    j += 8;\n                    break;\n            }\n        }\n        TIFFWriteScanline(tif, scan_line, i, 0);\n    }\n\n    free(scan_line);\n    TIFFClose(tif);\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          37,
+          0
+        ],
+        [
+          279,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void Usage()\n{\n    fprintf(stderr, \"Usage: %s -depth (8 | 4 | 2 | 1) tiff-image\\n\",\n            programName);\n    exit(0);\n}",
+      "fn_code_pos": [
+        [
+          281,
+          0
+        ],
+        [
+          286,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "Usage()",
+      "fn_dec_pos": [
+        [
+          35,
+          5
+        ],
+        [
+          35,
+          12
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

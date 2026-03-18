@@ -1,0 +1,125 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nint trueBytesSize(cmsUInt32Number Format)\n{\n       int fmt_bytes = T_BYTES(Format);\n\n       // For double, the T_BYTES field returns zero\n       if (fmt_bytes == 0)\n              return sizeof(double);\n\n       // Otherwise, it is already correct for all formats\n       return fmt_bytes;\n}",
+      "fn_code_pos": [
+        [
+          48,
+          0
+        ],
+        [
+          59,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "trueBytesSize",
+        "parameters": {
+          "Format": "cmsUInt32Number"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ComputeIncrementsForChunky(cmsUInt32Number Format, \n                                cmsUInt32Number BytesPerPlane,\n                                cmsUInt32Number* nChannels,\n                                cmsUInt32Number* nAlpha,\n                                cmsUInt32Number ComponentStartingOrder[], \n                                cmsUInt32Number ComponentPointerIncrements[])\n{\n       int extra = T_EXTRA(Format);\n       int channels = T_CHANNELS(Format);\n       int total_chans = channels + extra;\n       int i;       \n       int channelSize = trueBytesSize(Format);\n       int pixelSize = channelSize * total_chans;\n       \n       UNUSED_PARAMETER(BytesPerPlane);\n\n       // Setup the counts\n       if (nChannels != NULL)\n              *nChannels = channels;\n\n       if (nAlpha != NULL)\n              *nAlpha = extra;\n\n       // Separation is independent of starting point and only depends on channel size\n       for (i = 0; i < total_chans; i++)\n              ComponentPointerIncrements[i] = pixelSize;\n\n       // Handle do swap\n       for (i = 0; i < total_chans; i++)\n       {\n              if (T_DOSWAP(Format)) {\n                     ComponentStartingOrder[i] = total_chans - i - 1;\n              }\n              else {\n                     ComponentStartingOrder[i] = i;\n              }\n       }\n\n       // Handle swap first (ROL of positions), example CMYK -> KCMY | 0123 -> 3012\n       if (T_SWAPFIRST(Format)) {\n              \n              cmsUInt32Number tmp = ComponentStartingOrder[0];\n              for (i = 0; i < total_chans-1; i++)\n                     ComponentStartingOrder[i] = ComponentStartingOrder[i + 1];\n\n              ComponentStartingOrder[total_chans - 1] = tmp;\n       }\n\n       // Handle size\n       if (channelSize > 1)\n              for (i = 0; i < total_chans; i++) {\n                     ComponentStartingOrder[i] *= channelSize;\n              }\n}",
+      "fn_code_pos": [
+        [
+          67,
+          0
+        ],
+        [
+          121,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComputeIncrementsForChunky",
+        "parameters": {
+          "Format": "cmsUInt32Number",
+          "BytesPerPlane": "cmsUInt32Number",
+          "nChannels": "cmsUInt32Number",
+          "nAlpha": "cmsUInt32Number",
+          "ComponentStartingOrder": "cmsUInt32Number",
+          "ComponentPointerIncrements": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ComputeIncrementsForPlanar(cmsUInt32Number Format, \n                                cmsUInt32Number BytesPerPlane,\n                                cmsUInt32Number* nChannels,\n                                cmsUInt32Number* nAlpha,\n                                cmsUInt32Number ComponentStartingOrder[], \n                                cmsUInt32Number ComponentPointerIncrements[])\n{\n       int extra = T_EXTRA(Format);\n       int channels = T_CHANNELS(Format);\n       int total_chans = channels + extra;\n       int i;\n       int channelSize = trueBytesSize(Format);\n       \n       // Setup the counts\n       if (nChannels != NULL) \n              *nChannels = channels;\n\n       if (nAlpha != NULL) \n              *nAlpha = extra;\n\n       // Separation is independent of starting point and only depends on channel size\n       for (i = 0; i < total_chans; i++)\n              ComponentPointerIncrements[i] = channelSize;\n\n       // Handle do swap\n       for (i = 0; i < total_chans; i++)\n       {\n              if (T_DOSWAP(Format)) {\n                     ComponentStartingOrder[i] = total_chans - i - 1;\n              }\n              else {\n                     ComponentStartingOrder[i] = i;\n              }\n       }\n\n       // Handle swap first (ROL of positions), example CMYK -> KCMY | 0123 -> 3012\n       if (T_SWAPFIRST(Format)) {\n\n              cmsUInt32Number tmp = ComponentStartingOrder[0];\n              for (i = 0; i < total_chans - 1; i++)\n                     ComponentStartingOrder[i] = ComponentStartingOrder[i + 1];\n\n              ComponentStartingOrder[total_chans - 1] = tmp;\n       }\n\n       // Handle size\n       for (i = 0; i < total_chans; i++) {\n              ComponentStartingOrder[i] *= BytesPerPlane;\n       }\n}",
+      "fn_code_pos": [
+        [
+          126,
+          0
+        ],
+        [
+          176,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComputeIncrementsForPlanar",
+        "parameters": {
+          "Format": "cmsUInt32Number",
+          "BytesPerPlane": "cmsUInt32Number",
+          "nChannels": "cmsUInt32Number",
+          "nAlpha": "cmsUInt32Number",
+          "ComponentStartingOrder": "cmsUInt32Number",
+          "ComponentPointerIncrements": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "CMSCHECKPOINT void  CMSEXPORT _cmsComputeComponentIncrements(cmsUInt32Number Format,\n                                     cmsUInt32Number BytesPerPlane,\n                                     cmsUInt32Number* nChannels,\n                                     cmsUInt32Number* nAlpha,\n                                     cmsUInt32Number ComponentStartingOrder[], \n                                     cmsUInt32Number ComponentPointerIncrements[])\n{\n       if (T_PLANAR(Format)) {\n\n              ComputeIncrementsForPlanar(Format,  BytesPerPlane, nChannels, nAlpha, ComponentStartingOrder, ComponentPointerIncrements);\n       }\n       else {\n              ComputeIncrementsForChunky(Format,  BytesPerPlane, nChannels, nAlpha, ComponentStartingOrder, ComponentPointerIncrements);\n       }\n\n}",
+      "fn_code_pos": [
+        [
+          181,
+          0
+        ],
+        [
+          196,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsComputeComponentIncrements",
+        "parameters": {
+          "Format": "cmsUInt32Number",
+          "BytesPerPlane": "cmsUInt32Number",
+          "nChannels": "cmsUInt32Number",
+          "nAlpha": "cmsUInt32Number",
+          "ComponentStartingOrder": "cmsUInt32Number",
+          "ComponentPointerIncrements": "cmsUInt32Number"
+        },
+        "return_type": "CMSCHECKPOINT"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"fast_float_internal.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

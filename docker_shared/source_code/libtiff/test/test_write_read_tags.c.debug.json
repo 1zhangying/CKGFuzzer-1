@@ -1,0 +1,419 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main()\n{\n    int ret, ret1, ret2;\n\n    fprintf(stderr, \"==== Test automatically if all tags are \"\n                    \"written/read correctly. ====\\n\");\n    /* --- Test with Classic-TIFF ---*/\n    /* Delete file, if exists and open it freshly. */\n    ret = unlink(filename);\n    if (ret != 0 && errno != ENOENT)\n    {\n        fprintf(stderr, \"Can't delete test TIFF file %s.\\n\", filename);\n    }\n    TIFF *tif = TIFFOpen(filename, \"w+\");\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't create test TIFF file %s.\\n\", filename);\n        return 1;\n    }\n\n    /* Firstly, check for correct definition of tags. */\n    fprintf(stderr, \"-------- Check tag definition  -------------------\\n\");\n    ret1 = check_tag_definitions();\n\n    if (ret1 > 0)\n        return (ret1);\n\n    /* Write a simple image with all tags and check if correctly written\n     * by reading all tags. */\n    fprintf(stderr, \"-------- Test with ClassicTIFF started  ----------\\n\");\n    ret1 = write_test_tiff(tif, filename);\n\n    if (ret1 > 0)\n        return (ret1);\n\n    /*--- Test with BIG-TIFF ---*/\n    ret = unlink(filenameBigTiff);\n    if (ret != 0 && errno != ENOENT)\n    {\n        fprintf(stderr, \"Can't delete test TIFF file %s.\\n\", filenameBigTiff);\n    }\n    tif = TIFFOpen(filenameBigTiff, \"w8\");\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't create test TIFF file %s.\\n\", filenameBigTiff);\n        return 1;\n    }\n    fprintf(stderr, \"\\n\\n-------- Test with BigTIFF started  ----------\\n\");\n    ret2 = write_test_tiff(tif, filenameBigTiff);\n\n    if (ret2 > 0)\n        return (ret2 + 10);\n    else\n        return (ret2);\n}",
+      "fn_code_pos": [
+        [
+          175,
+          0
+        ],
+        [
+          229,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int check_tag_definitions(void)\n{\n    const TIFFFieldArray *tFieldArray;\n    int ret = 0;\n\n    tFieldArray = _TIFFGetFields();\n    ret = testPasscountFlag(\"---- TIFF tags:\", tFieldArray,\n                            listTagsNotFollowPasscountRules,\n                            NUM_ELEMENTS(listTagsNotFollowPasscountRules));\n\n    tFieldArray = _TIFFGetGpsFields();\n    ret += testPasscountFlag(\"---- GPS tags:\", tFieldArray, NULL, 0);\n\n    tFieldArray = _TIFFGetExifFields();\n    ret += testPasscountFlag(\"---- EXIF tags:\", tFieldArray, NULL, 0);\n\n    return ret;\n}",
+      "fn_code_pos": [
+        [
+          235,
+          0
+        ],
+        [
+          252,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "check_tag_definitions",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int write_test_tiff(TIFF *tif, const char *filenameRead)\n{\n    unsigned char buf[SPP] = {0, 127, 255};\n    uint16_t auxUint16 = 0;\n    uint32_t auxUint32 = 0;\n    int i;\n\n    /*-- Fill test data arrays for writing and later comparison when written\n     * tags are checked. */\n    for (i = 0; i < N_SIZE; i++)\n    {\n        sprintf(auxTextArrayW[i],\n                \"N%d-String-%d_tttttttttttttttttttttttttttttx\", i, i);\n    }\n    for (i = 0; i < N_SIZE; i++)\n    {\n        auxCharArrayW[i] = (char)(i + 1);\n    }\n    for (i = 0; i < N_SIZE; i++)\n    {\n        auxShortArrayW[i] = (short)(i + 1) * 7;\n    }\n    for (i = 0; i < N_SIZE; i++)\n    {\n        auxInt32ArrayW[i] = (i + 1) * 133;\n    }\n    for (i = 0; i < N_SIZE; i++)\n    {\n        auxFloatArrayW[i] = (float)((i + 1) * 133) / 3.3f;\n    }\n    for (i = 0; i < N_SIZE; i++)\n    {\n        auxDoubleArrayW[i] = (double)((i + 1) * 3689) / 4.5697;\n    }\n\n    /*-- Setup standard tags of a simple tiff file --*/\n    fprintf(stderr, \"----Write TIFF tags ...\\n\");\n    if (!TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, width))\n    {\n        fprintf(stderr, \"Can't set ImageWidth tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_IMAGELENGTH, length))\n    {\n        fprintf(stderr, \"Can't set ImageLength tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, bps))\n    {\n        fprintf(stderr, \"Can't set BitsPerSample tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, SPP))\n    {\n        fprintf(stderr, \"Can't set SamplesPerPixel tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, rows_per_strip))\n    {\n        fprintf(stderr, \"Can't set SamplesPerPixel tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_PLANARCONFIG, planarconfig))\n    {\n        fprintf(stderr, \"Can't set PlanarConfiguration tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, photometric))\n    {\n        fprintf(stderr, \"Can't set PhotometricInterpretation tag.\\n\");\n        goto failure;\n    }\n\n    /*============ Write GPS and EXIF Dummy tags =====================*/\n    /*-- Set dummy EXIF/GPS tag in original tif-structure in order to reserve\n     *   space for final dir_offset value,\n     *   which is properly written at the end.\n     */\n    uint64_t dir_offset = 0; /* Zero, in case no Custom-IFD is written */\n\n    if (!TIFFSetField(tif, TIFFTAG_GPSIFD, dir_offset))\n    {\n        fprintf(stderr, \"Can't write TIFFTAG_GPSIFD\\n\");\n    }\n\n    if (!TIFFSetField(tif, TIFFTAG_EXIFIFD, dir_offset))\n    {\n        fprintf(stderr, \"Can't write TIFFTAG_EXIFIFD\\n\");\n    }\n\n    /*============ Write mostly all other TIFF tags ==================*/\n    /* Get array, where tag fields are defined. */\n    const TIFFFieldArray *tFieldArray = _TIFFGetFields();\n\n    /*-- write_all_tags() writes all tags automatically with the defined\n     *   precision according to its set_field_type definition. --*/\n    uint32_t iDataCnt = 0;\n    if (write_all_tags(tif, tFieldArray, listTagsNotToWrite,\n                       NUM_ELEMENTS(listTagsNotToWrite), &iDataCnt))\n    {\n        fprintf(stderr, \"Error during TIFF tag writing.\\n\");\n        goto failure;\n    }\n\n#ifndef WRITEPIXELLAST\n    /*-- Write dummy pixel data. --*/\n    if (TIFFWriteScanline(tif, buf, 0, 0) < 0)\n    {\n        fprintf(stderr, \"Can't write image data.\\n\");\n        goto failure;\n    }\n#endif\n\n    /*================== Save TIFF Directory =====================*/\n    /*-- Save current TIFF-directory to file before directory is changed.\n     *   Otherwise it will be lost!\n     *   The tif-structure is overwritten/ freshly initialized by any\n     *   \"CreateDirectory\".\n     *-----  What is needed here ??? ----\n     * In custom_dir.c only \tTIFFFreeDirectory( tif );   is used to set\n     * fields of another Sub-Directory. It releases storage associated\n     * with a directory, especially custom-fields.\n     *-- Using only  TIFFFreeDirectory() here leads to an error!!\n     *-- Using here TIFFCheckpointDirectory() leads to an additional Main-IFD\n     *   because it does not cleanup the tif-structure.\n     *-- TIFFWriteDirectory() does cleanup the tif-structure and tries to\n     *   write the IFD to the same location.\n     */\n    /*retCode = TIFFCheckpointDirectory(tif);*/\n    if (!TIFFWriteDirectory(tif))\n    {\n        fprintf(stderr,\n                \"Can't write TIFF directory after TIFF tags and image data.\\n\");\n        goto failure;\n    }\n\n    /*======================= GPS Directory =============================*/\n    /*====== Create GPS Directory and write all GPS fields ==============*/\n    /* - Create the GPS directory.\n     * - Get GPS field array, where tag fields are defined.\n     * - Then write all tags automatically according to their set_field_type\n     *   definition.\n     */\n    fprintf(stderr, \"----Write GPS tags ...\\n\");\n    if (TIFFCreateGPSDirectory(tif) != 0)\n    {\n        fprintf(stderr, \"TIFFCreateGPSDirectory() failed.\\n\");\n        goto failure;\n    }\n\n    tFieldArray = _TIFFGetGpsFields();\n    if (write_all_tags(tif, tFieldArray, NULL, 0, &iDataCnt))\n    {\n        fprintf(stderr, \"Error during GPS tag writing.\\n\");\n        goto failure;\n    }\n\n    /*-- Re-write a valid GPS version ID --*/\n    if (!TIFFSetField(tif, GPSTAG_VERSIONID, gpsVersion))\n    {\n        fprintf(stderr, \"Can't write GPSTAG_VERSIONID\\n\");\n        goto failure;\n    }\n\n    /*-- GPS - write custom directory GPS into file and\n     *   get back the offset of GPS directory.\n     */\n    uint64_t dir_offset_GPS = 0;\n    if (!TIFFWriteCustomDirectory(tif, &dir_offset_GPS))\n    {\n        fprintf(stderr, \"TIFFWriteCustomDirectory() with GPS failed.\\n\");\n        goto failure;\n    }\n\n    /*-- Go back to the first (main) directory, and set correct value of the\n     *   GPS IFD pointer. (main directory is reloaded from file!)\n     */\n    if (!TIFFSetDirectory(tif, 0))\n    {\n        fprintf(stderr, \"TIFFSetDirectory(0) after writing GPS failed.\\n\");\n        goto failure;\n    }\n    /*-- Write GPS tag reference / offset into GPSIFD tag in main directory --*/\n    if (!TIFFSetField(tif, TIFFTAG_GPSIFD, dir_offset_GPS))\n    {\n        fprintf(stderr, \"Can't write TIFFTAG_GPSIFD.\\n\");\n        goto failure;\n    }\n\n    /*-- Save current TIFF-directory to file before directory is changed.\n     * Otherwise it will be lost! The tif-structure is overwritten/ freshly\n     * initialized by any \"CreateDirectory\".\n     * TIFFWriteDirectory() does cleanup tif-structure.\n     */\n    if (!TIFFWriteDirectory(tif))\n    {\n        fprintf(stderr, \"Can't write TIFF directory after GPS tags.\\n\");\n        goto failure;\n    }\n\n    /*======================= EXIF Directory ============================*/\n    /*====== Create EXIF Directory and write all EXIF fields ============*/\n    /* - Create the EXIF directory.\n     * - Get EXIF field array, where tag fields are defined.\n     * - Then write all tags automatically according to their set_field_type\n     *   definition.\n     */\n    fprintf(stderr, \"----Write EXIF tags ...\\n\");\n    if (TIFFCreateEXIFDirectory(tif) != 0)\n    {\n        fprintf(stderr, \"TIFFCreateEXIFDirectory() failed.\\n\");\n        goto failure;\n    }\n\n    tFieldArray = _TIFFGetExifFields();\n    if (write_all_tags(tif, tFieldArray, listTagsNotToWrite,\n                       NUM_ELEMENTS(listTagsNotToWrite), &iDataCnt))\n    {\n        fprintf(stderr, \"Error during GPS tag writing.\\n\");\n        goto failure;\n    }\n\n    /*--- Set valid EXIF version, which is a 4 byte string --*/\n    if (!TIFFSetField(tif, EXIFTAG_EXIFVERSION, exifVersion))\n    {\n        fprintf(stderr, \"Can't write EXIFTAG_EXIFVERSION\\n\");\n        goto failure;\n    }\n\n    /*-- EXIF - write custom directory EXIF into file and\n     *   get back the offset of EXIF directory.\n     */\n    uint64_t dir_offset_EXIF = 0;\n    if (!TIFFWriteCustomDirectory(tif, &dir_offset_EXIF))\n    {\n        fprintf(stderr, \"TIFFWriteCustomDirectory() with EXIF failed.\\n\");\n        goto failure;\n    }\n\n    /*-- Go back to the first (main) directory, and set correct value of the\n     *   EXIF IFD pointer. (main directory is reloaded from file!)\n     */\n    if (!TIFFSetDirectory(tif, 0))\n    {\n        fprintf(stderr, \"TIFFSetDirectory(0) after writing EXIF failed.\\n\");\n        goto failure;\n    }\n    /*-- Write EXIF tag reference / offset into EXIFIFD tag in main directory\n     * --*/\n    if (!TIFFSetField(tif, TIFFTAG_EXIFIFD, dir_offset_EXIF))\n    {\n        fprintf(stderr, \"Can't write TIFFTAG_EXIFIFD.\\n\");\n        goto failure;\n    }\n\n#ifdef WRITEPIXELLAST\n    /*-- Write dummy pixel data at the end of all directories. --*/\n    if (TIFFWriteScanline(tif, buf, 0, 0) < 0)\n    {\n        fprintf(stderr, \"Can't write image data after all directories.\\n\");\n        goto failure;\n    }\n#endif\n\n    /*================= Close TIFF file  ====================*/\n    /* Always TIFFWriteDirectory() before using/creating another directory.\n     * Not necessary before TIFFClose(), however, TIFFClose() uses\n     * TIFFReWriteDirectory(), which forces directory to be written at another\n     * location.\n     * Therefore, better use TIFFWriteDirectory() just before TIFFCllose().\n     */\n    if (!TIFFWriteDirectory(tif))\n    {\n        fprintf(stderr, \"Can't write TIFF directory after EXIF tags.\\n\");\n        goto failure;\n    }\n    TIFFClose(tif);\n\n    fprintf(stderr, \"-------- Continue Test  ---------- reading ...\\n\");\n\n    /*===========  READING  =============  READING ==========================*/\n    /* Ok, now test whether we can read written values correctly. */\n    tif = TIFFOpen(filenameRead, \"r\");\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't open test TIFF file %s for reading.\\n\",\n                filenameRead);\n        goto failure;\n    }\n\n    /*-- Read some special parameters out of the main directory --*/\n    if (!TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &auxUint32))\n    {\n        fprintf(stderr, \"Can't read %s.\\n\", \"TIFFTAG_IMAGEWIDTH\");\n        goto failure;\n    }\n    if (auxUint32 != width)\n    {\n        fprintf(stderr,\n                \"Read value of IMAGEWIDTH %\" PRIu32\n                \" differs from set value %\" PRIu16 \".\\n\",\n                auxUint32, width);\n        goto failure;\n    }\n    if (!TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &auxUint32))\n    {\n        fprintf(stderr, \"Can't read %s.\\n\", \"TIFFTAG_IMAGELENGTH\");\n        goto failure;\n    }\n    if (auxUint32 != width)\n    {\n        fprintf(stderr,\n                \"Read value of TIFFTAG_IMAGELENGTH %\" PRIu32\n                \" differs from set value %\" PRIu16 \".\\n\",\n                auxUint32, length);\n        goto failure;\n    }\n\n    /* TIFFTAG_NUMBEROFINKS is a special tag, which is automatically set when\n     * InkNames string is written. */\n    if (!TIFFGetField(tif, TIFFTAG_NUMBEROFINKS, &auxUint16))\n    {\n        fprintf(stderr, \"Can't read %s\\n\", \"TIFFTAG_NUMBEROFINKS\");\n        goto failure;\n    }\n    else\n    {\n        if (auxUint16 != NINKS)\n        {\n            fprintf(stderr,\n                    \"Read value of TIFFTAG_NUMBEROFINKS %\" PRIu32\n                    \" differs from set value %\" PRIu16 \".\\n\",\n                    auxUint16, NINKS);\n            goto failure;\n        }\n    }\n\n    /*================== Reading all TIFF tags =======================*/\n    fprintf(stderr, \"----Read TIFF tags ...\\n\");\n    tFieldArray = _TIFFGetFields();\n    iDataCnt = 0;\n    if (read_all_tags(tif, tFieldArray, listTagsNotToWrite,\n                      NUM_ELEMENTS(listTagsNotToWrite), &iDataCnt))\n    {\n        fprintf(stderr, \"Error during TIFF tag reading.\\n\");\n        goto failure;\n    }\n\n    /*================== Reading GPS tags ============================*/\n    /*-- First get offset to GPS-directory and set it active with\n     *   TIFFReadGPSDirectory().\n     *   (this will destroy previously main directory fields in memory!)\n     */\n    uint64_t read_dir_offset = 0;\n    fprintf(stderr, \"----Read GPS tags ...\\n\");\n    if (!TIFFGetField(tif, TIFFTAG_GPSIFD, &read_dir_offset))\n    {\n        fprintf(stderr, \"Can't read %s\\n\", \"TIFFTAG_GPSIFD\");\n        goto failure;\n    }\n    if (!TIFFReadGPSDirectory(tif, read_dir_offset))\n    {\n        fprintf(stderr, \"Can't read %s\\n\", \"TIFFReadGPSDirectory()\");\n        goto failure;\n    }\n\n    /*-- Now read and compare tags from GPS-directory --*/\n    tFieldArray = _TIFFGetGpsFields();\n    if (read_all_tags(tif, tFieldArray, NULL, 0, &iDataCnt))\n    {\n        fprintf(stderr, \"Error during GPS tag reading.\\n\");\n        goto failure;\n    }\n\n    /*================== Reading EXIF tags ===========================*/\n    /*-- Go back to the first (main) directory using TIFFSetDirectory(),\n     * and then get value of the EXIFIFD directory offset.\n     * Then read EXIF directory tags from file into tif-structure.\n     * Finally, read and compare tags to the written values.\n     */\n    TIFFSetDirectory(tif, 0);\n    fprintf(stderr, \"----Read EXIF tags ...\\n\");\n    if (!TIFFGetField(tif, TIFFTAG_EXIFIFD, &read_dir_offset))\n    {\n        fprintf(stderr, \"Can't read %s\\n\", \"TIFFTAG_EXIFIFD\");\n        goto failure;\n    }\n\n    if (!TIFFReadEXIFDirectory(tif, read_dir_offset))\n    {\n        fprintf(stderr, \"Can't read %s\\n\", \"TIFFReadEXIFDirectory()\");\n        goto failure;\n    }\n\n    tFieldArray = _TIFFGetExifFields();\n    if (read_all_tags(tif, tFieldArray, NULL, 0, &iDataCnt))\n    {\n        fprintf(stderr, \"Error during EXIF tag reading.\\n\");\n        goto failure;\n    }\n\n    TIFFClose(tif);\n\n    /* All tests passed; delete file and exit with success status. */\n#ifdef FOR_AUTO_TESTING\n    unlink(filenameRead);\n#endif\n    fprintf(stderr, \"-------- Test finished OK ----------\\n\");\n    return 0;\n\nfailure:\n    /*\n     * Something went wrong; close file and return unsuccessful status.\n     * Do not remove the file for further manual investigation.\n     */\n    TIFFClose(tif);\n    fprintf(stderr, \"-------- Test finished with FAILURE --------\\n\");\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          262,
+          0
+        ],
+        [
+          680,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "write_test_tiff",
+        "parameters": {
+          "tif": "TIFF",
+          "filenameRead": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int testPasscountFlag(const char *szMsg, const TIFFFieldArray *tFieldArray,\n                      uint32_t *plistTagsNotFollowPasscountRules,\n                      uint32_t nTagsInList)\n{\n    uint32_t t;\n    int retFails = 0;\n\n    uint32_t nTags = tFieldArray->count;\n    /*-- Test ReadCount equals WriteCount. --*/\n    int nFails = 0;\n    fprintf(stderr, \"%-16s Check if writecount equals readcount ... \", szMsg);\n    for (t = 0; t < nTags; t++)\n    {\n        if (tagIsInList(tFieldArray->fields[t].field_tag,\n                        plistTagsNotFollowPasscountRules, nTagsInList))\n            continue;\n\n        if (tFieldArray->fields[t].field_writecount !=\n            tFieldArray->fields[t].field_readcount)\n        {\n            if (nFails == 0)\n                fprintf(stderr, \"\\n\");\n            fprintf(stderr,\n                    \"WriteCount %d for tag \\t%-25s not equal ReadCount %d.\\n\",\n                    tFieldArray->fields[t].field_writecount,\n                    tFieldArray->fields[t].field_name,\n                    tFieldArray->fields[t].field_readcount);\n            nFails++;\n        }\n    } /* for - readcount == writecount */\n    if (nFails == 0)\n        fprintf(stderr, \"--> OK\\n\");\n    retFails += nFails;\n\n    /*-- Test correct setting of passcount flag. --*/\n    nFails = 0;\n    fprintf(stderr,\n            \"%-16s Check if passcount flag is set according to \"\n            \"writecount value ... \",\n            szMsg);\n    for (t = 0; t < nTags; t++)\n    {\n        if (tagIsInList(tFieldArray->fields[t].field_tag,\n                        plistTagsNotFollowPasscountRules, nTagsInList))\n            continue;\n\n        if (tFieldArray->fields[t].field_writecount < 0)\n        {\n            if (tFieldArray->fields[t].field_type != TIFF_ASCII &&\n                tFieldArray->fields[t].field_passcount == 0)\n            {\n                if (tFieldArray->fields[t].field_readcount != TIFF_SPP)\n                {\n                    if (nFails == 0)\n                        fprintf(stderr, \"\\n\");\n                    fprintf(stderr,\n                            \"Passcount flag for variable rd/wrtcount tag \"\n                            \"\\t%-25s not \"\n                            \"correctly set. Should be \"\n                            \"TRUE.\\n\",\n                            tFieldArray->fields[t].field_name);\n                }\n                else\n                {\n                    if (nFails == 0)\n                        fprintf(stderr, \"\\n\");\n                    fprintf(\n                        stderr,\n                        \"Passcount flag for TIFF_SPP readcount tag \\t%-25s not \"\n                        \"correctly set. Should be \"\n                        \"TRUE.\\n\",\n                        tFieldArray->fields[t].field_name);\n                }\n                nFails++;\n            }\n            else if (tFieldArray->fields[t].field_type == TIFF_ASCII &&\n                     tFieldArray->fields[t].set_field_type ==\n                         TIFF_SETGET_ASCII &&\n                     tFieldArray->fields[t].field_writecount !=\n                         TIFF_VARIABLE2 &&\n                     tFieldArray->fields[t].field_passcount != 0)\n            {\n                if (nFails == 0)\n                    fprintf(stderr, \"\\n\");\n                fprintf(\n                    stderr,\n                    \"Passcount flag for ASCII tag \\t%-25s not correctly set. \"\n                    \"Should be \"\n                    \"FALSE.\\n\",\n                    tFieldArray->fields[t].field_name);\n                nFails++;\n            }\n            else if (tFieldArray->fields[t].field_type == TIFF_ASCII &&\n                     tFieldArray->fields[t].field_writecount ==\n                         TIFF_VARIABLE2 &&\n                     tFieldArray->fields[t].field_passcount == 0)\n            {\n                if (nFails == 0)\n                    fprintf(stderr, \"\\n\");\n                fprintf(stderr,\n                        \"Passcount flag for ASCII 'TIFF_VARIABLE2' tag \\t%-25s \"\n                        \"not correctly set. \"\n                        \"Should be TRUE.\\n\",\n                        tFieldArray->fields[t].field_name);\n                nFails++;\n            }\n        }\n        else\n        {\n            /* field_writecount >= 0 */\n            if (tFieldArray->fields[t].field_passcount != 0)\n            {\n                if (nFails == 0)\n                    fprintf(stderr, \"\\n\");\n                fprintf(stderr,\n                        \"Passcount flag for tag \\t%-25s not correctly set. \"\n                        \"Should be \"\n                        \"FALSE.\\n\",\n                        tFieldArray->fields[t].field_name);\n                nFails++;\n            }\n            if (tFieldArray->fields[t].field_writecount == 0)\n            {\n                if (nFails == 0)\n                    fprintf(stderr, \"\\n\");\n                fprintf(stderr,\n                        \"WriteCount for tag \\t%-25s shall be not zero.\\n\",\n                        tFieldArray->fields[t].field_name);\n                nFails++;\n            }\n        }\n    } /* for() - passcount flag */\n    if (nFails == 0)\n        fprintf(stderr, \"--> OK\\n\");\n    retFails += nFails;\n\n    /*-- Test correct read-/writecount and TIFF_SETGET type. --*/\n    nFails = 0;\n    fprintf(stderr, \"%-16s Check if writecount fits to set_field_type ... \",\n            szMsg);\n    for (t = 0; t < nTags; t++)\n    {\n        if (tagIsInList(tFieldArray->fields[t].field_tag,\n                        plistTagsNotFollowPasscountRules, nTagsInList))\n            continue;\n\n        /* TIFF_SETGET_UNDEFINED tags FIELD_IGNORE tags are not written to file.\n         * Thus definition is obsolete. */\n        // if (tFieldArray->fields[t].set_field_type >= TIFF_SETGET_UNDEFINED &&\n        //     tFieldArray->fields[t].field_bit == FIELD_IGNORE)\n        //     continue;\n\n        if (tFieldArray->fields[t].field_writecount == TIFF_VARIABLE2 &&\n            !(tFieldArray->fields[t].set_field_type >= TIFF_SETGET_C32_ASCII &&\n              tFieldArray->fields[t].set_field_type <= TIFF_SETGET_C32_IFD8))\n        {\n            if (nFails == 0)\n                fprintf(stderr, \"\\n\");\n            fprintf(stderr,\n                    \"WriteCount %d for tag \\t%-25s does not fit to \"\n                    \"'set_field_type' %d. \"\n                    \"Should be TIFF_VARIABLE2=-3\\n\",\n                    tFieldArray->fields[t].field_writecount,\n                    tFieldArray->fields[t].field_name,\n                    tFieldArray->fields[t].set_field_type);\n            nFails++;\n        }\n        else if (tFieldArray->fields[t].field_writecount == TIFF_VARIABLE &&\n                 tFieldArray->fields[t].field_type != TIFF_ASCII &&\n                 !(tFieldArray->fields[t].set_field_type >=\n                       TIFF_SETGET_C16_ASCII &&\n                   tFieldArray->fields[t].set_field_type <=\n                       TIFF_SETGET_C16_IFD8))\n        {\n            if (tFieldArray->fields[t].field_readcount == TIFF_SPP)\n            {\n                /* Special case for tags defined with one value per sample,\n                 * thus readcount == SamplesPerPixel.\n                 */\n            }\n            else\n            {\n\n                if (nFails == 0)\n                    fprintf(stderr, \"\\n\");\n                fprintf(stderr,\n                        \"WriteCount %d for tag \\t%-25s does not fit to \"\n                        \"'set_field_type' %d. \"\n                        \"Should be TIFF_VARIABLE=-1\\n\",\n                        tFieldArray->fields[t].field_writecount,\n                        tFieldArray->fields[t].field_name,\n                        tFieldArray->fields[t].set_field_type);\n                nFails++;\n            }\n        }\n        else if (tFieldArray->fields[t].field_writecount > 1 &&\n                 !((tFieldArray->fields[t].set_field_type >=\n                        TIFF_SETGET_C0_ASCII &&\n                    tFieldArray->fields[t].set_field_type <=\n                        TIFF_SETGET_C0_IFD8) ||\n                   tFieldArray->fields[t].set_field_type == TIFF_SETGET_ASCII))\n        {\n            if (!(tFieldArray->fields[t].set_field_type ==\n                      TIFF_SETGET_UINT16_PAIR &&\n                  tFieldArray->fields[t].field_writecount == 2))\n            {\n\n                if (nFails == 0)\n                    fprintf(stderr, \"\\n\");\n                fprintf(stderr,\n                        \"WriteCount %d for tag \\t%-25s does not fit to \"\n                        \"'set_field_type' %d. \"\n                        \"Should be >1. \\n\",\n                        tFieldArray->fields[t].field_writecount,\n                        tFieldArray->fields[t].field_name,\n                        tFieldArray->fields[t].set_field_type);\n                nFails++;\n            }\n        }\n        else if (tFieldArray->fields[t].field_writecount == 1 &&\n                 !(tFieldArray->fields[t].set_field_type >=\n                       TIFF_SETGET_UNDEFINED &&\n                   tFieldArray->fields[t].set_field_type <= TIFF_SETGET_INT))\n        {\n            if (nFails == 0)\n                fprintf(stderr, \"\\n\");\n            fprintf(stderr,\n                    \"WriteCount %d for tag \\t%-25s does not fit to \"\n                    \"'set_field_type' %d. \"\n                    \"Should be 1. \\n\",\n                    tFieldArray->fields[t].field_writecount,\n                    tFieldArray->fields[t].field_name,\n                    tFieldArray->fields[t].set_field_type);\n            nFails++;\n        }\n    } /* for - read-/writecount and TIFF_SETGET type */\n    if (nFails == 0)\n        fprintf(stderr, \"--> OK\\n\");\n    retFails += nFails;\n\n    fprintf(stderr, \"\\n\");\n    return retFails;\n}",
+      "fn_code_pos": [
+        [
+          687,
+          0
+        ],
+        [
+          929,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "testPasscountFlag",
+        "parameters": {
+          "szMsg": "char",
+          "tFieldArray": "TIFFFieldArray",
+          "plistTagsNotFollowPasscountRules": "uint32_t",
+          "nTagsInList": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int write_all_tags(TIFF *tif, const TIFFFieldArray *tFieldArray,\n                   uint32_t *plistTagsNotToWrite, uint32_t nTagsInList,\n                   uint32_t *iCnt)\n{\n\n    char auxCharArray[2 * STRSIZE];\n\n    uint32_t i = *iCnt;\n    uint32_t nTags = tFieldArray->count;\n    for (uint32_t t = 0; t < nTags; i++, t++)\n    {\n        bool deferredSetField = false;\n        /* Always reset variableArrayCount to default value here. */\n        uint32_t variableArrayCount = VARIABLE_ARRAY_SIZE;\n\n        uint32_t tTag = tFieldArray->fields[t].field_tag;\n        if (tagIsInList(tTag, plistTagsNotToWrite, nTagsInList))\n            continue;\n\n        TIFFDataType tType =\n            tFieldArray->fields[t].field_type; /* e.g. TIFF_RATIONAL */\n        (void)tType;\n        short tWriteCount = tFieldArray->fields[t].field_writecount;\n        TIFFSetGetFieldType tSetFieldType =\n            tFieldArray->fields[t]\n                .set_field_type; /* e.g. TIFF_SETGET_C0_FLOAT */\n        char *tFieldName = tFieldArray->fields[t].field_name;\n        void *pVoid = NULL;\n\n        /*-- dependent on set_field_type write value --*/\n        uint32_t auxUint32 = 0;\n        switch (tSetFieldType)\n        {\n            case TIFF_SETGET_ASCII:\n                /* Either the stringlength is defined as a fixed length in\n                 * .field_writecount or a NULL-terminated string is used.\n                 * Shorter strings than in auxTextArraxW need a\n                 * NULL-termination. Therefore copy the string. */\n                if (tWriteCount > 0)\n                    auxUint32 = tWriteCount - 1;\n                else\n                    auxUint32 = (uint32_t)strlen(auxTextArrayW[i]) - 1;\n                auxUint32 = (size_t)auxUint32 >= sizeof(auxCharArray)\n                                ? (uint32_t)(sizeof(auxCharArray) - 1)\n                                : auxUint32;\n                strncpy(auxCharArray, auxTextArrayW[i], auxUint32);\n                auxCharArray[auxUint32] = 0;\n                if (!TIFFSetField(tif, tTag, auxCharArray))\n                {\n                    fprintf(stderr, \"Can't write %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    goto failure;\n                }\n                break;\n            case TIFF_SETGET_C16_ASCII:\n                if (tTag == TIFFTAG_INKNAMES)\n                {\n                    if (!TIFFSetField(tif, tTag, sizeof(inkNamesW), inkNamesW))\n                    {\n                        fprintf(stderr, \"Can't write %s\\n\",\n                                tFieldArray->fields[t].field_name);\n                        goto failure;\n                    }\n                }\n                break;\n            case TIFF_SETGET_UINT8:\n            case TIFF_SETGET_UINT16:\n            case TIFF_SETGET_UINT32:\n            case TIFF_SETGET_INT:\n            case TIFF_SETGET_UNDEFINED:\n                /*-- All those can be written with char, short or long\n                 * parameter. Only value range should be in line. */\n                if ((tSetFieldType == TIFF_SETGET_UINT8) &&\n                    (auxInt32ArrayW[i] > 255))\n                    auxInt32ArrayW[i] = 255;\n                else if ((tSetFieldType == TIFF_SETGET_UINT16) &&\n                         (auxInt32ArrayW[i] > 65535))\n                    auxInt32ArrayW[i] = 65535;\n                if (tTag == TIFFTAG_FILLORDER)\n                    auxInt32ArrayW[i] = 1;\n                if (tTag == TIFFTAG_ORIENTATION)\n                    auxInt32ArrayW[i] = 7;\n                if (tTag == TIFFTAG_RESOLUTIONUNIT)\n                    auxInt32ArrayW[i] = 3;\n                if (tTag == TIFFTAG_SAMPLEFORMAT)\n                    auxInt32ArrayW[i] = SAMPLEFORMAT_UINT;\n                if (!TIFFSetField(tif, tTag, auxInt32ArrayW[i]))\n                {\n                    fprintf(stderr, \"Can't write %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    goto failure;\n                }\n                break;\n            case TIFF_SETGET_UINT16_PAIR:\n                if (auxInt32ArrayW[i] > 65535)\n                    auxInt32ArrayW[i] = 65535;\n                if (!TIFFSetField(tif, tTag, 7, auxInt32ArrayW[i]))\n                {\n                    fprintf(stderr, \"Can't write %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    goto failure;\n                }\n                break;\n            case TIFF_SETGET_UINT64:\n            case TIFF_SETGET_IFD8:\n                /* IFD8 is uint64_t but we write here only values for uint32\n                 * size, even for BigTIFF.\n                 * -- Attention: --\n                 * \"Variable promotion\" for va_arg parameters are promoted to\n                 * \"int\", which is different in x64 and x86 compilations.\n                 * Thus cast to expected uint64_t.\n                 */\n                if (!TIFFSetField(tif, tTag, (uint64_t)auxInt32ArrayW[i]))\n                {\n                    fprintf(stderr, \"Can't write %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    goto failure;\n                }\n                break;\n            case TIFF_SETGET_SINT8:\n            case TIFF_SETGET_SINT16:\n            case TIFF_SETGET_SINT32:\n                /*-- All those can be written with char, short or long\n                 * parameter. Only value range should be in line. */\n                if (!TIFFSetField(tif, tTag, -1.0 * auxInt32ArrayW[i]))\n                {\n                    fprintf(stderr, \"Can't write %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    goto failure;\n                }\n                break;\n            case TIFF_SETGET_FLOAT:\n            case TIFF_SETGET_DOUBLE:\n                if (tWriteCount == 1)\n                {\n                    /*-- All single values can be written with float or\n                     * double parameter. Only value range should be in line.\n                     */\n                    if (!TIFFSetField(tif, tTag, auxDoubleArrayW[i]))\n                    {\n                        fprintf(stderr, \"Can't write %s\\n\",\n                                tFieldArray->fields[t].field_name);\n                        goto failure;\n                    }\n                }\n                else if (tFieldArray->fields[t].field_readcount == TIFF_SPP)\n                {\n                    /*-- Some tags are written per SamplesPerPixel. For\n                     * those, readcount is TIFF_SPP. */\n                    if (tTag == TIFFTAG_SMINSAMPLEVALUE ||\n                        tTag == TIFFTAG_SMAXSAMPLEVALUE)\n                    {\n                        auxDoubleArrayW[i] = 250;\n                    }\n                    if (!TIFFSetField(tif, tTag, auxDoubleArrayW[i]))\n                    {\n                        fprintf(stderr, \"Can't write %s\\n\",\n                                tFieldArray->fields[t].field_name);\n                        goto failure;\n                    }\n                }\n                else\n                {\n                    fprintf(stderr,\n                            \"WriteCount for .set_field_type %d should be \"\n                            \"1!  %s\\n\",\n                            tSetFieldType, tFieldArray->fields[t].field_name);\n                }\n                break;\n                /* _Cxx_ just defines the presence and size of the count\n                 * parameter for the array:\n                 * - C0=no count parameter (fixed array where,\n                 *      positive readcount/writecount gives array count)\n                 * - C16=short (uint16_t) count parameter size\n                 * - C32=long (uint32_t) count parameter size\n                 * Check, if it is a single parameter, a fixed array or a\n                 * variable array.\n                 */\n            case TIFF_SETGET_C0_FLOAT:\n            case TIFF_SETGET_C16_FLOAT:\n            case TIFF_SETGET_C32_FLOAT:\n                /* For arrays, distinguishing between float or double is\n                 * essential, even for writing. */\n                pVoid = &auxFloatArrayW[i];\n                deferredSetField = true;\n                break;\n            case TIFF_SETGET_C0_DOUBLE:\n            case TIFF_SETGET_C16_DOUBLE:\n            case TIFF_SETGET_C32_DOUBLE:\n                /* For arrays, distinguishing between float or double is\n                 * essential, even for writing. */\n                pVoid = &auxDoubleArrayW[i];\n                deferredSetField = true;\n                break;\n            case TIFF_SETGET_C0_UINT8:\n            case TIFF_SETGET_C0_SINT8:\n            case TIFF_SETGET_C16_UINT8:\n            case TIFF_SETGET_C16_SINT8:\n            case TIFF_SETGET_C32_UINT8:\n            case TIFF_SETGET_C32_SINT8:\n                pVoid = &auxCharArrayW[i];\n                deferredSetField = true;\n                break;\n            case TIFF_SETGET_C0_UINT16:\n            case TIFF_SETGET_C0_SINT16:\n            case TIFF_SETGET_C16_UINT16:\n            case TIFF_SETGET_C16_SINT16:\n            case TIFF_SETGET_C32_UINT16:\n            case TIFF_SETGET_C32_SINT16:\n                if (tTag == TIFFTAG_EXTRASAMPLES)\n                {\n                    variableArrayCount = 1;\n                    auxShortArrayW[i] = 2;\n                }\n                pVoid = &auxShortArrayW[i];\n                deferredSetField = true;\n                break;\n            case TIFF_SETGET_C0_UINT32:\n            case TIFF_SETGET_C0_SINT32:\n            case TIFF_SETGET_C16_UINT32:\n            case TIFF_SETGET_C16_SINT32:\n            case TIFF_SETGET_C32_UINT32:\n            case TIFF_SETGET_C32_SINT32:\n                pVoid = &auxInt32ArrayW[i];\n                deferredSetField = true;\n                break;\n            case TIFF_SETGET_C16_IFD8:\n                if (tTag == TIFFTAG_EXTRACAMERAPROFILES)\n                {\n                    uint64_t a = 18;\n                    if (!TIFFSetField(tif, tTag, 1, &a))\n                    {\n                        fprintf(stderr, \"Can't write %s\\n\",\n                                tFieldArray->fields[t].field_name);\n                        goto failure;\n                    }\n                }\n                else\n                {\n                    pVoid = &auxInt32ArrayW[i];\n                    deferredSetField = true;\n                }\n                break;\n            case TIFF_SETGET_OTHER:\n                /* Transferfunction and Colormap to be inserted here. */\n                fprintf(stderr,\n                        \"Writing of TIFF_SETGET_OTHER for tag %s not supported \"\n                        \"yet.\\n\",\n                        tFieldArray->fields[t].field_name);\n                break;\n            default:\n                fprintf(stderr,\n                        \"SetFieldType %d not defined within writing switch for \"\n                        \"%s.\\n\",\n                        tSetFieldType, tFieldName);\n        }; /*-- switch(tSetFieldType) --*/\n\n        if (deferredSetField)\n        {\n            /* deferredSetField is used to write fixed arrays and\n             * variable arrays.\n             * pVoid pointer is set above to the corresponding array and\n             * some other parameters like variableArrayCount are set for the\n             * field, which is written now.\n             */\n            if (tWriteCount == 1)\n            {\n                fprintf(stderr,\n                        \"WriteCount for .set_field_type %d should be -1 or \"\n                        \"greater than 1!  %s\\n\",\n                        tSetFieldType, tFieldArray->fields[t].field_name);\n            }\n            else\n            {\n                /*-- Either fix or variable array --*/\n                /* Now decide between fixed or variable array */\n                if (tWriteCount > 1)\n                {\n                    /* fixed array with needed arraysize defined in\n                     * .field_writecount */\n                    if (!TIFFSetField(tif, tTag, pVoid))\n                    {\n                        fprintf(stderr, \"Can't write %s\\n\",\n                                tFieldArray->fields[t].field_name);\n                        goto failure;\n                    }\n                }\n                else\n                {\n                    /*-- Special treatment of variable array --\n                     * For test, use always arraysize of\n                     * VARIABLE_ARRAY_SIZE, apart a few exceptions,\n                     * for which variableArrayCount is set differently above.\n                     */\n                    if (!TIFFSetField(tif, tTag, variableArrayCount, pVoid))\n                    {\n                        fprintf(stderr, \"Can't write %s\\n\",\n                                tFieldArray->fields[t].field_name);\n                        goto failure;\n                    }\n                }\n            }\n        }\n    } /*-- for() --*/\n\n    *iCnt = i;\n    return 0;\nfailure:\n    fprintf(stderr, \"\\n\");\n    *iCnt = i;\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          936,
+          0
+        ],
+        [
+          1247,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "write_all_tags",
+        "parameters": {
+          "tif": "TIFF",
+          "tFieldArray": "TIFFFieldArray",
+          "plistTagsNotToWrite": "uint32_t",
+          "nTagsInList": "uint32_t",
+          "iCnt": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int tagIsInList(uint32_t tTag, uint32_t *list, uint32_t nTagsInList)\n{\n    if (list == NULL)\n        return 0;\n\n    for (uint32_t i = 0; i < nTagsInList; i++)\n    {\n        if (tTag == list[i])\n            return 1;\n    }\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          1253,
+          0
+        ],
+        [
+          1264,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tagIsInList",
+        "parameters": {
+          "tTag": "uint32_t",
+          "list": "uint32_t",
+          "nTagsInList": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int read_all_tags(TIFF *tif, const TIFFFieldArray *tFieldArray,\n                  uint32_t *plistTagsNotToWrite, uint32_t nTagsNotToWrite,\n                  uint32_t *iCnt)\n{\n\n    /* -- Variables for reading within the switch() -- */\n    int32_t j;\n    float auxFloat = 0.0f;\n    double auxDouble = 0.0;\n    char auxChar = 0;\n    uint32_t auxUint32 = 0;\n    uint64_t auxUint64 = 0;\n    short auxShort = 0;\n    int32_t auxInt32 = 0;\n    union\n    {\n        int32_t Int32;\n        short Short1;\n        short Short2[2];\n        char Char[4];\n    } unionInt32;\n    void *pVoidArray;\n    char *pAscii;\n    double dblDiff, dblDiffLimit;\n\n    char auxCharArray[2 * STRSIZE];\n    short auxShortArray[2 * N_SIZE];\n    int32_t auxInt32Array[2 * N_SIZE];\n    float auxFloatArray[2 * N_SIZE];\n    double auxDoubleArray[2 * N_SIZE];\n#define RATIONAL_EPS                                                           \\\n    (1.0 / 30000.0) /* reduced difference of rational values, approx 3.3e-5 */\n\n    uint32_t i = *iCnt;\n    uint32_t nTags = tFieldArray->count;\n    for (uint32_t t = 0; t < nTags; t++, i++)\n    {\n        uint32_t tTag = tFieldArray->fields[t].field_tag;\n        TIFFDataType tType =\n            tFieldArray->fields[t].field_type; /* e.g. TIFF_RATIONAL */\n        short tWriteCount = tFieldArray->fields[t].field_writecount;\n        TIFFSetGetFieldType tSetFieldType =\n            tFieldArray->fields[t]\n                .set_field_type; /* e.g. TIFF_SETGET_C0_FLOAT */\n        char *tFieldName = tFieldArray->fields[t].field_name;\n        if (tagIsInList(tTag, plistTagsNotToWrite, nTagsNotToWrite))\n            continue;\n\n        /*-- dependent on set_field_type read value --*/\n        switch (tSetFieldType)\n        {\n            case TIFF_SETGET_ASCII:\n                /* Either the stringlength is defined as a fixed length in\n                 * .field_writecount or a NULL-terminated string is used. */\n                if (!TIFFGetField(tif, tTag, &pAscii))\n                {\n                    fprintf(stderr, \"Can't read %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    GOTOFAILURE\n                    break;\n                }\n                /* Save string from temporary buffer and compare with\n                 * written string. */\n                strncpy(auxCharArray, pAscii, sizeof(auxCharArray) - 1u);\n                auxCharArray[sizeof(auxCharArray) - 1u] = '\\0';\n                if (tWriteCount > 0)\n                    auxInt32 = tWriteCount - 1;\n                else\n                    auxInt32 = (int32_t)strlen(auxCharArray);\n                int retCode2 =\n                    strncmp(auxCharArray, auxTextArrayW[i], auxInt32);\n                if (retCode2 != 0)\n                {\n                    fprintf(stderr,\n                            \"%d:Read value of %s %s differs from set value \"\n                            \"%s\\n\",\n                            i, tFieldName, auxCharArray, auxTextArrayW[i]);\n                    GOTOFAILURE\n                }\n                break;\n            case TIFF_SETGET_C16_ASCII:\n                if (tTag == TIFFTAG_INKNAMES)\n                {\n                    if (!TIFFGetField(tif, tTag, &pVoidArray))\n                    {\n                        fprintf(stderr, \"Can't read %s\\n\",\n                                tFieldArray->fields[t].field_name);\n                        GOTOFAILURE\n                        break;\n                    }\n                    if (_TIFFmemcmp(inkNamesW, pVoidArray, sizeof(inkNamesW)) !=\n                        0)\n                    {\n                        fprintf(stderr,\n                                \"InkNames read (%s) are different from \"\n                                \"InkNamesW \"\n                                \"written %s.\\n\",\n                                (char *)pVoidArray, inkNamesW);\n                        GOTOFAILURE\n                    }\n                }\n                break;\n                /*-- For reading, the parameter size is to be observed !! */\n            case TIFF_SETGET_UINT8:\n            case TIFF_SETGET_SINT8:\n                if (!TIFFGetField(tif, tTag, &auxChar))\n                {\n                    fprintf(stderr, \"Can't read %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    GOTOFAILURE\n                    break;\n                }\n                /* compare read values with written ones */\n                auxInt32 = auxChar;\n                if (auxInt32 != (char)auxInt32ArrayW[i])\n                {\n                    fprintf(stderr,\n                            \"%d:Read value of %s %d differs from set \"\n                            \"value %d\\n\",\n                            i, tFieldName, auxInt32, auxInt32ArrayW[i]);\n                }\n                break;\n            case TIFF_SETGET_UINT16:\n            case TIFF_SETGET_SINT16:\n                if (!TIFFGetField(tif, tTag, &auxShort))\n                {\n                    fprintf(stderr, \"Can't read %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    GOTOFAILURE\n                    break;\n                }\n                /* compare read values with written ones */\n                auxInt32 = auxShort;\n                if (auxInt32 != (short)auxInt32ArrayW[i])\n                {\n                    fprintf(stderr,\n                            \"%d:Read value of %s %d differs from set \"\n                            \"value %d\\n\",\n                            i, tFieldName, auxInt32, auxInt32ArrayW[i]);\n                    GOTOFAILURE\n                }\n                break;\n            case TIFF_SETGET_UINT16_PAIR:\n                if (!TIFFGetField(tif, tTag, &auxShortArray[0],\n                                  &auxShortArray[1]))\n                {\n                    fprintf(stderr, \"Can't read %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    GOTOFAILURE\n                    break;\n                }\n                if (auxShortArray[0] != 7 ||\n                    auxShortArray[1] != auxInt32ArrayW[i])\n                {\n                    fprintf(stderr,\n                            \"%d:Read value of %s %d/%d UINT16_PAIR differs \"\n                            \"from set \"\n                            \"values %d/%d\\n\",\n                            i, tFieldName, auxShortArray[0], auxShortArray[1],\n                            7, auxInt32ArrayW[i]);\n                    GOTOFAILURE\n                }\n                break;\n            case TIFF_SETGET_UINT32:\n            case TIFF_SETGET_SINT32:\n            case TIFF_SETGET_INT:\n                if (!TIFFGetField(tif, tTag, &auxUint32))\n                {\n                    fprintf(stderr, \"Can't read %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    GOTOFAILURE\n                    break;\n                }\n                /* compare read values with written ones */\n                auxInt32 = auxUint32;\n                if (auxInt32 != auxInt32ArrayW[i])\n                {\n                    uint32_t auxU;\n                    if (tTag == TIFFTAG_TILEDEPTH &&\n                        TIFFGetField(tif, TIFFTAG_IMAGEDEPTH, &auxU))\n                    {\n                        /* At directory re-reading from file,\n                           tif->tif_dir.td_tiledepth =\n                           tif->tif_dir.td_imagedepth is set. */\n                        if (auxUint32 != auxU)\n                        {\n                            fprintf(stderr,\n                                    \"%d:Read value of %s %d differs \"\n                                    \"from set \"\n                                    \"value %d\\n\",\n                                    i, tFieldName, auxUint32, auxU);\n                            GOTOFAILURE\n                        }\n                    }\n                    else\n                    {\n                        fprintf(stderr,\n                                \"%d:Read value of %s %d differs from set \"\n                                \"value %d\\n\",\n                                i, tFieldName, auxInt32, auxInt32ArrayW[i]);\n                        GOTOFAILURE\n                    }\n                }\n                break;\n            case TIFF_SETGET_IFD8:\n                if (!TIFFGetField(tif, tTag, &auxUint64))\n                {\n                    fprintf(stderr, \"Can't read %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    GOTOFAILURE\n                    break;\n                }\n                /* compare read values with written ones, we wrote only\n                 * unit32 values! */\n                if (auxUint64 != (uint64_t)auxInt32ArrayW[i])\n                {\n                    fprintf(stderr,\n                            \"%d:Read value of %s %\" PRIu64 \" differs from set\"\n                            \"value %d\\n\",\n                            i, tFieldName, auxUint64, auxInt32ArrayW[i]);\n                    GOTOFAILURE\n                }\n                break;\n\n            case TIFF_SETGET_C16_IFD8:\n                if (!TIFFGetField(tif, tTag, &unionInt32, &pVoidArray))\n                {\n                    fprintf(stderr, \"Can't read %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    GOTOFAILURE\n                    break;\n                }\n                if (tTag == TIFFTAG_EXTRACAMERAPROFILES)\n                {\n                    auxUint64 = *(uint64_t *)pVoidArray;\n                    if (unionInt32.Short1 != 1 && auxUint64 != 18)\n                    {\n                        fprintf(stderr,\n                                \"%d:Read value of %s %\" PRIu64\n                                \" differs from set\"\n                                \"value %d\\n\",\n                                i, tFieldName, auxUint64, 18);\n                        GOTOFAILURE\n                    }\n                }\n                else\n                {\n                    /* ToDo: Such tags are not written yet.\n                     */\n                    fprintf(stderr, \"TIFF_SETGET_C16_IFD8 arrays not supported \"\n                                    \"in this testprogram.\\n\");\n                    GOTOFAILURE\n                }\n                break;\n            case TIFF_SETGET_FLOAT:\n                if (!TIFFGetField(tif, tTag, &auxFloat))\n                {\n                    fprintf(stderr, \"Can't read %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    GOTOFAILURE\n                    break;\n                }\n                /* compare read values with written ones */\n                if (tType == TIFF_RATIONAL || tType == TIFF_SRATIONAL)\n                    dblDiffLimit = RATIONAL_EPS * auxDoubleArrayW[i];\n                else\n                    dblDiffLimit = 1e-3;\n                dblDiff = auxFloat - auxDoubleArrayW[i];\n                if (fabs(dblDiff) > fabs(dblDiffLimit))\n                {\n                    /*--: EXIFTAG_SUBJECTDISTANCE: LibTiff returns value of\n                     * \"-1.0\" if numerator equals 4294967295 (0xFFFFFFFF) to\n                     * indicate infinite distance! However, there are two\n                     * other EXIF tags where numerator indicates a special\n                     * value and six other cases where the denominator\n                     * indicates special values, which are not treated\n                     * within LibTiff!!\n                     */\n                    if (!(tTag == EXIFTAG_SUBJECTDISTANCE && auxFloat == -1.0))\n                    {\n                        fprintf(stderr,\n                                \"%d:Read value of %s %f differs from set value \"\n                                \"%f\\n\",\n                                i, tFieldName, auxFloat, auxDoubleArrayW[i]);\n                        GOTOFAILURE\n                    }\n                }\n                break;\n            case TIFF_SETGET_DOUBLE:\n                if (!TIFFGetField(tif, tTag, &auxDouble))\n                {\n                    fprintf(stderr, \"Can't read %s\\n\",\n                            tFieldArray->fields[t].field_name);\n                    GOTOFAILURE\n                    break;\n                }\n                /* compare read values with written ones */\n                if (tType == TIFF_RATIONAL || tType == TIFF_SRATIONAL)\n                    dblDiffLimit = RATIONAL_EPS * auxDoubleArrayW[i];\n                else\n                    dblDiffLimit = 1e-6;\n                dblDiff = auxDouble - auxDoubleArrayW[i];\n                if (fabs(dblDiff) > fabs(dblDiffLimit))\n                {\n                    /*--: EXIFTAG_SUBJECTDISTANCE: LibTiff returns value of\n                     * \"-1.0\" if numerator equals 4294967295 (0xFFFFFFFF) to\n                     * indicate infinite distance!\n                     */\n                    if (!(tTag == EXIFTAG_SUBJECTDISTANCE && auxDouble == -1.0))\n                    {\n                        fprintf(stderr,\n                                \"%d:Read value of %s %f differs from set value \"\n                                \"%f\\n\",\n                                i, tFieldName, auxDouble, auxDoubleArrayW[i]);\n                        GOTOFAILURE\n                    }\n                }\n                break;\n            case TIFF_SETGET_C0_FLOAT:\n            case TIFF_SETGET_C0_DOUBLE:\n            case TIFF_SETGET_C16_FLOAT:\n            case TIFF_SETGET_C16_DOUBLE:\n            case TIFF_SETGET_C32_FLOAT:\n            case TIFF_SETGET_C32_DOUBLE:\n            case TIFF_SETGET_C0_UINT8:\n            case TIFF_SETGET_C0_SINT8:\n            case TIFF_SETGET_C16_UINT8:\n            case TIFF_SETGET_C16_SINT8:\n            case TIFF_SETGET_C32_UINT8:\n            case TIFF_SETGET_C32_SINT8:\n            case TIFF_SETGET_C0_UINT16:\n            case TIFF_SETGET_C0_SINT16:\n            case TIFF_SETGET_C16_UINT16:\n            case TIFF_SETGET_C16_SINT16:\n            case TIFF_SETGET_C32_UINT16:\n            case TIFF_SETGET_C32_SINT16:\n            case TIFF_SETGET_C0_UINT32:\n            case TIFF_SETGET_C0_SINT32:\n            case TIFF_SETGET_C16_UINT32:\n            case TIFF_SETGET_C16_SINT32:\n            case TIFF_SETGET_C32_UINT32:\n            case TIFF_SETGET_C32_SINT32:\n            {\n                /* _Cxx_ just defines the presence and size of the count\n                 * parameter for the array:\n                 * - C0=no count parameter (fixed array where,\n                 *      positive readcount/writecount gives array count)\n                 * - C16=short (uint16_t) count parameter size\n                 * - C32=long (uint32_t) count parameter size\n                 * Check, if it is a single parameter, a fixed array or a\n                 * variable array.\n                 */\n                if (tWriteCount == 1)\n                {\n                    fprintf(stderr,\n                            \"WriteCount for .set_field_type %d should be -1, \"\n                            \"-2, -3 or \"\n                            \"greater than 1!  %s\\n\",\n                            tSetFieldType, tFieldArray->fields[t].field_name);\n                    GOTOFAILURE\n                }\n                else\n                {\n                    /*-- Either fix or variable array --*/\n                    if (tWriteCount > 1)\n                    {\n                        /* fixed array with needed arraysize defined in\n                         * .field_writecount */\n                        if (!TIFFGetField(tif, tTag, &pVoidArray))\n                        {\n                            fprintf(stderr, \"Can't read %s\\n\",\n                                    tFieldArray->fields[t].field_name);\n                            GOTOFAILURE\n                            break;\n                        }\n                        /* set tWriteCount to number of read samples for\n                         * next steps\n                         */\n                        auxInt32 = tWriteCount;\n                    }\n                    else\n                    {\n                        /*-- Special treatment of variable array. --\n                         * Dependent on _Cxx_, the count parameter is\n                         * short or long. Therefore use unionInt32!\n                         */\n                        if (!TIFFGetField(tif, tTag, &unionInt32, &pVoidArray))\n                        {\n                            fprintf(stderr, \"Can't read %s\\n\",\n                                    tFieldArray->fields[t].field_name);\n                            GOTOFAILURE\n                            break;\n                        }\n                        /* set tWriteCount to number of read samples for\n                         * next steps\n                         */\n                        if (tSetFieldType == TIFF_SETGET_C32_UINT8 ||\n                            tSetFieldType == TIFF_SETGET_C32_SINT8 ||\n                            tSetFieldType == TIFF_SETGET_C32_UINT16 ||\n                            tSetFieldType == TIFF_SETGET_C32_SINT16 ||\n                            tSetFieldType == TIFF_SETGET_C32_UINT32 ||\n                            tSetFieldType == TIFF_SETGET_C32_SINT32 ||\n                            tSetFieldType == TIFF_SETGET_C32_FLOAT ||\n                            tSetFieldType == TIFF_SETGET_C32_DOUBLE)\n                        {\n                            auxInt32 = unionInt32.Int32;\n                        }\n                        else\n                        {\n                            auxInt32 = unionInt32.Short1;\n                        }\n                    }\n                    /* Save values from temporary array and compare to\n                     * written values. */\n                    if (tSetFieldType == TIFF_SETGET_C0_FLOAT ||\n                        tSetFieldType == TIFF_SETGET_C16_FLOAT ||\n                        tSetFieldType == TIFF_SETGET_C32_FLOAT)\n                    {\n                        memcpy(&auxFloatArray, pVoidArray,\n                               (auxInt32 * sizeof(auxFloatArray[0])));\n                        /* compare read values with written ones */\n                        if (tType == TIFF_RATIONAL || tType == TIFF_SRATIONAL)\n                            dblDiffLimit = RATIONAL_EPS * auxDoubleArrayW[i];\n                        else\n                            dblDiffLimit = 1e-6;\n                        for (j = 0; j < auxInt32; j++)\n                        {\n                            dblDiff = auxFloatArray[j] - auxFloatArrayW[i + j];\n                            if (fabs(dblDiff) > fabs(dblDiffLimit))\n                            {\n                                fprintf(stderr,\n                                        \"Read value %d of %s #%d %f differs \"\n                                        \"from set value %f\\n\",\n                                        i, tFieldName, j, auxFloatArray[j],\n                                        auxFloatArrayW[i + j]);\n                                GOTOFAILURE\n                            }\n                        }\n                    }\n                    else if (tSetFieldType == TIFF_SETGET_C0_DOUBLE ||\n                             tSetFieldType == TIFF_SETGET_C16_DOUBLE ||\n                             tSetFieldType == TIFF_SETGET_C32_DOUBLE)\n                    {\n                        memcpy(&auxDoubleArray, pVoidArray,\n                               (auxInt32 * sizeof(auxDoubleArray[0])));\n                        /* compare read values with written ones */\n                        if (tType == TIFF_RATIONAL || tType == TIFF_SRATIONAL)\n                            dblDiffLimit = RATIONAL_EPS * auxDoubleArrayW[i];\n                        else\n                            dblDiffLimit = 1e-6;\n                        for (j = 0; j < auxInt32; j++)\n                        {\n                            dblDiff =\n                                auxDoubleArray[j] - auxDoubleArrayW[i + j];\n                            if (fabs(dblDiff) > fabs(dblDiffLimit))\n                            {\n                                fprintf(stderr,\n                                        \"Read value %d of %s #%d %f differs \"\n                                        \"from set value %f\\n\",\n                                        i, tFieldName, j, auxDoubleArray[j],\n                                        auxDoubleArrayW[i + j]);\n                                GOTOFAILURE\n                            }\n                        }\n                    }\n                    else if (tSetFieldType == TIFF_SETGET_C0_UINT8 ||\n                             tSetFieldType == TIFF_SETGET_C0_SINT8 ||\n                             tSetFieldType == TIFF_SETGET_C16_UINT8 ||\n                             tSetFieldType == TIFF_SETGET_C16_SINT8 ||\n                             tSetFieldType == TIFF_SETGET_C32_UINT8 ||\n                             tSetFieldType == TIFF_SETGET_C32_SINT8)\n                    {\n                        memcpy(&auxCharArray, pVoidArray,\n                               (auxInt32 * sizeof(auxCharArray[0])));\n                        /* Compare and check values  */\n                        char *auxCharCompare;\n                        if (tTag == EXIFTAG_EXIFVERSION)\n                        {\n                            auxCharCompare = exifVersion;\n                        }\n                        else if (tTag == GPSTAG_VERSIONID)\n                        {\n                            auxCharCompare = gpsVersion;\n                        }\n                        else\n                        {\n                            auxCharCompare = &auxCharArrayW[i];\n                        }\n\n                        for (j = 0; j < auxInt32; j++)\n                        {\n                            if (auxCharArray[j] != auxCharCompare[j])\n                            {\n                                fprintf(stderr,\n                                        \"Read value %d of %s #%d %d differs \"\n                                        \"from set value %d\\n\",\n                                        i, tFieldName, j, auxCharArray[j],\n                                        auxCharArrayW[i + j]);\n                                GOTOFAILURE\n                            }\n                        }\n                    }\n                    else if (tSetFieldType == TIFF_SETGET_C0_UINT16 ||\n                             tSetFieldType == TIFF_SETGET_C0_SINT16 ||\n                             tSetFieldType == TIFF_SETGET_C16_UINT16 ||\n                             tSetFieldType == TIFF_SETGET_C16_SINT16 ||\n                             tSetFieldType == TIFF_SETGET_C32_UINT16 ||\n                             tSetFieldType == TIFF_SETGET_C32_SINT16)\n                    {\n                        memcpy(&auxShortArray, pVoidArray,\n                               (auxInt32 * sizeof(auxShortArray[0])));\n                        /* Compare and check values  */\n                        for (j = 0; j < auxInt32; j++)\n                        {\n                            if (auxShortArray[j] != auxShortArrayW[i + j])\n                            {\n                                fprintf(stderr,\n                                        \"Read value %d of %s #%d %d \"\n                                        \"differs from \"\n                                        \"set value %d\\n\",\n                                        i, tFieldName, j, auxShortArray[j],\n                                        auxShortArrayW[i + j]);\n                                GOTOFAILURE\n                            }\n                        }\n                    }\n                    else if (tSetFieldType == TIFF_SETGET_C0_UINT32 ||\n                             tSetFieldType == TIFF_SETGET_C0_SINT32 ||\n                             tSetFieldType == TIFF_SETGET_C16_UINT32 ||\n                             tSetFieldType == TIFF_SETGET_C16_SINT32 ||\n                             tSetFieldType == TIFF_SETGET_C32_UINT32 ||\n                             tSetFieldType == TIFF_SETGET_C32_SINT32)\n                    {\n                        memcpy(&auxInt32Array, pVoidArray,\n                               (auxInt32 * sizeof(auxInt32Array[0])));\n                        /* Compare and check values  */\n                        for (j = 0; j < auxInt32; j++)\n                        {\n                            if (auxInt32Array[j] != auxInt32ArrayW[i + j])\n                            {\n                                fprintf(stderr,\n                                        \"Read value %d of %s #%d %d \"\n                                        \"differs from \"\n                                        \"set value %d\\n\",\n                                        i, tFieldName, j, auxInt32Array[j],\n                                        auxInt32ArrayW[i + j]);\n                                GOTOFAILURE\n                            }\n                        }\n                    }\n                    else\n                    {\n                        fprintf(stderr,\n                                \"SetFieldType %d not defined within array\"\n                                \"reading clause for %s.\\n\",\n                                tSetFieldType, tFieldName);\n                        GOTOFAILURE\n                    }\n                }\n            } /* case for all arrays */\n            break;\n            case TIFF_SETGET_OTHER:\n                /* ToDo: Transferfunction and Colormap to be inserted here. */\n                break;\n            case TIFF_SETGET_UNDEFINED:\n                /* Such tags are not written to file. */\n                break;\n            default:\n                fprintf(stderr,\n                        \"SetFieldType %d not defined within reading switch for \"\n                        \"%s.\\n\",\n                        tSetFieldType, tFieldName);\n                GOTOFAILURE\n        }; /*-- switch(tSetFieldType) --*/\n    }      /*-- for(t to nTags) --*/\n\n    *iCnt = i;\n    return 0;\nfailure:\n    fprintf(stderr, \"\\n\");\n    *iCnt = i;\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          1272,
+          0
+        ],
+        [
+          1854,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "read_all_tags",
+        "parameters": {
+          "tif": "TIFF",
+          "tFieldArray": "TIFFFieldArray",
+          "plistTagsNotToWrite": "uint32_t",
+          "nTagsNotToWrite": "uint32_t",
+          "iCnt": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "check_tag_definitions(void)",
+      "fn_dec_pos": [
+        [
+          157,
+          4
+        ],
+        [
+          157,
+          31
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "check_tag_definitions",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "write_test_tiff(TIFF *tif, const char *filenameRead)",
+      "fn_dec_pos": [
+        [
+          158,
+          4
+        ],
+        [
+          158,
+          56
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "write_test_tiff",
+        "parameters": {
+          "tif": "TIFF",
+          "filenameRead": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "write_all_tags(TIFF *tif, const TIFFFieldArray *tFieldArray,\n                   uint32_t *plistTagsNotToWrite, uint32_t nTagsInList,\n                   uint32_t *iCnt)",
+      "fn_dec_pos": [
+        [
+          159,
+          4
+        ],
+        [
+          161,
+          34
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "write_all_tags",
+        "parameters": {
+          "tif": "TIFF",
+          "tFieldArray": "TIFFFieldArray",
+          "plistTagsNotToWrite": "uint32_t",
+          "nTagsInList": "uint32_t",
+          "iCnt": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "tagIsInList(uint32_t tTag, uint32_t *list, uint32_t nTagsInList)",
+      "fn_dec_pos": [
+        [
+          162,
+          4
+        ],
+        [
+          162,
+          68
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tagIsInList",
+        "parameters": {
+          "tTag": "uint32_t",
+          "list": "uint32_t",
+          "nTagsInList": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "testPasscountFlag(const char *szMsg, const TIFFFieldArray *tFieldArray,\n                      uint32_t *plistTagsNotFollowPasscountRules,\n                      uint32_t nTagsInList)",
+      "fn_dec_pos": [
+        [
+          163,
+          4
+        ],
+        [
+          165,
+          43
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "testPasscountFlag",
+        "parameters": {
+          "szMsg": "char",
+          "tFieldArray": "TIFFFieldArray",
+          "plistTagsNotFollowPasscountRules": "uint32_t",
+          "nTagsInList": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "read_all_tags(TIFF *tif, const TIFFFieldArray *tFieldArray,\n                  uint32_t *plistTagsNotToWrite, uint32_t nTagsNotToWrite,\n                  uint32_t *iCnt)",
+      "fn_dec_pos": [
+        [
+          166,
+          4
+        ],
+        [
+          168,
+          33
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "read_all_tags",
+        "parameters": {
+          "tif": "TIFF",
+          "tFieldArray": "TIFFFieldArray",
+          "plistTagsNotToWrite": "uint32_t",
+          "nTagsNotToWrite": "uint32_t",
+          "iCnt": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tif_config.h\" //necessary for linux compiler\n",
+      [
+        51,
+        0
+      ],
+      [
+        52,
+        0
+      ]
+    ],
+    [
+      "#include <errno.h>\n",
+      [
+        53,
+        0
+      ],
+      [
+        54,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        54,
+        0
+      ],
+      [
+        55,
+        0
+      ]
+    ],
+    [
+      "#include <stdbool.h>\n",
+      [
+        55,
+        0
+      ],
+      [
+        56,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        56,
+        0
+      ],
+      [
+        57,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        57,
+        0
+      ],
+      [
+        58,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        60,
+        0
+      ],
+      [
+        61,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        63,
+        0
+      ],
+      [
+        64,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        64,
+        0
+      ],
+      [
+        65,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

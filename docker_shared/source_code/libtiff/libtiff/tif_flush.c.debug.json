@@ -1,0 +1,88 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int TIFFFlush(TIFF *tif)\n{\n    if (tif->tif_mode == O_RDONLY)\n        return 1;\n\n    if (!TIFFFlushData(tif))\n        return (0);\n\n    /* In update (r+) mode we try to detect the case where\n       only the strip/tile map has been altered, and we try to\n       rewrite only that portion of the directory without\n       making any other changes */\n\n    if ((tif->tif_flags & TIFF_DIRTYSTRIP) &&\n        !(tif->tif_flags & TIFF_DIRTYDIRECT) && tif->tif_mode == O_RDWR)\n    {\n        if (TIFFForceStrileArrayWriting(tif))\n            return 1;\n    }\n\n    if ((tif->tif_flags & (TIFF_DIRTYDIRECT | TIFF_DIRTYSTRIP)) &&\n        !TIFFRewriteDirectory(tif))\n        return (0);\n\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          29,
+          0
+        ],
+        [
+          54,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFlush",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFForceStrileArrayWriting(TIFF *tif)\n{\n    static const char module[] = \"TIFFForceStrileArrayWriting\";\n    const int isTiled = TIFFIsTiled(tif);\n\n    if (tif->tif_mode == O_RDONLY)\n    {\n        TIFFErrorExtR(tif, tif->tif_name, \"File opened in read-only mode\");\n        return 0;\n    }\n    if (tif->tif_diroff == 0)\n    {\n        TIFFErrorExtR(tif, module, \"Directory has not yet been written\");\n        return 0;\n    }\n    if ((tif->tif_flags & TIFF_DIRTYDIRECT) != 0)\n    {\n        TIFFErrorExtR(tif, module,\n                      \"Directory has changes other than the strile arrays. \"\n                      \"TIFFRewriteDirectory() should be called instead\");\n        return 0;\n    }\n\n    if (!(tif->tif_flags & TIFF_DIRTYSTRIP))\n    {\n        if (!(tif->tif_dir.td_stripoffset_entry.tdir_tag != 0 &&\n              tif->tif_dir.td_stripoffset_entry.tdir_count == 0 &&\n              tif->tif_dir.td_stripoffset_entry.tdir_type == 0 &&\n              tif->tif_dir.td_stripoffset_entry.tdir_offset.toff_long8 == 0 &&\n              tif->tif_dir.td_stripbytecount_entry.tdir_tag != 0 &&\n              tif->tif_dir.td_stripbytecount_entry.tdir_count == 0 &&\n              tif->tif_dir.td_stripbytecount_entry.tdir_type == 0 &&\n              tif->tif_dir.td_stripbytecount_entry.tdir_offset.toff_long8 == 0))\n        {\n            TIFFErrorExtR(tif, module,\n                          \"Function not called together with \"\n                          \"TIFFDeferStrileArrayWriting()\");\n            return 0;\n        }\n\n        if (tif->tif_dir.td_stripoffset_p == NULL && !TIFFSetupStrips(tif))\n            return 0;\n    }\n\n    if (_TIFFRewriteField(tif,\n                          isTiled ? TIFFTAG_TILEOFFSETS : TIFFTAG_STRIPOFFSETS,\n                          TIFF_LONG8, tif->tif_dir.td_nstrips,\n                          tif->tif_dir.td_stripoffset_p) &&\n        _TIFFRewriteField(\n            tif, isTiled ? TIFFTAG_TILEBYTECOUNTS : TIFFTAG_STRIPBYTECOUNTS,\n            TIFF_LONG8, tif->tif_dir.td_nstrips,\n            tif->tif_dir.td_stripbytecount_p))\n    {\n        tif->tif_flags &= ~TIFF_DIRTYSTRIP;\n        tif->tif_flags &= ~TIFF_BEENWRITING;\n        return 1;\n    }\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          75,
+          0
+        ],
+        [
+          134,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFForceStrileArrayWriting",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFFlushData(TIFF *tif)\n{\n    if ((tif->tif_flags & TIFF_BEENWRITING) == 0)\n        return (1);\n    if (tif->tif_flags & TIFF_POSTENCODE)\n    {\n        tif->tif_flags &= ~TIFF_POSTENCODE;\n        if (!(*tif->tif_postencode)(tif))\n            return (0);\n    }\n    return (TIFFFlushData1(tif));\n}",
+      "fn_code_pos": [
+        [
+          145,
+          0
+        ],
+        [
+          156,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFlushData",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

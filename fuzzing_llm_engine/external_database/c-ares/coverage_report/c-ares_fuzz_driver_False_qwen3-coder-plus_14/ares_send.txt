@@ -1,0 +1,134 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17		#include "ares_setup.h"	
+18			
+19		#ifdef HAVE_NETINET_IN_H	
+20		#  include <netinet/in.h>	
+21		#endif	
+22			
+23		#include "ares_nameser.h"	
+24			
+25		#include "ares.h"	
+26		#include "ares_dns.h"	
+27		#include "ares_private.h"	
+28			
+29		void ares_send(ares_channel channel, const unsigned char *qbuf, int qlen,	
+30		ares_callback callback, void *arg)	
+31	390	{	
+32	390	struct query *query;	
+33	390	int i, packetsz;	
+34	390	struct timeval now;	
+35			
+36		/* Verify that the query is at least long enough to hold the header. */	
+37	390	if (qlen < HFIXEDSZ || qlen >= (1 << 16))	
+38	0	{	
+39	0	callback(arg,ARES_EBADQUERY, 0,NULL, 0);	
+40	0	return;	
+41	0	}	
+42			
+43		/* Allocate space for query and allocated fields. */	
+44	390	query = ares_malloc(sizeof(struct query));	
+45	390	if (!query)	
+46	0	{	
+47	0	callback(arg,ARES_ENOMEM, 0,NULL, 0);	
+48	0	return;	
+49	0	}	
+50	390	query->tcpbuf = ares_malloc(qlen + 2);	
+51	390	if (!query->tcpbuf)	
+52	0	{	
+53	0	ares_free(query);	
+54	0	callback(arg,ARES_ENOMEM, 0,NULL, 0);	
+55	0	return;	
+56	0	}	
+57	390	if (channel->nservers < 1)	
+58	0	{	
+59	0	ares_free(query);	
+60	0	callback(arg,ARES_ESERVFAIL, 0,NULL, 0);	
+61	0	return;	
+62	0	}	
+63	390	query->server_info = ares_malloc(channel->nservers *	
+64	390	sizeof(query->server_info[0]));	
+65	390	if (!query->server_info)	
+66	0	{	
+67	0	ares_free(query->tcpbuf);	
+68	0	ares_free(query);	
+69	0	callback(arg,ARES_ENOMEM, 0,NULL, 0);	
+70	0	return;	
+71	0	}	
+72			
+73		/* Compute the query ID.  Start with no timeout. */	
+74	390	query->qid = DNS_HEADER_QID(qbuf);	
+75	390	query->timeout.tv_sec = 0;	
+76	390	query->timeout.tv_usec = 0;	
+77			
+78		/* Form the TCP query buffer by prepending qlen (as two	
+79		* network-order bytes) to qbuf.	
+80		*/	
+81	390	query->tcpbuf[0] = (unsigned char)((qlen >> 8) & 0xff);	
+82	390	query->tcpbuf[1] = (unsigned char)(qlen & 0xff);	
+83	390	memcpy(query->tcpbuf + 2, qbuf, qlen);	
+84	390	query->tcplen = qlen + 2;	
+85			
+86		/* Fill in query arguments. */	
+87	390	query->qbuf = query->tcpbuf + 2;	
+88	390	query->qlen = qlen;	
+89	390	query->callback = callback;	
+90	390	query->arg = arg;	
+91			
+92		/* Initialize query status. */	
+93	390	query->try_count = 0;	
+94			
+95		/* Choose the server to send the query to. If rotation is enabled, keep track	
+96		* of the next server we want to use. */	
+97	390	query->server = channel->last_server;	
+98	390	if (channel->rotate == 1)	
+99	0	channel->last_server = (channel->last_server + 1) % channel->nservers;	
+100			
+101	780	for (i = 0; i < channel->nservers; i++)	
+102	390	{	
+103	390	query->server_info[i].skip_server = 0;	
+104	390	query->server_info[i].tcp_connection_generation = 0;	
+105	390	}	
+106			
+107	390	packetsz = (channel->flags & ARES_FLAG_EDNS) ?channel->ednspsz: PACKETSZ;	
+108	390	query->using_tcp = (channel->flags & ARES_FLAG_USEVC) || qlen > packetsz;	
+109			
+110	390	query->error_status = ARES_ECONNREFUSED;	
+111	390	query->timeouts = 0;	
+112			
+113		/* Initialize our list nodes. */	
+114	390	ares__init_list_node(&(query->queries_by_qid),     query);	
+115	390	ares__init_list_node(&(query->queries_by_timeout), query);	
+116	390	ares__init_list_node(&(query->queries_to_server),  query);	
+117	390	ares__init_list_node(&(query->all_queries),        query);	
+118			
+119		/* Chain the query into the list of all queries. */	
+120	390	ares__insert_in_list(&(query->all_queries), &(channel->all_queries));	
+121		/* Keep track of queries bucketed by qid, so we can process DNS	
+122		* responses quickly.	
+123		*/	
+124	390	ares__insert_in_list(	
+125	390	&(query->queries_by_qid),	
+126	390	&(channel->queries_by_qid[query->qid % ARES_QID_TABLE_SIZE]));	
+127			
+128		/* Perform the first query action. */	
+129	390	now = ares__tvnow();	
+130	390	ares__send_query(channel, query, &now);	
+131	390	}	
+
+

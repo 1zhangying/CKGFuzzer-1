@@ -1,0 +1,170 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int setup_transfer_functions(void)\n{\n    if (pTransferFunctionData)\n        _TIFFfree(pTransferFunctionData);\n\n    /* Setup array with some more values to shift start of the three arrays. */\n    nSamplesPerTransferFunction = ((uint32_t)1 << bps);\n    pTransferFunctionData = _TIFFmalloc(3 * (tmsize_t)nSamplesPerTransferFunction * sizeof(uint16_t));\n    if (!pTransferFunctionData)\n        return 1;\n\n    for (uint32_t i = 0; i < 3 * nSamplesPerTransferFunction; i++)\n        pTransferFunctionData[i] = (uint16_t)(i + 1);\n\n    ptf0 = &pTransferFunctionData[0];\n    ptf1 = &pTransferFunctionData[nSamplesPerTransferFunction];\n    ptf2 = &pTransferFunctionData[2 * nSamplesPerTransferFunction];\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          66,
+          0
+        ],
+        [
+          85,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setup_transfer_functions",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int read_check_transferfunctions(TIFF **ptif, const char *filename, int blnClose, const uint16_t *ptfx0,\n                                 const uint16_t *ptfx1, const uint16_t *ptfx2)\n{\n    /* Test reading of transfer functions */\n    int retval = 0;\n    TIFF *tif = TIFFOpen(filename, \"r\");\n    *ptif = tif;\n    if (!tif)\n    {\n        fprintf(stderr, \"read_check_transferfunctions(): Can't open %s for reading.\\n\", filename);\n        GOTOFAILURE(-1);\n    }\n\n    if (!TIFFGetField(tif, TIFFTAG_TRANSFERFUNCTION, &ptfR0, &ptfR1, &ptfR2))\n    {\n        fprintf(stderr, \"read_check_transferfunctions(): TIFFGetField for TIFFTAG_TRANSFERFUNCTION failed.\\n\");\n        GOTOFAILURE(-1);\n    }\n    else\n    {\n        if (ptfR0 != NULL && !_TIFFmemcmp(ptfx0, ptfR0, nSamplesPerTransferFunction * sizeof(uint16_t)))\n            retval += 1;\n        if (ptfR1 != NULL && !_TIFFmemcmp(ptfx1, ptfR1, nSamplesPerTransferFunction * sizeof(uint16_t)))\n            retval += 2;\n        if (ptfR2 != NULL && !_TIFFmemcmp(ptfx2, ptfR2, nSamplesPerTransferFunction * sizeof(uint16_t)))\n            retval += 4;\n    }\n\nfailure:\n    if (blnClose)\n    {\n        TIFFClose(tif);\n        tif = NULL;\n    }\n    *ptif = tif;\n\n    return retval;\n}",
+      "fn_code_pos": [
+        [
+          95,
+          0
+        ],
+        [
+          132,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "read_check_transferfunctions",
+        "parameters": {
+          "ptif": "TIFF",
+          "filename": "char",
+          "blnClose": "int",
+          "ptfx0": "uint16_t",
+          "ptfx1": "uint16_t",
+          "ptfx2": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int write_basic_IFD_data(TIFF **ptif, const char *filename, int wrtTransferFunction, int nExtraSamples,\n                         int blnCloseFile)\n{\n    unsigned char buf[3] = {0, 127, 255};\n    int retval = 0;\n    uint8_t *bufLine = NULL;\n    TIFF *tif = TIFFOpen(filename, \"w\");\n    *ptif = tif;\n    if (!tif)\n    {\n        fprintf(stderr, \"write_basic_IFD_data(): Can't create %s\\n\", filename);\n        GOTOFAILURE(1);\n    }\n\n    if (!TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, width))\n    {\n        fprintf(stderr, \"write_basic_IFD_data(): Can't set ImageWidth tag.\\n\");\n        GOTOFAILURE(1);\n    }\n    if (!TIFFSetField(tif, TIFFTAG_IMAGELENGTH, length))\n    {\n        fprintf(stderr, \"write_basic_IFD_data(): Can't set ImageLength tag.\\n\");\n        GOTOFAILURE(1);\n    }\n    if (!TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, bps))\n    {\n        fprintf(stderr, \"write_basic_IFD_data(): Can't set BitsPerSample tag.\\n\");\n        GOTOFAILURE(1);\n    }\n    if (!TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, spp))\n    {\n        fprintf(stderr, \"write_basic_IFD_data(): Can't set SamplesPerPixel tag.\\n\");\n        GOTOFAILURE(1);\n    }\n    if (!TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, rows_per_strip))\n    {\n        fprintf(stderr, \"write_basic_IFD_data(): Can't set SamplesPerPixel tag.\\n\");\n        GOTOFAILURE(1);\n    }\n    if (!TIFFSetField(tif, TIFFTAG_PLANARCONFIG, planarconfig))\n    {\n        fprintf(stderr, \"write_basic_IFD_data(): Can't set PlanarConfiguration tag.\\n\");\n        GOTOFAILURE(1);\n    }\n    if (!TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, photometric))\n    {\n        fprintf(stderr, \"write_basic_IFD_data(): Can't set PhotometricInterpretation tag.\\n\");\n        GOTOFAILURE(1);\n    }\n\n    /* Set transfer function before ExtraSamples*/\n    if (wrtTransferFunction == 1)\n    {\n\n        if (!TIFFSetField(tif, TIFFTAG_TRANSFERFUNCTION, ptf0, ptf1, ptf2))\n        {\n            fprintf(stderr, \"write_basic_IFD_data(): TIFFSetField for TIFFTAG_TRANSFERFUNCTION failed.\\n\");\n            GOTOFAILURE(1);\n        }\n    }\n\n    /* Set ExtraSamples thus SamplesPerPixel for transfer functions is reduced by one. */\n    uint16_t extraSamples[4] = {EXTRASAMPLE_UNSPECIFIED, EXTRASAMPLE_UNSPECIFIED, EXTRASAMPLE_UNSPECIFIED,\n                                EXTRASAMPLE_UNSPECIFIED};\n    if (nExtraSamples > 0 && nExtraSamples < 4)\n    {\n        if (!TIFFSetField(tif, TIFFTAG_EXTRASAMPLES, nExtraSamples, extraSamples))\n        {\n            fprintf(stderr, \"write_basic_IFD_data(): Warning: Could not set TIFFTAG_EXTRASAMPLES tag.\\n\");\n        }\n    }\n\n    /* Set transfer function after ExtraSamples*/\n    if (wrtTransferFunction == 2)\n    {\n\n        if (!TIFFSetField(tif, TIFFTAG_TRANSFERFUNCTION, ptf0, ptf1, ptf2))\n        {\n            fprintf(stderr, \"write_basic_IFD_data(): TIFFSetField for TIFFTAG_TRANSFERFUNCTION failed.\\n\");\n            GOTOFAILURE(1);\n        }\n    }\n\n    /* Setup buffer for image line */\n    size_t bufLen = (size_t)width * spp * (bps + 7) / 8;\n    bufLine = _TIFFmalloc(bufLen);\n    if (!bufLine)\n    {\n        fprintf(stderr, \"write_basic_IFD_data(): Can't allocate bufLine buffer.\\n\");\n        GOTOFAILURE(1);\n    }\n    if (bufLen > sizeof(buf))\n        _TIFFmemcpy(bufLine, buf, sizeof(buf));\n\n    /* Write dummy pixel data. */\n    for (int i = 0; i < length; i++)\n    {\n        if (TIFFWriteScanline(tif, bufLine, i, 0) == -1)\n        {\n            fprintf(stderr, \"write_basic_IFD_data(): Can't write image data.\\n\");\n            GOTOFAILURE(1);\n        }\n        size_t idx = (size_t)i * spp < bufLen ? (size_t)i * spp : bufLen - 2;\n        bufLine[idx] = (uint8_t)(i * 80);\n    }\n\nfailure:\n    if (bufLine) \n        _TIFFfree(bufLine);\n    if (blnCloseFile)\n    {\n        TIFFClose(tif);\n        tif = NULL;\n    }\n    *ptif = tif;\n\n    return retval;\n}",
+      "fn_code_pos": [
+        [
+          145,
+          0
+        ],
+        [
+          262,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "write_basic_IFD_data",
+        "parameters": {
+          "ptif": "TIFF",
+          "filename": "char",
+          "wrtTransferFunction": "int",
+          "nExtraSamples": "int",
+          "blnCloseFile": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int main()\n{\n\n    const char *filename = \"test_transferfunction_write_read.tif\";\n\n    if (setup_transfer_functions())\n        return 1;\n\n    int ret;\n    TIFF *tif = NULL;\n\n    fprintf(stderr,\n            \"--- Testing TIFF_TRANSFERFUNCTION tag writing and reading. ---\\n    Expect 6 warning messages ...\\n\");\n\n    /* Test with RGB data */\n    spp = 3;\n    if (write_basic_IFD_data(&tif, filename, 2, 0, true))\n        return 1;\n    ret = read_check_transferfunctions(&tif, filename, true, ptf0, ptf1, ptf2);\n    if (ret != 7)\n    {\n        fprintf(stderr, \"TRANSFERFUNCTION for RGB (SPP=3) could not be read correctly.\\n\");\n        return 1;\n    }\n\n    /* Test with Grayscale data */\n    spp = 1;\n    if (write_basic_IFD_data(&tif, filename, 2, 0, true))\n        return 1;\n    ret = read_check_transferfunctions(&tif, filename, true, ptf0, ptf1, ptf2);\n    if (ret != 1)\n    {\n        fprintf(stderr, \"TRANSFERFUNCTION SPP=1 could not be read correctly.\\n\");\n        return 1;\n    }\n\n    /* Test with RGB and ExtraSample, thus only 2 SamplesPerPixel left.\n     * ExtraSample is written before transfer function.\n     * --> For v4.5.1: This gives an Error when reading the transfer functions!\n     */\n    spp = 3;\n    if (write_basic_IFD_data(&tif, filename, 2, 1, true))\n        return 1;\n    ret = read_check_transferfunctions(&tif, filename, true, ptf0, ptf1, ptf2);\n    if (ret != 7)\n    {\n        fprintf(stderr, \"One ExtraSample plus TRANSFERFUNCTION SPP=3 could not be read correctly.\\n\");\n        return 1;\n    }\n    /* Now write two ExtraSamples, thus only one transfer function is written to file and read. */\n    if (write_basic_IFD_data(&tif, filename, 2, 2, true))\n        return 1;\n    ret = read_check_transferfunctions(&tif, filename, true, ptf0, ptf1, ptf2);\n    if (ret != 1)\n    {\n        fprintf(stderr, \"Two ExtraSamples plus TRANSFERFUNCTION SPP=3 could not be read correctly.\\n\");\n        return 1;\n    }\n\n    /* Test with tree times the same transfer functions.\n     * Thus, only one should be written to file and when read copied three times.\n     */\n    spp = 3;\n    if (write_basic_IFD_data(&tif, filename, 0, 0, false))\n        return 1;\n    ret = TIFFSetField(tif, TIFFTAG_TRANSFERFUNCTION, ptf0, ptf0, ptf0);\n    TIFFClose(tif);\n    ret = read_check_transferfunctions(&tif, filename, true, ptf0, ptf0, ptf0);\n    if (ret != 7)\n    {\n        fprintf(stderr, \"TRANSFERFUNCTIONs with same content could not be read correctly.\\n\");\n        return 1;\n    }\n\n    /*---- Test the setting of the transfer functions with different wrong calls of TIFFSetField(). ----*/\n    /* (ptf0, NULL, NULL) For v4.5.1: writes ptf0 to file and reads it back.\n     *  Now, this should work for spp=1 but not for spp=3\n     */\n    spp = 1;\n    if (write_basic_IFD_data(&tif, filename, 0, 0, false))\n        return 1;\n    ret = TIFFSetField(tif, TIFFTAG_TRANSFERFUNCTION, ptf0, NULL, NULL);\n    TIFFClose(tif);\n    ret = read_check_transferfunctions(&tif, filename, true, ptf0, ptf1, ptf2);\n    if (ret != 1)\n    {\n        fprintf(stderr, \"Unexpected at %d.\\n\", __LINE__);\n        return 1;\n    }\n    spp = 3;\n    /* (ptf0, NULL, NULL) For v4.5.1: writes ptf0 to file and reads it back.*/\n    if (write_basic_IFD_data(&tif, filename, 0, 0, false))\n        return 1;\n    ret = TIFFSetField(tif, TIFFTAG_TRANSFERFUNCTION, ptf0, NULL, NULL);\n    TIFFClose(tif);\n    ret = read_check_transferfunctions(&tif, filename, true, ptf0, ptf1, ptf2);\n    if (ret != -1)\n    {\n        fprintf(stderr, \"Unexpected at %d.\\n\", __LINE__);\n        return 1;\n    }\n\n    /* (ptf0, NULL, ptf2): For v4.5.1: Overflow error, when second ptf1 is copied in\n     * TIFFWriteDirectoryTagTransferfunction().*/\n    if (write_basic_IFD_data(&tif, filename, 0, 0, false))\n        return 1;\n    ret = TIFFSetField(tif, TIFFTAG_TRANSFERFUNCTION, ptf0, NULL, ptf2);\n    TIFFClose(tif);\n    ret = read_check_transferfunctions(&tif, filename, true, ptf0, ptf1, ptf2);\n    if (ret != -1)\n    {\n        fprintf(stderr, \"Unexpected at %d.\\n\", __LINE__);\n        return 1;\n    }\n\n    /* (ptf0, ptf1, NULL) For v4.5.1: writes ptf0 and ptf1 to file but does not read it back, because only 2 but 3\n     * required.*/\n    if (write_basic_IFD_data(&tif, filename, 0, 0, false))\n        return 1;\n    ret = TIFFSetField(tif, TIFFTAG_TRANSFERFUNCTION, ptf0, ptf1, NULL);\n    TIFFClose(tif);\n    ret = read_check_transferfunctions(&tif, filename, true, ptf0, ptf1, ptf2);\n    if (ret != -1)\n    {\n        fprintf(stderr, \"Unexpected at %d.\\n\", __LINE__);\n        return 1;\n    }\n\n    /* All tests passed; delete file and exit with success status. */\n    unlink(filename);\n    fprintf(stderr, \"-------- Test finished OK ----------\\n\");\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          265,
+          0
+        ],
+        [
+          397,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#include <stdbool.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h> /* for unlink() on linux */\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

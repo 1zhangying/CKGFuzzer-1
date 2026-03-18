@@ -1,0 +1,1466 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "cmsUInt16Number CMSEXPORT  _cmsAdjustEndianess16(cmsUInt16Number Word)\n{\n#ifndef CMS_USE_BIG_ENDIAN\n\n    cmsUInt8Number* pByte = (cmsUInt8Number*) &Word;\n    cmsUInt8Number tmp;\n\n    tmp = pByte[0];\n    pByte[0] = pByte[1];\n    pByte[1] = tmp;\n#endif\n\n    return Word;\n}",
+      "fn_code_pos": [
+        [
+          36,
+          0
+        ],
+        [
+          49,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsAdjustEndianess16",
+        "parameters": {
+          "Word": "cmsUInt16Number"
+        },
+        "return_type": "cmsUInt16Number"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT  _cmsAdjustEndianess32(cmsUInt32Number DWord)\n{\n#ifndef CMS_USE_BIG_ENDIAN\n\n    cmsUInt8Number* pByte = (cmsUInt8Number*) &DWord;\n    cmsUInt8Number temp1;\n    cmsUInt8Number temp2;\n\n    temp1 = *pByte++;\n    temp2 = *pByte++;\n    *(pByte-1) = *pByte;\n    *pByte++ = temp2;\n    *(pByte-3) = *pByte;\n    *pByte = temp1;\n#endif\n    return DWord;\n}",
+      "fn_code_pos": [
+        [
+          57,
+          0
+        ],
+        [
+          73,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsAdjustEndianess32",
+        "parameters": {
+          "DWord": "cmsUInt32Number"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT  _cmsAdjustEndianess64(cmsUInt64Number* Result, cmsUInt64Number* QWord)\n{\n\n#ifndef CMS_USE_BIG_ENDIAN\n\n    cmsUInt8Number* pIn  = (cmsUInt8Number*) QWord;\n    cmsUInt8Number* pOut = (cmsUInt8Number*) Result;\n\n    _cmsAssert(Result != NULL);\n\n    pOut[7] = pIn[0];\n    pOut[6] = pIn[1];\n    pOut[5] = pIn[2];\n    pOut[4] = pIn[3];\n    pOut[3] = pIn[4];\n    pOut[2] = pIn[5];\n    pOut[1] = pIn[6];\n    pOut[0] = pIn[7];\n\n#else\n    _cmsAssert(Result != NULL);\n\n#  ifdef CMS_DONT_USE_INT64\n    (*Result)[0] = (*QWord)[0];\n    (*Result)[1] = (*QWord)[1];\n#  else\n    *Result = *QWord;\n#  endif\n#endif\n}",
+      "fn_code_pos": [
+        [
+          78,
+          0
+        ],
+        [
+          107,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsAdjustEndianess64",
+        "parameters": {
+          "Result": "cmsUInt64Number",
+          "QWord": "cmsUInt64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsReadUInt8Number(cmsIOHANDLER* io, cmsUInt8Number* n)\n{\n    cmsUInt8Number tmp;\n\n    _cmsAssert(io != NULL);\n\n    if (io -> Read(io, &tmp, sizeof(cmsUInt8Number), 1) != 1)\n            return FALSE;\n\n    if (n != NULL) *n = tmp;\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          110,
+          0
+        ],
+        [
+          121,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadUInt8Number",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsUInt8Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsReadUInt16Number(cmsIOHANDLER* io, cmsUInt16Number* n)\n{\n    cmsUInt16Number tmp;\n\n    _cmsAssert(io != NULL);\n\n    if (io -> Read(io, &tmp, sizeof(cmsUInt16Number), 1) != 1)\n            return FALSE;\n\n    if (n != NULL) *n = _cmsAdjustEndianess16(tmp);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          123,
+          0
+        ],
+        [
+          134,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadUInt16Number",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsUInt16Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsReadUInt16Array(cmsIOHANDLER* io, cmsUInt32Number n, cmsUInt16Number* Array)\n{\n    cmsUInt32Number i;\n\n    _cmsAssert(io != NULL);\n\n    for (i=0; i < n; i++) {\n\n        if (Array != NULL) {\n            if (!_cmsReadUInt16Number(io, Array + i)) return FALSE;\n        }\n        else {\n            if (!_cmsReadUInt16Number(io, NULL)) return FALSE;\n        }\n\n    }\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          136,
+          0
+        ],
+        [
+          153,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadUInt16Array",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsUInt32Number",
+          "Array": "cmsUInt16Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsReadUInt32Number(cmsIOHANDLER* io, cmsUInt32Number* n)\n{\n    cmsUInt32Number tmp;\n\n    _cmsAssert(io != NULL);\n\n    if (io -> Read(io, &tmp, sizeof(cmsUInt32Number), 1) != 1)\n            return FALSE;\n\n    if (n != NULL) *n = _cmsAdjustEndianess32(tmp);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          155,
+          0
+        ],
+        [
+          166,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadUInt32Number",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsReadFloat32Number(cmsIOHANDLER* io, cmsFloat32Number* n)\n{\n    union typeConverter {\n        cmsUInt32Number integer;\n        cmsFloat32Number floating_point;\n    } tmp;\n\n    _cmsAssert(io != NULL);\n\n    if (io->Read(io, &tmp.integer, sizeof(cmsUInt32Number), 1) != 1)\n        return FALSE;\n\n    if (n != NULL) {\n\n        tmp.integer = _cmsAdjustEndianess32(tmp.integer);\n        *n = tmp.floating_point;\n\n        // Safeguard which covers against absurd values\n        if (*n > 1E+20 || *n < -1E+20) return FALSE;\n\n        #if defined(_MSC_VER) && _MSC_VER < 1800\n           return TRUE;\n        #elif defined (__BORLANDC__)\n           return TRUE;\n        #elif !defined(_MSC_VER) && (defined(__STDC_VERSION__) && __STDC_VERSION__ < 199901L)\n           return TRUE;\n        #else\n\n           // fpclassify() required by C99 (only provided by MSVC >= 1800, VS2013 onwards)\n           return ((fpclassify(*n) == FP_ZERO) || (fpclassify(*n) == FP_NORMAL));\n        #endif        \n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          168,
+          0
+        ],
+        [
+          202,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadFloat32Number",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsFloat32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT   _cmsReadUInt64Number(cmsIOHANDLER* io, cmsUInt64Number* n)\n{\n    cmsUInt64Number tmp;\n\n    _cmsAssert(io != NULL);\n\n    if (io -> Read(io, &tmp, sizeof(cmsUInt64Number), 1) != 1)\n            return FALSE;\n\n    if (n != NULL) {\n\n        _cmsAdjustEndianess64(n, &tmp);\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          205,
+          0
+        ],
+        [
+          220,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadUInt64Number",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsUInt64Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsRead15Fixed16Number(cmsIOHANDLER* io, cmsFloat64Number* n)\n{\n    cmsUInt32Number tmp;\n\n    _cmsAssert(io != NULL);\n\n    if (io -> Read(io, &tmp, sizeof(cmsUInt32Number), 1) != 1)\n            return FALSE;\n\n    if (n != NULL) {\n        *n = _cms15Fixed16toDouble((cmsS15Fixed16Number) _cmsAdjustEndianess32(tmp));\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          223,
+          0
+        ],
+        [
+          237,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsRead15Fixed16Number",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsFloat64Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsReadXYZNumber(cmsIOHANDLER* io, cmsCIEXYZ* XYZ)\n{\n    cmsEncodedXYZNumber xyz;\n\n    _cmsAssert(io != NULL);\n\n    if (io ->Read(io, &xyz, sizeof(cmsEncodedXYZNumber), 1) != 1) return FALSE;\n\n    if (XYZ != NULL) {\n\n        XYZ->X = _cms15Fixed16toDouble((cmsS15Fixed16Number) _cmsAdjustEndianess32((cmsUInt32Number) xyz.X));\n        XYZ->Y = _cms15Fixed16toDouble((cmsS15Fixed16Number) _cmsAdjustEndianess32((cmsUInt32Number) xyz.Y));\n        XYZ->Z = _cms15Fixed16toDouble((cmsS15Fixed16Number) _cmsAdjustEndianess32((cmsUInt32Number) xyz.Z));\n    }\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          240,
+          0
+        ],
+        [
+          255,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadXYZNumber",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "XYZ": "cmsCIEXYZ"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsWriteUInt8Number(cmsIOHANDLER* io, cmsUInt8Number n)\n{\n    _cmsAssert(io != NULL);\n\n    if (io -> Write(io, sizeof(cmsUInt8Number), &n) != 1)\n            return FALSE;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          257,
+          0
+        ],
+        [
+          265,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsWriteUInt8Number",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsUInt8Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsWriteUInt16Number(cmsIOHANDLER* io, cmsUInt16Number n)\n{\n    cmsUInt16Number tmp;\n\n    _cmsAssert(io != NULL);\n\n    tmp = _cmsAdjustEndianess16(n);\n    if (io -> Write(io, sizeof(cmsUInt16Number), &tmp) != 1)\n            return FALSE;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          267,
+          0
+        ],
+        [
+          278,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsWriteUInt16Number",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsUInt16Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsWriteUInt16Array(cmsIOHANDLER* io, cmsUInt32Number n, const cmsUInt16Number* Array)\n{\n    cmsUInt32Number i;\n\n    _cmsAssert(io != NULL);\n    _cmsAssert(Array != NULL);\n\n    for (i=0; i < n; i++) {\n        if (!_cmsWriteUInt16Number(io, Array[i])) return FALSE;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          280,
+          0
+        ],
+        [
+          292,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsWriteUInt16Array",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsUInt32Number",
+          "Array": "cmsUInt16Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsWriteUInt32Number(cmsIOHANDLER* io, cmsUInt32Number n)\n{\n    cmsUInt32Number tmp;\n\n    _cmsAssert(io != NULL);\n\n    tmp = _cmsAdjustEndianess32(n);\n    if (io -> Write(io, sizeof(cmsUInt32Number), &tmp) != 1)\n            return FALSE;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          294,
+          0
+        ],
+        [
+          305,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsWriteUInt32Number",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsWriteFloat32Number(cmsIOHANDLER* io, cmsFloat32Number n)\n{\n    union typeConverter {\n        cmsUInt32Number integer;\n        cmsFloat32Number floating_point;\n    } tmp;\n\n    tmp.floating_point = n;\n    tmp.integer = _cmsAdjustEndianess32(tmp.integer);\n    if (io -> Write(io, sizeof(cmsUInt32Number), &tmp.integer) != 1)\n            return FALSE;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          308,
+          0
+        ],
+        [
+          321,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsWriteFloat32Number",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsFloat32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsWriteUInt64Number(cmsIOHANDLER* io, cmsUInt64Number* n)\n{\n    cmsUInt64Number tmp;\n\n    _cmsAssert(io != NULL);\n\n    _cmsAdjustEndianess64(&tmp, n);\n    if (io -> Write(io, sizeof(cmsUInt64Number), &tmp) != 1)\n            return FALSE;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          323,
+          0
+        ],
+        [
+          334,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsWriteUInt64Number",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsUInt64Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsWrite15Fixed16Number(cmsIOHANDLER* io, cmsFloat64Number n)\n{\n    cmsUInt32Number tmp;\n\n    _cmsAssert(io != NULL);\n\n    tmp = _cmsAdjustEndianess32((cmsUInt32Number) _cmsDoubleTo15Fixed16(n));\n    if (io -> Write(io, sizeof(cmsUInt32Number), &tmp) != 1)\n            return FALSE;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          336,
+          0
+        ],
+        [
+          347,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsWrite15Fixed16Number",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "n": "cmsFloat64Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT  _cmsWriteXYZNumber(cmsIOHANDLER* io, const cmsCIEXYZ* XYZ)\n{\n    cmsEncodedXYZNumber xyz;\n\n    _cmsAssert(io != NULL);\n    _cmsAssert(XYZ != NULL);\n\n    xyz.X = (cmsS15Fixed16Number) _cmsAdjustEndianess32((cmsUInt32Number) _cmsDoubleTo15Fixed16(XYZ->X));\n    xyz.Y = (cmsS15Fixed16Number) _cmsAdjustEndianess32((cmsUInt32Number) _cmsDoubleTo15Fixed16(XYZ->Y));\n    xyz.Z = (cmsS15Fixed16Number) _cmsAdjustEndianess32((cmsUInt32Number) _cmsDoubleTo15Fixed16(XYZ->Z));\n\n    return io -> Write(io,  sizeof(cmsEncodedXYZNumber), &xyz);\n}",
+      "fn_code_pos": [
+        [
+          349,
+          0
+        ],
+        [
+          361,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsWriteXYZNumber",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "XYZ": "cmsCIEXYZ"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsFloat64Number CMSEXPORT _cms8Fixed8toDouble(cmsUInt16Number fixed8)\n{\n       cmsUInt8Number  msb, lsb;\n\n       lsb = (cmsUInt8Number) (fixed8 & 0xff);\n       msb = (cmsUInt8Number) (((cmsUInt16Number) fixed8 >> 8) & 0xff);\n\n       return (cmsFloat64Number) ((cmsFloat64Number) msb + ((cmsFloat64Number) lsb / 256.0));\n}",
+      "fn_code_pos": [
+        [
+          364,
+          0
+        ],
+        [
+          372,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cms8Fixed8toDouble",
+        "parameters": {
+          "fixed8": "cmsUInt16Number"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "cmsUInt16Number CMSEXPORT _cmsDoubleTo8Fixed8(cmsFloat64Number val)\n{\n    cmsS15Fixed16Number GammaFixed32 = _cmsDoubleTo15Fixed16(val);\n    return  (cmsUInt16Number) ((GammaFixed32 >> 8) & 0xFFFF);\n}",
+      "fn_code_pos": [
+        [
+          374,
+          0
+        ],
+        [
+          378,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsDoubleTo8Fixed8",
+        "parameters": {
+          "val": "cmsFloat64Number"
+        },
+        "return_type": "cmsUInt16Number"
+      }
+    },
+    {
+      "fn_code": "cmsFloat64Number CMSEXPORT _cms15Fixed16toDouble(cmsS15Fixed16Number fix32)\n{\n    cmsFloat64Number floater, sign, mid;\n    int Whole, FracPart;\n\n    sign  = (fix32 < 0 ? -1 : 1);\n    fix32 = abs(fix32);\n\n    Whole     = (cmsUInt16Number)(fix32 >> 16) & 0xffff;\n    FracPart  = (cmsUInt16Number)(fix32 & 0xffff);\n\n    mid     = (cmsFloat64Number) FracPart / 65536.0;\n    floater = (cmsFloat64Number) Whole + mid;\n\n    return sign * floater;\n}",
+      "fn_code_pos": [
+        [
+          381,
+          0
+        ],
+        [
+          396,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cms15Fixed16toDouble",
+        "parameters": {
+          "fix32": "cmsS15Fixed16Number"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "cmsS15Fixed16Number CMSEXPORT _cmsDoubleTo15Fixed16(cmsFloat64Number v)\n{\n    return ((cmsS15Fixed16Number) floor((v)*65536.0 + 0.5));\n}",
+      "fn_code_pos": [
+        [
+          399,
+          0
+        ],
+        [
+          402,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsDoubleTo15Fixed16",
+        "parameters": {
+          "v": "cmsFloat64Number"
+        },
+        "return_type": "cmsS15Fixed16Number"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT _cmsDecodeDateTimeNumber(const cmsDateTimeNumber *Source, struct tm *Dest)\n{\n\n    _cmsAssert(Dest != NULL);\n    _cmsAssert(Source != NULL);\n\n    Dest->tm_sec   = _cmsAdjustEndianess16(Source->seconds);\n    Dest->tm_min   = _cmsAdjustEndianess16(Source->minutes);\n    Dest->tm_hour  = _cmsAdjustEndianess16(Source->hours);\n    Dest->tm_mday  = _cmsAdjustEndianess16(Source->day);\n    Dest->tm_mon   = _cmsAdjustEndianess16(Source->month) - 1;\n    Dest->tm_year  = _cmsAdjustEndianess16(Source->year) - 1900;\n    Dest->tm_wday  = -1;\n    Dest->tm_yday  = -1;\n    Dest->tm_isdst = 0;\n}",
+      "fn_code_pos": [
+        [
+          406,
+          0
+        ],
+        [
+          421,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsDecodeDateTimeNumber",
+        "parameters": {
+          "Source": "cmsDateTimeNumber",
+          "Dest": "struct tm"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT _cmsEncodeDateTimeNumber(cmsDateTimeNumber *Dest, const struct tm *Source)\n{\n    _cmsAssert(Dest != NULL);\n    _cmsAssert(Source != NULL);\n\n    Dest->seconds = _cmsAdjustEndianess16((cmsUInt16Number) Source->tm_sec);\n    Dest->minutes = _cmsAdjustEndianess16((cmsUInt16Number) Source->tm_min);\n    Dest->hours   = _cmsAdjustEndianess16((cmsUInt16Number) Source->tm_hour);\n    Dest->day     = _cmsAdjustEndianess16((cmsUInt16Number) Source->tm_mday);\n    Dest->month   = _cmsAdjustEndianess16((cmsUInt16Number) (Source->tm_mon + 1));\n    Dest->year    = _cmsAdjustEndianess16((cmsUInt16Number) (Source->tm_year + 1900));\n}",
+      "fn_code_pos": [
+        [
+          423,
+          0
+        ],
+        [
+          434,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsEncodeDateTimeNumber",
+        "parameters": {
+          "Dest": "cmsDateTimeNumber",
+          "Source": "struct tm"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsTagTypeSignature CMSEXPORT _cmsReadTypeBase(cmsIOHANDLER* io)\n{\n    _cmsTagBase Base;\n\n    _cmsAssert(io != NULL);\n\n    if (io -> Read(io, &Base, sizeof(_cmsTagBase), 1) != 1)\n        return (cmsTagTypeSignature) 0;\n\n    return (cmsTagTypeSignature) _cmsAdjustEndianess32(Base.sig);\n}",
+      "fn_code_pos": [
+        [
+          437,
+          0
+        ],
+        [
+          447,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadTypeBase",
+        "parameters": {
+          "io": "cmsIOHANDLER"
+        },
+        "return_type": "cmsTagTypeSignature"
+      }
+    },
+    {
+      "fn_code": "cmsBool  CMSEXPORT _cmsWriteTypeBase(cmsIOHANDLER* io, cmsTagTypeSignature sig)\n{\n    _cmsTagBase  Base;\n\n    _cmsAssert(io != NULL);\n\n    Base.sig = (cmsTagTypeSignature) _cmsAdjustEndianess32(sig);\n    memset(&Base.reserved, 0, sizeof(Base.reserved));\n    return io -> Write(io, sizeof(_cmsTagBase), &Base);\n}",
+      "fn_code_pos": [
+        [
+          450,
+          0
+        ],
+        [
+          459,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsWriteTypeBase",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "sig": "cmsTagTypeSignature"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT _cmsReadAlignment(cmsIOHANDLER* io)\n{\n    cmsUInt8Number  Buffer[4];\n    cmsUInt32Number NextAligned, At;\n    cmsUInt32Number BytesToNextAlignedPos;\n\n    _cmsAssert(io != NULL);\n\n    At = io -> Tell(io);\n    NextAligned = _cmsALIGNLONG(At);\n    BytesToNextAlignedPos = NextAligned - At;\n    if (BytesToNextAlignedPos == 0) return TRUE;\n    if (BytesToNextAlignedPos > 4)  return FALSE;\n\n    return (io ->Read(io, Buffer, BytesToNextAlignedPos, 1) == 1);\n}",
+      "fn_code_pos": [
+        [
+          461,
+          0
+        ],
+        [
+          476,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadAlignment",
+        "parameters": {
+          "io": "cmsIOHANDLER"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT _cmsWriteAlignment(cmsIOHANDLER* io)\n{\n    cmsUInt8Number  Buffer[4];\n    cmsUInt32Number NextAligned, At;\n    cmsUInt32Number BytesToNextAlignedPos;\n\n    _cmsAssert(io != NULL);\n\n    At = io -> Tell(io);\n    NextAligned = _cmsALIGNLONG(At);\n    BytesToNextAlignedPos = NextAligned - At;\n    if (BytesToNextAlignedPos == 0) return TRUE;\n    if (BytesToNextAlignedPos > 4)  return FALSE;\n\n    memset(Buffer, 0, BytesToNextAlignedPos);\n    return io -> Write(io, BytesToNextAlignedPos, Buffer);\n}",
+      "fn_code_pos": [
+        [
+          478,
+          0
+        ],
+        [
+          494,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsWriteAlignment",
+        "parameters": {
+          "io": "cmsIOHANDLER"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT _cmsIOPrintf(cmsIOHANDLER* io, const char* frm, ...)\n{\n    va_list args;\n    int len;\n    cmsUInt8Number Buffer[2048];\n    cmsBool rc;\n    cmsUInt8Number* ptr;\n\n    _cmsAssert(io != NULL);\n    _cmsAssert(frm != NULL);\n\n    va_start(args, frm);\n\n    len = vsnprintf((char*) Buffer, 2047, frm, args);\n    if (len < 0) {\n        va_end(args);\n        return FALSE;   // Truncated, which is a fatal error for us\n    }\n\n    // setlocale may be active, no commas are needed in PS generator\n    // and PS generator is our only client\n    for (ptr = Buffer; *ptr; ptr++)\n    {\n        if (*ptr == ',') *ptr = '.';\n    }\n\n    rc = io ->Write(io, (cmsUInt32Number) len, Buffer);\n\n    va_end(args);\n\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          498,
+          0
+        ],
+        [
+          529,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsIOPrintf",
+        "parameters": {
+          "io": "cmsIOHANDLER",
+          "frm": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "void* _cmsPluginMalloc(cmsContext ContextID, cmsUInt32Number size)\n{\n    struct _cmsContext_struct* ctx = _cmsGetContext(ContextID);\n\n    if (ctx ->MemPool == NULL) {\n\n        if (ContextID == NULL) {\n\n            ctx->MemPool = _cmsCreateSubAlloc(0, 2*1024);\n            if (ctx->MemPool == NULL) return NULL;\n        }\n        else {\n            cmsSignalError(ContextID, cmsERROR_CORRUPTION_DETECTED, \"NULL memory pool on context\");\n            return NULL;\n        }\n    }\n\n    return _cmsSubAlloc(ctx->MemPool, size);\n}",
+      "fn_code_pos": [
+        [
+          535,
+          0
+        ],
+        [
+          553,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsPluginMalloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsPlugin(void* Plug_in)\n{\n    return cmsPluginTHR(NULL, Plug_in);\n}",
+      "fn_code_pos": [
+        [
+          557,
+          0
+        ],
+        [
+          560,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPlugin",
+        "parameters": {
+          "Plug_in": "void"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsPluginTHR(cmsContext id, void* Plug_in)\n{\n    cmsPluginBase* Plugin;\n\n    for (Plugin = (cmsPluginBase*) Plug_in;\n         Plugin != NULL;\n         Plugin = Plugin -> Next) {\n\n            if (Plugin -> Magic != cmsPluginMagicNumber) {\n                cmsSignalError(id, cmsERROR_UNKNOWN_EXTENSION, \"Unrecognized plugin\");\n                return FALSE;\n            }\n\n            if (Plugin ->ExpectedVersion > LCMS_VERSION) {\n                cmsSignalError(id, cmsERROR_UNKNOWN_EXTENSION, \"plugin needs Little CMS %d, current version is %d\",\n                    Plugin ->ExpectedVersion, LCMS_VERSION);\n                return FALSE;\n            }\n\n            switch (Plugin -> Type) {\n\n                case cmsPluginMemHandlerSig:\n                    if (!_cmsRegisterMemHandlerPlugin(id, Plugin)) return FALSE;\n                    break;\n\n                case cmsPluginInterpolationSig:\n                    if (!_cmsRegisterInterpPlugin(id, Plugin)) return FALSE;\n                    break;\n\n                case cmsPluginTagTypeSig:\n                    if (!_cmsRegisterTagTypePlugin(id, Plugin)) return FALSE;\n                    break;\n\n                case cmsPluginTagSig:\n                    if (!_cmsRegisterTagPlugin(id, Plugin)) return FALSE;\n                    break;\n\n                case cmsPluginFormattersSig:\n                    if (!_cmsRegisterFormattersPlugin(id, Plugin)) return FALSE;\n                    break;\n\n                case cmsPluginRenderingIntentSig:\n                    if (!_cmsRegisterRenderingIntentPlugin(id, Plugin)) return FALSE;\n                    break;\n\n                case cmsPluginParametricCurveSig:\n                    if (!_cmsRegisterParametricCurvesPlugin(id, Plugin)) return FALSE;\n                    break;\n\n                case cmsPluginMultiProcessElementSig:\n                    if (!_cmsRegisterMultiProcessElementPlugin(id, Plugin)) return FALSE;\n                    break;\n\n                case cmsPluginOptimizationSig:\n                    if (!_cmsRegisterOptimizationPlugin(id, Plugin)) return FALSE;\n                    break;\n\n                case cmsPluginTransformSig:\n                    if (!_cmsRegisterTransformPlugin(id, Plugin)) return FALSE;\n                    break;\n\n                case cmsPluginMutexSig:\n                    if (!_cmsRegisterMutexPlugin(id, Plugin)) return FALSE;\n                    break;\n\n                case cmsPluginParalellizationSig:\n                    if (!_cmsRegisterParallelizationPlugin(id, Plugin)) return FALSE;\n                    break;\n\n                default:\n                    cmsSignalError(id, cmsERROR_UNKNOWN_EXTENSION, \"Unrecognized plugin type '%X'\", Plugin -> Type);\n                    return FALSE;\n            }\n    }\n\n    // Keep a reference to the plug-in\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          562,
+          0
+        ],
+        [
+          639,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPluginTHR",
+        "parameters": {
+          "id": "cmsContext",
+          "Plug_in": "void"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsUnregisterPlugins(void)\n{\n    cmsUnregisterPluginsTHR(NULL);\n}",
+      "fn_code_pos": [
+        [
+          643,
+          0
+        ],
+        [
+          646,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsUnregisterPlugins",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool InitContextMutex(void)\n{\n    // See the comments regarding locking in lcms2_internal.h\n    // for an explanation of why we need the following code.\n#ifndef CMS_NO_PTHREADS\n#ifdef CMS_IS_WINDOWS_\n#ifndef CMS_RELY_ON_WINDOWS_STATIC_MUTEX_INIT\n\n    static cmsBool already_initialized = FALSE;\n\n    if (!already_initialized)\n    {\n        static HANDLE _cmsWindowsInitMutex = NULL;\n        static volatile HANDLE* mutex = &_cmsWindowsInitMutex;\n\n        if (*mutex == NULL)\n        {\n            HANDLE p = CreateMutex(NULL, FALSE, NULL);\n            if (p && InterlockedCompareExchangePointer((void**)mutex, (void*)p, NULL) != NULL)\n                CloseHandle(p);\n        }\n        if (*mutex == NULL || WaitForSingleObject(*mutex, INFINITE) == WAIT_FAILED)\n        {\n            cmsSignalError(0, cmsERROR_INTERNAL, \"Mutex lock failed\");\n            return FALSE;\n        }\n        if (((void**)&_cmsContextPoolHeadMutex)[0] == NULL)\n            InitializeCriticalSection(&_cmsContextPoolHeadMutex);\n        if (*mutex == NULL || !ReleaseMutex(*mutex))\n        {\n            cmsSignalError(0, cmsERROR_INTERNAL, \"Mutex unlock failed\");\n            return FALSE;\n        }\n        already_initialized = TRUE;\n    }\n#endif\n#endif\n#endif\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          684,
+          0
+        ],
+        [
+          725,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "InitContextMutex",
+        "parameters": {},
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "struct _cmsContext_struct* _cmsGetContext(cmsContext ContextID)\n{\n    struct _cmsContext_struct* id = (struct _cmsContext_struct*) ContextID;\n    struct _cmsContext_struct* ctx;\n\n    // On 0, use global settings\n    if (id == NULL) \n        return &globalContext;\n\n    InitContextMutex();\n\n    // Search\n    _cmsEnterCriticalSectionPrimitive(&_cmsContextPoolHeadMutex);\n\n    for (ctx = _cmsContextPoolHead;\n         ctx != NULL;\n         ctx = ctx ->Next) {\n\n            // Found it?\n        if (id == ctx)\n        {\n            _cmsLeaveCriticalSectionPrimitive(&_cmsContextPoolHeadMutex);\n            return ctx; // New-style context\n        }\n    }\n\n    _cmsLeaveCriticalSectionPrimitive(&_cmsContextPoolHeadMutex);\n    return &globalContext;\n}",
+      "fn_code_pos": [
+        [
+          730,
+          0
+        ],
+        [
+          758,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsGetContext",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "void* _cmsContextGetClientChunk(cmsContext ContextID, _cmsMemoryClient mc)\n{\n    struct _cmsContext_struct* ctx;\n    void *ptr;\n\n    if ((int) mc < 0 || mc >= MemoryClientMax) {\n        \n           cmsSignalError(ContextID, cmsERROR_INTERNAL, \"Bad context client -- possible corruption\");\n\n           // This is catastrophic. Should never reach here\n           _cmsAssert(0);\n\n           // Reverts to global context\n           return globalContext.chunks[UserPtr];\n    }\n    \n    ctx = _cmsGetContext(ContextID);\n    ptr = ctx ->chunks[mc];\n\n    if (ptr != NULL)\n        return ptr;\n\n    // A null ptr means no special settings for that context, and this \n    // reverts to Context0 globals\n    return globalContext.chunks[mc];    \n}",
+      "fn_code_pos": [
+        [
+          763,
+          0
+        ],
+        [
+          788,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsContextGetClientChunk",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "mc": "_cmsMemoryClient"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsUnregisterPluginsTHR(cmsContext ContextID)\n{    \n    _cmsRegisterMemHandlerPlugin(ContextID, NULL);\n    _cmsRegisterInterpPlugin(ContextID, NULL);\n    _cmsRegisterTagTypePlugin(ContextID, NULL);\n    _cmsRegisterTagPlugin(ContextID, NULL);\n    _cmsRegisterFormattersPlugin(ContextID, NULL);\n    _cmsRegisterRenderingIntentPlugin(ContextID, NULL);\n    _cmsRegisterParametricCurvesPlugin(ContextID, NULL);\n    _cmsRegisterMultiProcessElementPlugin(ContextID, NULL);\n    _cmsRegisterOptimizationPlugin(ContextID, NULL);\n    _cmsRegisterTransformPlugin(ContextID, NULL);    \n    _cmsRegisterMutexPlugin(ContextID, NULL);\n    _cmsRegisterParallelizationPlugin(ContextID, NULL);\n\n}",
+      "fn_code_pos": [
+        [
+          796,
+          0
+        ],
+        [
+          811,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsUnregisterPluginsTHR",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsPluginMemHandler* _cmsFindMemoryPlugin(void* PluginBundle)\n{\n    cmsPluginBase* Plugin;\n\n    for (Plugin = (cmsPluginBase*) PluginBundle;\n        Plugin != NULL;\n        Plugin = Plugin -> Next) {\n\n            if (Plugin -> Magic == cmsPluginMagicNumber && \n                Plugin -> ExpectedVersion <= LCMS_VERSION && \n                Plugin -> Type == cmsPluginMemHandlerSig) {\n\n                    // Found!\n                    return (cmsPluginMemHandler*) Plugin;  \n            }\n    }\n\n    // Nope, revert to defaults \n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          815,
+          0
+        ],
+        [
+          835,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsFindMemoryPlugin",
+        "parameters": {
+          "PluginBundle": "void"
+        },
+        "return_type": "cmsPluginMemHandler"
+      }
+    },
+    {
+      "fn_code": "cmsContext CMSEXPORT cmsCreateContext(void* Plugin, void* UserData)\n{\n    struct _cmsContext_struct* ctx;\n    struct _cmsContext_struct  fakeContext;\n        \n    if (!InitContextMutex()) return NULL;\n\n    _cmsInstallAllocFunctions(_cmsFindMemoryPlugin(Plugin), &fakeContext.DefaultMemoryManager);\n    \n    fakeContext.chunks[UserPtr]     = UserData;\n    fakeContext.chunks[MemPlugin]   = &fakeContext.DefaultMemoryManager;\n\n    // Create the context structure.\n    ctx = (struct _cmsContext_struct*) _cmsMalloc(&fakeContext, sizeof(struct _cmsContext_struct));\n    if (ctx == NULL)   \n        return NULL;     // Something very wrong happened!\n\n    // Init the structure and the memory manager\n    memset(ctx, 0, sizeof(struct _cmsContext_struct));\n\n    // Keep memory manager\n    memcpy(&ctx->DefaultMemoryManager, &fakeContext.DefaultMemoryManager, sizeof(_cmsMemPluginChunk)); \n   \n    // Maintain the linked list (with proper locking)\n    _cmsEnterCriticalSectionPrimitive(&_cmsContextPoolHeadMutex);\n       ctx ->Next = _cmsContextPoolHead;\n       _cmsContextPoolHead = ctx;\n    _cmsLeaveCriticalSectionPrimitive(&_cmsContextPoolHeadMutex);\n\n    ctx ->chunks[UserPtr]     = UserData;\n    ctx ->chunks[MemPlugin]   = &ctx->DefaultMemoryManager;\n   \n    // Now we can allocate the pool by using default memory manager\n    ctx ->MemPool = _cmsCreateSubAlloc(ctx, 22 * sizeof(void*));  // default size about 22 pointers\n    if (ctx ->MemPool == NULL) {\n\n         cmsDeleteContext(ctx);\n        return NULL;\n    }\n\n    _cmsAllocLogErrorChunk(ctx, NULL);\n    _cmsAllocAlarmCodesChunk(ctx, NULL);\n    _cmsAllocAdaptationStateChunk(ctx, NULL);\n    _cmsAllocMemPluginChunk(ctx, NULL);\n    _cmsAllocInterpPluginChunk(ctx, NULL);\n    _cmsAllocCurvesPluginChunk(ctx, NULL);\n    _cmsAllocFormattersPluginChunk(ctx, NULL);\n    _cmsAllocTagTypePluginChunk(ctx, NULL);\n    _cmsAllocMPETypePluginChunk(ctx, NULL);\n    _cmsAllocTagPluginChunk(ctx, NULL);\n    _cmsAllocIntentsPluginChunk(ctx, NULL);\n    _cmsAllocOptimizationPluginChunk(ctx, NULL);\n    _cmsAllocTransformPluginChunk(ctx, NULL);\n    _cmsAllocMutexPluginChunk(ctx, NULL);\n    _cmsAllocParallelizationPluginChunk(ctx, NULL);\n\n    // Setup the plug-ins\n    if (!cmsPluginTHR(ctx, Plugin)) {\n    \n        cmsDeleteContext(ctx);\n        return NULL;\n    }\n\n    return (cmsContext) ctx;  \n}",
+      "fn_code_pos": [
+        [
+          840,
+          0
+        ],
+        [
+          904,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateContext",
+        "parameters": {
+          "Plugin": "void",
+          "UserData": "void"
+        },
+        "return_type": "cmsContext"
+      }
+    },
+    {
+      "fn_code": "cmsContext CMSEXPORT cmsDupContext(cmsContext ContextID, void* NewUserData)\n{\n    int i;\n    struct _cmsContext_struct* ctx;\n    const struct _cmsContext_struct* src = _cmsGetContext(ContextID);\n\n    void* userData = (NewUserData != NULL) ? NewUserData : src -> chunks[UserPtr];\n    \n    \n    ctx = (struct _cmsContext_struct*) _cmsMalloc(ContextID, sizeof(struct _cmsContext_struct));\n    if (ctx == NULL)   \n        return NULL;     // Something very wrong happened\n\n    if (!InitContextMutex()) return NULL;\n\n    // Setup default memory allocators\n    memcpy(&ctx->DefaultMemoryManager, &src->DefaultMemoryManager, sizeof(ctx->DefaultMemoryManager));\n\n    // Maintain the linked list\n    _cmsEnterCriticalSectionPrimitive(&_cmsContextPoolHeadMutex);\n       ctx ->Next = _cmsContextPoolHead;\n       _cmsContextPoolHead = ctx;\n    _cmsLeaveCriticalSectionPrimitive(&_cmsContextPoolHeadMutex);\n\n    ctx ->chunks[UserPtr]    = userData;\n    ctx ->chunks[MemPlugin]  = &ctx->DefaultMemoryManager;\n\n    ctx ->MemPool = _cmsCreateSubAlloc(ctx, 22 * sizeof(void*));\n    if (ctx ->MemPool == NULL) {\n\n         cmsDeleteContext(ctx);\n        return NULL;\n    }\n\n    // Allocate all required chunks.\n    _cmsAllocLogErrorChunk(ctx, src);\n    _cmsAllocAlarmCodesChunk(ctx, src);\n    _cmsAllocAdaptationStateChunk(ctx, src);\n    _cmsAllocMemPluginChunk(ctx, src);\n    _cmsAllocInterpPluginChunk(ctx, src);\n    _cmsAllocCurvesPluginChunk(ctx, src);\n    _cmsAllocFormattersPluginChunk(ctx, src);\n    _cmsAllocTagTypePluginChunk(ctx, src);\n    _cmsAllocMPETypePluginChunk(ctx, src);\n    _cmsAllocTagPluginChunk(ctx, src);\n    _cmsAllocIntentsPluginChunk(ctx, src);\n    _cmsAllocOptimizationPluginChunk(ctx, src);\n    _cmsAllocTransformPluginChunk(ctx, src);\n    _cmsAllocMutexPluginChunk(ctx, src);\n    _cmsAllocParallelizationPluginChunk(ctx, src);\n\n    // Make sure no one failed\n    for (i=Logger; i < MemoryClientMax; i++) {\n\n        if (src ->chunks[i] == NULL) {\n            cmsDeleteContext((cmsContext) ctx);\n            return NULL;\n        }\n    }\n\n    return (cmsContext) ctx;\n}",
+      "fn_code_pos": [
+        [
+          909,
+          0
+        ],
+        [
+          970,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsDupContext",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "NewUserData": "void"
+        },
+        "return_type": "cmsContext"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsDeleteContext(cmsContext ContextID)\n{\n    if (ContextID == NULL) {\n\n        cmsUnregisterPlugins();\n        if (globalContext.MemPool != NULL)\n            _cmsSubAllocDestroy(globalContext.MemPool);\n        globalContext.MemPool = NULL;\n    }\n    else {\n\n        struct _cmsContext_struct* ctx = (struct _cmsContext_struct*) ContextID;              \n        struct _cmsContext_struct  fakeContext;  \n        struct _cmsContext_struct* prev;\n\n\n        InitContextMutex();\n\n        memcpy(&fakeContext.DefaultMemoryManager, &ctx->DefaultMemoryManager, sizeof(ctx->DefaultMemoryManager));\n\n        fakeContext.chunks[UserPtr]     = ctx ->chunks[UserPtr];\n        fakeContext.chunks[MemPlugin]   = &fakeContext.DefaultMemoryManager;\n\n        // Get rid of plugins\n        cmsUnregisterPluginsTHR(ContextID); \n\n        // Since all memory is allocated in the private pool, all what we need to do is destroy the pool\n        if (ctx -> MemPool != NULL)\n              _cmsSubAllocDestroy(ctx ->MemPool);\n        ctx -> MemPool = NULL;\n\n        // Maintain list\n        _cmsEnterCriticalSectionPrimitive(&_cmsContextPoolHeadMutex);\n        if (_cmsContextPoolHead == ctx) { \n\n            _cmsContextPoolHead = ctx->Next;\n        }\n        else {\n\n            // Search for previous\n            for (prev = _cmsContextPoolHead; \n                 prev != NULL;\n                 prev = prev ->Next)\n            {\n                if (prev -> Next == ctx) {\n                    prev -> Next = ctx ->Next;\n                    break;\n                }\n            }\n        }\n        _cmsLeaveCriticalSectionPrimitive(&_cmsContextPoolHeadMutex);\n\n        // free the memory block itself\n        _cmsFree(&fakeContext, ctx);\n    }\n}",
+      "fn_code_pos": [
+        [
+          976,
+          0
+        ],
+        [
+          1031,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsDeleteContext",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void* CMSEXPORT cmsGetContextUserData(cmsContext ContextID)\n{\n    return _cmsContextGetClientChunk(ContextID, UserPtr);\n}",
+      "fn_code_pos": [
+        [
+          1034,
+          0
+        ],
+        [
+          1037,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetContextUserData",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool _cmsGetTime(struct tm* ptr_time)\n{\n    struct tm* t;\n#if defined(HAVE_GMTIME_R) || defined(HAVE_GMTIME_S)\n    struct tm tm;\n#endif\n\n    time_t now = time(NULL);\n\n#ifdef HAVE_GMTIME_R\n    t = gmtime_r(&now, &tm);\n#elif defined(HAVE_GMTIME_S)\n    t = gmtime_s(&tm, &now) == 0 ? &tm : NULL;\n#else\n    if (!InitContextMutex()) return FALSE;\n\n    _cmsEnterCriticalSectionPrimitive(&_cmsContextPoolHeadMutex);\n    t = gmtime(&now);\n    _cmsLeaveCriticalSectionPrimitive(&_cmsContextPoolHeadMutex);\n#endif\n\n    if (t == NULL) \n        return FALSE;\n    else {\n        *ptr_time = *t;\n        return TRUE;\n    }\n}",
+      "fn_code_pos": [
+        [
+          1041,
+          0
+        ],
+        [
+          1068,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsGetTime",
+        "parameters": {
+          "ptr_time": "struct tm"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "_cmsPluginMalloc(cmsContext ContextID, cmsUInt32Number size)",
+      "fn_dec_pos": [
+        [
+          535,
+          6
+        ],
+        [
+          535,
+          66
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsPluginMalloc",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "size": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsGetContext(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          730,
+          27
+        ],
+        [
+          730,
+          63
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsGetContext",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsContextGetClientChunk(cmsContext ContextID, _cmsMemoryClient mc)",
+      "fn_dec_pos": [
+        [
+          763,
+          6
+        ],
+        [
+          763,
+          74
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsContextGetClientChunk",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "mc": "_cmsMemoryClient"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsFindMemoryPlugin(void* PluginBundle)",
+      "fn_dec_pos": [
+        [
+          816,
+          21
+        ],
+        [
+          816,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsFindMemoryPlugin",
+        "parameters": {
+          "PluginBundle": "void"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "cmsGetContextUserData(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          1034,
+          16
+        ],
+        [
+          1034,
+          59
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetContextUserData",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct tm",
+      {},
+      "",
+      [
+        406,
+        73
+      ],
+      [
+        406,
+        82
+      ]
+    ],
+    [
+      "struct tm",
+      {},
+      "",
+      [
+        423,
+        71
+      ],
+      [
+        423,
+        80
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        537,
+        4
+      ],
+      [
+        537,
+        29
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        651,
+        7
+      ],
+      [
+        651,
+        32
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        680,
+        7
+      ],
+      [
+        680,
+        32
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        730,
+        0
+      ],
+      [
+        730,
+        25
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        732,
+        4
+      ],
+      [
+        732,
+        29
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        732,
+        37
+      ],
+      [
+        732,
+        62
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        733,
+        4
+      ],
+      [
+        733,
+        29
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        765,
+        4
+      ],
+      [
+        765,
+        29
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        842,
+        4
+      ],
+      [
+        842,
+        29
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        843,
+        4
+      ],
+      [
+        843,
+        29
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        853,
+        11
+      ],
+      [
+        853,
+        36
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        853,
+        71
+      ],
+      [
+        853,
+        96
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        858,
+        26
+      ],
+      [
+        858,
+        51
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        912,
+        4
+      ],
+      [
+        912,
+        29
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        913,
+        10
+      ],
+      [
+        913,
+        35
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        918,
+        11
+      ],
+      [
+        918,
+        36
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        918,
+        68
+      ],
+      [
+        918,
+        93
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        987,
+        8
+      ],
+      [
+        987,
+        33
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        987,
+        42
+      ],
+      [
+        987,
+        67
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        988,
+        8
+      ],
+      [
+        988,
+        33
+      ]
+    ],
+    [
+      "struct _cmsContext_struct",
+      {},
+      "",
+      [
+        989,
+        8
+      ],
+      [
+        989,
+        33
+      ]
+    ],
+    [
+      "struct tm",
+      {},
+      "",
+      [
+        1041,
+        20
+      ],
+      [
+        1041,
+        29
+      ]
+    ],
+    [
+      "struct tm",
+      {},
+      "",
+      [
+        1043,
+        4
+      ],
+      [
+        1043,
+        13
+      ]
+    ],
+    [
+      "struct tm",
+      {},
+      "",
+      [
+        1045,
+        4
+      ],
+      [
+        1045,
+        13
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"lcms2_internal.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -1,0 +1,308 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void _XTIFFPrintDirectory(TIFF *tif, FILE *fd, long flags)\n{\n    xtiff *xt = XTIFFDIR(tif);\n    XTIFFDirectory *xd = &xt->xtif_dir;\n    int i, num;\n\n    /* call the inherited method */\n    if (PARENT(xt, printdir))\n        (PARENT(xt, printdir))(tif, fd, flags);\n\n    /* XXX Add field printing here. Replace the three example\n     *    tags implemented below with your own.\n     */\n\n    fprintf(fd, \"--My Example Tags--\\n\");\n\n    /* Our first example tag may have a lot of values, so we\n     * will only print them out if the TIFFPRINT_MYMULTIDOUBLES\n     * flag is passed into the print method.\n     */\n    if (TIFFFieldSet(tif, FIELD_EXAMPLE_MULTI))\n    {\n        fprintf(fd, \"  My Multi-Valued Doubles:\");\n        if (flags & TIFFPRINT_MYMULTIDOUBLES)\n        {\n            double *value = xd->xd_example_multi;\n\n            num = xd->xd_num_multi;\n            fprintf(fd, \"(\");\n            for (i = 0; i < num; i++)\n                fprintf(fd, \" %lg\", *value++);\n            fprintf(fd, \")\\n\");\n        }\n        else\n            fprintf(fd, \"(present)\\n\");\n    }\n\n    if (TIFFFieldSet(tif, FIELD_EXAMPLE_SINGLE))\n    {\n        fprintf(fd, \"  My Single Long Tag:  %lu\\n\", xd->xd_example_single);\n    }\n\n    if (TIFFFieldSet(tif, FIELD_EXAMPLE_ASCII))\n    {\n        _TIFFprintAsciiTag(fd, \"My ASCII Tag\", xd->xd_example_ascii);\n    }\n}",
+      "fn_code_pos": [
+        [
+          38,
+          0
+        ],
+        [
+          84,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_XTIFFPrintDirectory",
+        "parameters": {
+          "tif": "TIFF",
+          "fd": "FILE",
+          "flags": "long"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int _XTIFFVSetField(TIFF *tif, ttag_t tag, va_list ap)\n{\n    xtiff *xt = XTIFFDIR(tif);\n    XTIFFDirectory *xd = &xt->xtif_dir;\n    int status = 1;\n    uint32_t v32 = 0;\n    int i = 0, v = 0;\n    va_list ap1 = ap;\n\n    /* va_start is called by the calling routine */\n\n    switch (tag)\n    {\n            /*\n             * XXX put your extended tags here; replace the implemented\n             *     example tags with your own.\n             */\n        case TIFFTAG_EXAMPLE_MULTI:\n            /* multi-valued tags need to store the count as well */\n            xd->xd_num_multi = (uint16_t)va_arg(ap, int);\n            _TIFFsetDoubleArray(&xd->xd_example_multi, va_arg(ap, double *),\n                                (long)xd->xd_num_multi);\n            break;\n        case TIFFTAG_EXAMPLE_SINGLE:\n            xd->xd_example_single = va_arg(ap, uint32_t);\n            break;\n        case TIFFTAG_EXAMPLE_ASCII:\n            _TIFFsetString(&xd->xd_example_ascii, va_arg(ap, char *));\n            break;\n        default:\n            /* call the inherited method */\n            return (PARENT(xt, vsetfield))(tif, tag, ap);\n            break;\n    }\n    if (status)\n    {\n        /* we have to override the print method here,\n         * after the compression tags have gotten to it.\n         * This makes sense because the only time we would\n         * need the extended print method is if an extended\n         * tag is set by the reader.\n         */\n        if (!(xt->xtif_flags & XTIFFP_PRINT))\n        {\n            PARENT(xt, printdir) = TIFFMEMBER(tif, printdir);\n            TIFFMEMBER(tif, printdir) = _XTIFFPrintDirectory;\n            xt->xtif_flags |= XTIFFP_PRINT;\n        }\n        TIFFSetFieldBit(tif, _TIFFFieldWithTag(tif, tag)->field_bit);\n        tif->tif_flags |= TIFF_DIRTYDIRECT;\n    }\n    va_end(ap);\n    return (status);\nbadvalue:\n    TIFFErrorExtR(tif, tif->tif_name, \"%d: Bad value for \\\"%s\\\"\", v,\n                  _TIFFFieldWithTag(tif, tag)->field_name);\n    va_end(ap);\n    return (0);\nbadvalue32:\n    TIFFErrorExtR(tif, tif->tif_name, \"%ld: Bad value for \\\"%s\\\"\", v32,\n                  _TIFFFieldWithTag(tif, tag)->field_name);\n    va_end(ap);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          86,
+          0
+        ],
+        [
+          149,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_XTIFFVSetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "ttag_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int _XTIFFVGetField(TIFF *tif, ttag_t tag, va_list ap)\n{\n    xtiff *xt = XTIFFDIR(tif);\n    XTIFFDirectory *xd = &xt->xtif_dir;\n\n    switch (tag)\n    {\n            /*\n             * XXX put your extended tags here; replace the implemented\n             *     example tags with your own.\n             */\n        case TIFFTAG_EXAMPLE_MULTI:\n            *va_arg(ap, uint16_t *) = xd->xd_num_multi;\n            *va_arg(ap, double **) = xd->xd_example_multi;\n            break;\n        case TIFFTAG_EXAMPLE_ASCII:\n            *va_arg(ap, char **) = xd->xd_example_ascii;\n            break;\n        case TIFFTAG_EXAMPLE_SINGLE:\n            *va_arg(ap, uint32_t *) = xd->xd_example_single;\n            break;\n        default:\n            /* return inherited method */\n            return (PARENT(xt, vgetfield))(tif, tag, ap);\n            break;\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          151,
+          0
+        ],
+        [
+          178,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_XTIFFVGetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "ttag_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void _XTIFFFreeDirectory(xtiff *xt)\n{\n    XTIFFDirectory *xd = &xt->xtif_dir;\n\n    /*\n     *  XXX - Purge all Your allocated memory except\n     *  for the xtiff directory itself. This includes\n     *  all fields that require a _TIFFsetXXX call in\n     *  _XTIFFVSetField().\n     */\n\n    CleanupField(xd_example_multi);\n    CleanupField(xd_example_ascii);\n}",
+      "fn_code_pos": [
+        [
+          191,
+          0
+        ],
+        [
+          204,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_XTIFFFreeDirectory",
+        "parameters": {
+          "xt": "xtiff"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void _XTIFFLocalDefaultDirectory(TIFF *tif)\n{\n    xtiff *xt = XTIFFDIR(tif);\n    XTIFFDirectory *xd = &xt->xtif_dir;\n\n    /* Install the extended Tag field info */\n    _TIFFMergeFieldInfo(tif, xtiffFieldInfo, N(xtiffFieldInfo));\n\n    /*\n     *  free up any dynamically allocated arrays\n     *  before the new directory is read in.\n     */\n\n    _XTIFFFreeDirectory(xt);\n    _TIFFmemset(xt, 0, sizeof(xtiff));\n\n    /* Override the tag access methods */\n\n    PARENT(xt, vsetfield) = TIFFMEMBER(tif, vsetfield);\n    TIFFMEMBER(tif, vsetfield) = _XTIFFVSetField;\n    PARENT(xt, vgetfield) = TIFFMEMBER(tif, vgetfield);\n    TIFFMEMBER(tif, vgetfield) = _XTIFFVGetField;\n\n    /*\n     * XXX Set up any default values here.\n     */\n\n    xd->xd_example_single = 234;\n}",
+      "fn_code_pos": [
+        [
+          207,
+          0
+        ],
+        [
+          235,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_XTIFFLocalDefaultDirectory",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void _XTIFFDefaultDirectory(TIFF *tif)\n{\n    xtiff *xt;\n\n    /* Allocate Directory Structure if first time, and install it */\n    if (!(tif->tif_flags & XTIFF_INITIALIZED))\n    {\n        xt = _TIFFmalloc(sizeof(xtiff));\n        if (!xt)\n        {\n            /* handle memory allocation failure here ! */\n            return;\n        }\n        _TIFFmemset(xt, 0, sizeof(xtiff));\n        /*\n         * Install into TIFF structure.\n         */\n        TIFFMEMBER(tif, clientdir) = (tidata_t)xt;\n        tif->tif_flags |= XTIFF_INITIALIZED; /* don't do this again! */\n    }\n\n    /* set up our own defaults */\n    _XTIFFLocalDefaultDirectory(tif);\n\n    /* Since an XTIFF client module may have overridden\n     * the default directory method, we call it now to\n     * allow it to set up the rest of its own methods.\n     */\n\n    if (_ParentExtender)\n        (*_ParentExtender)(tif);\n}",
+      "fn_code_pos": [
+        [
+          249,
+          0
+        ],
+        [
+          280,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_XTIFFDefaultDirectory",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void _XTIFFInitialize(void)\n{\n    static first_time = 1;\n\n    if (!first_time)\n        return; /* Been there. Done that. */\n    first_time = 0;\n\n    /* Grab the inherited method and install */\n    _ParentExtender = TIFFSetTagExtender(_XTIFFDefaultDirectory);\n}",
+      "fn_code_pos": [
+        [
+          287,
+          0
+        ],
+        [
+          297,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_XTIFFInitialize",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "TIFF *XTIFFOpen(const char *name, const char *mode)\n{\n    /* Set up the callback */\n    _XTIFFInitialize();\n\n    /* Open the file; the callback will set everything up\n     */\n    return TIFFOpen(name, mode);\n}",
+      "fn_code_pos": [
+        [
+          302,
+          0
+        ],
+        [
+          310,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "XTIFFOpen",
+        "parameters": {
+          "name": "char",
+          "mode": "char"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "TIFF *XTIFFFdOpen(int fd, const char *name, const char *mode)\n{\n    /* Set up the callback */\n    _XTIFFInitialize();\n\n    /* Open the file; the callback will set everything up\n     */\n    return TIFFFdOpen(fd, name, mode);\n}",
+      "fn_code_pos": [
+        [
+          312,
+          0
+        ],
+        [
+          320,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "XTIFFFdOpen",
+        "parameters": {
+          "fd": "int",
+          "name": "char",
+          "mode": "char"
+        },
+        "return_type": "TIFF"
+      }
+    },
+    {
+      "fn_code": "void XTIFFClose(TIFF *tif)\n{\n    xtiff *xt = XTIFFDIR(tif);\n\n    /* call inherited function first */\n    TIFFClose(tif);\n\n    /* Free up extended allocated memory */\n    _XTIFFFreeDirectory(xt);\n    _TIFFfree(xt);\n}",
+      "fn_code_pos": [
+        [
+          322,
+          0
+        ],
+        [
+          332,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "XTIFFClose",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "XTIFFOpen(const char *name, const char *mode)",
+      "fn_dec_pos": [
+        [
+          302,
+          6
+        ],
+        [
+          302,
+          51
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "XTIFFOpen",
+        "parameters": {
+          "name": "char",
+          "mode": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "XTIFFFdOpen(int fd, const char *name, const char *mode)",
+      "fn_dec_pos": [
+        [
+          312,
+          6
+        ],
+        [
+          312,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "XTIFFFdOpen",
+        "parameters": {
+          "fd": "int",
+          "name": "char",
+          "mode": "char"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"xtiffiop.h\"\n",
+      [
+        13,
+        0
+      ],
+      [
+        14,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        14,
+        0
+      ],
+      [
+        15,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

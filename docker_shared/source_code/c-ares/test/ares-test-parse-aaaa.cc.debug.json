@@ -1,0 +1,286 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseAaaaReplyOK) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com\", T_AAAA))\n    .add_answer(new DNSAaaaRR(\"example.com\", 100,\n                              {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,\n                               0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04}))\n    .add_answer(new DNSARR(\"example.com\", 0x01020304, {2,3,4,5}));\n  std::vector<byte> data = pkt.data();\n  struct hostent *host = nullptr;\n  struct ares_addr6ttl info[5];\n  int count = 5;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_aaaa_reply(data.data(), data.size(),\n                                                &host, info, &count));\n  EXPECT_EQ(1, count);\n  EXPECT_EQ(100, info[0].ttl);\n  EXPECT_EQ(0x01, info[0].ip6addr._S6_un._S6_u8[0]);\n  EXPECT_EQ(0x02, info[0].ip6addr._S6_un._S6_u8[4]);\n  ASSERT_NE(nullptr, host);\n  std::stringstream ss;\n  ss << HostEnt(host);\n  EXPECT_EQ(\"{'example.com' aliases=[] addrs=[0101:0101:0202:0202:0303:0303:0404:0404]}\", ss.str());\n  ares_free_hostent(host);\n\n  // Repeat without providing places to put the results\n  count = 0;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_aaaa_reply(data.data(), data.size(),\n                                                nullptr, info, &count));\n}",
+      "fn_code_pos": [
+        [
+          9,
+          0
+        ],
+        [
+          37,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseAaaaReplyCname) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com\", T_AAAA))\n    .add_answer(new DNSCnameRR(\"example.com\", 50, \"c.example.com\"))\n    .add_answer(new DNSAaaaRR(\"c.example.com\", 100,\n                              {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,\n                               0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04}));\n  std::vector<byte> data = pkt.data();\n  struct hostent *host = nullptr;\n  struct ares_addr6ttl info[5];\n  int count = 5;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_aaaa_reply(data.data(), data.size(),\n                                                &host, info, &count));\n  EXPECT_EQ(1, count);\n  // CNAME TTL overrides AAAA TTL.\n  EXPECT_EQ(50, info[0].ttl);\n  EXPECT_EQ(0x01, info[0].ip6addr._S6_un._S6_u8[0]);\n  EXPECT_EQ(0x02, info[0].ip6addr._S6_un._S6_u8[4]);\n  ASSERT_NE(nullptr, host);\n  std::stringstream ss;\n  ss << HostEnt(host);\n  EXPECT_EQ(\"{'c.example.com' aliases=[example.com] addrs=[0101:0101:0202:0202:0303:0303:0404:0404]}\", ss.str());\n  ares_free_hostent(host);\n\n  // Repeat without providing a hostent\n  count = 5;\n  EXPECT_EQ(ARES_SUCCESS, ares_parse_aaaa_reply(data.data(), data.size(),\n                                                nullptr, info, &count));\n  EXPECT_EQ(1, count);\n  EXPECT_EQ(50, info[0].ttl);\n  EXPECT_EQ(0x01, info[0].ip6addr._S6_un._S6_u8[0]);\n  EXPECT_EQ(0x02, info[0].ip6addr._S6_un._S6_u8[4]);\n}",
+      "fn_code_pos": [
+        [
+          39,
+          0
+        ],
+        [
+          72,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseAaaaReplyNoData) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com\", T_AAAA));\n  std::vector<byte> data = pkt.data();\n  struct hostent *host = nullptr;\n  struct ares_addr6ttl info[2];\n  int count = 2;\n  EXPECT_EQ(ARES_ENODATA, ares_parse_aaaa_reply(data.data(), data.size(),\n                                                &host, info, &count));\n  EXPECT_EQ(0, count);\n  EXPECT_EQ(nullptr, host);\n\n  // Again but with a CNAME.\n  pkt.add_answer(new DNSCnameRR(\"example.com\", 200, \"c.example.com\"));\n  EXPECT_EQ(ARES_ENODATA, ares_parse_aaaa_reply(data.data(), data.size(),\n                                                &host, info, &count));\n  EXPECT_EQ(0, count);\n  EXPECT_EQ(nullptr, host);\n}",
+      "fn_code_pos": [
+        [
+          74,
+          0
+        ],
+        [
+          93,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseAaaaReplyErrors) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com\", T_AAAA))\n    .add_answer(new DNSAaaaRR(\"example.com\", 100,\n                              {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,\n                               0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04}));\n  std::vector<byte> data;\n\n  struct hostent *host = nullptr;\n  struct ares_addr6ttl info[2];\n  int count = 2;\n\n  // No question.\n  pkt.questions_.clear();\n  data = pkt.data();\n  EXPECT_EQ(ARES_EBADRESP, ares_parse_aaaa_reply(data.data(), data.size(),\n                                                 &host, info, &count));\n  EXPECT_EQ(nullptr, host);\n  pkt.add_question(new DNSQuestion(\"example.com\", T_AAAA));\n\n  // Question != answer\n  pkt.questions_.clear();\n  pkt.add_question(new DNSQuestion(\"Axample.com\", T_AAAA));\n  data = pkt.data();\n  EXPECT_EQ(ARES_ENODATA, ares_parse_aaaa_reply(data.data(), data.size(),\n                                                &host, info, &count));\n  EXPECT_EQ(nullptr, host);\n  pkt.questions_.clear();\n  pkt.add_question(new DNSQuestion(\"example.com\", T_AAAA));\n\n  // Two questions.\n  pkt.add_question(new DNSQuestion(\"example.com\", T_AAAA));\n  data = pkt.data();\n  EXPECT_EQ(ARES_EBADRESP, ares_parse_aaaa_reply(data.data(), data.size(),\n                                                 &host, info, &count));\n  EXPECT_EQ(nullptr, host);\n  pkt.questions_.clear();\n  pkt.add_question(new DNSQuestion(\"example.com\", T_AAAA));\n\n  // Wrong sort of answer.\n  pkt.answers_.clear();\n  pkt.add_answer(new DNSMxRR(\"example.com\", 100, 100, \"mx1.example.com\"));\n  data = pkt.data();\n  EXPECT_EQ(ARES_ENODATA, ares_parse_aaaa_reply(data.data(), data.size(),\n                                                &host, info, &count));\n  EXPECT_EQ(nullptr, host);\n  pkt.answers_.clear();\n  pkt.add_answer(new DNSAaaaRR(\"example.com\", 100,\n                              {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,\n                               0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04}));\n\n  // No answer.\n  pkt.answers_.clear();\n  data = pkt.data();\n  EXPECT_EQ(ARES_ENODATA, ares_parse_aaaa_reply(data.data(), data.size(),\n                                                &host, info, &count));\n  EXPECT_EQ(nullptr, host);\n  pkt.add_answer(new DNSAaaaRR(\"example.com\", 100,\n                              {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,\n                               0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04}));\n\n  // Truncated packets.\n  data = pkt.data();\n  for (size_t len = 1; len < data.size(); len++) {\n    EXPECT_EQ(ARES_EBADRESP, ares_parse_aaaa_reply(data.data(), len,\n                                                   &host, info, &count));\n    EXPECT_EQ(nullptr, host);\n    EXPECT_EQ(ARES_EBADRESP, ares_parse_aaaa_reply(data.data(), len,\n                                                   nullptr, info, &count));\n  }\n}",
+      "fn_code_pos": [
+        [
+          95,
+          0
+        ],
+        [
+          166,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_F(LibraryTest, ParseAaaaReplyAllocFail) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com\", T_AAAA))\n    .add_answer(new DNSCnameRR(\"example.com\", 300, \"c.example.com\"))\n    .add_answer(new DNSAaaaRR(\"c.example.com\", 100,\n                              {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,\n                               0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04}));\n  std::vector<byte> data = pkt.data();\n  struct hostent *host = nullptr;\n  struct ares_addr6ttl info[2];\n  int count = 2;\n\n  for (int ii = 1; ii <= 8; ii++) {\n    ClearFails();\n    SetAllocFail(ii);\n    EXPECT_EQ(ARES_ENOMEM, ares_parse_aaaa_reply(data.data(), data.size(),\n                                                 &host, info, &count)) << ii;\n    EXPECT_EQ(nullptr, host);\n  }\n}",
+      "fn_code_pos": [
+        [
+          168,
+          0
+        ],
+        [
+          188,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_F",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        18,
+        2
+      ],
+      [
+        18,
+        16
+      ]
+    ],
+    [
+      "struct ares_addr6ttl",
+      {},
+      "",
+      [
+        19,
+        2
+      ],
+      [
+        19,
+        22
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        48,
+        2
+      ],
+      [
+        48,
+        16
+      ]
+    ],
+    [
+      "struct ares_addr6ttl",
+      {},
+      "",
+      [
+        49,
+        2
+      ],
+      [
+        49,
+        22
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        79,
+        2
+      ],
+      [
+        79,
+        16
+      ]
+    ],
+    [
+      "struct ares_addr6ttl",
+      {},
+      "",
+      [
+        80,
+        2
+      ],
+      [
+        80,
+        22
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        104,
+        2
+      ],
+      [
+        104,
+        16
+      ]
+    ],
+    [
+      "struct ares_addr6ttl",
+      {},
+      "",
+      [
+        105,
+        2
+      ],
+      [
+        105,
+        22
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        177,
+        2
+      ],
+      [
+        177,
+        16
+      ]
+    ],
+    [
+      "struct ares_addr6ttl",
+      {},
+      "",
+      [
+        178,
+        2
+      ],
+      [
+        178,
+        22
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares-test.h\"\n",
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    [
+      "#include \"dns-proto.h\"\n",
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    [
+      "#include <sstream>\n",
+      [
+        3,
+        0
+      ],
+      [
+        4,
+        0
+      ]
+    ],
+    [
+      "#include <vector>\n",
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

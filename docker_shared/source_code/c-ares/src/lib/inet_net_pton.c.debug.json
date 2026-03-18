@@ -1,0 +1,307 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int\ninet_net_pton_ipv4(const char *src, unsigned char *dst, size_t size)\n{\n  static const char xdigits[] = \"0123456789abcdef\";\n  static const char digits[] = \"0123456789\";\n  int n, ch, tmp = 0, dirty, bits;\n  const unsigned char *odst = dst;\n\n  ch = *src++;\n  if (ch == '0' && (src[0] == 'x' || src[0] == 'X')\n      && ISASCII(src[1])\n      && ISXDIGIT(src[1])) {\n    /* Hexadecimal: Eat nybble string. */\n    if (!size)\n      goto emsgsize;\n    dirty = 0;\n    src++;  /* skip x or X. */\n    while ((ch = *src++) != '\\0' && ISASCII(ch) && ISXDIGIT(ch)) {\n      if (ISUPPER(ch))\n        ch = tolower(ch);\n      n = aresx_sztosi(strchr(xdigits, ch) - xdigits);\n      if (dirty == 0)\n        tmp = n;\n      else\n        tmp = (tmp << 4) | n;\n      if (++dirty == 2) {\n        if (!size--)\n          goto emsgsize;\n        *dst++ = (unsigned char) tmp;\n        dirty = 0;\n      }\n    }\n    if (dirty) {  /* Odd trailing nybble? */\n      if (!size--)\n        goto emsgsize;\n      *dst++ = (unsigned char) (tmp << 4);\n    }\n  } else if (ISASCII(ch) && ISDIGIT(ch)) {\n    /* Decimal: eat dotted digit string. */\n    for (;;) {\n      tmp = 0;\n      do {\n        n = aresx_sztosi(strchr(digits, ch) - digits);\n        tmp *= 10;\n        tmp += n;\n        if (tmp > 255)\n          goto enoent;\n      } while ((ch = *src++) != '\\0' &&\n               ISASCII(ch) && ISDIGIT(ch));\n      if (!size--)\n        goto emsgsize;\n      *dst++ = (unsigned char) tmp;\n      if (ch == '\\0' || ch == '/')\n        break;\n      if (ch != '.')\n        goto enoent;\n      ch = *src++;\n      if (!ISASCII(ch) || !ISDIGIT(ch))\n        goto enoent;\n    }\n  } else\n    goto enoent;\n\n  bits = -1;\n  if (ch == '/' && ISASCII(src[0]) &&\n      ISDIGIT(src[0]) && dst > odst) {\n    /* CIDR width specifier.  Nothing can follow it. */\n    ch = *src++;    /* Skip over the /. */\n    bits = 0;\n    do {\n      n = aresx_sztosi(strchr(digits, ch) - digits);\n      bits *= 10;\n      bits += n;\n      if (bits > 32)\n        goto enoent;\n    } while ((ch = *src++) != '\\0' && ISASCII(ch) && ISDIGIT(ch));\n    if (ch != '\\0')\n      goto enoent;\n  }\n\n  /* Firey death and destruction unless we prefetched EOS. */\n  if (ch != '\\0')\n    goto enoent;\n\n  /* If nothing was written to the destination, we found no address. */\n  if (dst == odst)\n    goto enoent;  /* LCOV_EXCL_LINE: all valid paths above increment dst */\n  /* If no CIDR spec was given, infer width from net class. */\n  if (bits == -1) {\n    if (*odst >= 240)       /* Class E */\n      bits = 32;\n    else if (*odst >= 224)  /* Class D */\n      bits = 8;\n    else if (*odst >= 192)  /* Class C */\n      bits = 24;\n    else if (*odst >= 128)  /* Class B */\n      bits = 16;\n    else                    /* Class A */\n      bits = 8;\n    /* If imputed mask is narrower than specified octets, widen. */\n    if (bits < ((dst - odst) * 8))\n      bits = aresx_sztosi(dst - odst) * 8;\n    /*\n     * If there are no additional bits specified for a class D\n     * address adjust bits to 4.\n     */\n    if (bits == 8 && *odst == 224)\n      bits = 4;\n  }\n  /* Extend network to cover the actual mask. */\n  while (bits > ((dst - odst) * 8)) {\n    if (!size--)\n      goto emsgsize;\n    *dst++ = '\\0';\n  }\n  return (bits);\n\n  enoent:\n  SET_ERRNO(ENOENT);\n  return (-1);\n\n  emsgsize:\n  SET_ERRNO(EMSGSIZE);\n  return (-1);\n}",
+      "fn_code_pos": [
+        [
+          61,
+          0
+        ],
+        [
+          185,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "inet_net_pton_ipv4",
+        "parameters": {
+          "src": "char",
+          "dst": "unsigned char",
+          "size": "size_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int\ngetbits(const char *src, int *bitsp)\n{\n  static const char digits[] = \"0123456789\";\n  int n;\n  int val;\n  char ch;\n\n  val = 0;\n  n = 0;\n  while ((ch = *src++) != '\\0') {\n    const char *pch;\n\n    pch = strchr(digits, ch);\n    if (pch != NULL) {\n      if (n++ != 0 && val == 0)       /* no leading zeros */\n        return (0);\n      val *= 10;\n      val += aresx_sztosi(pch - digits);\n      if (val > 128)                  /* range */\n        return (0);\n      continue;\n    }\n    return (0);\n  }\n  if (n == 0)\n    return (0);\n  *bitsp = val;\n  return (1);\n}",
+      "fn_code_pos": [
+        [
+          187,
+          0
+        ],
+        [
+          216,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "getbits",
+        "parameters": {
+          "src": "char",
+          "bitsp": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int\ngetv4(const char *src, unsigned char *dst, int *bitsp)\n{\n  static const char digits[] = \"0123456789\";\n  unsigned char *odst = dst;\n  int n;\n  unsigned int val;\n  char ch;\n\n  val = 0;\n  n = 0;\n  while ((ch = *src++) != '\\0') {\n    const char *pch;\n\n    pch = strchr(digits, ch);\n    if (pch != NULL) {\n      if (n++ != 0 && val == 0)       /* no leading zeros */\n        return (0);\n      val *= 10;\n      val += aresx_sztoui(pch - digits);\n      if (val > 255)                  /* range */\n        return (0);\n      continue;\n    }\n    if (ch == '.' || ch == '/') {\n      if (dst - odst > 3)             /* too many octets? */\n        return (0);\n      *dst++ = (unsigned char)val;\n      if (ch == '/')\n        return (getbits(src, bitsp));\n      val = 0;\n      n = 0;\n      continue;\n    }\n    return (0);\n  }\n  if (n == 0)\n    return (0);\n  if (dst - odst > 3)             /* too many octets? */\n    return (0);\n  *dst = (unsigned char)val;\n  return 1;\n}",
+      "fn_code_pos": [
+        [
+          218,
+          0
+        ],
+        [
+          260,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "getv4",
+        "parameters": {
+          "src": "char",
+          "dst": "unsigned char",
+          "bitsp": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int\ninet_net_pton_ipv6(const char *src, unsigned char *dst, size_t size)\n{\n  static const char xdigits_l[] = \"0123456789abcdef\",\n    xdigits_u[] = \"0123456789ABCDEF\";\n  unsigned char tmp[NS_IN6ADDRSZ], *tp, *endp, *colonp;\n  const char *xdigits, *curtok;\n  int ch, saw_xdigit;\n  unsigned int val;\n  int digits;\n  int bits;\n  size_t bytes;\n  int words;\n  int ipv4;\n\n  memset((tp = tmp), '\\0', NS_IN6ADDRSZ);\n  endp = tp + NS_IN6ADDRSZ;\n  colonp = NULL;\n  /* Leading :: requires some special handling. */\n  if (*src == ':')\n    if (*++src != ':')\n      goto enoent;\n  curtok = src;\n  saw_xdigit = 0;\n  val = 0;\n  digits = 0;\n  bits = -1;\n  ipv4 = 0;\n  while ((ch = *src++) != '\\0') {\n    const char *pch;\n\n    if ((pch = strchr((xdigits = xdigits_l), ch)) == NULL)\n      pch = strchr((xdigits = xdigits_u), ch);\n    if (pch != NULL) {\n      val <<= 4;\n      val |= aresx_sztoui(pch - xdigits);\n      if (++digits > 4)\n        goto enoent;\n      saw_xdigit = 1;\n      continue;\n    }\n    if (ch == ':') {\n      curtok = src;\n      if (!saw_xdigit) {\n        if (colonp)\n          goto enoent;\n        colonp = tp;\n        continue;\n      } else if (*src == '\\0')\n        goto enoent;\n      if (tp + NS_INT16SZ > endp)\n        return (0);\n      *tp++ = (unsigned char)((val >> 8) & 0xff);\n      *tp++ = (unsigned char)(val & 0xff);\n      saw_xdigit = 0;\n      digits = 0;\n      val = 0;\n      continue;\n    }\n    if (ch == '.' && ((tp + NS_INADDRSZ) <= endp) &&\n        getv4(curtok, tp, &bits) > 0) {\n      tp += NS_INADDRSZ;\n      saw_xdigit = 0;\n      ipv4 = 1;\n      break;  /* '\\0' was seen by inet_pton4(). */\n    }\n    if (ch == '/' && getbits(src, &bits) > 0)\n      break;\n    goto enoent;\n  }\n  if (saw_xdigit) {\n    if (tp + NS_INT16SZ > endp)\n      goto enoent;\n    *tp++ = (unsigned char)((val >> 8) & 0xff);\n    *tp++ = (unsigned char)(val & 0xff);\n  }\n  if (bits == -1)\n    bits = 128;\n\n  words = (bits + 15) / 16;\n  if (words < 2)\n    words = 2;\n  if (ipv4)\n    words = 8;\n  endp =  tmp + 2 * words;\n\n  if (colonp != NULL) {\n    /*\n     * Since some memmove()'s erroneously fail to handle\n     * overlapping regions, we'll do the shift by hand.\n     */\n    const ares_ssize_t n = tp - colonp;\n    ares_ssize_t i;\n\n    if (tp == endp)\n      goto enoent;\n    for (i = 1; i <= n; i++) {\n      *(endp - i) = *(colonp + n - i);\n      *(colonp + n - i) = 0;\n    }\n    tp = endp;\n  }\n  if (tp != endp)\n    goto enoent;\n\n  bytes = (bits + 7) / 8;\n  if (bytes > size)\n    goto emsgsize;\n  memcpy(dst, tmp, bytes);\n  return (bits);\n\n  enoent:\n  SET_ERRNO(ENOENT);\n  return (-1);\n\n  emsgsize:\n  SET_ERRNO(EMSGSIZE);\n  return (-1);\n}",
+      "fn_code_pos": [
+        [
+          262,
+          0
+        ],
+        [
+          380,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "inet_net_pton_ipv6",
+        "parameters": {
+          "src": "char",
+          "dst": "unsigned char",
+          "size": "size_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int\nares_inet_net_pton(int af, const char *src, void *dst, size_t size)\n{\n  switch (af) {\n  case AF_INET:\n    return (inet_net_pton_ipv4(src, dst, size));\n  case AF_INET6:\n    return (inet_net_pton_ipv6(src, dst, size));\n  default:\n    SET_ERRNO(EAFNOSUPPORT);\n    return (-1);\n  }\n}",
+      "fn_code_pos": [
+        [
+          400,
+          0
+        ],
+        [
+          412,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_inet_net_pton",
+        "parameters": {
+          "af": "int",
+          "src": "char",
+          "dst": "void",
+          "size": "size_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ares_inet_pton(int af, const char *src, void *dst)\n{\n  int result;\n  size_t size;\n\n  if (af == AF_INET)\n    size = sizeof(struct in_addr);\n  else if (af == AF_INET6)\n    size = sizeof(struct ares_in6_addr);\n  else\n  {\n    SET_ERRNO(EAFNOSUPPORT);\n    return -1;\n  }\n  result = ares_inet_net_pton(af, src, dst, size);\n  if (result == -1 && ERRNO == ENOENT)\n    return 0;\n  return (result > -1 ? 1 : -1);\n}",
+      "fn_code_pos": [
+        [
+          417,
+          0
+        ],
+        [
+          435,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_inet_pton",
+        "parameters": {
+          "af": "int",
+          "src": "char",
+          "dst": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ares_inet_pton(int af, const char *src, void *dst)\n{\n  /* just relay this to the underlying function */\n  return inet_pton(af, src, dst);\n}",
+      "fn_code_pos": [
+        [
+          437,
+          0
+        ],
+        [
+          441,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_inet_pton",
+        "parameters": {
+          "af": "int",
+          "src": "char",
+          "dst": "void"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct ares_in6_addr",
+      {},
+      "",
+      [
+        35,
+        6
+      ],
+      [
+        35,
+        26
+      ]
+    ],
+    [
+      "struct in_addr",
+      {},
+      "",
+      [
+        423,
+        18
+      ],
+      [
+        423,
+        32
+      ]
+    ],
+    [
+      "struct ares_in6_addr",
+      {},
+      "",
+      [
+        425,
+        18
+      ],
+      [
+        425,
+        38
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        18,
+        0
+      ],
+      [
+        19,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_ipv6.h\"\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nowarn.h\"\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_inet_net_pton.h\"\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

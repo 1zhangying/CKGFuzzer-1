@@ -1,0 +1,312 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998, 2011 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17		#include "ares_setup.h"	
+18			
+19		#ifdef HAVE_NETINET_IN_H	
+20		#  include <netinet/in.h>	
+21		#endif	
+22			
+23		#include "ares_nameser.h"	
+24			
+25		#include "ares.h"	
+26		#include "ares_nowarn.h"	
+27		#include "ares_private.h" /* for the memdebug */	
+28			
+29		/* Maximum number of indirections allowed for a name */	
+30	826	#define MAX_INDIRS 50	
+31			
+32		static int name_length(const unsigned char *encoded, const unsigned char *abuf,	
+33		int alen, int is_hostname);	
+34			
+35		/* Reserved characters for names that need to be escaped */	
+36		static int is_reservedch(int ch)	
+37	15.1k	{	
+38	15.1k	switch (ch) {	
+39	207	case '"':	
+40	214	case '.':	
+41	261	case ';':	
+42	1.07k	case '\\':	
+43	1.31k	case '(':	
+44	1.72k	case ')':	
+45	1.72k	case '@':	
+46	1.80k	case '$':	
+47	1.80k	return 1;	
+48	13.3k	default:	
+49	13.3k	break;	
+50	15.1k	}	
+51			
+52	13.3k	return 0;	
+53	15.1k	}	
+54			
+55		static int ares__isprint(int ch)	
+56	41.8k	{	
+57	41.8k	if (ch >= 0x20 && ch <= 0x7E)	
+58	14.6k	return 1;	
+59	27.1k	return 0;	
+60	41.8k	}	
+61			
+62		/* Character set allowed by hostnames.  This is to include the normal	
+63		* domain name character set plus:	
+64		*  - underscores which are used in SRV records.	
+65		*  - Forward slashes such as are used for classless in-addr.arpa	
+66		*    delegation (CNAMEs)	
+67		* While RFC 2181 section 11 does state not to do validation,	
+68		* that applies to servers, not clients.  Vulnerabilities have been	
+69		* reported when this validation is not performed.  Security is more	
+70		* important than edge-case compatibility (which is probably invalid	
+71		* anyhow). */	
+72		static int is_hostnamech(int ch)	
+73	1.55k	{	
+74		/* [A-Za-z0-9-._/]	
+75		* Don't use isalnum() as it is locale-specific	
+76		*/	
+77	1.55k	if (ch >= 'A' && ch <= 'Z')	
+78	306	return 1;	
+79	1.24k	if (ch >= 'a' && ch <= 'z')	
+80	177	return 1;	
+81	1.07k	if (ch >= '0' && ch <= '9')	
+82	358	return 1;	
+83	714	if (ch == '-' || ch == '.' || ch == '_' || ch == '/')	
+84	690	return 1;	
+85			
+86	24	return 0;	
+87	714	}	
+88			
+89		/* Expand an RFC1035-encoded domain name given by encoded.  The	
+90		* containing message is given by abuf and alen.  The result given by	
+91		* *s, which is set to a NUL-terminated allocated buffer.  *enclen is	
+92		* set to the length of the encoded name (not the length of the	
+93		* expanded name; the goal is to tell the caller how many bytes to	
+94		* move forward to get past the encoded name).	
+95		*	
+96		* In the simple case, an encoded name is a series of labels, each	
+97		* composed of a one-byte length (limited to values between 0 and 63	
+98		* inclusive) followed by the label contents.  The name is terminated	
+99		* by a zero-length label.	
+100		*	
+101		* In the more complicated case, a label may be terminated by an	
+102		* indirection pointer, specified by two bytes with the high bits of	
+103		* the first byte (corresponding to INDIR_MASK) set to 11.  With the	
+104		* two high bits of the first byte stripped off, the indirection	
+105		* pointer gives an offset from the beginning of the containing	
+106		* message with more labels to decode.  Indirection can happen an	
+107		* arbitrary number of times, so we have to detect loops.	
+108		*	
+109		* Since the expanded name uses '.' as a label separator, we use	
+110		* backslashes to escape periods or backslashes in the expanded name.	
+111		*	
+112		* If the result is expected to be a hostname, then no escaped data is allowed	
+113		* and will return error.	
+114		*/	
+115			
+116		int ares__expand_name_validated(const unsigned char *encoded,	
+117		const unsigned char *abuf,	
+118		int alen, char **s, long *enclen,	
+119		int is_hostname)	
+120	1.70k	{	
+121	1.70k	int len, indir = 0;	
+122	1.70k	char *q;	
+123	1.70k	const unsigned char *p;	
+124	1.70k	union {	
+125	1.70k	ares_ssize_t sig;	
+126	1.70k	size_t uns;	
+127	1.70k	} nlen;	
+128			
+129	1.70k	nlen.sig = name_length(encoded, abuf, alen, is_hostname);	
+130	1.70k	if (nlen.sig < 0)	
+131	351	return ARES_EBADNAME;	
+132			
+133	1.34k	*s = ares_malloc(nlen.uns + 1);	
+134	1.34k	if (!*s)	
+135	0	returnARES_ENOMEM;	
+136	1.34k	q = *s;	
+137			
+138	1.34k	if (nlen.uns == 0) {	
+139		/* RFC2181 says this should be ".": the root of the DNS tree.	
+140		* Since this function strips trailing dots though, it becomes ""	
+141		*/	
+142	1.13k	q[0] = '\0';	
+143			
+144		/* indirect root label (like 0xc0 0x0c) is 2 bytes long (stupid, but	
+145		valid) */	
+146	1.13k	if ((*encoded & INDIR_MASK) == INDIR_MASK)	
+147	17	*enclen = 2L;	
+148	1.11k	else	
+149	1.11k	*enclen = 1L;  /* the caller should move one byte to get past this */	
+150			
+151	1.13k	return ARES_SUCCESS;	
+152	1.13k	}	
+153			
+154		/* No error-checking necessary; it was all done by name_length(). */	
+155	219	p = encoded;	
+156	1.26k	while (*p)	
+157	1.04k	{	
+158	1.04k	if ((*p & INDIR_MASK) == INDIR_MASK)	
+159	50	{	
+160	50	if (!indir)	
+161	30	{	
+162	30	*enclen = aresx_uztosl(p + 2U - encoded);	
+163	30	indir = 1;	
+164	30	}	
+165	50	p = abuf + ((*p & ~INDIR_MASK) << 8 | *(p + 1));	
+166	50	}	
+167	998	else	
+168	998	{	
+169	998	int name_len = *p;	
+170	998	len = name_len;	
+171	998	p++;	
+172			
+173	10.0k	while (len--)	
+174	9.08k	{	
+175		/* Output as \DDD for consistency with RFC1035 5.1, except	
+176		* for the special case of a root name response  */	
+177	9.08k	if (!ares__isprint(*p) && !(name_len == 1 && *p == 0))	
+178	5.36k	{	
+179	5.36k	*q++ = '\\';	
+180	5.36k	*q++ = '0' + *p / 100;	
+181	5.36k	*q++ = '0' + (*p % 100) / 10;	
+182	5.36k	*q++ = '0' + (*p % 10);	
+183	5.36k	}	
+184	3.71k	else if (is_reservedch(*p))	
+185	542	{	
+186	542	*q++ = '\\';	
+187	542	*q++ = *p;	
+188	542	}	
+189	3.17k	else	
+190	3.17k	{	
+191	3.17k	*q++ = *p;	
+192	3.17k	}	
+193	9.08k	p++;	
+194	9.08k	}	
+195	998	*q++ = '.';	
+196	998	}	
+197	1.04k	}	
+198			
+199	219	if (!indir)	
+200	189	*enclen = aresx_uztosl(p + 1U - encoded);	
+201			
+202		/* Nuke the trailing period if we wrote one. */	
+203	219	if (q > *s)	
+204	219	*(q - 1) = 0;	
+205	0	else	
+206	0	*q = 0; /* zero terminate; LCOV_EXCL_LINE: empty names exit above */	
+207			
+208	219	return ARES_SUCCESS;	
+209	1.34k	}	
+210			
+211			
+212		int ares_expand_name(const unsigned char *encoded, const unsigned char *abuf,	
+213		int alen, char **s, long *enclen)	
+214	493	{	
+215	493	return ares__expand_name_validated(encoded, abuf, alen, s, enclen, 0);	
+216	493	}	
+217			
+218		/* Return the length of the expansion of an encoded domain name, or	
+219		* -1 if the encoding is invalid.	
+220		*/	
+221		static int name_length(const unsigned char *encoded, const unsigned char *abuf,	
+222		int alen, int is_hostname)	
+223	1.70k	{	
+224	1.70k	int n = 0, offset, indir = 0, top;	
+225			
+226		/* Allow the caller to pass us abuf + alen and have us check for it. */	
+227	1.70k	if (encoded >= abuf + alen)	
+228	9	return -1;	
+229			
+230	8.85k	while (*encoded)	
+231	7.50k	{	
+232	7.50k	top = (*encoded & INDIR_MASK);	
+233	7.50k	if (top == INDIR_MASK)	
+234	970	{	
+235		/* Check the offset and go there. */	
+236	970	if (encoded + 1 >= abuf + alen)	
+237	3	return -1;	
+238	967	offset = (*encoded & ~INDIR_MASK) << 8 | *(encoded + 1);	
+239	967	if (offset >= alen)	
+240	130	return -1;	
+241	837	encoded = abuf + offset;	
+242			
+243		/* If we've seen more indirects than the message length,	
+244		* then there's a loop.	
+245		*/	
+246	837	++indir;	
+247	837	if (indir > alen || indir > MAX_INDIRS)	
+248	22	return -1;	
+249	837	}	
+250	6.53k	else if (top == 0x00)	
+251	6.48k	{	
+252	6.48k	int name_len = *encoded;	
+253	6.48k	offset = name_len;	
+254	6.48k	if (encoded + offset + 1 >= abuf + alen)	
+255	74	return -1;	
+256	6.40k	encoded++;	
+257			
+258	39.1k	while (offset--)	
+259	32.7k	{	
+260	32.7k	if (!ares__isprint(*encoded) && !(name_len == 1 && *encoded == 0))	
+261	21.3k	{	
+262	21.3k	if (is_hostname)	
+263	26	return -1;	
+264	21.2k	n += 4;	
+265	21.2k	}	
+266	11.4k	else if (is_reservedch(*encoded))	
+267	1.26k	{	
+268	1.26k	if (is_hostname)	
+269	7	return -1;	
+270	1.26k	n += 2;	
+271	1.26k	}	
+272	10.1k	else	
+273	10.1k	{	
+274	10.1k	if (is_hostname && !is_hostnamech(*encoded))	
+275	24	return -1;	
+276	10.1k	n += 1;	
+277	10.1k	}	
+278	32.6k	encoded++;	
+279	32.6k	}	
+280			
+281	6.35k	n++;	
+282	6.35k	}	
+283	56	else	
+284	56	{	
+285		/* RFC 1035 4.1.4 says other options (01, 10) for top 2	
+286		* bits are reserved.	
+287		*/	
+288	56	return -1;	
+289	56	}	
+290	7.50k	}	
+291			
+292		/* If there were any labels at all, then the number of dots is one	
+293		* less than the number of labels, so subtract one.	
+294		*/	
+295	1.34k	return (n) ? n - 1 : n;	
+296	1.69k	}	
+297			
+298		/* Like ares_expand_name_validated  but returns EBADRESP in case of invalid	
+299		* input. */	
+300		int ares__expand_name_for_response(const unsigned char *encoded,	
+301		const unsigned char *abuf, int alen,	
+302		char **s, long *enclen, int is_hostname)	
+303	1.20k	{	
+304	1.20k	int status = ares__expand_name_validated(encoded, abuf, alen, s, enclen,	
+305	1.20k	is_hostname);	
+306	1.20k	if (status == ARES_EBADNAME)	
+307	117	status = ARES_EBADRESP;	
+308	1.20k	return status;	
+309	1.20k	}	
+
+

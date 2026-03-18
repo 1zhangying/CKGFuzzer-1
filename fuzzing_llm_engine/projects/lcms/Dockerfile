@@ -16,7 +16,10 @@
 
 FROM gcr.io/oss-fuzz-base/base-builder
 RUN apt-get update && apt-get install -y make autoconf automake libtool
-RUN git clone --depth 1 https://github.com/mm2/Little-CMS.git lcms
+# Use local source code instead of git clone
+COPY lcms_src $SRC/lcms
+WORKDIR $SRC
+
 RUN mkdir $SRC/seeds && \
     cd seeds && \
     cp $SRC/lcms/testbed/bad.icc . && \

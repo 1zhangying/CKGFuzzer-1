@@ -1,0 +1,1324 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int LogL16Decode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)\n{\n    static const char module[] = \"LogL16Decode\";\n    LogLuvState *sp = DecoderState(tif);\n    int shft;\n    tmsize_t i;\n    tmsize_t npixels;\n    unsigned char *bp;\n    int16_t *tp;\n    int16_t b;\n    tmsize_t cc;\n    int rc;\n\n    (void)s;\n    assert(s == 0);\n    assert(sp != NULL);\n\n    npixels = occ / sp->pixel_size;\n\n    if (sp->user_datafmt == SGILOGDATAFMT_16BIT)\n        tp = (int16_t *)op;\n    else\n    {\n        if (sp->tbuflen < npixels)\n        {\n            TIFFErrorExtR(tif, module, \"Translation buffer too short\");\n            return (0);\n        }\n        tp = (int16_t *)sp->tbuf;\n    }\n    _TIFFmemset((void *)tp, 0, npixels * sizeof(tp[0]));\n\n    bp = (unsigned char *)tif->tif_rawcp;\n    cc = tif->tif_rawcc;\n    /* get each byte string */\n    for (shft = 8; shft >= 0; shft -= 8)\n    {\n        for (i = 0; i < npixels && cc > 0;)\n        {\n            if (*bp >= 128)\n            { /* run */\n                if (cc < 2)\n                    break;\n                rc = *bp++ + (2 - 128);\n                b = (int16_t)(*bp++ << shft);\n                cc -= 2;\n                while (rc-- && i < npixels)\n                    tp[i++] |= b;\n            }\n            else\n            {               /* non-run */\n                rc = *bp++; /* nul is noop */\n                while (--cc && rc-- && i < npixels)\n                    tp[i++] |= (int16_t)*bp++ << shft;\n            }\n        }\n        if (i != npixels)\n        {\n            TIFFErrorExtR(tif, module,\n                          \"Not enough data at row %\" PRIu32\n                          \" (short %\" TIFF_SSIZE_FORMAT \" pixels)\",\n                          tif->tif_row, npixels - i);\n            tif->tif_rawcp = (uint8_t *)bp;\n            tif->tif_rawcc = cc;\n            return (0);\n        }\n    }\n    (*sp->tfunc)(sp, op, npixels);\n    tif->tif_rawcp = (uint8_t *)bp;\n    tif->tif_rawcc = cc;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          182,
+          0
+        ],
+        [
+          253,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogL16Decode",
+        "parameters": {
+          "tif": "TIFF",
+          "op": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvDecode24(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)\n{\n    static const char module[] = \"LogLuvDecode24\";\n    LogLuvState *sp = DecoderState(tif);\n    tmsize_t cc;\n    tmsize_t i;\n    tmsize_t npixels;\n    unsigned char *bp;\n    uint32_t *tp;\n\n    (void)s;\n    assert(s == 0);\n    assert(sp != NULL);\n\n    npixels = occ / sp->pixel_size;\n\n    if (sp->user_datafmt == SGILOGDATAFMT_RAW)\n        tp = (uint32_t *)op;\n    else\n    {\n        if (sp->tbuflen < npixels)\n        {\n            TIFFErrorExtR(tif, module, \"Translation buffer too short\");\n            return (0);\n        }\n        tp = (uint32_t *)sp->tbuf;\n    }\n    /* copy to array of uint32_t */\n    bp = (unsigned char *)tif->tif_rawcp;\n    cc = tif->tif_rawcc;\n    for (i = 0; i < npixels && cc >= 3; i++)\n    {\n        tp[i] = bp[0] << 16 | bp[1] << 8 | bp[2];\n        bp += 3;\n        cc -= 3;\n    }\n    tif->tif_rawcp = (uint8_t *)bp;\n    tif->tif_rawcc = cc;\n    if (i != npixels)\n    {\n        TIFFErrorExtR(tif, module,\n                      \"Not enough data at row %\" PRIu32\n                      \" (short %\" TIFF_SSIZE_FORMAT \" pixels)\",\n                      tif->tif_row, npixels - i);\n        return (0);\n    }\n    (*sp->tfunc)(sp, op, npixels);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          258,
+          0
+        ],
+        [
+          306,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvDecode24",
+        "parameters": {
+          "tif": "TIFF",
+          "op": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvDecode32(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)\n{\n    static const char module[] = \"LogLuvDecode32\";\n    LogLuvState *sp;\n    int shft;\n    tmsize_t i;\n    tmsize_t npixels;\n    unsigned char *bp;\n    uint32_t *tp;\n    uint32_t b;\n    tmsize_t cc;\n    int rc;\n\n    (void)s;\n    assert(s == 0);\n    sp = DecoderState(tif);\n    assert(sp != NULL);\n\n    npixels = occ / sp->pixel_size;\n\n    if (sp->user_datafmt == SGILOGDATAFMT_RAW)\n        tp = (uint32_t *)op;\n    else\n    {\n        if (sp->tbuflen < npixels)\n        {\n            TIFFErrorExtR(tif, module, \"Translation buffer too short\");\n            return (0);\n        }\n        tp = (uint32_t *)sp->tbuf;\n    }\n    _TIFFmemset((void *)tp, 0, npixels * sizeof(tp[0]));\n\n    bp = (unsigned char *)tif->tif_rawcp;\n    cc = tif->tif_rawcc;\n    /* get each byte string */\n    for (shft = 24; shft >= 0; shft -= 8)\n    {\n        for (i = 0; i < npixels && cc > 0;)\n        {\n            if (*bp >= 128)\n            { /* run */\n                if (cc < 2)\n                    break;\n                rc = *bp++ + (2 - 128);\n                b = (uint32_t)*bp++ << shft;\n                cc -= 2;\n                while (rc-- && i < npixels)\n                    tp[i++] |= b;\n            }\n            else\n            {               /* non-run */\n                rc = *bp++; /* nul is noop */\n                while (--cc && rc-- && i < npixels)\n                    tp[i++] |= (uint32_t)*bp++ << shft;\n            }\n        }\n        if (i != npixels)\n        {\n            TIFFErrorExtR(tif, module,\n                          \"Not enough data at row %\" PRIu32\n                          \" (short %\" TIFF_SSIZE_FORMAT \" pixels)\",\n                          tif->tif_row, npixels - i);\n            tif->tif_rawcp = (uint8_t *)bp;\n            tif->tif_rawcc = cc;\n            return (0);\n        }\n    }\n    (*sp->tfunc)(sp, op, npixels);\n    tif->tif_rawcp = (uint8_t *)bp;\n    tif->tif_rawcc = cc;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          311,
+          0
+        ],
+        [
+          383,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvDecode32",
+        "parameters": {
+          "tif": "TIFF",
+          "op": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvDecodeStrip(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)\n{\n    tmsize_t rowlen = TIFFScanlineSize(tif);\n\n    if (rowlen == 0)\n        return 0;\n\n    assert(cc % rowlen == 0);\n    while (cc && (*tif->tif_decoderow)(tif, bp, rowlen, s))\n    {\n        bp += rowlen;\n        cc -= rowlen;\n    }\n    return (cc == 0);\n}",
+      "fn_code_pos": [
+        [
+          390,
+          0
+        ],
+        [
+          404,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvDecodeStrip",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvDecodeTile(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)\n{\n    tmsize_t rowlen = TIFFTileRowSize(tif);\n\n    if (rowlen == 0)\n        return 0;\n\n    assert(cc % rowlen == 0);\n    while (cc && (*tif->tif_decoderow)(tif, bp, rowlen, s))\n    {\n        bp += rowlen;\n        cc -= rowlen;\n    }\n    return (cc == 0);\n}",
+      "fn_code_pos": [
+        [
+          411,
+          0
+        ],
+        [
+          425,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvDecodeTile",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogL16Encode(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)\n{\n    static const char module[] = \"LogL16Encode\";\n    LogLuvState *sp = EncoderState(tif);\n    int shft;\n    tmsize_t i;\n    tmsize_t j;\n    tmsize_t npixels;\n    uint8_t *op;\n    int16_t *tp;\n    int16_t b;\n    tmsize_t occ;\n    int rc = 0, mask;\n    tmsize_t beg;\n\n    (void)s;\n    assert(s == 0);\n    assert(sp != NULL);\n    npixels = cc / sp->pixel_size;\n\n    if (sp->user_datafmt == SGILOGDATAFMT_16BIT)\n        tp = (int16_t *)bp;\n    else\n    {\n        tp = (int16_t *)sp->tbuf;\n        if (sp->tbuflen < npixels)\n        {\n            TIFFErrorExtR(tif, module, \"Translation buffer too short\");\n            return (0);\n        }\n        (*sp->tfunc)(sp, bp, npixels);\n    }\n    /* compress each byte string */\n    op = tif->tif_rawcp;\n    occ = tif->tif_rawdatasize - tif->tif_rawcc;\n    for (shft = 8; shft >= 0; shft -= 8)\n    {\n        for (i = 0; i < npixels; i += rc)\n        {\n            if (occ < 4)\n            {\n                tif->tif_rawcp = op;\n                tif->tif_rawcc = tif->tif_rawdatasize - occ;\n                if (!TIFFFlushData1(tif))\n                    return (0);\n                op = tif->tif_rawcp;\n                occ = tif->tif_rawdatasize - tif->tif_rawcc;\n            }\n            mask = 0xff << shft; /* find next run */\n            for (beg = i; beg < npixels; beg += rc)\n            {\n                b = (int16_t)(tp[beg] & mask);\n                rc = 1;\n                while (rc < 127 + 2 && beg + rc < npixels &&\n                       (tp[beg + rc] & mask) == b)\n                    rc++;\n                if (rc >= MINRUN)\n                    break; /* long enough */\n            }\n            if (beg - i > 1 && beg - i < MINRUN)\n            {\n                b = (int16_t)(tp[i] & mask); /*check short run */\n                j = i + 1;\n                while ((tp[j++] & mask) == b)\n                    if (j == beg)\n                    {\n                        *op++ = (uint8_t)(128 - 2 + j - i);\n                        *op++ = (uint8_t)(b >> shft);\n                        occ -= 2;\n                        i = beg;\n                        break;\n                    }\n            }\n            while (i < beg)\n            { /* write out non-run */\n                if ((j = beg - i) > 127)\n                    j = 127;\n                if (occ < j + 3)\n                {\n                    tif->tif_rawcp = op;\n                    tif->tif_rawcc = tif->tif_rawdatasize - occ;\n                    if (!TIFFFlushData1(tif))\n                        return (0);\n                    op = tif->tif_rawcp;\n                    occ = tif->tif_rawdatasize - tif->tif_rawcc;\n                }\n                *op++ = (uint8_t)j;\n                occ--;\n                while (j--)\n                {\n                    *op++ = (uint8_t)(tp[i++] >> shft & 0xff);\n                    occ--;\n                }\n            }\n            if (rc >= MINRUN)\n            { /* write out run */\n                *op++ = (uint8_t)(128 - 2 + rc);\n                *op++ = (uint8_t)(tp[beg] >> shft & 0xff);\n                occ -= 2;\n            }\n            else\n                rc = 0;\n        }\n    }\n    tif->tif_rawcp = op;\n    tif->tif_rawcc = tif->tif_rawdatasize - occ;\n\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          430,
+          0
+        ],
+        [
+          538,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogL16Encode",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvEncode24(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)\n{\n    static const char module[] = \"LogLuvEncode24\";\n    LogLuvState *sp = EncoderState(tif);\n    tmsize_t i;\n    tmsize_t npixels;\n    tmsize_t occ;\n    uint8_t *op;\n    uint32_t *tp;\n\n    (void)s;\n    assert(s == 0);\n    assert(sp != NULL);\n    npixels = cc / sp->pixel_size;\n\n    if (sp->user_datafmt == SGILOGDATAFMT_RAW)\n        tp = (uint32_t *)bp;\n    else\n    {\n        tp = (uint32_t *)sp->tbuf;\n        if (sp->tbuflen < npixels)\n        {\n            TIFFErrorExtR(tif, module, \"Translation buffer too short\");\n            return (0);\n        }\n        (*sp->tfunc)(sp, bp, npixels);\n    }\n    /* write out encoded pixels */\n    op = tif->tif_rawcp;\n    occ = tif->tif_rawdatasize - tif->tif_rawcc;\n    for (i = npixels; i--;)\n    {\n        if (occ < 3)\n        {\n            tif->tif_rawcp = op;\n            tif->tif_rawcc = tif->tif_rawdatasize - occ;\n            if (!TIFFFlushData1(tif))\n                return (0);\n            op = tif->tif_rawcp;\n            occ = tif->tif_rawdatasize - tif->tif_rawcc;\n        }\n        *op++ = (uint8_t)(*tp >> 16);\n        *op++ = (uint8_t)(*tp >> 8 & 0xff);\n        *op++ = (uint8_t)(*tp++ & 0xff);\n        occ -= 3;\n    }\n    tif->tif_rawcp = op;\n    tif->tif_rawcc = tif->tif_rawdatasize - occ;\n\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          543,
+          0
+        ],
+        [
+          593,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvEncode24",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvEncode32(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)\n{\n    static const char module[] = \"LogLuvEncode32\";\n    LogLuvState *sp = EncoderState(tif);\n    int shft;\n    tmsize_t i;\n    tmsize_t j;\n    tmsize_t npixels;\n    uint8_t *op;\n    uint32_t *tp;\n    uint32_t b;\n    tmsize_t occ;\n    int rc = 0;\n    tmsize_t beg;\n\n    (void)s;\n    assert(s == 0);\n    assert(sp != NULL);\n\n    npixels = cc / sp->pixel_size;\n\n    if (sp->user_datafmt == SGILOGDATAFMT_RAW)\n        tp = (uint32_t *)bp;\n    else\n    {\n        tp = (uint32_t *)sp->tbuf;\n        if (sp->tbuflen < npixels)\n        {\n            TIFFErrorExtR(tif, module, \"Translation buffer too short\");\n            return (0);\n        }\n        (*sp->tfunc)(sp, bp, npixels);\n    }\n    /* compress each byte string */\n    op = tif->tif_rawcp;\n    occ = tif->tif_rawdatasize - tif->tif_rawcc;\n    for (shft = 24; shft >= 0; shft -= 8)\n    {\n        const uint32_t mask = 0xffU << shft; /* find next run */\n        for (i = 0; i < npixels; i += rc)\n        {\n            if (occ < 4)\n            {\n                tif->tif_rawcp = op;\n                tif->tif_rawcc = tif->tif_rawdatasize - occ;\n                if (!TIFFFlushData1(tif))\n                    return (0);\n                op = tif->tif_rawcp;\n                occ = tif->tif_rawdatasize - tif->tif_rawcc;\n            }\n            for (beg = i; beg < npixels; beg += rc)\n            {\n                b = tp[beg] & mask;\n                rc = 1;\n                while (rc < 127 + 2 && beg + rc < npixels &&\n                       (tp[beg + rc] & mask) == b)\n                    rc++;\n                if (rc >= MINRUN)\n                    break; /* long enough */\n            }\n            if (beg - i > 1 && beg - i < MINRUN)\n            {\n                b = tp[i] & mask; /* check short run */\n                j = i + 1;\n                while ((tp[j++] & mask) == b)\n                    if (j == beg)\n                    {\n                        *op++ = (uint8_t)(128 - 2 + j - i);\n                        *op++ = (uint8_t)(b >> shft);\n                        occ -= 2;\n                        i = beg;\n                        break;\n                    }\n            }\n            while (i < beg)\n            { /* write out non-run */\n                if ((j = beg - i) > 127)\n                    j = 127;\n                if (occ < j + 3)\n                {\n                    tif->tif_rawcp = op;\n                    tif->tif_rawcc = tif->tif_rawdatasize - occ;\n                    if (!TIFFFlushData1(tif))\n                        return (0);\n                    op = tif->tif_rawcp;\n                    occ = tif->tif_rawdatasize - tif->tif_rawcc;\n                }\n                *op++ = (uint8_t)j;\n                occ--;\n                while (j--)\n                {\n                    *op++ = (uint8_t)(tp[i++] >> shft & 0xff);\n                    occ--;\n                }\n            }\n            if (rc >= MINRUN)\n            { /* write out run */\n                *op++ = (uint8_t)(128 - 2 + rc);\n                *op++ = (uint8_t)(tp[beg] >> shft & 0xff);\n                occ -= 2;\n            }\n            else\n                rc = 0;\n        }\n    }\n    tif->tif_rawcp = op;\n    tif->tif_rawcc = tif->tif_rawdatasize - occ;\n\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          598,
+          0
+        ],
+        [
+          707,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvEncode32",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvEncodeStrip(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)\n{\n    tmsize_t rowlen = TIFFScanlineSize(tif);\n\n    if (rowlen == 0)\n        return 0;\n\n    assert(cc % rowlen == 0);\n    while (cc && (*tif->tif_encoderow)(tif, bp, rowlen, s) == 1)\n    {\n        bp += rowlen;\n        cc -= rowlen;\n    }\n    return (cc == 0);\n}",
+      "fn_code_pos": [
+        [
+          713,
+          0
+        ],
+        [
+          727,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvEncodeStrip",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvEncodeTile(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)\n{\n    tmsize_t rowlen = TIFFTileRowSize(tif);\n\n    if (rowlen == 0)\n        return 0;\n\n    assert(cc % rowlen == 0);\n    while (cc && (*tif->tif_encoderow)(tif, bp, rowlen, s) == 1)\n    {\n        bp += rowlen;\n        cc -= rowlen;\n    }\n    return (cc == 0);\n}",
+      "fn_code_pos": [
+        [
+          733,
+          0
+        ],
+        [
+          747,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvEncodeTile",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int tiff_itrunc(double x, int m)\n{\n    if (m == SGILOGENCODE_NODITHER)\n        return (int)x;\n    /* Silence CoverityScan warning about bad crypto function */\n    /* coverity[dont_call] */\n    return (int)(x + rand() * (1. / RAND_MAX) - .5);\n}",
+      "fn_code_pos": [
+        [
+          772,
+          0
+        ],
+        [
+          779,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tiff_itrunc",
+        "parameters": {
+          "x": "double",
+          "m": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "double\n    LogL16toY(int p16) /* compute luminance from 16-bit LogL */\n{\n    int Le = p16 & 0x7fff;\n    double Y;\n\n    if (!Le)\n        return (0.);\n    Y = exp(M_LN2 / 256. * (Le + .5) - M_LN2 * 64.);\n    return (!(p16 & 0x8000) ? Y : -Y);\n}",
+      "fn_code_pos": [
+        [
+          784,
+          4
+        ],
+        [
+          794,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogL16toY",
+        "parameters": {
+          "p16": "int"
+        },
+        "return_type": "double"
+      }
+    },
+    {
+      "fn_code": "int\n    LogL16fromY(double Y, int em) /* get 16-bit LogL from Y */\n{\n    if (Y >= 1.8371976e19)\n        return (0x7fff);\n    if (Y <= -1.8371976e19)\n        return (0xffff);\n    if (Y > 5.4136769e-20)\n        return tiff_itrunc(256. * (log2(Y) + 64.), em);\n    if (Y < -5.4136769e-20)\n        return (~0x7fff | tiff_itrunc(256. * (log2(-Y) + 64.), em));\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          799,
+          4
+        ],
+        [
+          811,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogL16fromY",
+        "parameters": {
+          "Y": "double",
+          "em": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void L16toY(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    int16_t *l16 = (int16_t *)sp->tbuf;\n    float *yp = (float *)op;\n\n    while (n-- > 0)\n        *yp++ = (float)LogL16toY(*l16++);\n}",
+      "fn_code_pos": [
+        [
+          813,
+          0
+        ],
+        [
+          820,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "L16toY",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void L16toGry(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    int16_t *l16 = (int16_t *)sp->tbuf;\n    uint8_t *gp = (uint8_t *)op;\n\n    while (n-- > 0)\n    {\n        double Y = LogL16toY(*l16++);\n        *gp++ = (uint8_t)((Y <= 0.)   ? 0\n                          : (Y >= 1.) ? 255\n                                      : (int)(256. * sqrt(Y)));\n    }\n}",
+      "fn_code_pos": [
+        [
+          822,
+          0
+        ],
+        [
+          834,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "L16toGry",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void L16fromY(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    int16_t *l16 = (int16_t *)sp->tbuf;\n    float *yp = (float *)op;\n\n    while (n-- > 0)\n        *l16++ = (int16_t)(LogL16fromY(*yp++, sp->encode_meth));\n}",
+      "fn_code_pos": [
+        [
+          836,
+          0
+        ],
+        [
+          843,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "L16fromY",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void\n    XYZtoRGB24(float *xyz, uint8_t *rgb)\n{\n    double r, g, b;\n    /* assume CCIR-709 primaries */\n    r = 2.690 * xyz[0] + -1.276 * xyz[1] + -0.414 * xyz[2];\n    g = -1.022 * xyz[0] + 1.978 * xyz[1] + 0.044 * xyz[2];\n    b = 0.061 * xyz[0] + -0.224 * xyz[1] + 1.163 * xyz[2];\n    /* assume 2.0 gamma for speed */\n    /* could use integer sqrt approx., but this is probably faster */\n    rgb[0] = (uint8_t)((r <= 0.) ? 0 : (r >= 1.) ? 255 : (int)(256. * sqrt(r)));\n    rgb[1] = (uint8_t)((g <= 0.) ? 0 : (g >= 1.) ? 255 : (int)(256. * sqrt(g)));\n    rgb[2] = (uint8_t)((b <= 0.) ? 0 : (b >= 1.) ? 255 : (int)(256. * sqrt(b)));\n}",
+      "fn_code_pos": [
+        [
+          848,
+          4
+        ],
+        [
+          861,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "XYZtoRGB24",
+        "parameters": {
+          "xyz": "float",
+          "rgb": "uint8_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "double\n    LogL10toY(int p10) /* compute luminance from 10-bit LogL */\n{\n    if (p10 == 0)\n        return (0.);\n    return (exp(M_LN2 / 64. * (p10 + .5) - M_LN2 * 12.));\n}",
+      "fn_code_pos": [
+        [
+          866,
+          4
+        ],
+        [
+          872,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogL10toY",
+        "parameters": {
+          "p10": "int"
+        },
+        "return_type": "double"
+      }
+    },
+    {
+      "fn_code": "int\n    LogL10fromY(double Y, int em) /* get 10-bit LogL from Y */\n{\n    if (Y >= 15.742)\n        return (0x3ff);\n    else if (Y <= .00024283)\n        return (0);\n    else\n        return tiff_itrunc(64. * (log2(Y) + 12.), em);\n}",
+      "fn_code_pos": [
+        [
+          877,
+          4
+        ],
+        [
+          886,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogL10fromY",
+        "parameters": {
+          "Y": "double",
+          "em": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int oog_encode(double u, double v) /* encode out-of-gamut chroma */\n{\n    static int oog_table[NANGLES];\n    static int initialized = 0;\n    register int i;\n\n    if (!initialized)\n    { /* set up perimeter table */\n        double eps[NANGLES], ua, va, ang, epsa;\n        int ui, vi, ustep;\n        for (i = NANGLES; i--;)\n            eps[i] = 2.;\n        for (vi = UV_NVS; vi--;)\n        {\n            va = UV_VSTART + (vi + .5) * UV_SQSIZ;\n            ustep = uv_row[vi].nus - 1;\n            if (vi == UV_NVS - 1 || vi == 0 || ustep <= 0)\n                ustep = 1;\n            for (ui = uv_row[vi].nus - 1; ui >= 0; ui -= ustep)\n            {\n                ua = uv_row[vi].ustart + (ui + .5) * UV_SQSIZ;\n                ang = uv2ang(ua, va);\n                i = (int)ang;\n                epsa = fabs(ang - (i + .5));\n                if (epsa < eps[i])\n                {\n                    oog_table[i] = uv_row[vi].ncum + ui;\n                    eps[i] = epsa;\n                }\n            }\n        }\n        for (i = NANGLES; i--;) /* fill any holes */\n            if (eps[i] > 1.5)\n            {\n                int i1, i2;\n                for (i1 = 1; i1 < NANGLES / 2; i1++)\n                    if (eps[(i + i1) % NANGLES] < 1.5)\n                        break;\n                for (i2 = 1; i2 < NANGLES / 2; i2++)\n                    if (eps[(i + NANGLES - i2) % NANGLES] < 1.5)\n                        break;\n                if (i1 < i2)\n                    oog_table[i] = oog_table[(i + i1) % NANGLES];\n                else\n                    oog_table[i] = oog_table[(i + NANGLES - i2) % NANGLES];\n            }\n        initialized = 1;\n    }\n    i = (int)uv2ang(u, v); /* look up hue angle */\n    return (oog_table[i]);\n}",
+      "fn_code_pos": [
+        [
+          892,
+          0
+        ],
+        [
+          942,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "oog_encode",
+        "parameters": {
+          "u": "double",
+          "v": "double"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int\n    uv_encode(double u, double v, int em) /* encode (u',v') coordinates */\n{\n    unsigned int vi;\n    int ui;\n\n    /* check for NaN */\n    if (u != u || v != v)\n    {\n        u = U_NEU;\n        v = V_NEU;\n    }\n\n    if (v < UV_VSTART)\n        return oog_encode(u, v);\n    vi = tiff_itrunc((v - UV_VSTART) * (1. / UV_SQSIZ), em);\n    if (vi >= UV_NVS)\n        return oog_encode(u, v);\n    if (u < uv_row[vi].ustart)\n        return oog_encode(u, v);\n    ui = tiff_itrunc((u - uv_row[vi].ustart) * (1. / UV_SQSIZ), em);\n    if (ui >= uv_row[vi].nus)\n        return oog_encode(u, v);\n\n    return (uv_row[vi].ncum + ui);\n}",
+      "fn_code_pos": [
+        [
+          950,
+          4
+        ],
+        [
+          975,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "uv_encode",
+        "parameters": {
+          "u": "double",
+          "v": "double",
+          "em": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int\n    uv_decode(double *up, double *vp, int c) /* decode (u',v') index */\n{\n    unsigned int upper, lower;\n    int ui;\n    unsigned int vi;\n\n    if (c < 0 || c >= UV_NDIVS)\n        return (-1);\n    lower = 0; /* binary search */\n    upper = UV_NVS;\n    while (upper - lower > 1)\n    {\n        vi = (lower + upper) >> 1;\n        ui = c - uv_row[vi].ncum;\n        if (ui > 0)\n            lower = vi;\n        else if (ui < 0)\n            upper = vi;\n        else\n        {\n            lower = vi;\n            break;\n        }\n    }\n    vi = lower;\n    ui = c - uv_row[vi].ncum;\n    *up = uv_row[vi].ustart + (ui + .5) * UV_SQSIZ;\n    *vp = UV_VSTART + (vi + .5) * UV_SQSIZ;\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          980,
+          4
+        ],
+        [
+          1010,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "uv_decode",
+        "parameters": {
+          "up": "double",
+          "vp": "double",
+          "c": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void\n    LogLuv24toXYZ(uint32_t p, float *XYZ)\n{\n    int Ce;\n    double L, u, v, s, x, y;\n    /* decode luminance */\n    L = LogL10toY(p >> 14 & 0x3ff);\n    if (L <= 0.)\n    {\n        XYZ[0] = XYZ[1] = XYZ[2] = 0.;\n        return;\n    }\n    /* decode color */\n    Ce = p & 0x3fff;\n    if (uv_decode(&u, &v, Ce) < 0)\n    {\n        u = U_NEU;\n        v = V_NEU;\n    }\n    s = 1. / (6. * u - 16. * v + 12.);\n    x = 9. * u * s;\n    y = 4. * v * s;\n    /* convert to XYZ */\n    XYZ[0] = (float)(x / y * L);\n    XYZ[1] = (float)L;\n    XYZ[2] = (float)((1. - x - y) / y * L);\n}",
+      "fn_code_pos": [
+        [
+          1015,
+          4
+        ],
+        [
+          1041,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuv24toXYZ",
+        "parameters": {
+          "p": "uint32_t",
+          "XYZ": "float"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "uint32_t\n    LogLuv24fromXYZ(float *XYZ, int em)\n{\n    int Le, Ce;\n    double u, v, s;\n    /* encode luminance */\n    Le = LogL10fromY(XYZ[1], em);\n    /* encode color */\n    s = XYZ[0] + 15. * XYZ[1] + 3. * XYZ[2];\n    if (!Le || s <= 0.)\n    {\n        u = U_NEU;\n        v = V_NEU;\n    }\n    else\n    {\n        u = 4. * XYZ[0] / s;\n        v = 9. * XYZ[1] / s;\n    }\n    Ce = uv_encode(u, v, em);\n    if (Ce < 0) /* never happens */\n        Ce = uv_encode(U_NEU, V_NEU, SGILOGENCODE_NODITHER);\n    /* combine encodings */\n    return (Le << 14 | Ce);\n}",
+      "fn_code_pos": [
+        [
+          1046,
+          4
+        ],
+        [
+          1070,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuv24fromXYZ",
+        "parameters": {
+          "XYZ": "float",
+          "em": "int"
+        },
+        "return_type": "uint32_t"
+      }
+    },
+    {
+      "fn_code": "static void Luv24toXYZ(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    uint32_t *luv = (uint32_t *)sp->tbuf;\n    float *xyz = (float *)op;\n\n    while (n-- > 0)\n    {\n        LogLuv24toXYZ(*luv, xyz);\n        xyz += 3;\n        luv++;\n    }\n}",
+      "fn_code_pos": [
+        [
+          1072,
+          0
+        ],
+        [
+          1083,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Luv24toXYZ",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void Luv24toLuv48(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    uint32_t *luv = (uint32_t *)sp->tbuf;\n    int16_t *luv3 = (int16_t *)op;\n\n    while (n-- > 0)\n    {\n        double u, v;\n\n        *luv3++ = (int16_t)((*luv >> 12 & 0xffd) + 13314);\n        if (uv_decode(&u, &v, *luv & 0x3fff) < 0)\n        {\n            u = U_NEU;\n            v = V_NEU;\n        }\n        *luv3++ = (int16_t)(u * (1L << 15));\n        *luv3++ = (int16_t)(v * (1L << 15));\n        luv++;\n    }\n}",
+      "fn_code_pos": [
+        [
+          1085,
+          0
+        ],
+        [
+          1104,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Luv24toLuv48",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void Luv24toRGB(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    uint32_t *luv = (uint32_t *)sp->tbuf;\n    uint8_t *rgb = (uint8_t *)op;\n\n    while (n-- > 0)\n    {\n        float xyz[3];\n\n        LogLuv24toXYZ(*luv++, xyz);\n        XYZtoRGB24(xyz, rgb);\n        rgb += 3;\n    }\n}",
+      "fn_code_pos": [
+        [
+          1106,
+          0
+        ],
+        [
+          1119,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Luv24toRGB",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void Luv24fromXYZ(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    uint32_t *luv = (uint32_t *)sp->tbuf;\n    float *xyz = (float *)op;\n\n    while (n-- > 0)\n    {\n        *luv++ = LogLuv24fromXYZ(xyz, sp->encode_meth);\n        xyz += 3;\n    }\n}",
+      "fn_code_pos": [
+        [
+          1121,
+          0
+        ],
+        [
+          1131,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Luv24fromXYZ",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void Luv24fromLuv48(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    uint32_t *luv = (uint32_t *)sp->tbuf;\n    int16_t *luv3 = (int16_t *)op;\n\n    while (n-- > 0)\n    {\n        int Le, Ce;\n\n        if (luv3[0] <= 0)\n            Le = 0;\n        else if (luv3[0] >= (1 << 12) + 3314)\n            Le = (1 << 10) - 1;\n        else if (sp->encode_meth == SGILOGENCODE_NODITHER)\n            Le = (luv3[0] - 3314) >> 2;\n        else\n            Le = tiff_itrunc(.25 * (luv3[0] - 3314.), sp->encode_meth);\n\n        Ce = uv_encode((luv3[1] + .5) / (1 << 15), (luv3[2] + .5) / (1 << 15),\n                       sp->encode_meth);\n        if (Ce < 0) /* never happens */\n            Ce = uv_encode(U_NEU, V_NEU, SGILOGENCODE_NODITHER);\n        *luv++ = (uint32_t)Le << 14 | Ce;\n        luv3 += 3;\n    }\n}",
+      "fn_code_pos": [
+        [
+          1133,
+          0
+        ],
+        [
+          1158,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Luv24fromLuv48",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void\n    LogLuv32toXYZ(uint32_t p, float *XYZ)\n{\n    double L, u, v, s, x, y;\n    /* decode luminance */\n    L = LogL16toY((int)p >> 16);\n    if (L <= 0.)\n    {\n        XYZ[0] = XYZ[1] = XYZ[2] = 0.;\n        return;\n    }\n    /* decode color */\n    u = 1. / UVSCALE * ((p >> 8 & 0xff) + .5);\n    v = 1. / UVSCALE * ((p & 0xff) + .5);\n    s = 1. / (6. * u - 16. * v + 12.);\n    x = 9. * u * s;\n    y = 4. * v * s;\n    /* convert to XYZ */\n    XYZ[0] = (float)(x / y * L);\n    XYZ[1] = (float)L;\n    XYZ[2] = (float)((1. - x - y) / y * L);\n}",
+      "fn_code_pos": [
+        [
+          1163,
+          4
+        ],
+        [
+          1184,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuv32toXYZ",
+        "parameters": {
+          "p": "uint32_t",
+          "XYZ": "float"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "uint32_t\n    LogLuv32fromXYZ(float *XYZ, int em)\n{\n    unsigned int Le, ue, ve;\n    double u, v, s;\n    /* encode luminance */\n    Le = (unsigned int)LogL16fromY(XYZ[1], em);\n    /* encode color */\n    s = XYZ[0] + 15. * XYZ[1] + 3. * XYZ[2];\n    if (!Le || s <= 0.)\n    {\n        u = U_NEU;\n        v = V_NEU;\n    }\n    else\n    {\n        u = 4. * XYZ[0] / s;\n        v = 9. * XYZ[1] / s;\n    }\n    if (u <= 0.)\n        ue = 0;\n    else\n        ue = tiff_itrunc(UVSCALE * u, em);\n    if (ue > 255)\n        ue = 255;\n    if (v <= 0.)\n        ve = 0;\n    else\n        ve = tiff_itrunc(UVSCALE * v, em);\n    if (ve > 255)\n        ve = 255;\n    /* combine encodings */\n    return (Le << 16 | ue << 8 | ve);\n}",
+      "fn_code_pos": [
+        [
+          1189,
+          4
+        ],
+        [
+          1222,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuv32fromXYZ",
+        "parameters": {
+          "XYZ": "float",
+          "em": "int"
+        },
+        "return_type": "uint32_t"
+      }
+    },
+    {
+      "fn_code": "static void Luv32toXYZ(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    uint32_t *luv = (uint32_t *)sp->tbuf;\n    float *xyz = (float *)op;\n\n    while (n-- > 0)\n    {\n        LogLuv32toXYZ(*luv++, xyz);\n        xyz += 3;\n    }\n}",
+      "fn_code_pos": [
+        [
+          1224,
+          0
+        ],
+        [
+          1234,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Luv32toXYZ",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void Luv32toLuv48(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    uint32_t *luv = (uint32_t *)sp->tbuf;\n    int16_t *luv3 = (int16_t *)op;\n\n    while (n-- > 0)\n    {\n        double u, v;\n\n        *luv3++ = (int16_t)(*luv >> 16);\n        u = 1. / UVSCALE * ((*luv >> 8 & 0xff) + .5);\n        v = 1. / UVSCALE * ((*luv & 0xff) + .5);\n        *luv3++ = (int16_t)(u * (1L << 15));\n        *luv3++ = (int16_t)(v * (1L << 15));\n        luv++;\n    }\n}",
+      "fn_code_pos": [
+        [
+          1236,
+          0
+        ],
+        [
+          1252,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Luv32toLuv48",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void Luv32toRGB(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    uint32_t *luv = (uint32_t *)sp->tbuf;\n    uint8_t *rgb = (uint8_t *)op;\n\n    while (n-- > 0)\n    {\n        float xyz[3];\n\n        LogLuv32toXYZ(*luv++, xyz);\n        XYZtoRGB24(xyz, rgb);\n        rgb += 3;\n    }\n}",
+      "fn_code_pos": [
+        [
+          1254,
+          0
+        ],
+        [
+          1267,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Luv32toRGB",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void Luv32fromXYZ(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    uint32_t *luv = (uint32_t *)sp->tbuf;\n    float *xyz = (float *)op;\n\n    while (n-- > 0)\n    {\n        *luv++ = LogLuv32fromXYZ(xyz, sp->encode_meth);\n        xyz += 3;\n    }\n}",
+      "fn_code_pos": [
+        [
+          1269,
+          0
+        ],
+        [
+          1279,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Luv32fromXYZ",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void Luv32fromLuv48(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    uint32_t *luv = (uint32_t *)sp->tbuf;\n    int16_t *luv3 = (int16_t *)op;\n\n    if (sp->encode_meth == SGILOGENCODE_NODITHER)\n    {\n        while (n-- > 0)\n        {\n            *luv++ = (uint32_t)luv3[0] << 16 |\n                     (luv3[1] * (uint32_t)(UVSCALE + .5) >> 7 & 0xff00) |\n                     (luv3[2] * (uint32_t)(UVSCALE + .5) >> 15 & 0xff);\n            luv3 += 3;\n        }\n        return;\n    }\n    while (n-- > 0)\n    {\n        *luv++ =\n            (uint32_t)luv3[0] << 16 |\n            (tiff_itrunc(luv3[1] * (UVSCALE / (1 << 15)), sp->encode_meth)\n                 << 8 &\n             0xff00) |\n            (tiff_itrunc(luv3[2] * (UVSCALE / (1 << 15)), sp->encode_meth) &\n             0xff);\n        luv3 += 3;\n    }\n}",
+      "fn_code_pos": [
+        [
+          1281,
+          0
+        ],
+        [
+          1308,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Luv32fromLuv48",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void _logLuvNop(LogLuvState *sp, uint8_t *op, tmsize_t n)\n{\n    (void)sp;\n    (void)op;\n    (void)n;\n}",
+      "fn_code_pos": [
+        [
+          1310,
+          0
+        ],
+        [
+          1315,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_logLuvNop",
+        "parameters": {
+          "sp": "LogLuvState",
+          "op": "uint8_t",
+          "n": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int LogL16GuessDataFmt(TIFFDirectory *td)\n{\n#define PACK(s, b, f) (((b) << 6) | ((s) << 3) | (f))\n    switch (\n        PACK(td->td_samplesperpixel, td->td_bitspersample, td->td_sampleformat))\n    {\n        case PACK(1, 32, SAMPLEFORMAT_IEEEFP):\n            return (SGILOGDATAFMT_FLOAT);\n        case PACK(1, 16, SAMPLEFORMAT_VOID):\n        case PACK(1, 16, SAMPLEFORMAT_INT):\n        case PACK(1, 16, SAMPLEFORMAT_UINT):\n            return (SGILOGDATAFMT_16BIT);\n        case PACK(1, 8, SAMPLEFORMAT_VOID):\n        case PACK(1, 8, SAMPLEFORMAT_UINT):\n            return (SGILOGDATAFMT_8BIT);\n    }\n#undef PACK\n    return (SGILOGDATAFMT_UNKNOWN);\n}",
+      "fn_code_pos": [
+        [
+          1317,
+          0
+        ],
+        [
+          1335,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogL16GuessDataFmt",
+        "parameters": {
+          "td": "TIFFDirectory"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static tmsize_t multiply_ms(tmsize_t m1, tmsize_t m2)\n{\n    return _TIFFMultiplySSize(NULL, m1, m2, NULL);\n}",
+      "fn_code_pos": [
+        [
+          1337,
+          0
+        ],
+        [
+          1340,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "multiply_ms",
+        "parameters": {
+          "m1": "tmsize_t",
+          "m2": "tmsize_t"
+        },
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "static int LogL16InitState(TIFF *tif)\n{\n    static const char module[] = \"LogL16InitState\";\n    TIFFDirectory *td = &tif->tif_dir;\n    LogLuvState *sp = DecoderState(tif);\n\n    assert(sp != NULL);\n    assert(td->td_photometric == PHOTOMETRIC_LOGL);\n\n    if (td->td_samplesperpixel != 1)\n    {\n        TIFFErrorExtR(tif, module,\n                      \"Sorry, can not handle LogL image with %s=%\" PRIu16,\n                      \"Samples/pixel\", td->td_samplesperpixel);\n        return 0;\n    }\n\n    /* for some reason, we can't do this in TIFFInitLogL16 */\n    if (sp->user_datafmt == SGILOGDATAFMT_UNKNOWN)\n        sp->user_datafmt = LogL16GuessDataFmt(td);\n    switch (sp->user_datafmt)\n    {\n        case SGILOGDATAFMT_FLOAT:\n            sp->pixel_size = sizeof(float);\n            break;\n        case SGILOGDATAFMT_16BIT:\n            sp->pixel_size = sizeof(int16_t);\n            break;\n        case SGILOGDATAFMT_8BIT:\n            sp->pixel_size = sizeof(uint8_t);\n            break;\n        default:\n            TIFFErrorExtR(tif, module,\n                          \"No support for converting user data format to LogL\");\n            return (0);\n    }\n    if (isTiled(tif))\n        sp->tbuflen = multiply_ms(td->td_tilewidth, td->td_tilelength);\n    else if (td->td_rowsperstrip < td->td_imagelength)\n        sp->tbuflen = multiply_ms(td->td_imagewidth, td->td_rowsperstrip);\n    else\n        sp->tbuflen = multiply_ms(td->td_imagewidth, td->td_imagelength);\n    if (multiply_ms(sp->tbuflen, sizeof(int16_t)) == 0 ||\n        (sp->tbuf = (uint8_t *)_TIFFmallocExt(\n             tif, sp->tbuflen * sizeof(int16_t))) == NULL)\n    {\n        TIFFErrorExtR(tif, module, \"No space for SGILog translation buffer\");\n        return (0);\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          1342,
+          0
+        ],
+        [
+          1392,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogL16InitState",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvGuessDataFmt(TIFFDirectory *td)\n{\n    int guess;\n\n    /*\n     * If the user didn't tell us their datafmt,\n     * take our best guess from the bitspersample.\n     */\n#define PACK(a, b) (((a) << 3) | (b))\n    switch (PACK(td->td_bitspersample, td->td_sampleformat))\n    {\n        case PACK(32, SAMPLEFORMAT_IEEEFP):\n            guess = SGILOGDATAFMT_FLOAT;\n            break;\n        case PACK(32, SAMPLEFORMAT_VOID):\n        case PACK(32, SAMPLEFORMAT_UINT):\n        case PACK(32, SAMPLEFORMAT_INT):\n            guess = SGILOGDATAFMT_RAW;\n            break;\n        case PACK(16, SAMPLEFORMAT_VOID):\n        case PACK(16, SAMPLEFORMAT_INT):\n        case PACK(16, SAMPLEFORMAT_UINT):\n            guess = SGILOGDATAFMT_16BIT;\n            break;\n        case PACK(8, SAMPLEFORMAT_VOID):\n        case PACK(8, SAMPLEFORMAT_UINT):\n            guess = SGILOGDATAFMT_8BIT;\n            break;\n        default:\n            guess = SGILOGDATAFMT_UNKNOWN;\n            break;\n#undef PACK\n    }\n    /*\n     * Double-check samples per pixel.\n     */\n    switch (td->td_samplesperpixel)\n    {\n        case 1:\n            if (guess != SGILOGDATAFMT_RAW)\n                guess = SGILOGDATAFMT_UNKNOWN;\n            break;\n        case 3:\n            if (guess == SGILOGDATAFMT_RAW)\n                guess = SGILOGDATAFMT_UNKNOWN;\n            break;\n        default:\n            guess = SGILOGDATAFMT_UNKNOWN;\n            break;\n    }\n    return (guess);\n}",
+      "fn_code_pos": [
+        [
+          1394,
+          0
+        ],
+        [
+          1445,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvGuessDataFmt",
+        "parameters": {
+          "td": "TIFFDirectory"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvInitState(TIFF *tif)\n{\n    static const char module[] = \"LogLuvInitState\";\n    TIFFDirectory *td = &tif->tif_dir;\n    LogLuvState *sp = DecoderState(tif);\n\n    assert(sp != NULL);\n    assert(td->td_photometric == PHOTOMETRIC_LOGLUV);\n\n    /* for some reason, we can't do this in TIFFInitLogLuv */\n    if (td->td_planarconfig != PLANARCONFIG_CONTIG)\n    {\n        TIFFErrorExtR(tif, module,\n                      \"SGILog compression cannot handle non-contiguous data\");\n        return (0);\n    }\n    if (sp->user_datafmt == SGILOGDATAFMT_UNKNOWN)\n        sp->user_datafmt = LogLuvGuessDataFmt(td);\n    switch (sp->user_datafmt)\n    {\n        case SGILOGDATAFMT_FLOAT:\n            sp->pixel_size = 3 * sizeof(float);\n            break;\n        case SGILOGDATAFMT_16BIT:\n            sp->pixel_size = 3 * sizeof(int16_t);\n            break;\n        case SGILOGDATAFMT_RAW:\n            sp->pixel_size = sizeof(uint32_t);\n            break;\n        case SGILOGDATAFMT_8BIT:\n            sp->pixel_size = 3 * sizeof(uint8_t);\n            break;\n        default:\n            TIFFErrorExtR(\n                tif, module,\n                \"No support for converting user data format to LogLuv\");\n            return (0);\n    }\n    if (isTiled(tif))\n        sp->tbuflen = multiply_ms(td->td_tilewidth, td->td_tilelength);\n    else if (td->td_rowsperstrip < td->td_imagelength)\n        sp->tbuflen = multiply_ms(td->td_imagewidth, td->td_rowsperstrip);\n    else\n        sp->tbuflen = multiply_ms(td->td_imagewidth, td->td_imagelength);\n    if (multiply_ms(sp->tbuflen, sizeof(uint32_t)) == 0 ||\n        (sp->tbuf = (uint8_t *)_TIFFmallocExt(\n             tif, sp->tbuflen * sizeof(uint32_t))) == NULL)\n    {\n        TIFFErrorExtR(tif, module, \"No space for SGILog translation buffer\");\n        return (0);\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          1447,
+          0
+        ],
+        [
+          1499,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvInitState",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvFixupTags(TIFF *tif)\n{\n    (void)tif;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          1501,
+          0
+        ],
+        [
+          1505,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvFixupTags",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvSetupDecode(TIFF *tif)\n{\n    static const char module[] = \"LogLuvSetupDecode\";\n    LogLuvState *sp = DecoderState(tif);\n    TIFFDirectory *td = &tif->tif_dir;\n\n    tif->tif_postdecode = _TIFFNoPostDecode;\n    switch (td->td_photometric)\n    {\n        case PHOTOMETRIC_LOGLUV:\n            if (!LogLuvInitState(tif))\n                break;\n            if (td->td_compression == COMPRESSION_SGILOG24)\n            {\n                tif->tif_decoderow = LogLuvDecode24;\n                switch (sp->user_datafmt)\n                {\n                    case SGILOGDATAFMT_FLOAT:\n                        sp->tfunc = Luv24toXYZ;\n                        break;\n                    case SGILOGDATAFMT_16BIT:\n                        sp->tfunc = Luv24toLuv48;\n                        break;\n                    case SGILOGDATAFMT_8BIT:\n                        sp->tfunc = Luv24toRGB;\n                        break;\n                }\n            }\n            else\n            {\n                tif->tif_decoderow = LogLuvDecode32;\n                switch (sp->user_datafmt)\n                {\n                    case SGILOGDATAFMT_FLOAT:\n                        sp->tfunc = Luv32toXYZ;\n                        break;\n                    case SGILOGDATAFMT_16BIT:\n                        sp->tfunc = Luv32toLuv48;\n                        break;\n                    case SGILOGDATAFMT_8BIT:\n                        sp->tfunc = Luv32toRGB;\n                        break;\n                }\n            }\n            return (1);\n        case PHOTOMETRIC_LOGL:\n            if (!LogL16InitState(tif))\n                break;\n            tif->tif_decoderow = LogL16Decode;\n            switch (sp->user_datafmt)\n            {\n                case SGILOGDATAFMT_FLOAT:\n                    sp->tfunc = L16toY;\n                    break;\n                case SGILOGDATAFMT_8BIT:\n                    sp->tfunc = L16toGry;\n                    break;\n            }\n            return (1);\n        default:\n            TIFFErrorExtR(tif, module,\n                          \"Inappropriate photometric interpretation %\" PRIu16\n                          \" for SGILog compression; %s\",\n                          td->td_photometric, \"must be either LogLUV or LogL\");\n            break;\n    }\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          1507,
+          0
+        ],
+        [
+          1574,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvSetupDecode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvSetupEncode(TIFF *tif)\n{\n    static const char module[] = \"LogLuvSetupEncode\";\n    LogLuvState *sp = EncoderState(tif);\n    TIFFDirectory *td = &tif->tif_dir;\n\n    switch (td->td_photometric)\n    {\n        case PHOTOMETRIC_LOGLUV:\n            if (!LogLuvInitState(tif))\n                return (0);\n            if (td->td_compression == COMPRESSION_SGILOG24)\n            {\n                tif->tif_encoderow = LogLuvEncode24;\n                switch (sp->user_datafmt)\n                {\n                    case SGILOGDATAFMT_FLOAT:\n                        sp->tfunc = Luv24fromXYZ;\n                        break;\n                    case SGILOGDATAFMT_16BIT:\n                        sp->tfunc = Luv24fromLuv48;\n                        break;\n                    case SGILOGDATAFMT_RAW:\n                        break;\n                    default:\n                        goto notsupported;\n                }\n            }\n            else\n            {\n                tif->tif_encoderow = LogLuvEncode32;\n                switch (sp->user_datafmt)\n                {\n                    case SGILOGDATAFMT_FLOAT:\n                        sp->tfunc = Luv32fromXYZ;\n                        break;\n                    case SGILOGDATAFMT_16BIT:\n                        sp->tfunc = Luv32fromLuv48;\n                        break;\n                    case SGILOGDATAFMT_RAW:\n                        break;\n                    default:\n                        goto notsupported;\n                }\n            }\n            break;\n        case PHOTOMETRIC_LOGL:\n            if (!LogL16InitState(tif))\n                return (0);\n            tif->tif_encoderow = LogL16Encode;\n            switch (sp->user_datafmt)\n            {\n                case SGILOGDATAFMT_FLOAT:\n                    sp->tfunc = L16fromY;\n                    break;\n                case SGILOGDATAFMT_16BIT:\n                    break;\n                default:\n                    goto notsupported;\n            }\n            break;\n        default:\n            TIFFErrorExtR(tif, module,\n                          \"Inappropriate photometric interpretation %\" PRIu16\n                          \" for SGILog compression; %s\",\n                          td->td_photometric, \"must be either LogLUV or LogL\");\n            return (0);\n    }\n    sp->encoder_state = 1;\n    return (1);\nnotsupported:\n    TIFFErrorExtR(tif, module,\n                  \"SGILog compression supported only for %s, or raw data\",\n                  td->td_photometric == PHOTOMETRIC_LOGL ? \"Y, L\" : \"XYZ, Luv\");\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          1576,
+          0
+        ],
+        [
+          1651,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvSetupEncode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void LogLuvClose(TIFF *tif)\n{\n    LogLuvState *sp = (LogLuvState *)tif->tif_data;\n    TIFFDirectory *td = &tif->tif_dir;\n\n    assert(sp != 0);\n    /*\n     * For consistency, we always want to write out the same\n     * bitspersample and sampleformat for our TIFF file,\n     * regardless of the data format being used by the application.\n     * Since this routine is called after tags have been set but\n     * before they have been recorded in the file, we reset them here.\n     * Note: this is really a nasty approach. See PixarLogClose\n     */\n    if (sp->encoder_state)\n    {\n        /* See PixarLogClose. Might avoid issues with tags whose size depends\n         * on those below, but not completely sure this is enough. */\n        td->td_samplesperpixel =\n            (td->td_photometric == PHOTOMETRIC_LOGL) ? 1 : 3;\n        td->td_bitspersample = 16;\n        td->td_sampleformat = SAMPLEFORMAT_INT;\n    }\n}",
+      "fn_code_pos": [
+        [
+          1653,
+          0
+        ],
+        [
+          1676,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvClose",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void LogLuvCleanup(TIFF *tif)\n{\n    LogLuvState *sp = (LogLuvState *)tif->tif_data;\n\n    assert(sp != 0);\n\n    tif->tif_tagmethods.vgetfield = sp->vgetparent;\n    tif->tif_tagmethods.vsetfield = sp->vsetparent;\n\n    if (sp->tbuf)\n        _TIFFfreeExt(tif, sp->tbuf);\n    _TIFFfreeExt(tif, sp);\n    tif->tif_data = NULL;\n\n    _TIFFSetDefaultCompressionState(tif);\n}",
+      "fn_code_pos": [
+        [
+          1678,
+          0
+        ],
+        [
+          1693,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvCleanup",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvVSetField(TIFF *tif, uint32_t tag, va_list ap)\n{\n    static const char module[] = \"LogLuvVSetField\";\n    LogLuvState *sp = DecoderState(tif);\n    int bps, fmt;\n\n    switch (tag)\n    {\n        case TIFFTAG_SGILOGDATAFMT:\n            sp->user_datafmt = (int)va_arg(ap, int);\n            /*\n             * Tweak the TIFF header so that the rest of libtiff knows what\n             * size of data will be passed between app and library, and\n             * assume that the app knows what it is doing and is not\n             * confused by these header manipulations...\n             */\n            switch (sp->user_datafmt)\n            {\n                case SGILOGDATAFMT_FLOAT:\n                    bps = 32;\n                    fmt = SAMPLEFORMAT_IEEEFP;\n                    break;\n                case SGILOGDATAFMT_16BIT:\n                    bps = 16;\n                    fmt = SAMPLEFORMAT_INT;\n                    break;\n                case SGILOGDATAFMT_RAW:\n                    bps = 32;\n                    fmt = SAMPLEFORMAT_UINT;\n                    TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);\n                    break;\n                case SGILOGDATAFMT_8BIT:\n                    bps = 8;\n                    fmt = SAMPLEFORMAT_UINT;\n                    break;\n                default:\n                    TIFFErrorExtR(\n                        tif, tif->tif_name,\n                        \"Unknown data format %d for LogLuv compression\",\n                        sp->user_datafmt);\n                    return (0);\n            }\n            TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, bps);\n            TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT, fmt);\n            /*\n             * Must recalculate sizes should bits/sample change.\n             */\n            tif->tif_tilesize = isTiled(tif) ? TIFFTileSize(tif) : (tmsize_t)-1;\n            tif->tif_scanlinesize = TIFFScanlineSize(tif);\n            return (1);\n        case TIFFTAG_SGILOGENCODE:\n            sp->encode_meth = (int)va_arg(ap, int);\n            if (sp->encode_meth != SGILOGENCODE_NODITHER &&\n                sp->encode_meth != SGILOGENCODE_RANDITHER)\n            {\n                TIFFErrorExtR(tif, module,\n                              \"Unknown encoding %d for LogLuv compression\",\n                              sp->encode_meth);\n                return (0);\n            }\n            return (1);\n        default:\n            return (*sp->vsetparent)(tif, tag, ap);\n    }\n}",
+      "fn_code_pos": [
+        [
+          1695,
+          0
+        ],
+        [
+          1759,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvVSetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LogLuvVGetField(TIFF *tif, uint32_t tag, va_list ap)\n{\n    LogLuvState *sp = (LogLuvState *)tif->tif_data;\n\n    switch (tag)\n    {\n        case TIFFTAG_SGILOGDATAFMT:\n            *va_arg(ap, int *) = sp->user_datafmt;\n            return (1);\n        default:\n            return (*sp->vgetparent)(tif, tag, ap);\n    }\n}",
+      "fn_code_pos": [
+        [
+          1761,
+          0
+        ],
+        [
+          1773,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LogLuvVGetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFInitSGILog(TIFF *tif, int scheme)\n{\n    static const char module[] = \"TIFFInitSGILog\";\n    LogLuvState *sp;\n\n    assert(scheme == COMPRESSION_SGILOG24 || scheme == COMPRESSION_SGILOG);\n\n    /*\n     * Merge codec-specific tag information.\n     */\n    if (!_TIFFMergeFields(tif, LogLuvFields, TIFFArrayCount(LogLuvFields)))\n    {\n        TIFFErrorExtR(tif, module, \"Merging SGILog codec-specific tags failed\");\n        return 0;\n    }\n\n    /*\n     * Allocate state block so tag methods have storage to record values.\n     */\n    tif->tif_data = (uint8_t *)_TIFFmallocExt(tif, sizeof(LogLuvState));\n    if (tif->tif_data == NULL)\n        goto bad;\n    sp = (LogLuvState *)tif->tif_data;\n    _TIFFmemset((void *)sp, 0, sizeof(*sp));\n    sp->user_datafmt = SGILOGDATAFMT_UNKNOWN;\n    sp->encode_meth = (scheme == COMPRESSION_SGILOG24) ? SGILOGENCODE_RANDITHER\n                                                       : SGILOGENCODE_NODITHER;\n    sp->tfunc = _logLuvNop;\n\n    /*\n     * Install codec methods.\n     * NB: tif_decoderow & tif_encoderow are filled\n     *     in at setup time.\n     */\n    tif->tif_fixuptags = LogLuvFixupTags;\n    tif->tif_setupdecode = LogLuvSetupDecode;\n    tif->tif_decodestrip = LogLuvDecodeStrip;\n    tif->tif_decodetile = LogLuvDecodeTile;\n    tif->tif_setupencode = LogLuvSetupEncode;\n    tif->tif_encodestrip = LogLuvEncodeStrip;\n    tif->tif_encodetile = LogLuvEncodeTile;\n    tif->tif_close = LogLuvClose;\n    tif->tif_cleanup = LogLuvCleanup;\n\n    /*\n     * Override parent get/set field methods.\n     */\n    sp->vgetparent = tif->tif_tagmethods.vgetfield;\n    tif->tif_tagmethods.vgetfield = LogLuvVGetField; /* hook for codec tags */\n    sp->vsetparent = tif->tif_tagmethods.vsetfield;\n    tif->tif_tagmethods.vsetfield = LogLuvVSetField; /* hook for codec tags */\n\n    return (1);\nbad:\n    TIFFErrorExtR(tif, module, \"%s: No space for LogLuv state block\",\n                  tif->tif_name);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          1781,
+          0
+        ],
+        [
+          1838,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFInitSGILog",
+        "parameters": {
+          "tif": "TIFF",
+          "scheme": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "(*tfunc)(LogLuvState *, uint8_t *, tmsize_t)",
+      "fn_dec_pos": [
+        [
+          166,
+          9
+        ],
+        [
+          166,
+          53
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct logLuvState\n{\n    int encoder_state; /* 1 if encoder correctly initialized */\n    int user_datafmt;  /* user data format */\n    int encode_meth;   /* encoding method */\n    int pixel_size;    /* bytes per pixel */\n\n    uint8_t *tbuf;    /* translation buffer */\n    tmsize_t tbuflen; /* buffer length */\n    void (*tfunc)(LogLuvState *, uint8_t *, tmsize_t);\n\n    TIFFVSetMethod vgetparent; /* super-class method */\n    TIFFVSetMethod vsetparent; /* super-class method */\n}",
+      {
+        "encoder_state": "int",
+        "user_datafmt": "int",
+        "encode_meth": "int",
+        "pixel_size": "int",
+        "*tbuf": "uint8_t",
+        "tbuflen": "tmsize_t",
+        "(*tfunc)(LogLuvState *, uint8_t *, tmsize_t)": "void",
+        "vgetparent": "TIFFVSetMethod",
+        "vsetparent": "TIFFVSetMethod"
+      },
+      "logLuvState",
+      [
+        157,
+        0
+      ],
+      [
+        170,
+        1
+      ]
+    ],
+    [
+      "typedef struct logLuvState LogLuvState;",
+      {},
+      "LogLuvState",
+      [
+        155,
+        0
+      ],
+      [
+        155,
+        39
+      ]
+    ],
+    [
+      "struct logLuvState\n{\n    int encoder_state; /* 1 if encoder correctly initialized */\n    int user_datafmt;  /* user data format */\n    int encode_meth;   /* encoding method */\n    int pixel_size;    /* bytes per pixel */\n\n    uint8_t *tbuf;    /* translation buffer */\n    tmsize_t tbuflen; /* buffer length */\n    void (*tfunc)(LogLuvState *, uint8_t *, tmsize_t);\n\n    TIFFVSetMethod vgetparent; /* super-class method */\n    TIFFVSetMethod vsetparent; /* super-class method */\n}",
+      {
+        "encoder_state": "int",
+        "user_datafmt": "int",
+        "encode_meth": "int",
+        "pixel_size": "int",
+        "*tbuf": "uint8_t",
+        "tbuflen": "tmsize_t",
+        "(*tfunc)(LogLuvState *, uint8_t *, tmsize_t)": "void",
+        "vgetparent": "TIFFVSetMethod",
+        "vsetparent": "TIFFVSetMethod"
+      },
+      "logLuvState",
+      [
+        157,
+        0
+      ],
+      [
+        170,
+        1
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        147,
+        0
+      ],
+      [
+        148,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        148,
+        0
+      ],
+      [
+        149,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        149,
+        0
+      ],
+      [
+        150,
+        0
+      ]
+    ],
+    [
+      "#include \"uvcode.h\"\n",
+      [
+        753,
+        0
+      ],
+      [
+        754,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

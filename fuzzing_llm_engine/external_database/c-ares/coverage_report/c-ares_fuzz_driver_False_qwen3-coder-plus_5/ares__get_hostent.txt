@@ -1,0 +1,263 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998, 2011 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17		#include "ares_setup.h"	
+18			
+19		#ifdef HAVE_NETINET_IN_H	
+20		#  include <netinet/in.h>	
+21		#endif	
+22		#ifdef HAVE_NETDB_H	
+23		#  include <netdb.h>	
+24		#endif	
+25		#ifdef HAVE_ARPA_INET_H	
+26		#  include <arpa/inet.h>	
+27		#endif	
+28			
+29		#include "ares.h"	
+30		#include "ares_inet_net_pton.h"	
+31		#include "ares_nowarn.h"	
+32		#include "ares_private.h"	
+33			
+34		int ares__get_hostent(FILE *fp, int family, struct hostent **host)	
+35	0	{	
+36	0	char *line =NULL, *p, *q, **alias;	
+37	0	char *txtaddr, *txthost, *txtalias;	
+38	0	int status;	
+39	0	size_t addrlen, linesize, naliases;	
+40	0	struct ares_addr addr;	
+41	0	struct hostent *hostent =NULL;	
+42			
+43	0	*host =NULL; /* Assume failure */	
+44			
+45		/* Validate family */	
+46	0	switch (family) {	
+47	0	caseAF_INET:	
+48	0	caseAF_INET6:	
+49	0	caseAF_UNSPEC:	
+50	0	break;	
+51	0	default:	
+52	0	returnARES_EBADFAMILY;	
+53	0	}	
+54			
+55	0	while ((status = ares__read_line(fp, &line, &linesize)) ==ARES_SUCCESS)	
+56	0	{	
+57			
+58		/* Trim line comment. */	
+59	0	p = line;	
+60	0	while (*p&&(*p != '#'))	
+61	0	p++;	
+62	0	*p = '\0';	
+63			
+64		/* Trim trailing whitespace. */	
+65	0	q = p - 1;	
+66	0	while ((q >= line)&&ISSPACE(*q))	
+67	0	q--;	
+68	0	*++q = '\0';	
+69			
+70		/* Skip leading whitespace. */	
+71	0	p = line;	
+72	0	while (*p&&ISSPACE(*p))	
+73	0	p++;	
+74	0	if (!*p)	
+75		/* Ignore line if empty. */	
+76	0	continue;	
+77			
+78		/* Pointer to start of IPv4 or IPv6 address part. */	
+79	0	txtaddr = p;	
+80			
+81		/* Advance past address part. */	
+82	0	while (*p&&!ISSPACE(*p))	
+83	0	p++;	
+84	0	if (!*p)	
+85		/* Ignore line if reached end of line. */	
+86	0	continue;	
+87			
+88		/* Null terminate address part. */	
+89	0	*p = '\0';	
+90			
+91		/* Advance to host name */	
+92	0	p++;	
+93	0	while (*p&&ISSPACE(*p))	
+94	0	p++;	
+95	0	if (!*p)	
+96		/* Ignore line if reached end of line. */	
+97	0	continue;  /* LCOV_EXCL_LINE: trailing whitespace already stripped */	
+98			
+99		/* Pointer to start of host name. */	
+100	0	txthost = p;	
+101			
+102		/* Advance past host name. */	
+103	0	while (*p&&!ISSPACE(*p))	
+104	0	p++;	
+105			
+106		/* Pointer to start of first alias. */	
+107	0	txtalias =NULL;	
+108	0	if (*p)	
+109	0	{	
+110	0	q = p + 1;	
+111	0	while (*q&&ISSPACE(*q))	
+112	0	q++;	
+113	0	if (*q)	
+114	0	txtalias = q;	
+115	0	}	
+116			
+117		/* Null terminate host name. */	
+118	0	*p = '\0';	
+119			
+120		/* find out number of aliases. */	
+121	0	naliases = 0;	
+122	0	if (txtalias)	
+123	0	{	
+124	0	p = txtalias;	
+125	0	while (*p)	
+126	0	{	
+127	0	while (*p&&!ISSPACE(*p))	
+128	0	p++;	
+129	0	while (*p&&ISSPACE(*p))	
+130	0	p++;	
+131	0	naliases++;	
+132	0	}	
+133	0	}	
+134			
+135		/* Convert address string to network address for the requested family. */	
+136	0	addrlen = 0;	
+137	0	addr.family =AF_UNSPEC;	
+138	0	addr.addrV4.s_addr =INADDR_NONE;	
+139	0	if ((family ==AF_INET)||(family ==AF_UNSPEC))	
+140	0	{	
+141	0	if (ares_inet_pton(AF_INET, txtaddr, &addr.addrV4) > 0)	
+142	0	{	
+143		/* Actual network address family and length. */	
+144	0	addr.family =AF_INET;	
+145	0	addrlen = sizeof(addr.addrV4);	
+146	0	}	
+147	0	}	
+148	0	if ((family ==AF_INET6)||((family ==AF_UNSPEC)&&(!addrlen)))	
+149	0	{	
+150	0	if (ares_inet_pton(AF_INET6, txtaddr, &addr.addrV6) > 0)	
+151	0	{	
+152		/* Actual network address family and length. */	
+153	0	addr.family =AF_INET6;	
+154	0	addrlen = sizeof(addr.addrV6);	
+155	0	}	
+156	0	}	
+157	0	if (!addrlen)	
+158		/* Ignore line if invalid address string for the requested family. */	
+159	0	continue;	
+160			
+161		/*	
+162		** Actual address family possible values are AF_INET and AF_INET6 only.	
+163		*/	
+164			
+165		/* Allocate memory for the hostent structure. */	
+166	0	hostent = ares_malloc(sizeof(struct hostent));	
+167	0	if (!hostent)	
+168	0	break;	
+169			
+170		/* Initialize fields for out of memory condition. */	
+171	0	hostent->h_aliases =NULL;	
+172	0	hostent->h_addr_list =NULL;	
+173			
+174		/* Copy official host name. */	
+175	0	hostent->h_name = ares_strdup(txthost);	
+176	0	if (!hostent->h_name)	
+177	0	break;	
+178			
+179		/* Copy network address. */	
+180	0	hostent->h_addr_list = ares_malloc(2 * sizeof(char *));	
+181	0	if (!hostent->h_addr_list)	
+182	0	break;	
+183	0	hostent->h_addr_list[1] =NULL;	
+184	0	hostent->h_addr_list[0] = ares_malloc(addrlen);	
+185	0	if (!hostent->h_addr_list[0])	
+186	0	break;	
+187	0	if (addr.family ==AF_INET)	
+188	0	memcpy(hostent->h_addr_list[0], &addr.addrV4, sizeof(addr.addrV4));	
+189	0	else	
+190	0	memcpy(hostent->h_addr_list[0], &addr.addrV6, sizeof(addr.addrV6));	
+191			
+192		/* Copy aliases. */	
+193	0	hostent->h_aliases = ares_malloc((naliases + 1) * sizeof(char *));	
+194	0	if (!hostent->h_aliases)	
+195	0	break;	
+196	0	alias = hostent->h_aliases;	
+197	0	while (naliases)	
+198	0	*(alias + naliases--) =NULL;	
+199	0	*alias =NULL;	
+200	0	while (txtalias)	
+201	0	{	
+202	0	p = txtalias;	
+203	0	while (*p&&!ISSPACE(*p))	
+204	0	p++;	
+205	0	q = p;	
+206	0	while (*q&&ISSPACE(*q))	
+207	0	q++;	
+208	0	*p = '\0';	
+209	0	if ((*alias = ares_strdup(txtalias)) ==NULL)	
+210	0	break;	
+211	0	alias++;	
+212	0	txtalias =*q?q:NULL;	
+213	0	}	
+214	0	if (txtalias)	
+215		/* Alias memory allocation failure. */	
+216	0	break;	
+217			
+218		/* Copy actual network address family and length. */	
+219	0	hostent->h_addrtype = aresx_sitoss(addr.family);	
+220	0	hostent->h_length = aresx_uztoss(addrlen);	
+221			
+222		/* Free line buffer. */	
+223	0	ares_free(line);	
+224			
+225		/* Return hostent successfully */	
+226	0	*host = hostent;	
+227	0	returnARES_SUCCESS;	
+228			
+229	0	}	
+230			
+231		/* If allocated, free line buffer. */	
+232	0	if (line)	
+233	0	ares_free(line);	
+234			
+235	0	if (status ==ARES_SUCCESS)	
+236	0	{	
+237		/* Memory allocation failure; clean up. */	
+238	0	if (hostent)	
+239	0	{	
+240	0	if (hostent->h_name)	
+241	0	ares_free((char *) hostent->h_name);	
+242	0	if (hostent->h_aliases)	
+243	0	{	
+244	0	for (alias = hostent->h_aliases;*alias;alias++)	
+245	0	ares_free(*alias);	
+246	0	ares_free(hostent->h_aliases);	
+247	0	}	
+248	0	if (hostent->h_addr_list)	
+249	0	{	
+250	0	if (hostent->h_addr_list[0])	
+251	0	ares_free(hostent->h_addr_list[0]);	
+252	0	ares_free(hostent->h_addr_list);	
+253	0	}	
+254	0	ares_free(hostent);	
+255	0	}	
+256	0	returnARES_ENOMEM;	
+257	0	}	
+258			
+259	0	return status;	
+260	0	}	
+
+

@@ -1,0 +1,236 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int abs(int v) { return (v < 0 ? -v : v); }",
+      "fn_code_pos": [
+        [
+          23,
+          0
+        ],
+        [
+          23,
+          50
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "abs",
+        "parameters": {
+          "v": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static double pct(int v, double range) { return (v * 100. / range); }",
+      "fn_code_pos": [
+        [
+          24,
+          0
+        ],
+        [
+          24,
+          69
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "pct",
+        "parameters": {
+          "v": "int",
+          "range": "double"
+        },
+        "return_type": "double"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char **argv)\n{\n    int R, G, B;\n\n    if (argc > 1)\n    {\n        refBlackWhite[0] = 16;\n        refBlackWhite[1] = 235;\n        refBlackWhite[2] = 128;\n        refBlackWhite[3] = 240;\n        refBlackWhite[4] = 128;\n        refBlackWhite[5] = 240;\n    }\n    D3 = 2 - 2 * LumaRed;\n    D4 = 2 - 2 * LumaBlue;\n    D1 = 1. / D3;\n    D2 = 1. / D4;\n    D5 = D3 * LumaRed / LumaGreen;\n    D6 = D4 * LumaBlue / LumaGreen;\n    setupLumaTables();\n    for (R = 0; R < 256; R++)\n    {\n        for (G = 0; G < 256; G++)\n            for (B = 0; B < 256; B++)\n                check(R, G, B);\n        printf(\"[%3u] c %u/%u b %u/%u (R %u/%d/%u G %u/%d/%u B %u/%d/%u)\\n\", R,\n               eCodes - preveCodes, eCodes, eBits - preveBits, eBits,\n               abs(AbseRtotal - preveRtotal), eRtotal, AbseRtotal,\n               abs(AbseGtotal - preveGtotal), eGtotal, AbseGtotal,\n               abs(AbseBtotal - preveBtotal), eBtotal, AbseBtotal);\n        preveRtotal = AbseRtotal;\n        preveGtotal = AbseGtotal;\n        preveBtotal = AbseBtotal;\n        preveCodes = eCodes;\n        preveBits = eBits;\n    }\n    printf(\"%u total codes\\n\", 256 * 256 * 256);\n    printf(\"total error: %u codes %u bits (R %d/%u G %d/%u B %d/%u)\\n\", eCodes,\n           eBits, eRtotal, AbseRtotal, eGtotal, AbseGtotal, eBtotal,\n           AbseBtotal);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          31,
+          0
+        ],
+        [
+          72,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static float *setupLuma(float c)\n{\n    float *v = (float *)_TIFFmalloc(256 * sizeof(float));\n    int i;\n    for (i = 0; i < 256; i++)\n        v[i] = c * i;\n    return (v);\n}",
+      "fn_code_pos": [
+        [
+          78,
+          0
+        ],
+        [
+          85,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setupLuma",
+        "parameters": {
+          "c": "float"
+        },
+        "return_type": "float"
+      }
+    },
+    {
+      "fn_code": "static void setupLumaTables(void)\n{\n    lumaRed = setupLuma(LumaRed);\n    lumaGreen = setupLuma(LumaGreen);\n    lumaBlue = setupLuma(LumaBlue);\n}",
+      "fn_code_pos": [
+        [
+          87,
+          0
+        ],
+        [
+          92,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setupLumaTables",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static unsigned V2Code(float f, unsigned long RB, unsigned long RW, int CR)\n{\n    unsigned int c = (unsigned int)((((f) * (RW - RB) / CR) + RB) + .5);\n    return (c > 255 ? 255 : c);\n}",
+      "fn_code_pos": [
+        [
+          94,
+          0
+        ],
+        [
+          98,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "V2Code",
+        "parameters": {
+          "f": "float",
+          "RB": "unsigned long",
+          "RW": "unsigned long",
+          "CR": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static void check(int R, int G, int B)\n{\n    float Y, Cb, Cr;\n    int iY, iCb, iCr;\n    float rY, rCb, rCr;\n    float rR, rG, rB;\n    int eR, eG, eB;\n\n    Y = lumaRed[R] + lumaGreen[G] + lumaBlue[B];\n    Cb = (B - Y) * D2;\n    Cr = (R - Y) * D1;\n    iY = V2Code(Y, refBlackWhite[0], refBlackWhite[1], 255);\n    iCb = V2Code(Cb, refBlackWhite[2], refBlackWhite[3], 127);\n    iCr = V2Code(Cr, refBlackWhite[4], refBlackWhite[5], 127);\n    rCb = Code2V(iCb, refBlackWhite[2], refBlackWhite[3], 127);\n    rCr = Code2V(iCr, refBlackWhite[4], refBlackWhite[5], 127);\n    rY = Code2V(iY, refBlackWhite[0], refBlackWhite[1], 255);\n    rR = rY + rCr * D3;\n    rB = rY + rCb * D4;\n    rG = rY - rCb * D6 - rCr * D5;\n    eR = R - CLAMP(rR, 0, 255);\n    eG = G - CLAMP(rG, 0, 255);\n    eB = B - CLAMP(rB, 0, 255);\n    if (abs(eR) > 1 || abs(eG) > 1 || abs(eB) > 1)\n    {\n        printf(\"R %u G %u B %u\", R, G, B);\n        printf(\" Y %g Cb %g Cr %g\", Y, Cb, Cr);\n        printf(\" iY %u iCb %u iCr %u\", iY, iCb, iCr);\n        printf(\"\\n -> Y %g Cb %g Cr %g\", rY, rCb, rCr);\n        printf(\" R %g (%u) G %g (%u) B %g (%u) E=[%d %d %d])\\n\", rR,\n               CLAMP(rR, 0, 255), rG, CLAMP(rG, 0, 255), rB, CLAMP(rB, 0, 255),\n               eR, eG, eB);\n    }\n    eRtotal += eR;\n    eGtotal += eG;\n    eBtotal += eB;\n    AbseRtotal += abs(eR);\n    AbseGtotal += abs(eG);\n    AbseBtotal += abs(eB);\n    if (eR | eG | eB)\n        eCodes++;\n    eBits += abs(eR) + abs(eG) + abs(eB);\n}",
+      "fn_code_pos": [
+        [
+          105,
+          0
+        ],
+        [
+          147,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "check",
+        "parameters": {
+          "R": "int",
+          "G": "int",
+          "B": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "setupLumaTables()",
+      "fn_dec_pos": [
+        [
+          22,
+          12
+        ],
+        [
+          22,
+          29
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setupLumaTables",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "check(int R, int G, int B)",
+      "fn_dec_pos": [
+        [
+          25,
+          12
+        ],
+        [
+          25,
+          38
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "check",
+        "parameters": {
+          "R": "int",
+          "G": "int",
+          "B": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "setupLuma(float c)",
+      "fn_dec_pos": [
+        [
+          78,
+          14
+        ],
+        [
+          78,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setupLuma",
+        "parameters": {
+          "c": "float"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

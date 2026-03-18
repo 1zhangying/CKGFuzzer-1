@@ -1,0 +1,1613 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void *limitMalloc(tmsize_t s)\n{\n    /* tmsize_t is signed and _TIFFmalloc() converts s to size_t. Therefore\n     * check for negative s. */\n    if (maxMalloc && ((s > maxMalloc) || (s < 0)))\n    {\n        fprintf(stderr,\n                \"MemoryLimitError: allocation of %\" TIFF_SSIZE_FORMAT\n                \" bytes is forbidden. Limit is %\" TIFF_SSIZE_FORMAT \".\\n\",\n                s, maxMalloc);\n        fprintf(stderr, \"                  use -M option to change limit.\\n\");\n        return NULL;\n    }\n    return _TIFFmalloc(s);\n}",
+      "fn_code_pos": [
+        [
+          250,
+          0
+        ],
+        [
+          264,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "limitMalloc",
+        "parameters": {
+          "s": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    int dirnum = -1, c, np = 0;\n    int centered = 0;\n    double bottommargin = 0;\n    double leftmargin = 0;\n    double pageWidth = 0;\n    double pageHeight = 0;\n    uint32_t diroff = 0;\n#if !HAVE_DECL_OPTARG\n    extern char *optarg;\n    extern int optind;\n#endif\n    FILE *output = stdout;\n\n    pageOrientation[0] = '\\0';\n\n    while ((c = getopt(argc, argv,\n                       \"b:d:h:H:W:L:M:i:w:l:o:O:P:C:r:t:acemxyzps1238DT\")) !=\n           -1)\n        switch (c)\n        {\n            case 'M':\n                maxMalloc = (tmsize_t)strtoul(optarg, NULL, 0) << 20;\n                break;\n            case 'b':\n                bottommargin = atof(optarg);\n                break;\n            case 'c':\n                centered = 1;\n                break;\n            case 'C':\n                creator = optarg;\n                break;\n            case 'd': /* without -a, this only processes one image at this IFD\n                       */\n                dirnum = atoi(optarg);\n                break;\n            case 'D':\n                PSduplex = TRUE;\n                break;\n            case 'i':\n                interpolate = atoi(optarg) ? TRUE : FALSE;\n                break;\n            case 'T':\n                PStumble = TRUE;\n                break;\n            case 'e':\n                PSavoiddeadzone = FALSE;\n                generateEPSF = TRUE;\n                break;\n            case 'h':\n                pageHeight = atof(optarg);\n                break;\n            case 'H':\n                maxPageHeight = atof(optarg);\n                break;\n            case 'W':\n                maxPageWidth = atof(optarg);\n                break;\n            case 'L':\n                splitOverlap = atof(optarg);\n                break;\n            case 'm':\n                useImagemask = TRUE;\n                break;\n            case 'o':\n                switch (optarg[0])\n                {\n                    case '0':\n                    case '1':\n                    case '2':\n                    case '3':\n                    case '4':\n                    case '5':\n                    case '6':\n                    case '7':\n                    case '8':\n                    case '9':\n                        diroff = (uint32_t)strtoul(optarg, NULL, 0);\n                        break;\n                    default:\n                        TIFFError(\"-o\", \"Offset must be a numeric value.\");\n                        exit(EXIT_FAILURE);\n                }\n                break;\n            case 'O': /* XXX too bad -o is already taken */\n                output = fopen(optarg, \"w\");\n                if (output == NULL)\n                {\n                    fprintf(stderr, \"%s: %s: Cannot open output file.\\n\",\n                            argv[0], optarg);\n                    exit(EXIT_FAILURE);\n                }\n                break;\n            case 'P':\n                switch (optarg[0])\n                {\n                    case 'l':\n                    case 'L':\n                        strcpy(pageOrientation, \"Landscape\");\n                        break;\n                    case 'p':\n                    case 'P':\n                        strcpy(pageOrientation, \"Portrait\");\n                        break;\n                    default:\n                        TIFFError(\n                            \"-P\",\n                            \"Page orientation must be Landscape or Portrait\");\n                        exit(EXIT_FAILURE);\n                }\n                break;\n            case 'l':\n                leftmargin = atof(optarg);\n                break;\n            case 'a': /* removed fall through to generate warning below, R Nolde\n                         09-01-2010 */\n                printAll = TRUE;\n                break;\n            case 'p':\n                generateEPSF = FALSE;\n                break;\n            case 'r':\n                if (strcmp(optarg, \"auto\") == 0)\n                {\n                    rotation_g = 0;\n                    auto_rotate_g = TRUE;\n                }\n                else\n                {\n                    rotation_g = atoi(optarg);\n                    auto_rotate_g = FALSE;\n                }\n                switch (rotation_g)\n                {\n                    case 0:\n                    case 90:\n                    case 180:\n                    case 270:\n                        break;\n                    default:\n                        fprintf(stderr, \"Rotation angle must be 90, 180, 270 \"\n                                        \"(degrees ccw) or auto\\n\");\n                        exit(EXIT_FAILURE);\n                }\n                break;\n            case 's':\n                printAll = FALSE;\n                break;\n            case 't':\n                title = optarg;\n                break;\n            case 'w':\n                pageWidth = atof(optarg);\n                break;\n            case 'z':\n                PSavoiddeadzone = FALSE;\n                break;\n            case '1':\n                level2 = FALSE;\n                level3 = FALSE;\n                ascii85_g = FALSE;\n                break;\n            case '2':\n                level2 = TRUE;\n                ascii85_g = TRUE; /* default to yes */\n                break;\n            case '3':\n                level3 = TRUE;\n                ascii85_g = TRUE; /* default to yes */\n                break;\n            case '8':\n                ascii85_g = FALSE;\n                break;\n            case 'x':\n                res_unit = RESUNIT_CENTIMETER;\n                break;\n            case 'y':\n                res_unit = RESUNIT_INCH;\n                break;\n            case '?':\n                usage(EXIT_FAILURE);\n        }\n\n    if (useImagemask == TRUE)\n    {\n        if ((level2 == FALSE) && (level3 == FALSE))\n        {\n            TIFFError(\n                \"-m \",\n                \" imagemask operator requires Postscript Level2 or Level3\");\n            exit(EXIT_FAILURE);\n        }\n    }\n\n    if (pageWidth && (maxPageWidth > pageWidth))\n    {\n        TIFFError(\"-W\", \"Max viewport width cannot exceed page width\");\n        exit(EXIT_FAILURE);\n    }\n\n    /* auto rotate requires a specified page width and height */\n    if (auto_rotate_g == TRUE)\n    {\n        /*\n      if ((pageWidth == 0) || (pageHeight == 0))\n        TIFFWarning (\"-r auto\", \" requires page height and width specified with\n      -h and -w\");\n        */\n        if ((maxPageWidth > 0) || (maxPageHeight > 0))\n        {\n            TIFFError(\"-r auto\", \" is incompatible with maximum page \"\n                                 \"width/height specified by -H or -W\");\n            exit(EXIT_FAILURE);\n        }\n    }\n    if ((maxPageWidth > 0) && (maxPageHeight > 0))\n    {\n        TIFFError(\"-H and -W\",\n                  \" Use only one of -H or -W to define a viewport\");\n        exit(EXIT_FAILURE);\n    }\n\n    if ((generateEPSF == TRUE) && (printAll == TRUE))\n    {\n        TIFFError(\" -e and -a\", \"Warning: Cannot generate Encapsulated \"\n                                \"Postscript for multiple images\");\n        generateEPSF = FALSE;\n    }\n\n    if ((generateEPSF == TRUE) && (PSduplex == TRUE))\n    {\n        TIFFError(\n            \" -e and -D\",\n            \"Warning: Encapsulated Postscript does not support Duplex option\");\n        PSduplex = FALSE;\n    }\n\n    if ((generateEPSF == TRUE) && (PStumble == TRUE))\n    {\n        TIFFError(\" -e and -T\", \"Warning: Encapsulated Postscript does not \"\n                                \"support Top Edge Binding option\");\n        PStumble = FALSE;\n    }\n\n    if ((generateEPSF == TRUE) && (PSavoiddeadzone == TRUE))\n        PSavoiddeadzone = FALSE;\n\n    for (; argc - optind > 0; optind++)\n    {\n        TIFFOpenOptions *opts = TIFFOpenOptionsAlloc();\n        if (opts == NULL)\n        {\n            return EXIT_FAILURE;\n        }\n        TIFFOpenOptionsSetMaxSingleMemAlloc(opts, maxMalloc);\n        TIFF *tif = TIFFOpenExt(filename = argv[optind], \"r\", opts);\n        TIFFOpenOptionsFree(opts);\n        if (tif != NULL)\n        {\n            if (dirnum != -1 && !TIFFSetDirectory(tif, (tdir_t)dirnum))\n            {\n                TIFFClose(tif);\n                return (EXIT_FAILURE);\n            }\n            else if (diroff != 0 && !TIFFSetSubDirectory(tif, diroff))\n            {\n                TIFFClose(tif);\n                return (EXIT_FAILURE);\n            }\n            np = TIFF2PS(output, tif, pageWidth, pageHeight, leftmargin,\n                         bottommargin, centered);\n            if (np < 0)\n            {\n                TIFFError(\"Error\", \"Unable to process %s\", filename);\n            }\n            TIFFClose(tif);\n        }\n    }\n    if (np)\n        PSTail(output, np);\n    else\n        usage(EXIT_FAILURE);\n    if (output != stdout)\n        fclose(output);\n    return (EXIT_SUCCESS);\n}",
+      "fn_code_pos": [
+        [
+          266,
+          0
+        ],
+        [
+          553,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int checkImage(TIFF *tif)\n{\n    switch (photometric)\n    {\n        case PHOTOMETRIC_YCBCR:\n            if ((compression == COMPRESSION_JPEG ||\n                 compression == COMPRESSION_OJPEG) &&\n                planarconfiguration == PLANARCONFIG_CONTIG)\n            {\n                /* can rely on libjpeg to convert to RGB */\n                TIFFSetField(tif, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB);\n                photometric = PHOTOMETRIC_RGB;\n            }\n            else\n            {\n                if (level2 || level3)\n                    break;\n                TIFFError(filename, \"Can not handle image with %s\",\n                          \"PhotometricInterpretation=YCbCr\");\n                return (0);\n            }\n            /* fall through... */\n        case PHOTOMETRIC_RGB:\n            if (alpha && bitspersample != 8)\n            {\n                TIFFError(filename,\n                          \"Can not handle %\" PRIu16\n                          \"-bit/sample RGB image with alpha\",\n                          bitspersample);\n                return (0);\n            }\n            /* fall through... */\n        case PHOTOMETRIC_SEPARATED:\n        case PHOTOMETRIC_PALETTE:\n        case PHOTOMETRIC_MINISBLACK:\n        case PHOTOMETRIC_MINISWHITE:\n            break;\n        case PHOTOMETRIC_LOGL:\n        case PHOTOMETRIC_LOGLUV:\n            if (compression != COMPRESSION_SGILOG &&\n                compression != COMPRESSION_SGILOG24)\n            {\n                TIFFError(\n                    filename,\n                    \"Can not handle %s data with compression other than SGILog\",\n                    (photometric == PHOTOMETRIC_LOGL) ? \"LogL\" : \"LogLuv\");\n                return (0);\n            }\n            /* rely on library to convert to RGB/greyscale */\n            TIFFSetField(tif, TIFFTAG_SGILOGDATAFMT, SGILOGDATAFMT_8BIT);\n            photometric = (photometric == PHOTOMETRIC_LOGL)\n                              ? PHOTOMETRIC_MINISBLACK\n                              : PHOTOMETRIC_RGB;\n            bitspersample = 8;\n            break;\n        case PHOTOMETRIC_CIELAB:\n            /* fall through... */\n        default:\n            TIFFError(\n                filename,\n                \"Can not handle image with PhotometricInterpretation=%\" PRIu16,\n                photometric);\n            return (0);\n    }\n    switch (bitspersample)\n    {\n        case 1:\n        case 2:\n        case 4:\n        case 8:\n        case 16:\n            break;\n        default:\n            TIFFError(filename, \"Can not handle %\" PRIu16 \"-bit/sample image\",\n                      bitspersample);\n            return (0);\n    }\n    if (planarconfiguration == PLANARCONFIG_SEPARATE && extrasamples > 0)\n        TIFFWarning(filename, \"Ignoring extra samples\");\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          563,
+          0
+        ],
+        [
+          643,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "checkImage",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void PhotoshopBanner(FILE *fd, uint32_t w, uint32_t h, int bs, int nc,\n                            const char *startline)\n{\n    fprintf(fd, \"%%ImageData: %\" PRIu32 \" %\" PRIu32 \" %\" PRIu16 \" %d 0 %d 2 \\\"\",\n            w, h, bitspersample, nc, bs);\n    fprintf(fd, startline, nc);\n    fprintf(fd, \"\\\"\\n\");\n}",
+      "fn_code_pos": [
+        [
+          677,
+          0
+        ],
+        [
+          684,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PhotoshopBanner",
+        "parameters": {
+          "fd": "FILE",
+          "w": "uint32_t",
+          "h": "uint32_t",
+          "bs": "int",
+          "nc": "int",
+          "startline": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void setupPageState(TIFF *tif, uint32_t *pw, uint32_t *ph, double *pprw,\n                           double *pprh)\n{\n    float xres = 0.0F, yres = 0.0F;\n\n    TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, pw);\n    TIFFGetField(tif, TIFFTAG_IMAGELENGTH, ph);\n    if (res_unit == 0) /* Not specified as command line option */\n        if (!TIFFGetFieldDefaulted(tif, TIFFTAG_RESOLUTIONUNIT, &res_unit))\n            res_unit = RESUNIT_INCH;\n    /*\n     * Calculate printable area.\n     */\n    if (!TIFFGetField(tif, TIFFTAG_XRESOLUTION, &xres) ||\n        fabs(xres) < 0.0000001)\n        xres = PS_UNIT_SIZE;\n    if (!TIFFGetField(tif, TIFFTAG_YRESOLUTION, &yres) ||\n        fabs(yres) < 0.0000001)\n        yres = PS_UNIT_SIZE;\n    switch (res_unit)\n    {\n        case RESUNIT_CENTIMETER:\n            xres *= 2.54F, yres *= 2.54F;\n            break;\n        case RESUNIT_INCH:\n            break;\n        case RESUNIT_NONE: /* Subsequent code assumes we have converted to\n                              inches! */\n            res_unit = RESUNIT_INCH;\n            break;\n        default: /* Last ditch guess for unspecified RESUNIT case\n                  * check that the resolution is not inches before scaling it.\n                  * Moved to end of function with additional check, RJN,\n                  * 08-31-2010 if (xres != PS_UNIT_SIZE || yres != PS_UNIT_SIZE)\n                  * xres *= PS_UNIT_SIZE, yres *= PS_UNIT_SIZE;\n                  */\n            break;\n    }\n    /* This is a hack to deal with images that have no meaningful Resolution\n     * Size but may have x and/or y resolutions of 1 pixel per undefined unit.\n     */\n    if ((xres > 1.0) && (xres != PS_UNIT_SIZE))\n        *pprw = PSUNITS(*pw, xres);\n    else\n        *pprw = PSUNITS(*pw, PS_UNIT_SIZE);\n    if ((yres > 1.0) && (yres != PS_UNIT_SIZE))\n        *pprh = PSUNITS(*ph, yres);\n    else\n        *pprh = PSUNITS(*ph, PS_UNIT_SIZE);\n}",
+      "fn_code_pos": [
+        [
+          693,
+          0
+        ],
+        [
+          742,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setupPageState",
+        "parameters": {
+          "tif": "TIFF",
+          "pw": "uint32_t",
+          "ph": "uint32_t",
+          "pprw": "double",
+          "pprh": "double"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int isCCITTCompression(TIFF *tif)\n{\n    uint16_t compress;\n    TIFFGetField(tif, TIFFTAG_COMPRESSION, &compress);\n    return (compress == COMPRESSION_CCITTFAX3 ||\n            compress == COMPRESSION_CCITTFAX4 ||\n            compress == COMPRESSION_CCITTRLE ||\n            compress == COMPRESSION_CCITTRLEW);\n}",
+      "fn_code_pos": [
+        [
+          744,
+          0
+        ],
+        [
+          752,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "isCCITTCompression",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int get_subimage_count(double pagewidth, double pageheight, double imagewidth,\n                       double imageheight, int *ximages, int *yimages,\n                       int rotation, double scale)\n{\n    int pages = 1;\n    double splitheight = 0; /* Requested Max Height in points */\n    double splitwidth = 0;  /* Requested Max Width in points */\n    double overlap = 0;     /* Repeated edge width in points */\n\n    splitheight = maxPageHeight * PS_UNIT_SIZE;\n    splitwidth = maxPageWidth * PS_UNIT_SIZE;\n    overlap = splitOverlap * PS_UNIT_SIZE;\n    pagewidth *= PS_UNIT_SIZE;\n    pageheight *= PS_UNIT_SIZE;\n\n    if ((imagewidth < 1.0) || (imageheight < 1.0))\n    {\n        TIFFError(\"get_subimage_count\", \"Invalid image width or height\");\n        return (0);\n    }\n\n    switch (rotation)\n    {\n        case 0:\n        case 180:\n            if (splitheight > 0) /* -H maxPageHeight */\n            {\n                if (imageheight >\n                    splitheight) /* More than one vertical image segment */\n                {\n                    if (pagewidth)\n                        *ximages = (int)ceil((scale * imagewidth) /\n                                             (pagewidth - overlap));\n                    else\n                        *ximages = 1;\n                    *yimages = (int)ceil(\n                        (scale * imageheight) /\n                        (splitheight - overlap)); /* Max vert pages needed */\n                }\n                else\n                {\n                    if (pagewidth)\n                        *ximages = (int)ceil(\n                            (scale * imagewidth) /\n                            (pagewidth - overlap)); /* Max horz pages needed */\n                    else\n                        *ximages = 1;\n                    *yimages = 1; /* Max vert pages needed */\n                }\n            }\n            else\n            {\n                if (splitwidth > 0) /* -W maxPageWidth */\n                {\n                    if (imagewidth > splitwidth)\n                    {\n                        *ximages = (int)ceil(\n                            (scale * imagewidth) /\n                            (splitwidth - overlap)); /* Max horz pages needed */\n                        if (pageheight)\n                            *yimages = (int)ceil(\n                                (scale * imageheight) /\n                                (pageheight -\n                                 overlap)); /* Max vert pages needed */\n                        else\n                            *yimages = 1;\n                    }\n                    else\n                    {\n                        *ximages = 1; /* Max vert pages needed */\n                        if (pageheight)\n                            *yimages = (int)ceil(\n                                (scale * imageheight) /\n                                (pageheight -\n                                 overlap)); /* Max vert pages needed */\n                        else\n                            *yimages = 1;\n                    }\n                }\n                else\n                {\n                    *ximages = 1;\n                    *yimages = 1;\n                }\n            }\n            break;\n        case 90:\n        case 270:\n            if (splitheight > 0) /* -H maxPageHeight */\n            {\n                if (imagewidth >\n                    splitheight) /* More than one vertical image segment */\n                {\n                    *yimages = (int)ceil(\n                        (scale * imagewidth) /\n                        (splitheight - overlap)); /* Max vert pages needed */\n                    if (pagewidth)\n                        *ximages = (int)ceil(\n                            (scale * imageheight) /\n                            (pagewidth - overlap)); /* Max horz pages needed */\n                    else\n                        *ximages = 1;\n                }\n                else\n                {\n                    *yimages = 1; /* Max vert pages needed */\n                    if (pagewidth)\n                        *ximages = (int)ceil(\n                            (scale * imageheight) /\n                            (pagewidth - overlap)); /* Max horz pages needed */\n                    else\n                        *ximages = 1;\n                }\n            }\n            else\n            {\n                if (splitwidth > 0) /* -W maxPageWidth */\n                {\n                    if (imageheight > splitwidth)\n                    {\n                        if (pageheight)\n                            *yimages = (int)ceil(\n                                (scale * imagewidth) /\n                                (pageheight -\n                                 overlap)); /* Max vert pages needed */\n                        else\n                            *yimages = 1;\n                        *ximages = (int)ceil(\n                            (scale * imageheight) /\n                            (splitwidth - overlap)); /* Max horz pages needed */\n                    }\n                    else\n                    {\n                        if (pageheight)\n                            *yimages = (int)ceil(\n                                (scale * imagewidth) /\n                                (pageheight -\n                                 overlap)); /* Max horz pages needed */\n                        else\n                            *yimages = 1;\n                        *ximages = 1; /* Max vert pages needed */\n                    }\n                }\n                else\n                {\n                    *ximages = 1;\n                    *yimages = 1;\n                }\n            }\n            break;\n        default:\n            *ximages = 1;\n            *yimages = 1;\n    }\n    pages = (*ximages) * (*yimages);\n    return (pages);\n}",
+      "fn_code_pos": [
+        [
+          769,
+          0
+        ],
+        [
+          925,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "get_subimage_count",
+        "parameters": {
+          "pagewidth": "double",
+          "pageheight": "double",
+          "imagewidth": "double",
+          "imageheight": "double",
+          "ximages": "int",
+          "yimages": "int",
+          "rotation": "int",
+          "scale": "double"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int exportMaskedImage(FILE *fp, double pagewidth, double pageheight,\n                      double imagewidth, double imageheight, int row,\n                      int column, double left_offset, double bott_offset,\n                      double scale, int center, int rotation)\n{\n    double xtran = 0.0;\n    double ytran = 0.0;\n\n    double xscale = 1.0;\n    double yscale = 1.0;\n\n    double splitheight = 0; /* Requested Max Height in points */\n    double splitwidth = 0;  /* Requested Max Width in points */\n    double overlap = 0;     /* Repeated edge width in points */\n    double subimage_height = 0.0;\n\n    splitheight = maxPageHeight * PS_UNIT_SIZE;\n    splitwidth = maxPageWidth * PS_UNIT_SIZE;\n    overlap = splitOverlap * PS_UNIT_SIZE;\n    xscale = scale * imagewidth;\n    yscale = scale * imageheight;\n\n    if ((xscale < 0.0) || (yscale < 0.0))\n    {\n        TIFFError(\"exportMaskedImage\", \"Invalid parameters.\");\n        return (-1);\n    }\n\n    /* If images are cropped to a vewport with -H or -W, the output pages are\n     * shifted to the top of each output page rather than the Postscript default\n     * lower edge.\n     */\n    switch (rotation)\n    {\n        case 0:\n        case 180:\n            if (splitheight > 0) /* -H maxPageHeight */\n            {\n                if (splitheight <\n                    imageheight) /* More than one vertical image segments */\n                {\n                    /* Intra2net: Keep correct apspect ratio */\n                    xscale = (imagewidth + overlap) *\n                             (pageheight / splitheight) * scale;\n\n                    xtran = -1.0 * column * (pagewidth - overlap);\n                    subimage_height =\n                        imageheight - ((splitheight - overlap) * row);\n                    ytran = pageheight -\n                            subimage_height * (pageheight / splitheight);\n                }\n                else /* Only one page in vertical direction */\n                {\n                    xtran = -1.0 * column * (pagewidth - overlap);\n                    ytran = splitheight - imageheight;\n                }\n            }\n            else\n            {\n                if (splitwidth > 0) /* maxPageWidth */\n                {\n                    if (splitwidth < imagewidth)\n                    {\n                        xtran = -1.0 * column * splitwidth;\n                        ytran = -1.0 * row * (pageheight - overlap);\n                    }\n                    else /* Only one page in horizontal direction */\n                    {\n                        ytran = -1.0 * row * (pageheight - overlap);\n                        xtran = 0;\n                    }\n                }\n                else /* Simple case, no splitting */\n                {\n                    ytran = pageheight - imageheight;\n                    xtran = 0;\n                }\n            }\n\n            if (imagewidth <= pagewidth)\n            {\n                /* Intra2net: Crop page at the bottom instead of the top (->\n                   output starts at the top). Only do this in non-page-split\n                   mode */\n                if (imageheight <= splitheight)\n                {\n                    ytran = pageheight -\n                            imageheight; /* Note: Will be negative for images\n                                            longer than page size */\n                }\n            }\n            bott_offset += ytran / (center ? 2 : 1);\n            left_offset += xtran / (center ? 2 : 1);\n            break;\n        case 90:\n        case 270:\n            if (splitheight > 0) /* -H maxPageHeight */\n            {\n                if (splitheight <\n                    imagewidth) /* More than one vertical image segments */\n                {\n                    xtran = -1.0 * column * (pageheight - overlap);\n                    /* Commented code places image at bottom of page instead of\n                       top. ytran = -1.0 * row * splitheight;\n                      */\n                    if (row == 0)\n                        ytran = -1.0 * (imagewidth - splitheight);\n                    else\n                        ytran = -1.0 * (imagewidth -\n                                        (splitheight - overlap) * (row + 1));\n                }\n                else /* Only one page in vertical direction */\n                {\n                    xtran = -1.0 * column * (pageheight - overlap);\n                    ytran = splitheight - imagewidth;\n                }\n            }\n            else\n            {\n                if (splitwidth > 0) /* maxPageWidth */\n                {\n                    if (splitwidth < imageheight)\n                    {\n                        xtran = -1.0 * column * splitwidth;\n                        ytran = -1.0 * row * (pagewidth - overlap);\n                    }\n                    else /* Only one page in horizontal direction */\n                    {\n                        ytran = -1.0 * row * (pagewidth - overlap);\n                        xtran = 0;\n                    }\n                }\n                else /* Simple case, no splitting */\n                {\n                    ytran = pageheight - imageheight;\n                    xtran = 0; /* pagewidth  - imagewidth; */\n                }\n            }\n            bott_offset += ytran / (center ? 2 : 1);\n            left_offset += xtran / (center ? 2 : 1);\n            break;\n        default:\n            xtran = 0;\n            ytran = 0;\n    }\n\n    switch (rotation)\n    {\n        case 0:\n            fprintf(fp, \"%f %f translate\\n\", left_offset, bott_offset);\n            fprintf(fp, \"%f %f scale\\n\", xscale, yscale);\n            break;\n        case 180:\n            fprintf(fp, \"%f %f translate\\n\", left_offset, bott_offset);\n            fprintf(fp, \"%f %f scale\\n1 1 translate 180 rotate\\n\", xscale,\n                    yscale);\n            break;\n        case 90:\n            fprintf(fp, \"%f %f translate\\n\", left_offset, bott_offset);\n            fprintf(fp, \"%f %f scale\\n1 0 translate 90 rotate\\n\", yscale,\n                    xscale);\n            break;\n        case 270:\n            fprintf(fp, \"%f %f translate\\n\", left_offset, bott_offset);\n            fprintf(fp, \"%f %f scale\\n0 1 translate 270 rotate\\n\", yscale,\n                    xscale);\n            break;\n        default:\n            TIFFError(\"exportMaskedImage\",\n                      \"Unsupported rotation angle %d. No rotation\", rotation);\n            fprintf(fp, \"%f %f scale\\n\", xscale, yscale);\n            break;\n    }\n\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          930,
+          0
+        ],
+        [
+          1105,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "exportMaskedImage",
+        "parameters": {
+          "fp": "FILE",
+          "pagewidth": "double",
+          "pageheight": "double",
+          "imagewidth": "double",
+          "imageheight": "double",
+          "row": "int",
+          "column": "int",
+          "left_offset": "double",
+          "bott_offset": "double",
+          "scale": "double",
+          "center": "int",
+          "rotation": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int psRotateImage(FILE *fd, int rotation, double pswidth, double psheight,\n                  double left_offset, double bottom_offset)\n{\n    if ((left_offset != 0.0) || (bottom_offset != 0))\n        fprintf(fd, \"%f %f translate\\n\", left_offset, bottom_offset);\n\n    /* Exchange width and height for 90/270 rotations */\n    switch (rotation)\n    {\n        case 0:\n            fprintf(fd, \"%f %f scale\\n\", pswidth, psheight);\n            break;\n        case 90:\n            fprintf(fd, \"%f %f scale\\n1 0 translate 90 rotate\\n\", psheight,\n                    pswidth);\n            break;\n        case 180:\n            fprintf(fd, \"%f %f scale\\n1 1 translate 180 rotate\\n\", pswidth,\n                    psheight);\n            break;\n        case 270:\n            fprintf(fd, \"%f %f scale\\n0 1 translate 270 rotate\\n\", psheight,\n                    pswidth);\n            break;\n        default:\n            TIFFError(\"psRotateImage\", \"Unsupported rotation %d.\", rotation);\n            fprintf(fd, \"%f %f scale\\n\", pswidth, psheight);\n            return (1);\n    }\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          1108,
+          0
+        ],
+        [
+          1138,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "psRotateImage",
+        "parameters": {
+          "fd": "FILE",
+          "rotation": "int",
+          "pswidth": "double",
+          "psheight": "double",
+          "left_offset": "double",
+          "bottom_offset": "double"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int psScaleImage(FILE *fd, double scale, int rotation, int center,\n                 double reqwidth, double reqheight, double pswidth,\n                 double psheight, double left_offset, double bottom_offset)\n{\n    double hcenter = 0.0, vcenter = 0.0;\n\n    /* Adjust offsets for centering */\n    if (center)\n    {\n        switch (rotation)\n        {\n            case 90:\n                vcenter = (reqheight - pswidth * scale) / 2;\n                hcenter = (reqwidth - psheight * scale) / 2;\n                fprintf(fd, \"%f %f translate\\n\", hcenter, vcenter);\n                fprintf(fd, \"%f %f scale\\n1 0 translate 90 rotate\\n\",\n                        psheight * scale, pswidth * scale);\n                break;\n            case 180:\n                hcenter = (reqwidth - pswidth * scale) / 2;\n                vcenter = (reqheight - psheight * scale) / 2;\n                fprintf(fd, \"%f %f translate\\n\", hcenter, vcenter);\n                fprintf(fd, \"%f %f scale\\n1 1 translate 180 rotate\\n\",\n                        pswidth * scale, psheight * scale);\n                break;\n            case 270:\n                vcenter = (reqheight - pswidth * scale) / 2;\n                hcenter = (reqwidth - psheight * scale) / 2;\n                fprintf(fd, \"%f %f translate\\n\", hcenter, vcenter);\n                fprintf(fd, \"%f %f scale\\n0 1 translate 270 rotate\\n\",\n                        psheight * scale, pswidth * scale);\n                break;\n            case 0:\n            default:\n                hcenter = (reqwidth - pswidth * scale) / 2;\n                vcenter = (reqheight - psheight * scale) / 2;\n                fprintf(fd, \"%f %f translate\\n\", hcenter, vcenter);\n                fprintf(fd, \"%f %f scale\\n\", pswidth * scale, psheight * scale);\n                break;\n        }\n    }\n    else /* Not centered */\n    {\n        switch (rotation)\n        {\n            case 0:\n                fprintf(fd, \"%f %f translate\\n\",\n                        left_offset ? left_offset : 0.0,\n                        bottom_offset ? bottom_offset\n                                      : reqheight - (psheight * scale));\n                fprintf(fd, \"%f %f scale\\n\", pswidth * scale, psheight * scale);\n                break;\n            case 90:\n                fprintf(fd, \"%f %f translate\\n\",\n                        left_offset ? left_offset : 0.0,\n                        bottom_offset ? bottom_offset\n                                      : reqheight - (pswidth * scale));\n                fprintf(fd, \"%f %f scale\\n1 0 translate 90 rotate\\n\",\n                        psheight * scale, pswidth * scale);\n                break;\n            case 180:\n                fprintf(fd, \"%f %f translate\\n\",\n                        left_offset ? left_offset : 0.0,\n                        bottom_offset ? bottom_offset\n                                      : reqheight - (psheight * scale));\n                fprintf(fd, \"%f %f scale\\n1 1 translate 180 rotate\\n\",\n                        pswidth * scale, psheight * scale);\n                break;\n            case 270:\n                fprintf(fd, \"%f %f translate\\n\",\n                        left_offset ? left_offset : 0.0,\n                        bottom_offset ? bottom_offset\n                                      : reqheight - (pswidth * scale));\n                fprintf(fd, \"%f %f scale\\n0 1 translate 270 rotate\\n\",\n                        psheight * scale, pswidth * scale);\n                break;\n            default:\n                TIFFError(\"psScaleImage\", \"Unsupported rotation  %d\", rotation);\n                fprintf(fd, \"%f %f scale\\n\", pswidth * scale, psheight * scale);\n                return (1);\n        }\n    }\n\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          1141,
+          0
+        ],
+        [
+          1225,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "psScaleImage",
+        "parameters": {
+          "fd": "FILE",
+          "scale": "double",
+          "rotation": "int",
+          "center": "int",
+          "reqwidth": "double",
+          "reqheight": "double",
+          "pswidth": "double",
+          "psheight": "double",
+          "left_offset": "double",
+          "bottom_offset": "double"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int psPageSize(FILE *fd, int rotation, double pgwidth, double pgheight,\n               double reqwidth, double reqheight, double pswidth,\n               double psheight)\n{\n    double xscale = 1.0, yscale = 1.0, scale = 1.0;\n    double splitheight;\n    double splitwidth;\n    double new_width;\n    double new_height;\n\n    splitheight = maxPageHeight * PS_UNIT_SIZE;\n    splitwidth = maxPageWidth * PS_UNIT_SIZE;\n\n    switch (rotation)\n    {\n        case 0:\n        case 180:\n            if ((splitheight > 0) || (splitwidth > 0))\n            {\n                if (pgwidth != 0 || pgheight != 0)\n                {\n                    xscale = reqwidth / (splitwidth ? splitwidth : pswidth);\n                    yscale = reqheight / (splitheight ? splitheight : psheight);\n                    scale = (xscale < yscale) ? xscale : yscale;\n                }\n                new_width = splitwidth ? splitwidth : scale * pswidth;\n                new_height = splitheight ? splitheight : scale * psheight;\n                if (strlen(pageOrientation))\n                    fprintf(fd, \"%%%%PageOrientation: %s\\n\", pageOrientation);\n                else\n                    fprintf(fd, \"%%%%PageOrientation: %s\\n\",\n                            (new_width > new_height) ? \"Landscape\"\n                                                     : \"Portrait\");\n                fprintf(fd,\n                        \"%%%%PageBoundingBox: 0 0 %\" PRId32 \" %\" PRId32 \"\\n\",\n                        (int32_t)new_width, (int32_t)new_height);\n                fprintf(fd,\n                        \"1 dict begin /PageSize [ %f %f ] def currentdict end \"\n                        \"setpagedevice\\n\",\n                        new_width, new_height);\n            }\n            else /* No viewport defined with -H or -W */\n            {\n                if ((pgwidth == 0) && (pgheight == 0)) /* Image not scaled */\n                {\n                    if (strlen(pageOrientation))\n                        fprintf(fd, \"%%%%PageOrientation: %s\\n\",\n                                pageOrientation);\n                    else\n                        fprintf(fd, \"%%%%PageOrientation: %s\\n\",\n                                (pswidth > psheight) ? \"Landscape\"\n                                                     : \"Portrait\");\n                    fprintf(fd,\n                            \"%%%%PageBoundingBox: 0 0 %\" PRId32 \" %\" PRId32\n                            \"\\n\",\n                            (int32_t)pswidth, (int32_t)psheight);\n                    fprintf(fd,\n                            \"1 dict begin /PageSize [ %f %f ] def currentdict \"\n                            \"end setpagedevice\\n\",\n                            pswidth, psheight);\n                }\n                else /* Image scaled */\n                {\n                    if (strlen(pageOrientation))\n                        fprintf(fd, \"%%%%PageOrientation: %s\\n\",\n                                pageOrientation);\n                    else\n                        fprintf(fd, \"%%%%PageOrientation: %s\\n\",\n                                (reqwidth > reqheight) ? \"Landscape\"\n                                                       : \"Portrait\");\n                    fprintf(fd,\n                            \"%%%%PageBoundingBox: 0 0 %\" PRId32 \" %\" PRId32\n                            \"\\n\",\n                            (int32_t)reqwidth, (int32_t)reqheight);\n                    fprintf(fd,\n                            \"1 dict begin /PageSize [ %f %f ] def currentdict \"\n                            \"end setpagedevice\\n\",\n                            reqwidth, reqheight);\n                }\n            }\n            break;\n        case 90:\n        case 270:\n            if ((splitheight > 0) || (splitwidth > 0))\n            {\n                if (pgwidth != 0 || pgheight != 0)\n                {\n                    xscale = reqwidth / (splitwidth ? splitwidth : pswidth);\n                    yscale = reqheight / (splitheight ? splitheight : psheight);\n                    scale = (xscale < yscale) ? xscale : yscale;\n                }\n                new_width = splitwidth ? splitwidth : scale * psheight;\n                new_height = splitheight ? splitheight : scale * pswidth;\n\n                if (strlen(pageOrientation))\n                    fprintf(fd, \"%%%%PageOrientation: %s\\n\", pageOrientation);\n                else\n                    fprintf(fd, \"%%%%PageOrientation: %s\\n\",\n                            (new_width > new_height) ? \"Landscape\"\n                                                     : \"Portrait\");\n                fprintf(fd,\n                        \"%%%%PageBoundingBox: 0 0 %\" PRId32 \" %\" PRId32 \"\\n\",\n                        (int32_t)new_width, (int32_t)new_height);\n                fprintf(fd,\n                        \"1 dict begin /PageSize [ %f %f ] def currentdict end \"\n                        \"setpagedevice\\n\",\n                        new_width, new_height);\n            }\n            else\n            {\n                if ((pgwidth == 0) && (pgheight == 0)) /* Image not scaled */\n                {\n                    if (strlen(pageOrientation))\n                        fprintf(fd, \"%%%%PageOrientation: %s\\n\",\n                                pageOrientation);\n                    else\n                        fprintf(fd, \"%%%%PageOrientation: %s\\n\",\n                                (psheight > pswidth) ? \"Landscape\"\n                                                     : \"Portrait\");\n                    fprintf(fd,\n                            \"%%%%PageBoundingBox: 0 0 %\" PRId32 \" %\" PRId32\n                            \"\\n\",\n                            (int32_t)psheight, (int32_t)pswidth);\n                    fprintf(fd,\n                            \"1 dict begin /PageSize [ %f %f ] def currentdict \"\n                            \"end setpagedevice\\n\",\n                            psheight, pswidth);\n                }\n                else /* Image scaled */\n                {\n                    if (strlen(pageOrientation))\n                        fprintf(fd, \"%%%%PageOrientation: %s\\n\",\n                                pageOrientation);\n                    else\n                        fprintf(fd, \"%%%%PageOrientation: %s\\n\",\n                                (reqwidth > reqheight) ? \"Landscape\"\n                                                       : \"Portrait\");\n                    fprintf(fd,\n                            \"%%%%PageBoundingBox: 0 0 %\" PRId32 \" %\" PRId32\n                            \"\\n\",\n                            (int32_t)reqwidth, (int32_t)reqheight);\n                    fprintf(fd,\n                            \"1 dict begin /PageSize [ %f %f ] def currentdict \"\n                            \"end setpagedevice\\n\",\n                            reqwidth, reqheight);\n                }\n            }\n            break;\n        default:\n            TIFFError(\"psPageSize\", \"Invalid rotation %d\", rotation);\n            return (1);\n    }\n    fputs(\"<<\\n  /Policies <<\\n    /PageSize 3\\n  >>\\n>> setpagedevice\\n\", fd);\n\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          1230,
+          0
+        ],
+        [
+          1385,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "psPageSize",
+        "parameters": {
+          "fd": "FILE",
+          "rotation": "int",
+          "pgwidth": "double",
+          "pgheight": "double",
+          "reqwidth": "double",
+          "reqheight": "double",
+          "pswidth": "double",
+          "psheight": "double"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int psMaskImage(FILE *fd, TIFF *tif, int rotation, int center, int *npages,\n                double pixwidth, double pixheight, double left_margin,\n                double bottom_margin, double pgwidth, double pgheight,\n                double pswidth, double psheight, double scale)\n{\n    int i, j;\n    int ximages = 1, yimages = 1;\n    int pages = *npages;\n    double view_width = 0;\n    double view_height = 0;\n\n    if (get_viewport(pgwidth, pgheight, pswidth, psheight, &view_width,\n                     &view_height, rotation))\n    {\n        TIFFError(\"get_viewport\", \"Unable to set image viewport\");\n        return (-1);\n    }\n\n    if (get_subimage_count(pgwidth, pgheight, pswidth, psheight, &ximages,\n                           &yimages, rotation, scale) < 1)\n    {\n        TIFFError(\"get_subimage_count\",\n                  \"Invalid image count: %d columns, %d rows\", ximages, yimages);\n        return (-1);\n    }\n\n    for (i = 0; i < yimages; i++)\n    {\n        for (j = 0; j < ximages; j++)\n        {\n            pages++;\n            *npages = pages;\n            fprintf(fd, \"%%%%Page: %d %d\\n\", pages, pages);\n\n            /* Write out the PageSize info for non EPS files */\n            if (!generateEPSF && (level2 || level3))\n            {\n                if (psPageSize(fd, rotation, pgwidth, pgheight, view_width,\n                               view_height, pswidth, psheight))\n                    return (-1);\n            }\n            fprintf(fd, \"gsave\\n\");\n            fprintf(fd, \"100 dict begin\\n\");\n            if (exportMaskedImage(fd, view_width, view_height, pswidth,\n                                  psheight, i, j, left_margin, bottom_margin,\n                                  scale, center, rotation))\n            {\n                TIFFError(\"exportMaskedImage\", \"Invalid image parameters.\");\n                return (-1);\n            }\n            PSpage(fd, tif, (uint32_t)pixwidth, (uint32_t)pixheight);\n            fprintf(fd, \"end\\n\");\n            fprintf(fd, \"grestore\\n\");\n            fprintf(fd, \"showpage\\n\");\n        }\n    }\n\n    return (pages);\n}",
+      "fn_code_pos": [
+        [
+          1390,
+          0
+        ],
+        [
+          1448,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "psMaskImage",
+        "parameters": {
+          "fd": "FILE",
+          "tif": "TIFF",
+          "rotation": "int",
+          "center": "int",
+          "npages": "int",
+          "pixwidth": "double",
+          "pixheight": "double",
+          "left_margin": "double",
+          "bottom_margin": "double",
+          "pgwidth": "double",
+          "pgheight": "double",
+          "pswidth": "double",
+          "psheight": "double",
+          "scale": "double"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int psStart(FILE *fd, int npages, int auto_rotate, int *rotation, double *scale,\n            double ox, double oy, double pgwidth, double pgheight,\n            double reqwidth, double reqheight, double pswidth, double psheight,\n            double left_offset, double bottom_offset)\n{\n    double maxsource = 0.0; /* Used for auto rotations */\n    double maxtarget = 0.0;\n    double xscale = 1.0, yscale = 1.0;\n    double splitheight;\n    double splitwidth;\n    double view_width = 0.0, view_height = 0.0;\n    double page_width = 0.0, page_height = 0.0;\n\n    /* Splitheight and splitwidth are in inches */\n    splitheight = maxPageHeight * PS_UNIT_SIZE;\n    splitwidth = maxPageWidth * PS_UNIT_SIZE;\n\n    page_width = pgwidth * PS_UNIT_SIZE;\n    page_height = pgheight * PS_UNIT_SIZE;\n\n    /* If user has specified a page width and height and requested the\n     * image to be auto-rotated to fit on that media, we match the\n     * longest dimension of the image to the longest dimension of the\n     * target media but we have to ignore auto rotate if user specified\n     * maxPageHeight since this makes life way too complicated. */\n    if (auto_rotate)\n    {\n        if ((splitheight != 0) || (splitwidth != 0))\n        {\n            TIFFError(\"psStart\",\n                      \"Auto-rotate is incompatible with page splitting \");\n            return (1);\n        }\n\n        /* Find longest edges in image and output media */\n        maxsource = (pswidth >= psheight) ? pswidth : psheight;\n        maxtarget = (reqwidth >= reqheight) ? reqwidth : reqheight;\n\n        if (((maxsource == pswidth) && (maxtarget != reqwidth)) ||\n            ((maxsource == psheight) && (maxtarget != reqheight)))\n        { /* optimal orientation does not match input orientation */\n            *rotation = 90;\n            xscale = (reqwidth - left_offset) / psheight;\n            yscale = (reqheight - bottom_offset) / pswidth;\n        }\n        else /* optimal orientation matches input orientation */\n        {\n            xscale = (reqwidth - left_offset) / pswidth;\n            yscale = (reqheight - bottom_offset) / psheight;\n        }\n        *scale = (xscale < yscale) ? xscale : yscale;\n\n        /* Do not scale image beyond original size */\n        if (*scale > 1.0)\n            *scale = 1.0;\n\n        /* Set the size of the displayed image to requested page size\n         * and optimal orientation.\n         */\n        if (!npages)\n            PSHead(fd, reqwidth, reqheight, ox, oy);\n\n        return (0);\n    }\n\n    /* N.B. If pgwidth or pgheight are set from maxPageHeight/Width,\n     * we have a problem with the tests below under splitheight.\n     */\n\n    switch (*rotation) /* Auto rotate has NOT been specified */\n    {\n        case 0:\n        case 180:\n            if ((splitheight != 0) || (splitwidth != 0))\n            { /* Viewport clipped to maxPageHeight or maxPageWidth */\n                if ((page_width != 0) || (page_height != 0)) /* Image scaled */\n                {\n                    xscale = (reqwidth - left_offset) /\n                             (page_width ? page_width : pswidth);\n                    yscale = (reqheight - bottom_offset) /\n                             (page_height ? page_height : psheight);\n                    *scale = (xscale < yscale) ? xscale : yscale;\n                    /*\n                    if (*scale > 1.0)\n                      *scale = 1.0;\n                     */\n                }\n                else /* Image clipped but not scaled */\n                    *scale = 1.0;\n\n                view_width = splitwidth ? splitwidth : *scale * pswidth;\n                view_height = splitheight ? splitheight : *scale * psheight;\n            }\n            else /* Viewport not clipped to maxPageHeight or maxPageWidth */\n            {\n                if ((page_width != 0) || (page_height != 0))\n                { /* Image scaled  */\n                    xscale = (reqwidth - left_offset) / pswidth;\n                    yscale = (reqheight - bottom_offset) / psheight;\n\n                    view_width = reqwidth;\n                    view_height = reqheight;\n                }\n                else\n                { /* Image not scaled  */\n                    xscale = (pswidth - left_offset) / pswidth;\n                    yscale = (psheight - bottom_offset) / psheight;\n\n                    view_width = pswidth;\n                    view_height = psheight;\n                }\n            }\n            break;\n        case 90:\n        case 270:\n            if ((splitheight != 0) || (splitwidth != 0))\n            { /* Viewport clipped to maxPageHeight or maxPageWidth */\n                if ((page_width != 0) || (page_height != 0)) /* Image scaled */\n                {\n                    xscale = (reqwidth - left_offset) / psheight;\n                    yscale = (reqheight - bottom_offset) / pswidth;\n                    *scale = (xscale < yscale) ? xscale : yscale;\n                    /*\n                    if (*scale > 1.0)\n                      *scale = 1.0;\n                   */\n                }\n                else /* Image clipped but not scaled */\n                    *scale = 1.0;\n                view_width = splitwidth ? splitwidth : *scale * psheight;\n                view_height = splitheight ? splitheight : *scale * pswidth;\n            }\n            else /* Viewport not clipped to maxPageHeight or maxPageWidth */\n            {\n                if ((page_width != 0) || (page_height != 0)) /* Image scaled */\n                {\n                    xscale = (reqwidth - left_offset) / psheight;\n                    yscale = (reqheight - bottom_offset) / pswidth;\n\n                    view_width = reqwidth;\n                    view_height = reqheight;\n                }\n                else\n                {\n                    xscale = (pswidth - left_offset) / psheight;\n                    yscale = (psheight - bottom_offset) / pswidth;\n\n                    view_width = psheight;\n                    view_height = pswidth;\n                }\n            }\n            break;\n        default:\n            TIFFError(\"psPageSize\", \"Invalid rotation %d\", *rotation);\n            return (1);\n    }\n\n    if (!npages)\n        PSHead(fd, (page_width ? page_width : view_width),\n               (page_height ? page_height : view_height), ox, oy);\n\n    *scale = (xscale < yscale) ? xscale : yscale;\n    if (*scale > 1.0)\n        *scale = 1.0;\n\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          1451,
+          0
+        ],
+        [
+          1617,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "psStart",
+        "parameters": {
+          "fd": "FILE",
+          "npages": "int",
+          "auto_rotate": "int",
+          "rotation": "int",
+          "scale": "double",
+          "ox": "double",
+          "oy": "double",
+          "pgwidth": "double",
+          "pgheight": "double",
+          "reqwidth": "double",
+          "reqheight": "double",
+          "pswidth": "double",
+          "psheight": "double",
+          "left_offset": "double",
+          "bottom_offset": "double"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int get_viewport(double pgwidth, double pgheight, double pswidth,\n                 double psheight, double *view_width, double *view_height,\n                 int rotation)\n{\n    /* Only one of maxPageHeight or maxPageWidth can be specified */\n    if (maxPageHeight !=\n        0) /* Clip the viewport to maxPageHeight on each page */\n    {\n        if (pgheight != 0 && pgheight < maxPageHeight)\n            *view_height = pgheight * PS_UNIT_SIZE;\n        else\n            *view_height = maxPageHeight * PS_UNIT_SIZE;\n        /*\n         * if (res_unit == RESUNIT_CENTIMETER)\n         * *view_height /= 2.54F;\n         */\n    }\n    else\n    {\n        if (pgheight != 0) /* User has set PageHeight with -h flag */\n        {\n            *view_height =\n                pgheight *\n                PS_UNIT_SIZE; /* Postscript size for Page Height in inches */\n            /* if (res_unit == RESUNIT_CENTIMETER)\n             *  *view_height /= 2.54F;\n             */\n        }\n        else /* If no width or height are specified, use the original size from\n                image */\n            switch (rotation)\n            {\n                default:\n                case 0:\n                case 180:\n                    *view_height = psheight;\n                    break;\n                case 90:\n                case 270:\n                    *view_height = pswidth;\n                    break;\n            }\n    }\n\n    if (maxPageWidth != 0) /* Clip the viewport to maxPageWidth on each page */\n    {\n        if (pgwidth != 0 && pgwidth < maxPageWidth)\n            *view_width = pgwidth * PS_UNIT_SIZE;\n        else\n            *view_width = maxPageWidth * PS_UNIT_SIZE;\n        /* if (res_unit == RESUNIT_CENTIMETER)\n         *  *view_width /= 2.54F;\n         */\n    }\n    else\n    {\n        if (pgwidth != 0) /* User has set PageWidth with -w flag */\n        {\n            *view_width =\n                pgwidth *\n                PS_UNIT_SIZE; /* Postscript size for Page Width in inches */\n            /* if (res_unit == RESUNIT_CENTIMETER)\n             * *view_width /= 2.54F;\n             */\n        }\n        else /* If no width or height are specified, use the original size from\n                image */\n            switch (rotation)\n            {\n                default:\n                case 0:\n                case 180:\n                    *view_width = pswidth;\n                    break;\n                case 90:\n                case 270:\n                    *view_width =\n                        psheight; /* (*view_height / psheight) * psheight; */\n                    break;\n            }\n    }\n\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          1619,
+          0
+        ],
+        [
+          1702,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "get_viewport",
+        "parameters": {
+          "pgwidth": "double",
+          "pgheight": "double",
+          "pswidth": "double",
+          "psheight": "double",
+          "view_width": "double",
+          "view_height": "double",
+          "rotation": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFF2PS(FILE *fd, TIFF *tif, double pgwidth, double pgheight, double lm,\n            double bm, int center)\n{\n    uint32_t pixwidth = 0, pixheight = 0; /* Image width and height in pixels */\n    double ox = 0.0, oy = 0.0; /* Offset from current Postscript origin */\n    double pswidth,\n        psheight; /* Original raw image width and height in points */\n    double view_width, view_height; /* Viewport width and height in points */\n    double scale = 1.0;\n    double left_offset = lm * PS_UNIT_SIZE;\n    double bottom_offset = bm * PS_UNIT_SIZE;\n    uint32_t subfiletype;\n    uint16_t *sampleinfo;\n    static int npages = 0;\n\n    if (!TIFFGetField(tif, TIFFTAG_XPOSITION, &ox))\n        ox = 0;\n    if (!TIFFGetField(tif, TIFFTAG_YPOSITION, &oy))\n        oy = 0;\n\n    /* Consolidated all the tag information into one code segment, Richard Nolde\n     */\n    do\n    {\n        tf_numberstrips = TIFFNumberOfStrips(tif);\n        TIFFGetFieldDefaulted(tif, TIFFTAG_ROWSPERSTRIP, &tf_rowsperstrip);\n        TIFFGetFieldDefaulted(tif, TIFFTAG_BITSPERSAMPLE, &bitspersample);\n        TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);\n        TIFFGetFieldDefaulted(tif, TIFFTAG_PLANARCONFIG, &planarconfiguration);\n        TIFFGetField(tif, TIFFTAG_COMPRESSION, &compression);\n        TIFFGetFieldDefaulted(tif, TIFFTAG_EXTRASAMPLES, &extrasamples,\n                              &sampleinfo);\n        alpha = (extrasamples == 1 && sampleinfo[0] == EXTRASAMPLE_ASSOCALPHA);\n        if (!TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &photometric))\n        {\n            switch (samplesperpixel - extrasamples)\n            {\n                case 1:\n                    if (isCCITTCompression(tif))\n                        photometric = PHOTOMETRIC_MINISWHITE;\n                    else\n                        photometric = PHOTOMETRIC_MINISBLACK;\n                    break;\n                case 3:\n                    photometric = PHOTOMETRIC_RGB;\n                    break;\n                case 4:\n                    photometric = PHOTOMETRIC_SEPARATED;\n                    break;\n            }\n        }\n\n        /* Read image tags for width and height in pixels pixwidth, pixheight,\n         * and convert to points pswidth, psheight\n         */\n        setupPageState(tif, &pixwidth, &pixheight, &pswidth, &psheight);\n        view_width = pswidth;\n        view_height = psheight;\n\n        if (get_viewport(pgwidth, pgheight, pswidth, psheight, &view_width,\n                         &view_height, rotation_g))\n        {\n            TIFFError(\"get_viewport\", \"Unable to set image viewport\");\n            return (1);\n        }\n\n        /* Write the Postscript file header with Bounding Box and Page Size\n         * definitions */\n        if (psStart(fd, npages, auto_rotate_g, &rotation_g, &scale, ox, oy,\n                    pgwidth, pgheight, view_width, view_height, pswidth,\n                    psheight, left_offset, bottom_offset))\n            return (-1);\n\n        if (checkImage(tif)) /* Aborts if unsupported image parameters */\n        {\n            tf_bytesperrow = TIFFScanlineSize(tif);\n\n            /* Set viewport clipping and scaling options */\n            if ((maxPageHeight) || (maxPageWidth) || (pgwidth != 0) ||\n                (pgheight != 0))\n            {\n                if ((maxPageHeight) ||\n                    (maxPageWidth)) /* used -H or -W  option */\n                {\n                    if (psMaskImage(fd, tif, rotation_g, center, &npages,\n                                    pixwidth, pixheight, left_offset,\n                                    bottom_offset, pgwidth, pgheight, pswidth,\n                                    psheight, scale) < 0)\n                        return (-1);\n                }\n                else /* N.B. Setting maxPageHeight no longer sets pgheight */\n                {\n                    if (pgwidth != 0 || pgheight != 0)\n                    {\n                        /* User did not specify a maximum page height or width\n                         * using -H or -W flag but did use -h or -w flag to\n                         * scale to a specific size page.\n                         */\n                        npages++;\n                        fprintf(fd, \"%%%%Page: %d %d\\n\", npages, npages);\n\n                        if (!generateEPSF && (level2 || level3))\n                        {\n                            /* Write out the PageSize info for non EPS files */\n                            if (psPageSize(fd, rotation_g, pgwidth, pgheight,\n                                           view_width, view_height, pswidth,\n                                           psheight))\n                                return (-1);\n                        }\n                        fprintf(fd, \"gsave\\n\");\n                        fprintf(fd, \"100 dict begin\\n\");\n                        if (psScaleImage(fd, scale, rotation_g, center,\n                                         view_width, view_height, pswidth,\n                                         psheight, left_offset, bottom_offset))\n                            return (-1);\n\n                        PSpage(fd, tif, pixwidth, pixheight);\n                        fprintf(fd, \"end\\n\");\n                        fprintf(fd, \"grestore\\n\");\n                        fprintf(fd, \"showpage\\n\");\n                    }\n                }\n            }\n            else /* Simple rotation: user did not use -H, -W, -h or -w */\n            {\n                npages++;\n                fprintf(fd, \"%%%%Page: %d %d\\n\", npages, npages);\n\n                if (!generateEPSF && (level2 || level3))\n                {\n                    /* Write out the PageSize info for non EPS files */\n                    if (psPageSize(fd, rotation_g, pgwidth, pgheight,\n                                   view_width, view_height, pswidth, psheight))\n                        return (-1);\n                }\n                fprintf(fd, \"gsave\\n\");\n                fprintf(fd, \"100 dict begin\\n\");\n                if (psRotateImage(fd, rotation_g, pswidth, psheight,\n                                  left_offset, bottom_offset))\n                    return (-1);\n\n                PSpage(fd, tif, pixwidth, pixheight);\n                fprintf(fd, \"end\\n\");\n                fprintf(fd, \"grestore\\n\");\n                fprintf(fd, \"showpage\\n\");\n            }\n        }\n        if (generateEPSF)\n            break;\n        if (auto_rotate_g)\n            rotation_g = 0;\n        TIFFGetFieldDefaulted(tif, TIFFTAG_SUBFILETYPE, &subfiletype);\n    } while (((subfiletype & FILETYPE_PAGE) || printAll) &&\n             TIFFReadDirectory(tif));\n\n    return (npages);\n}",
+      "fn_code_pos": [
+        [
+          1710,
+          0
+        ],
+        [
+          1866,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFF2PS",
+        "parameters": {
+          "fd": "FILE",
+          "tif": "TIFF",
+          "pgwidth": "double",
+          "pgheight": "double",
+          "lm": "double",
+          "bm": "double",
+          "center": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void PSHead(FILE *fd, double pagewidth, double pageheight, double xoff,\n            double yoff)\n{\n    time_t t;\n\n    t = time(0);\n    fprintf(fd, \"%%!PS-Adobe-3.0%s\\n\", generateEPSF ? \" EPSF-3.0\" : \"\");\n    fprintf(fd, \"%%%%Creator: %s\\n\", creator ? creator : \"tiff2ps\");\n    fprintf(fd, \"%%%%Title: %s\\n\", title ? title : filename);\n    fprintf(fd, \"%%%%CreationDate: %s\", ctime(&t));\n    fprintf(fd, \"%%%%DocumentData: Clean7Bit\\n\");\n    /* NB: should use PageBoundingBox for each page instead of BoundingBox *\n     * PageBoundingBox DSC added in PSPageSize function, R Nolde 09-01-2010\n     */\n    fprintf(fd, \"%%%%Origin: %\" PRId32 \" %\" PRId32 \"\\n\", (int32_t)xoff,\n            (int32_t)yoff);\n    fprintf(fd, \"%%%%BoundingBox: 0 0 %\" PRId32 \" %\" PRId32 \"\\n\",\n            (int32_t)ceil(pagewidth), (int32_t)ceil(pageheight));\n\n    fprintf(fd, \"%%%%LanguageLevel: %d\\n\", (level3 ? 3 : (level2 ? 2 : 1)));\n    if (generateEPSF == TRUE)\n        fprintf(fd, \"%%%%Pages: 1 1\\n\");\n    else\n        fprintf(fd, \"%%%%Pages: (atend)\\n\");\n    fprintf(fd, \"%%%%EndComments\\n\");\n    if (generateEPSF == FALSE)\n    {\n        fprintf(fd, \"%%%%BeginSetup\\n\");\n        if (PSduplex)\n            fprintf(fd, \"%s\", DuplexPreamble);\n        if (PStumble)\n            fprintf(fd, \"%s\", TumblePreamble);\n        if (PSavoiddeadzone && (level2 || level3))\n            fprintf(fd, \"%s\", AvoidDeadZonePreamble);\n        fprintf(fd, \"%%%%EndSetup\\n\");\n    }\n}",
+      "fn_code_pos": [
+        [
+          1900,
+          0
+        ],
+        [
+          1936,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSHead",
+        "parameters": {
+          "fd": "FILE",
+          "pagewidth": "double",
+          "pageheight": "double",
+          "xoff": "double",
+          "yoff": "double"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void PSTail(FILE *fd, int npages)\n{\n    fprintf(fd, \"%%%%Trailer\\n\");\n    if (generateEPSF == FALSE)\n        fprintf(fd, \"%%%%Pages: %d\\n\", npages);\n    fprintf(fd, \"%%%%EOF\\n\");\n}",
+      "fn_code_pos": [
+        [
+          1938,
+          0
+        ],
+        [
+          1944,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSTail",
+        "parameters": {
+          "fd": "FILE",
+          "npages": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int checkcmap(TIFF *tif, int n, uint16_t *r, uint16_t *g, uint16_t *b)\n{\n    (void)tif;\n    while (n-- > 0)\n        if (*r++ >= 256 || *g++ >= 256 || *b++ >= 256)\n            return (16);\n    TIFFWarning(filename, \"Assuming 8-bit colormap\");\n    return (8);\n}",
+      "fn_code_pos": [
+        [
+          1946,
+          0
+        ],
+        [
+          1954,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "checkcmap",
+        "parameters": {
+          "tif": "TIFF",
+          "n": "int",
+          "r": "uint16_t",
+          "g": "uint16_t",
+          "b": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void PS_Lvl2colorspace(FILE *fd, TIFF *tif)\n{\n    uint16_t *rmap, *gmap, *bmap;\n    int i, num_colors;\n    const char *colorspace_p;\n\n    switch (photometric)\n    {\n        case PHOTOMETRIC_SEPARATED:\n            colorspace_p = \"CMYK\";\n            break;\n\n        case PHOTOMETRIC_RGB:\n            colorspace_p = \"RGB\";\n            break;\n\n        default:\n            colorspace_p = \"Gray\";\n    }\n\n    /*\n     * Set up PostScript Level 2 colorspace according to\n     * section 4.8 in the PostScript reference manual.\n     */\n    fputs(\"% PostScript Level 2 only.\\n\", fd);\n    if (photometric != PHOTOMETRIC_PALETTE)\n    {\n        if (photometric == PHOTOMETRIC_YCBCR)\n        {\n            /* MORE CODE HERE */\n        }\n        fprintf(fd, \"/Device%s setcolorspace\\n\", colorspace_p);\n        return;\n    }\n\n    /*\n     * Set up an indexed/palette colorspace\n     */\n    num_colors = (1 << bitspersample);\n    if (!TIFFGetField(tif, TIFFTAG_COLORMAP, &rmap, &gmap, &bmap))\n    {\n        TIFFError(filename, \"Palette image w/o \\\"Colormap\\\" tag\");\n        return;\n    }\n    if (checkcmap(tif, num_colors, rmap, gmap, bmap) == 16)\n    {\n        /*\n         * Convert colormap to 8-bits values.\n         */\n#define CVT(x) (((x)*255) / ((1L << 16) - 1))\n        for (i = 0; i < num_colors; i++)\n        {\n            rmap[i] = CVT(rmap[i]);\n            gmap[i] = CVT(gmap[i]);\n            bmap[i] = CVT(bmap[i]);\n        }\n#undef CVT\n    }\n    fprintf(fd, \"[ /Indexed /DeviceRGB %d\", num_colors - 1);\n    if (ascii85_g)\n    {\n        Ascii85Init();\n        fputs(\"\\n<~\", fd);\n        ascii85breaklen -= 2;\n    }\n    else\n        fputs(\" <\", fd);\n    for (i = 0; i < num_colors; i++)\n    {\n        if (ascii85_g)\n        {\n            Ascii85Put((unsigned char)rmap[i], fd);\n            Ascii85Put((unsigned char)gmap[i], fd);\n            Ascii85Put((unsigned char)bmap[i], fd);\n        }\n        else\n        {\n            fputs((i % 8) ? \" \" : \"\\n  \", fd);\n            fprintf(fd, \"%02\" PRIx16 \"%02\" PRIx16 \"%02\" PRIx16 \"\", rmap[i],\n                    gmap[i], bmap[i]);\n        }\n    }\n    if (ascii85_g)\n        Ascii85Flush(fd);\n    else\n        fputs(\">\\n\", fd);\n    fputs(\"] setcolorspace\\n\", fd);\n}",
+      "fn_code_pos": [
+        [
+          1956,
+          0
+        ],
+        [
+          2043,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PS_Lvl2colorspace",
+        "parameters": {
+          "fd": "FILE",
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int PS_Lvl2ImageDict(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)\n{\n    int use_rawdata;\n    uint32_t tile_width, tile_height;\n    uint16_t predictor, minsamplevalue, maxsamplevalue;\n    uint32_t repeat_count;\n    char im_h[64], im_x[64], im_y[64];\n    const char *imageOp = \"image\";\n\n    if (useImagemask && (bitspersample == 1))\n        imageOp = \"imagemask\";\n\n    (void)strcpy(im_x, \"0\");\n    (void)snprintf(im_y, sizeof(im_y), \"%\" PRIu32, h);\n    (void)snprintf(im_h, sizeof(im_h), \"%\" PRIu32, h);\n    tile_width = w;\n    tile_height = h;\n    if (TIFFIsTiled(tif))\n    {\n        repeat_count = TIFFNumberOfTiles(tif);\n        TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tile_width);\n        TIFFGetField(tif, TIFFTAG_TILELENGTH, &tile_height);\n        if (tile_width > w || tile_height > h || (w % tile_width) != 0 ||\n            (h % tile_height != 0))\n        {\n            /*\n             * The tiles does not fit image width and height.\n             * Set up a clip rectangle for the image unit square.\n             */\n            fputs(\"0 0 1 1 rectclip\\n\", fd);\n        }\n        if (tile_width < w)\n        {\n            fputs(\"/im_x 0 def\\n\", fd);\n            (void)strcpy(im_x, \"im_x neg\");\n        }\n        if (tile_height < h)\n        {\n            fputs(\"/im_y 0 def\\n\", fd);\n            (void)snprintf(im_y, sizeof(im_y), \"%\" PRIu32 \" im_y sub\", h);\n        }\n    }\n    else\n    {\n        repeat_count = tf_numberstrips;\n        tile_height = tf_rowsperstrip;\n        if (tile_height > h)\n            tile_height = h;\n        if (repeat_count > 1)\n        {\n            fputs(\"/im_y 0 def\\n\", fd);\n            fprintf(fd, \"/im_h %\" PRIu32 \" def\\n\", tile_height);\n            (void)strcpy(im_h, \"im_h\");\n            (void)snprintf(im_y, sizeof(im_y), \"%\" PRIu32 \" im_y sub\", h);\n        }\n    }\n\n    /*\n     * Output start of exec block\n     */\n    fputs(\"{ % exec\\n\", fd);\n\n    if (repeat_count > 1)\n        fprintf(fd, \"%\" PRIu32 \" { %% repeat\\n\", repeat_count);\n\n    /*\n     * Output filter options and image dictionary.\n     */\n    if (ascii85_g)\n        fputs(\" /im_stream currentfile /ASCII85Decode filter def\\n\", fd);\n    fputs(\" <<\\n\", fd);\n    fputs(\"  /ImageType 1\\n\", fd);\n    fprintf(fd, \"  /Width %\" PRIu32 \"\\n\", tile_width);\n    /*\n     * Workaround for some software that may crash when last strip\n     * of image contains fewer number of scanlines than specified\n     * by the `/Height' variable. So for stripped images with multiple\n     * strips we will set `/Height' as `im_h', because one is\n     * recalculated for each strip - including the (smaller) final strip.\n     * For tiled images and images with only one strip `/Height' will\n     * contain number of scanlines in tile (or image height in case of\n     * one-stripped image).\n     */\n    if (TIFFIsTiled(tif) || tf_numberstrips == 1)\n        fprintf(fd, \"  /Height %\" PRIu32 \"\\n\", tile_height);\n    else\n        fprintf(fd, \"  /Height im_h\\n\");\n\n    if (planarconfiguration == PLANARCONFIG_SEPARATE && samplesperpixel > 1)\n        fputs(\"  /MultipleDataSources true\\n\", fd);\n    fprintf(fd, \"  /ImageMatrix [ %\" PRIu32 \" 0 0 %\" PRId32 \" %s %s ]\\n\", w,\n            -(int32_t)h, im_x, im_y);\n    fprintf(fd, \"  /BitsPerComponent %\" PRIu16 \"\\n\", bitspersample);\n    fprintf(fd, \"  /Interpolate %s\\n\", interpolate ? \"true\" : \"false\");\n\n    switch (samplesperpixel - extrasamples)\n    {\n        case 1:\n            switch (photometric)\n            {\n                case PHOTOMETRIC_MINISBLACK:\n                    fputs(\"  /Decode [0 1]\\n\", fd);\n                    break;\n                case PHOTOMETRIC_MINISWHITE:\n                    switch (compression)\n                    {\n                        case COMPRESSION_CCITTRLE:\n                        case COMPRESSION_CCITTRLEW:\n                        case COMPRESSION_CCITTFAX3:\n                        case COMPRESSION_CCITTFAX4:\n                            /*\n                             * Manage inverting with /Blackis1 flag\n                             * since there might be uncompressed parts\n                             */\n                            fputs(\"  /Decode [0 1]\\n\", fd);\n                            break;\n                        default:\n                            /*\n                             * ERROR...\n                             */\n                            fputs(\"  /Decode [1 0]\\n\", fd);\n                            break;\n                    }\n                    break;\n                case PHOTOMETRIC_PALETTE:\n                    TIFFGetFieldDefaulted(tif, TIFFTAG_MINSAMPLEVALUE,\n                                          &minsamplevalue);\n                    TIFFGetFieldDefaulted(tif, TIFFTAG_MAXSAMPLEVALUE,\n                                          &maxsamplevalue);\n                    fprintf(fd, \"  /Decode [%\" PRIu16 \" %\" PRIu16 \"]\\n\",\n                            minsamplevalue, maxsamplevalue);\n                    break;\n                default:\n                    /*\n                     * ERROR ?\n                     */\n                    fputs(\"  /Decode [0 1]\\n\", fd);\n                    break;\n            }\n            break;\n        case 3:\n            switch (photometric)\n            {\n                case PHOTOMETRIC_RGB:\n                    fputs(\"  /Decode [0 1 0 1 0 1]\\n\", fd);\n                    break;\n                case PHOTOMETRIC_MINISWHITE:\n                case PHOTOMETRIC_MINISBLACK:\n                default:\n                    /*\n                     * ERROR??\n                     */\n                    fputs(\"  /Decode [0 1 0 1 0 1]\\n\", fd);\n                    break;\n            }\n            break;\n        case 4:\n            /*\n             * ERROR??\n             */\n            fputs(\"  /Decode [0 1 0 1 0 1 0 1]\\n\", fd);\n            break;\n    }\n    fputs(\"  /DataSource\", fd);\n    if (planarconfiguration == PLANARCONFIG_SEPARATE && samplesperpixel > 1)\n        fputs(\" [\", fd);\n    if (ascii85_g)\n        fputs(\" im_stream\", fd);\n    else\n        fputs(\" currentfile /ASCIIHexDecode filter\", fd);\n\n    use_rawdata = TRUE;\n    switch (compression)\n    {\n        case COMPRESSION_NONE: /* 1: uncompressed */\n            break;\n        case COMPRESSION_CCITTRLE:  /* 2: CCITT modified Huffman RLE */\n        case COMPRESSION_CCITTRLEW: /* 32771: #1 w/ word alignment */\n        case COMPRESSION_CCITTFAX3: /* 3: CCITT Group 3 fax encoding */\n        case COMPRESSION_CCITTFAX4: /* 4: CCITT Group 4 fax encoding */\n            fputs(\"\\n\\t<<\\n\", fd);\n            if (compression == COMPRESSION_CCITTFAX3)\n            {\n                uint32_t g3_options;\n\n                fputs(\"\\t /EndOfLine true\\n\", fd);\n                fputs(\"\\t /EndOfBlock false\\n\", fd);\n                if (!TIFFGetField(tif, TIFFTAG_GROUP3OPTIONS, &g3_options))\n                    g3_options = 0;\n                if (g3_options & GROUP3OPT_2DENCODING)\n                    fprintf(fd, \"\\t /K %s\\n\", im_h);\n                if (g3_options & GROUP3OPT_UNCOMPRESSED)\n                    fputs(\"\\t /Uncompressed true\\n\", fd);\n                if (g3_options & GROUP3OPT_FILLBITS)\n                    fputs(\"\\t /EncodedByteAlign true\\n\", fd);\n            }\n            if (compression == COMPRESSION_CCITTFAX4)\n            {\n                uint32_t g4_options;\n\n                fputs(\"\\t /K -1\\n\", fd);\n                TIFFGetFieldDefaulted(tif, TIFFTAG_GROUP4OPTIONS, &g4_options);\n                if (g4_options & GROUP4OPT_UNCOMPRESSED)\n                    fputs(\"\\t /Uncompressed true\\n\", fd);\n            }\n            if (!(tile_width == w && w == 1728U))\n                fprintf(fd, \"\\t /Columns %\" PRIu32 \"\\n\", tile_width);\n            fprintf(fd, \"\\t /Rows %s\\n\", im_h);\n            if (compression == COMPRESSION_CCITTRLE ||\n                compression == COMPRESSION_CCITTRLEW)\n            {\n                fputs(\"\\t /EncodedByteAlign true\\n\", fd);\n                fputs(\"\\t /EndOfBlock false\\n\", fd);\n            }\n            if (photometric == PHOTOMETRIC_MINISBLACK)\n                fputs(\"\\t /BlackIs1 true\\n\", fd);\n            fprintf(fd, \"\\t>> /CCITTFaxDecode filter\");\n            break;\n        case COMPRESSION_LZW: /* 5: Lempel-Ziv & Welch */\n            TIFFGetFieldDefaulted(tif, TIFFTAG_PREDICTOR, &predictor);\n            if (predictor == 2)\n            {\n                fputs(\"\\n\\t<<\\n\", fd);\n                fprintf(fd, \"\\t /Predictor %\" PRIu16 \"\\n\", predictor);\n                fprintf(fd, \"\\t /Columns %\" PRIu32 \"\\n\", tile_width);\n                fprintf(fd, \"\\t /Colors %\" PRIu16 \"\\n\", samplesperpixel);\n                fprintf(fd, \"\\t /BitsPerComponent %\" PRIu16 \"\\n\",\n                        bitspersample);\n                fputs(\"\\t>>\", fd);\n            }\n            fputs(\" /LZWDecode filter\", fd);\n            break;\n        case COMPRESSION_DEFLATE: /* 5: ZIP */\n        case COMPRESSION_ADOBE_DEFLATE:\n            if (level3)\n            {\n                TIFFGetFieldDefaulted(tif, TIFFTAG_PREDICTOR, &predictor);\n                if (predictor > 1)\n                {\n                    fprintf(fd, \"\\t %% PostScript Level 3 only.\");\n                    fputs(\"\\n\\t<<\\n\", fd);\n                    fprintf(fd, \"\\t /Predictor %\" PRIu16 \"\\n\", predictor);\n                    fprintf(fd, \"\\t /Columns %\" PRIu32 \"\\n\", tile_width);\n                    fprintf(fd, \"\\t /Colors %\" PRIu16 \"\\n\", samplesperpixel);\n                    fprintf(fd, \"\\t /BitsPerComponent %\" PRIu16 \"\\n\",\n                            bitspersample);\n                    fputs(\"\\t>>\", fd);\n                }\n                fputs(\" /FlateDecode filter\", fd);\n            }\n            else\n            {\n                use_rawdata = FALSE;\n            }\n            break;\n        case COMPRESSION_PACKBITS: /* 32773: Macintosh RLE */\n            fputs(\" /RunLengthDecode filter\", fd);\n            use_rawdata = TRUE;\n            break;\n        case COMPRESSION_OJPEG: /* 6: !6.0 JPEG */\n        case COMPRESSION_JPEG:  /* 7: %JPEG DCT compression */\n#ifdef notdef\n            /*\n             * Code not tested yet\n             */\n            fputs(\" /DCTDecode filter\", fd);\n            use_rawdata = TRUE;\n#else\n            use_rawdata = FALSE;\n#endif\n            break;\n        case COMPRESSION_NEXT:        /* 32766: NeXT 2-bit RLE */\n        case COMPRESSION_THUNDERSCAN: /* 32809: ThunderScan RLE */\n        case COMPRESSION_PIXARFILM:   /* 32908: Pixar companded 10bit LZW */\n        case COMPRESSION_JBIG:        /* 34661: ISO JBIG */\n            use_rawdata = FALSE;\n            break;\n        case COMPRESSION_SGILOG:   /* 34676: SGI LogL or LogLuv */\n        case COMPRESSION_SGILOG24: /* 34677: SGI 24-bit LogLuv */\n            use_rawdata = FALSE;\n            break;\n        default:\n            /*\n             * ERROR...\n             */\n            use_rawdata = FALSE;\n            break;\n    }\n    if (planarconfiguration == PLANARCONFIG_SEPARATE && samplesperpixel > 1)\n    {\n        uint16_t i;\n\n        /*\n         * NOTE: This code does not work yet...\n         */\n        for (i = 1; i < samplesperpixel; i++)\n            fputs(\" dup\", fd);\n        fputs(\" ]\", fd);\n    }\n\n    fprintf(fd, \"\\n >> %s\\n\", imageOp);\n    if (ascii85_g)\n        fputs(\" im_stream status { im_stream flushfile } if\\n\", fd);\n    if (repeat_count > 1)\n    {\n        if (tile_width < w)\n        {\n            fprintf(fd, \" /im_x im_x %\" PRIu32 \" add def\\n\", tile_width);\n            if (tile_height < h)\n            {\n                fprintf(fd, \" im_x %\" PRIu32 \" ge {\\n\", w);\n                fputs(\"  /im_x 0 def\\n\", fd);\n                fprintf(fd, \" /im_y im_y %\" PRIu32 \" add def\\n\", tile_height);\n                fputs(\" } if\\n\", fd);\n            }\n        }\n        if (tile_height < h)\n        {\n            if (tile_width >= w)\n            {\n                fprintf(fd, \" /im_y im_y %\" PRIu32 \" add def\\n\", tile_height);\n                if (!TIFFIsTiled(tif))\n                {\n                    fprintf(fd, \" /im_h %\" PRIu32 \" im_y sub\", h);\n                    fprintf(fd, \" dup %\" PRIu32 \" gt { pop\", tile_height);\n                    fprintf(fd, \" %\" PRIu32 \" } if def\\n\", tile_height);\n                }\n            }\n        }\n        fputs(\"} repeat\\n\", fd);\n    }\n    /*\n     * End of exec function\n     */\n    fputs(\"}\\n\", fd);\n\n    return (use_rawdata);\n}",
+      "fn_code_pos": [
+        [
+          2045,
+          0
+        ],
+        [
+          2382,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PS_Lvl2ImageDict",
+        "parameters": {
+          "fd": "FILE",
+          "tif": "TIFF",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void PS_FlipBytes(unsigned char *buf, tsize_t count)\n{\n    int i;\n    unsigned char temp;\n\n    if (count <= 0 || bitspersample <= 8)\n    {\n        return;\n    }\n\n    count--;\n\n    for (i = 0; i < count; i += 2)\n    {\n        temp = buf[i];\n        buf[i] = buf[i + 1];\n        buf[i + 1] = temp;\n    }\n}",
+      "fn_code_pos": [
+        [
+          2385,
+          0
+        ],
+        [
+          2403,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PS_FlipBytes",
+        "parameters": {
+          "buf": "unsigned char",
+          "count": "tsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int PS_Lvl2page(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)\n{\n    uint16_t fillorder;\n    int use_rawdata, tiled_image, breaklen = MAXLINE;\n    uint32_t chunk_no, num_chunks;\n    uint64_t *bc;\n    unsigned char *buf_data, *cp;\n    tsize_t chunk_size, byte_count;\n\n#if defined(EXP_ASCII85ENCODER)\n    tsize_t ascii85_l;      /* Length, in bytes, of ascii85_p[] data */\n    uint8_t *ascii85_p = 0; /* Holds ASCII85 encoded data */\n#endif\n\n    PS_Lvl2colorspace(fd, tif);\n    use_rawdata = PS_Lvl2ImageDict(fd, tif, w, h);\n\n/* See http://bugzilla.remotesensing.org/show_bug.cgi?id=80 */\n#ifdef ENABLE_BROKEN_BEGINENDDATA\n    fputs(\"%%BeginData:\\n\", fd);\n#endif\n    fputs(\"exec\\n\", fd);\n\n    tiled_image = TIFFIsTiled(tif);\n    if (tiled_image)\n    {\n        num_chunks = TIFFNumberOfTiles(tif);\n        TIFFGetField(tif, TIFFTAG_TILEBYTECOUNTS, &bc);\n    }\n    else\n    {\n        num_chunks = TIFFNumberOfStrips(tif);\n        TIFFGetField(tif, TIFFTAG_STRIPBYTECOUNTS, &bc);\n    }\n\n    if (use_rawdata)\n    {\n        chunk_size = (tsize_t)bc[0];\n        for (chunk_no = 1; chunk_no < num_chunks; chunk_no++)\n            if ((tsize_t)bc[chunk_no] > chunk_size)\n                chunk_size = (tsize_t)bc[chunk_no];\n    }\n    else\n    {\n        if (tiled_image)\n            chunk_size = TIFFTileSize(tif);\n        else\n            chunk_size = TIFFStripSize(tif);\n    }\n    buf_data = (unsigned char *)limitMalloc(chunk_size);\n    if (!buf_data)\n    {\n        TIFFError(filename, \"Can't alloc %\" TIFF_SSIZE_FORMAT \" bytes for %s.\",\n                  chunk_size, tiled_image ? \"tiles\" : \"strips\");\n        return (FALSE);\n    }\n\n#if defined(EXP_ASCII85ENCODER)\n    if (ascii85_g)\n    {\n        /*\n         * Allocate a buffer to hold the ASCII85 encoded data.  Note\n         * that it is allocated with sufficient room to hold the\n         * encoded data (5*chunk_size/4) plus the EOD marker (+8)\n         * and formatting line breaks.  The line breaks are more\n         * than taken care of by using 6*chunk_size/4 rather than\n         * 5*chunk_size/4.\n         */\n\n        ascii85_p = limitMalloc((chunk_size + (chunk_size / 2)) + 8);\n\n        if (!ascii85_p)\n        {\n            _TIFFfree(buf_data);\n\n            TIFFError(filename, \"Cannot allocate ASCII85 encoding buffer.\");\n            return (FALSE);\n        }\n    }\n#endif\n\n    TIFFGetFieldDefaulted(tif, TIFFTAG_FILLORDER, &fillorder);\n    for (chunk_no = 0; chunk_no < num_chunks; chunk_no++)\n    {\n        if (ascii85_g)\n            Ascii85Init();\n        else\n            breaklen = MAXLINE;\n        if (use_rawdata)\n        {\n            if (tiled_image)\n                byte_count =\n                    TIFFReadRawTile(tif, chunk_no, buf_data, chunk_size);\n            else\n                byte_count =\n                    TIFFReadRawStrip(tif, chunk_no, buf_data, chunk_size);\n            if (fillorder == FILLORDER_LSB2MSB)\n                TIFFReverseBits(buf_data, byte_count);\n        }\n        else\n        {\n            if (tiled_image)\n                byte_count =\n                    TIFFReadEncodedTile(tif, chunk_no, buf_data, chunk_size);\n            else\n                byte_count =\n                    TIFFReadEncodedStrip(tif, chunk_no, buf_data, chunk_size);\n        }\n        if (byte_count < 0)\n        {\n            TIFFError(filename, \"Can't read %s %\" PRIu32 \".\",\n                      tiled_image ? \"tile\" : \"strip\", chunk_no);\n            if (ascii85_g)\n                Ascii85Put('\\0', fd);\n        }\n        /*\n         * for 16 bits, the two bytes must be most significant\n         * byte first\n         */\n        if (bitspersample == 16 && !TIFFIsBigEndian(tif))\n        {\n            PS_FlipBytes(buf_data, byte_count);\n        }\n        /*\n         * For images with alpha, matte against a white background;\n         * i.e. Cback * (1 - Aimage) where Cback = 1. We will fill the\n         * lower part of the buffer with the modified values.\n         *\n         * XXX: needs better solution\n         */\n        if (alpha)\n        {\n            int adjust, i, j = 0;\n            int ncomps = samplesperpixel - extrasamples;\n            for (i = 0; (i + ncomps) < byte_count; i += samplesperpixel)\n            {\n                adjust = 255 - buf_data[i + ncomps];\n                switch (ncomps)\n                {\n                    case 1:\n                        buf_data[j++] = buf_data[i] + adjust;\n                        break;\n                    case 2:\n                        buf_data[j++] = buf_data[i] + adjust;\n                        buf_data[j++] = buf_data[i + 1] + adjust;\n                        break;\n                    case 3:\n                        buf_data[j++] = buf_data[i] + adjust;\n                        buf_data[j++] = buf_data[i + 1] + adjust;\n                        buf_data[j++] = buf_data[i + 2] + adjust;\n                        break;\n                }\n            }\n            byte_count -= j;\n        }\n\n        if (ascii85_g)\n        {\n#if defined(EXP_ASCII85ENCODER)\n            ascii85_l = Ascii85EncodeBlock(ascii85_p, 1, buf_data, byte_count);\n\n            if (ascii85_l > 0)\n                fwrite(ascii85_p, ascii85_l, 1, fd);\n#else\n            for (cp = buf_data; byte_count > 0; byte_count--)\n                Ascii85Put(*cp++, fd);\n#endif\n        }\n        else\n        {\n            for (cp = buf_data; byte_count > 0; byte_count--)\n            {\n                putc(hex[((*cp) >> 4) & 0xf], fd);\n                putc(hex[(*cp) & 0xf], fd);\n                cp++;\n\n                if (--breaklen <= 0)\n                {\n                    putc('\\n', fd);\n                    breaklen = MAXLINE;\n                }\n            }\n        }\n\n        if (!ascii85_g)\n        {\n            if (level2 || level3)\n                putc('>', fd);\n            putc('\\n', fd);\n        }\n#if !defined(EXP_ASCII85ENCODER)\n        else\n            Ascii85Flush(fd);\n#endif\n    }\n\n#if defined(EXP_ASCII85ENCODER)\n    if (ascii85_p)\n        _TIFFfree(ascii85_p);\n#endif\n\n    _TIFFfree(buf_data);\n#ifdef ENABLE_BROKEN_BEGINENDDATA\n    fputs(\"%%EndData\\n\", fd);\n#endif\n    return (TRUE);\n}",
+      "fn_code_pos": [
+        [
+          2407,
+          0
+        ],
+        [
+          2613,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PS_Lvl2page",
+        "parameters": {
+          "fd": "FILE",
+          "tif": "TIFF",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void PSpage(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)\n{\n    char *imageOp = \"image\";\n\n    if (useImagemask && (bitspersample == 1))\n        imageOp = \"imagemask\";\n\n    if ((level2 || level3) && PS_Lvl2page(fd, tif, w, h))\n        return;\n    ps_bytesperrow = tf_bytesperrow - (extrasamples * bitspersample / 8) * w;\n    switch (photometric)\n    {\n        case PHOTOMETRIC_RGB:\n            if (planarconfiguration == PLANARCONFIG_CONTIG)\n            {\n                fprintf(fd, \"%s\", RGBcolorimage);\n                PSColorContigPreamble(fd, w, h, 3);\n                PSDataColorContig(fd, tif, w, h, 3);\n            }\n            else\n            {\n                PSColorSeparatePreamble(fd, w, h, 3);\n                PSDataColorSeparate(fd, tif, w, h, 3);\n            }\n            break;\n        case PHOTOMETRIC_SEPARATED:\n            /* XXX should emit CMYKcolorimage */\n            if (planarconfiguration == PLANARCONFIG_CONTIG)\n            {\n                PSColorContigPreamble(fd, w, h, 4);\n                PSDataColorContig(fd, tif, w, h, 4);\n            }\n            else\n            {\n                PSColorSeparatePreamble(fd, w, h, 4);\n                PSDataColorSeparate(fd, tif, w, h, 4);\n            }\n            break;\n        case PHOTOMETRIC_PALETTE:\n            fprintf(fd, \"%s\", RGBcolorimage);\n            PhotoshopBanner(fd, w, h, 1, 3, \"false 3 colorimage\");\n            fprintf(fd, \"/scanLine %\" TIFF_SSIZE_FORMAT \" string def\\n\",\n                    ps_bytesperrow * 3);\n            fprintf(fd, \"%\" PRIu32 \" %\" PRIu32 \" 8\\n\", w, h);\n            fprintf(fd, \"[%\" PRIu32 \" 0 0 -%\" PRIu32 \" 0 %\" PRIu32 \"]\\n\", w, h,\n                    h);\n            fprintf(fd, \"{currentfile scanLine readhexstring pop} bind\\n\");\n            fprintf(fd, \"false 3 colorimage\\n\");\n            PSDataPalette(fd, tif, w, h);\n            break;\n        case PHOTOMETRIC_MINISBLACK:\n        case PHOTOMETRIC_MINISWHITE:\n            PhotoshopBanner(fd, w, h, 1, 1, imageOp);\n            fprintf(fd, \"/scanLine %\" TIFF_SSIZE_FORMAT \" string def\\n\",\n                    ps_bytesperrow);\n            fprintf(fd, \"%\" PRIu32 \" %\" PRIu32 \" %\" PRIu16 \"\\n\", w, h,\n                    bitspersample);\n            fprintf(fd, \"[%\" PRIu32 \" 0 0 -%\" PRIu32 \" 0 %\" PRIu32 \"]\\n\", w, h,\n                    h);\n            fprintf(fd, \"{currentfile scanLine readhexstring pop} bind\\n\");\n            fprintf(fd, \"%s\\n\", imageOp);\n            PSDataBW(fd, tif, w, h);\n            break;\n    }\n    putc('\\n', fd);\n}",
+      "fn_code_pos": [
+        [
+          2615,
+          0
+        ],
+        [
+          2680,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSpage",
+        "parameters": {
+          "fd": "FILE",
+          "tif": "TIFF",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void PSColorContigPreamble(FILE *fd, uint32_t w, uint32_t h, int nc)\n{\n    ps_bytesperrow = nc * (tf_bytesperrow / samplesperpixel);\n    PhotoshopBanner(fd, w, h, 1, nc, \"false %d colorimage\");\n    fprintf(fd, \"/line %\" TIFF_SSIZE_FORMAT \" string def\\n\", ps_bytesperrow);\n    fprintf(fd, \"%\" PRIu32 \" %\" PRIu32 \" %\" PRIu16 \"\\n\", w, h, bitspersample);\n    fprintf(fd, \"[%\" PRIu32 \" 0 0 -%\" PRIu32 \" 0 %\" PRIu32 \"]\\n\", w, h, h);\n    fprintf(fd, \"{currentfile line readhexstring pop} bind\\n\");\n    fprintf(fd, \"false %d colorimage\\n\", nc);\n}",
+      "fn_code_pos": [
+        [
+          2682,
+          0
+        ],
+        [
+          2691,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSColorContigPreamble",
+        "parameters": {
+          "fd": "FILE",
+          "w": "uint32_t",
+          "h": "uint32_t",
+          "nc": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void PSColorSeparatePreamble(FILE *fd, uint32_t w, uint32_t h, int nc)\n{\n    int i;\n\n    PhotoshopBanner(fd, w, h, ps_bytesperrow, nc, \"true %d colorimage\");\n    for (i = 0; i < nc; i++)\n        fprintf(fd, \"/line%d %\" TIFF_SSIZE_FORMAT \" string def\\n\", i,\n                ps_bytesperrow);\n    fprintf(fd, \"%\" PRIu32 \" %\" PRIu32 \" %\" PRIu16 \"\\n\", w, h, bitspersample);\n    fprintf(fd, \"[%\" PRIu32 \" 0 0 -%\" PRIu32 \" 0 %\" PRIu32 \"] \\n\", w, h, h);\n    for (i = 0; i < nc; i++)\n        fprintf(fd, \"{currentfile line%d readhexstring pop}bind\\n\", i);\n    fprintf(fd, \"true %d colorimage\\n\", nc);\n}",
+      "fn_code_pos": [
+        [
+          2693,
+          0
+        ],
+        [
+          2706,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSColorSeparatePreamble",
+        "parameters": {
+          "fd": "FILE",
+          "w": "uint32_t",
+          "h": "uint32_t",
+          "nc": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static inline void puthex(unsigned int c, FILE *fd)\n{\n    putc(hex[((c) >> 4) & 0xf], fd);\n    putc(hex[(c)&0xf], fd);\n}",
+      "fn_code_pos": [
+        [
+          2715,
+          0
+        ],
+        [
+          2719,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "puthex",
+        "parameters": {
+          "c": "unsigned int",
+          "fd": "FILE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void PSDataColorContig(FILE *fd, TIFF *tif, uint32_t w, uint32_t h, int nc)\n{\n    uint32_t row;\n    int breaklen = MAXLINE, es = samplesperpixel - nc;\n    tsize_t cc;\n    unsigned char *tf_buf;\n    unsigned char *cp, c;\n\n    (void)w;\n    if (es < 0)\n    {\n        TIFFError(filename,\n                  \"Inconsistent value of es: %d (samplesperpixel=%\" PRIu16\n                  \", nc=%d)\",\n                  es, samplesperpixel, nc);\n        return;\n    }\n    tf_buf = (unsigned char *)limitMalloc(tf_bytesperrow);\n    if (tf_buf == NULL)\n    {\n        TIFFError(filename, \"No space for scanline buffer\");\n        return;\n    }\n    for (row = 0; row < h; row++)\n    {\n        if (TIFFReadScanline(tif, tf_buf, row, 0) < 0)\n            break;\n        cp = tf_buf;\n        /*\n         * for 16 bits, the two bytes must be most significant\n         * byte first\n         */\n        if (bitspersample == 16 && !HOST_BIGENDIAN)\n        {\n            PS_FlipBytes(cp, tf_bytesperrow);\n        }\n        if (alpha)\n        {\n            int adjust;\n            /*\n             * the code inside this loop reads nc bytes + 1 extra byte (for\n             * adjust)\n             */\n            for (cc = 0; (cc + nc) < tf_bytesperrow; cc += samplesperpixel)\n            {\n                DOBREAK(breaklen, nc, fd);\n                /*\n                 * For images with alpha, matte against\n                 * a white background; i.e.\n                 *    Cback * (1 - Aimage)\n                 * where Cback = 1.\n                 */\n                adjust = 255 - cp[nc];\n                for (int i = 0; i < nc; ++i)\n                {\n                    c = *cp++ + adjust;\n                    puthex(c, fd);\n                }\n                cp += es;\n            }\n        }\n        else\n        {\n            /*\n             * the code inside this loop reads nc bytes per iteration\n             */\n            for (cc = 0; (cc + nc) <= tf_bytesperrow; cc += samplesperpixel)\n            {\n                DOBREAK(breaklen, nc, fd);\n                for (int i = 0; i < nc; ++i)\n                {\n                    c = *cp++;\n                    puthex(c, fd);\n                }\n                cp += es;\n            }\n        }\n    }\n    _TIFFfree((char *)tf_buf);\n}",
+      "fn_code_pos": [
+        [
+          2721,
+          0
+        ],
+        [
+          2800,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSDataColorContig",
+        "parameters": {
+          "fd": "FILE",
+          "tif": "TIFF",
+          "w": "uint32_t",
+          "h": "uint32_t",
+          "nc": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void PSDataColorSeparate(FILE *fd, TIFF *tif, uint32_t w, uint32_t h, int nc)\n{\n    uint32_t row;\n    int breaklen = MAXLINE;\n    tsize_t cc;\n    tsample_t s, maxs;\n    unsigned char *tf_buf;\n    unsigned char *cp, c;\n\n    (void)w;\n    tf_buf = (unsigned char *)limitMalloc(tf_bytesperrow);\n    if (tf_buf == NULL)\n    {\n        TIFFError(filename, \"No space for scanline buffer\");\n        return;\n    }\n    maxs = (samplesperpixel > nc ? nc : samplesperpixel);\n    for (row = 0; row < h; row++)\n    {\n        for (s = 0; s < maxs; s++)\n        {\n            if (TIFFReadScanline(tif, tf_buf, row, s) < 0)\n                goto end_loop;\n            for (cp = tf_buf, cc = 0; cc < tf_bytesperrow; cc++)\n            {\n                DOBREAK(breaklen, 1, fd);\n                c = *cp++;\n                puthex(c, fd);\n            }\n        }\n    }\nend_loop:\n    _TIFFfree((char *)tf_buf);\n}",
+      "fn_code_pos": [
+        [
+          2802,
+          0
+        ],
+        [
+          2835,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSDataColorSeparate",
+        "parameters": {
+          "fd": "FILE",
+          "tif": "TIFF",
+          "w": "uint32_t",
+          "h": "uint32_t",
+          "nc": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void PSDataPalette(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)\n{\n    uint16_t *rmap, *gmap, *bmap;\n    uint32_t row;\n    int breaklen = MAXLINE, nc;\n    tsize_t cc;\n    unsigned char *tf_buf;\n    unsigned char *cp, c;\n\n    (void)w;\n    if (!TIFFGetField(tif, TIFFTAG_COLORMAP, &rmap, &gmap, &bmap))\n    {\n        TIFFError(filename, \"Palette image w/o \\\"Colormap\\\" tag\");\n        return;\n    }\n    switch (bitspersample)\n    {\n        case 8:\n        case 4:\n        case 2:\n        case 1:\n            break;\n        default:\n            TIFFError(filename, \"Depth %\" PRIu16 \" not supported\",\n                      bitspersample);\n            return;\n    }\n    nc = 3 * (8 / bitspersample);\n    tf_buf = (unsigned char *)limitMalloc(tf_bytesperrow);\n    if (tf_buf == NULL)\n    {\n        TIFFError(filename, \"No space for scanline buffer\");\n        return;\n    }\n    if (checkcmap(tif, 1 << bitspersample, rmap, gmap, bmap) == 16)\n    {\n        int i;\n#define CVT(x) ((unsigned short)(((x)*255) / ((1U << 16) - 1)))\n        for (i = (1 << bitspersample) - 1; i >= 0; i--)\n        {\n            rmap[i] = CVT(rmap[i]);\n            gmap[i] = CVT(gmap[i]);\n            bmap[i] = CVT(bmap[i]);\n        }\n#undef CVT\n    }\n    for (row = 0; row < h; row++)\n    {\n        if (TIFFReadScanline(tif, tf_buf, row, 0) < 0)\n            goto end_loop;\n        for (cp = tf_buf, cc = 0; cc < tf_bytesperrow; cc++)\n        {\n            DOBREAK(breaklen, nc, fd);\n            switch (bitspersample)\n            {\n                case 8:\n                    c = *cp++;\n                    PUTRGBHEX(c, fd);\n                    break;\n                case 4:\n                    c = *cp++;\n                    PUTRGBHEX(c & 0xf, fd);\n                    c >>= 4;\n                    PUTRGBHEX(c, fd);\n                    break;\n                case 2:\n                    c = *cp++;\n                    PUTRGBHEX(c & 0x3, fd);\n                    c >>= 2;\n                    PUTRGBHEX(c & 0x3, fd);\n                    c >>= 2;\n                    PUTRGBHEX(c & 0x3, fd);\n                    c >>= 2;\n                    PUTRGBHEX(c, fd);\n                    break;\n                case 1:\n                    c = *cp++;\n                    PUTRGBHEX(c & 0x1, fd);\n                    c >>= 1;\n                    PUTRGBHEX(c & 0x1, fd);\n                    c >>= 1;\n                    PUTRGBHEX(c & 0x1, fd);\n                    c >>= 1;\n                    PUTRGBHEX(c & 0x1, fd);\n                    c >>= 1;\n                    PUTRGBHEX(c & 0x1, fd);\n                    c >>= 1;\n                    PUTRGBHEX(c & 0x1, fd);\n                    c >>= 1;\n                    PUTRGBHEX(c & 0x1, fd);\n                    c >>= 1;\n                    PUTRGBHEX(c, fd);\n                    break;\n            }\n        }\n    }\nend_loop:\n    _TIFFfree((char *)tf_buf);\n}",
+      "fn_code_pos": [
+        [
+          2842,
+          0
+        ],
+        [
+          2940,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSDataPalette",
+        "parameters": {
+          "fd": "FILE",
+          "tif": "TIFF",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void PSDataBW(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)\n{\n    int breaklen = MAXLINE;\n    unsigned char *tf_buf;\n    unsigned char *cp;\n    tsize_t stripsize = TIFFStripSize(tif);\n    tstrip_t s;\n\n#if defined(EXP_ASCII85ENCODER)\n    tsize_t ascii85_l;      /* Length, in bytes, of ascii85_p[] data */\n    uint8_t *ascii85_p = 0; /* Holds ASCII85 encoded data */\n#endif\n\n    (void)w;\n    (void)h;\n    tf_buf = (unsigned char *)limitMalloc(stripsize);\n    if (tf_buf == NULL)\n    {\n        TIFFError(filename, \"No space for scanline buffer\");\n        return;\n    }\n\n    // FIXME\n    memset(tf_buf, 0, stripsize);\n\n#if defined(EXP_ASCII85ENCODER)\n    if (ascii85_g)\n    {\n        /*\n         * Allocate a buffer to hold the ASCII85 encoded data.  Note\n         * that it is allocated with sufficient room to hold the\n         * encoded data (5*stripsize/4) plus the EOD marker (+8)\n         * and formatting line breaks.  The line breaks are more\n         * than taken care of by using 6*stripsize/4 rather than\n         * 5*stripsize/4.\n         */\n\n        ascii85_p = limitMalloc((stripsize + (stripsize / 2)) + 8);\n\n        if (!ascii85_p)\n        {\n            _TIFFfree(tf_buf);\n\n            TIFFError(filename, \"Cannot allocate ASCII85 encoding buffer.\");\n            return;\n        }\n    }\n#endif\n\n    if (ascii85_g)\n        Ascii85Init();\n\n    for (s = 0; s < TIFFNumberOfStrips(tif); s++)\n    {\n        tmsize_t cc = TIFFReadEncodedStrip(tif, s, tf_buf, stripsize);\n        if (cc < 0)\n        {\n            TIFFError(filename, \"Can't read strip\");\n            break;\n        }\n        cp = tf_buf;\n        if (photometric == PHOTOMETRIC_MINISWHITE)\n        {\n            for (cp += cc; --cp >= tf_buf;)\n                *cp = ~*cp;\n            cp++;\n        }\n        /*\n         * for 16 bits, the two bytes must be most significant\n         * byte first\n         */\n        if (bitspersample == 16 && !HOST_BIGENDIAN)\n        {\n            PS_FlipBytes(cp, cc);\n        }\n        if (ascii85_g)\n        {\n#if defined(EXP_ASCII85ENCODER)\n            if (alpha)\n            {\n                int adjust, i;\n                for (i = 0; i < (cc - 1); i += 2)\n                {\n                    adjust = 255 - cp[i + 1];\n                    cp[i / 2] = cp[i] + adjust;\n                }\n                cc /= 2;\n            }\n\n            ascii85_l = Ascii85EncodeBlock(ascii85_p, 1, cp, cc);\n\n            if (ascii85_l > 0)\n                fwrite(ascii85_p, ascii85_l, 1, fd);\n#else\n            while (cc-- > 0)\n                Ascii85Put(*cp++, fd);\n#endif /* EXP_ASCII85_ENCODER */\n        }\n        else\n        {\n            unsigned char c;\n\n            if (alpha)\n            {\n                int adjust;\n                while (cc-- > 1)\n                {\n                    DOBREAK(breaklen, 1, fd);\n                    /*\n                     * For images with alpha, matte against\n                     * a white background; i.e.\n                     *    Cback * (1 - Aimage)\n                     * where Cback = 1.\n                     */\n                    adjust = 255 - cp[1];\n                    c = *cp++ + adjust;\n                    puthex(c, fd);\n                    cp++, cc--;\n                }\n            }\n            else\n            {\n                while (cc-- > 0)\n                {\n                    c = *cp++;\n                    DOBREAK(breaklen, 1, fd);\n                    puthex(c, fd);\n                }\n            }\n        }\n    }\n\n    if (!ascii85_g)\n    {\n        if (level2 || level3)\n            fputs(\">\\n\", fd);\n    }\n#if !defined(EXP_ASCII85ENCODER)\n    else\n        Ascii85Flush(fd);\n#else\n    if (ascii85_p)\n        _TIFFfree(ascii85_p);\n#endif\n\n    _TIFFfree(tf_buf);\n}",
+      "fn_code_pos": [
+        [
+          2942,
+          0
+        ],
+        [
+          3088,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSDataBW",
+        "parameters": {
+          "fd": "FILE",
+          "tif": "TIFF",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void PSRawDataBW(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)\n{\n    uint64_t *bc;\n    uint32_t bufsize;\n    int breaklen = MAXLINE;\n    tmsize_t cc;\n    uint16_t fillorder;\n    unsigned char *tf_buf;\n    unsigned char *cp, c;\n    tstrip_t s;\n\n#if defined(EXP_ASCII85ENCODER)\n    tsize_t ascii85_l;      /* Length, in bytes, of ascii85_p[] data */\n    uint8_t *ascii85_p = 0; /* Holds ASCII85 encoded data */\n#endif\n\n    (void)w;\n    (void)h;\n    TIFFGetFieldDefaulted(tif, TIFFTAG_FILLORDER, &fillorder);\n    TIFFGetField(tif, TIFFTAG_STRIPBYTECOUNTS, &bc);\n\n    /*\n     * Find largest strip:\n     */\n\n    bufsize = (uint32_t)bc[0];\n\n    for (s = 0; ++s < tf_numberstrips;)\n    {\n        if (bc[s] > bufsize)\n            bufsize = (uint32_t)bc[s];\n    }\n\n    tf_buf = (unsigned char *)limitMalloc(bufsize);\n    if (tf_buf == NULL)\n    {\n        TIFFError(filename, \"No space for strip buffer\");\n        return;\n    }\n\n#if defined(EXP_ASCII85ENCODER)\n    if (ascii85_g)\n    {\n        /*\n         * Allocate a buffer to hold the ASCII85 encoded data.  Note\n         * that it is allocated with sufficient room to hold the\n         * encoded data (5*bufsize/4) plus the EOD marker (+8)\n         * and formatting line breaks.  The line breaks are more\n         * than taken care of by using 6*bufsize/4 rather than\n         * 5*bufsize/4.\n         */\n\n        ascii85_p = limitMalloc((bufsize + (bufsize / 2)) + 8);\n\n        if (!ascii85_p)\n        {\n            _TIFFfree(tf_buf);\n\n            TIFFError(filename, \"Cannot allocate ASCII85 encoding buffer.\");\n            return;\n        }\n    }\n#endif\n\n    for (s = 0; s < tf_numberstrips; s++)\n    {\n        cc = TIFFReadRawStrip(tif, s, tf_buf, (tmsize_t)bc[s]);\n        if (cc < 0)\n        {\n            TIFFError(filename, \"Can't read strip\");\n            break;\n        }\n        if (fillorder == FILLORDER_LSB2MSB)\n            TIFFReverseBits(tf_buf, cc);\n        if (!ascii85_g)\n        {\n            for (cp = tf_buf; cc > 0; cc--)\n            {\n                DOBREAK(breaklen, 1, fd);\n                c = *cp++;\n                puthex(c, fd);\n            }\n            fputs(\">\\n\", fd);\n            breaklen = MAXLINE;\n        }\n        else\n        {\n            Ascii85Init();\n#if defined(EXP_ASCII85ENCODER)\n            ascii85_l = Ascii85EncodeBlock(ascii85_p, 1, tf_buf, cc);\n\n            if (ascii85_l > 0)\n                fwrite(ascii85_p, ascii85_l, 1, fd);\n#else\n            for (cp = tf_buf; cc > 0; cc--)\n                Ascii85Put(*cp++, fd);\n            Ascii85Flush(fd);\n#endif /* EXP_ASCII85ENCODER */\n        }\n    }\n    _TIFFfree((char *)tf_buf);\n\n#if defined(EXP_ASCII85ENCODER)\n    if (ascii85_p)\n        _TIFFfree(ascii85_p);\n#endif\n}",
+      "fn_code_pos": [
+        [
+          3090,
+          0
+        ],
+        [
+          3196,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSRawDataBW",
+        "parameters": {
+          "fd": "FILE",
+          "tif": "TIFF",
+          "w": "uint32_t",
+          "h": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void Ascii85Init(void)\n{\n    ascii85breaklen = 2 * MAXLINE;\n    ascii85count = 0;\n}",
+      "fn_code_pos": [
+        [
+          3198,
+          0
+        ],
+        [
+          3202,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Ascii85Init",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static char *Ascii85Encode(unsigned char *raw)\n{\n    static char encoded[6];\n    uint32_t word;\n\n    word = (((raw[0] << 8) + raw[1]) << 16) + (raw[2] << 8) + raw[3];\n    if (word != 0L)\n    {\n        uint32_t q;\n        uint16_t w1;\n\n        q = word / (85L * 85 * 85 * 85); /* actually only a byte */\n        encoded[0] = (char)(q + '!');\n\n        word -= q * (85L * 85 * 85 * 85);\n        q = word / (85L * 85 * 85);\n        encoded[1] = (char)(q + '!');\n\n        word -= q * (85L * 85 * 85);\n        q = word / (85 * 85);\n        encoded[2] = (char)(q + '!');\n\n        w1 = (uint16_t)(word - q * (85L * 85));\n        encoded[3] = (char)((w1 / 85) + '!');\n        encoded[4] = (char)((w1 % 85) + '!');\n        encoded[5] = '\\0';\n    }\n    else\n        encoded[0] = 'z', encoded[1] = '\\0';\n    return (encoded);\n}",
+      "fn_code_pos": [
+        [
+          3204,
+          0
+        ],
+        [
+          3234,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Ascii85Encode",
+        "parameters": {
+          "raw": "unsigned char"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "void Ascii85Put(unsigned char code, FILE *fd)\n{\n    ascii85buf[ascii85count++] = code;\n    if (ascii85count >= 4)\n    {\n        unsigned char *p;\n        int n;\n\n        for (n = ascii85count, p = ascii85buf; n >= 4; n -= 4, p += 4)\n        {\n            char *cp;\n            for (cp = Ascii85Encode(p); *cp; cp++)\n            {\n                putc(*cp, fd);\n                if (--ascii85breaklen == 0)\n                {\n                    putc('\\n', fd);\n                    ascii85breaklen = 2 * MAXLINE;\n                }\n            }\n        }\n        _TIFFmemcpy(ascii85buf, p, n);\n        ascii85count = n;\n    }\n}",
+      "fn_code_pos": [
+        [
+          3236,
+          0
+        ],
+        [
+          3260,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Ascii85Put",
+        "parameters": {
+          "code": "unsigned char",
+          "fd": "FILE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void Ascii85Flush(FILE *fd)\n{\n    if (ascii85count > 0)\n    {\n        char *res;\n        _TIFFmemset(&ascii85buf[ascii85count], 0, 3);\n        res = Ascii85Encode(ascii85buf);\n        fwrite(res[0] == 'z' ? \"!!!!\" : res, ascii85count + 1, 1, fd);\n    }\n    fputs(\"~>\\n\", fd);\n}",
+      "fn_code_pos": [
+        [
+          3262,
+          0
+        ],
+        [
+          3272,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Ascii85Flush",
+        "parameters": {
+          "fd": "FILE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "tsize_t Ascii85EncodeBlock(uint8_t *ascii85_p, unsigned f_eod,\n                           const uint8_t *raw_p, tsize_t raw_l)\n\n{\n    char ascii85[5];   /* Encoded 5 tuple */\n    tsize_t ascii85_l; /* Number of bytes written to ascii85_p[] */\n    int rc;            /* Return code */\n    uint32_t val32;    /* Unencoded 4 tuple */\n\n    ascii85_l = 0; /* Nothing written yet */\n\n    if (raw_p)\n    {\n        --raw_p; /* Prepare for pre-increment fetches */\n\n        for (; raw_l > 3; raw_l -= 4)\n        {\n            val32 = (uint32_t) * (++raw_p) << 24;\n            val32 += (uint32_t) * (++raw_p) << 16;\n            val32 += (uint32_t) * (++raw_p) << 8;\n            val32 += (uint32_t) * (++raw_p);\n\n            if (val32 == 0) /* Special case */\n            {\n                ascii85_p[ascii85_l] = 'z';\n                rc = 1;\n            }\n\n            else\n            {\n                ascii85[4] = (char)((val32 % 85) + 33);\n                val32 /= 85;\n\n                ascii85[3] = (char)((val32 % 85) + 33);\n                val32 /= 85;\n\n                ascii85[2] = (char)((val32 % 85) + 33);\n                val32 /= 85;\n\n                ascii85[1] = (char)((val32 % 85) + 33);\n                ascii85[0] = (char)((val32 / 85) + 33);\n\n                _TIFFmemcpy(&ascii85_p[ascii85_l], ascii85, sizeof(ascii85));\n                rc = sizeof(ascii85);\n            }\n\n            ascii85_l += rc;\n\n            if ((A85BREAKCNTR -= rc) <= 0)\n            {\n                ascii85_p[ascii85_l] = '\\n';\n                ++ascii85_l;\n                A85BREAKCNTR = A85BREAKLEN;\n            }\n        }\n\n        /*\n         * Output any straggler bytes:\n         */\n\n        if (raw_l > 0)\n        {\n            tsize_t len; /* Output this many bytes */\n\n            len = raw_l + 1;\n            val32 = (uint32_t) * ++raw_p << 24; /* Prime the pump */\n\n            if (--raw_l > 0)\n                val32 += *(++raw_p) << 16;\n            if (--raw_l > 0)\n                val32 += *(++raw_p) << 8;\n\n            val32 /= 85;\n\n            ascii85[3] = (char)((val32 % 85) + 33);\n            val32 /= 85;\n\n            ascii85[2] = (char)((val32 % 85) + 33);\n            val32 /= 85;\n\n            ascii85[1] = (char)((val32 % 85) + 33);\n            ascii85[0] = (char)((val32 / 85) + 33);\n\n            _TIFFmemcpy(&ascii85_p[ascii85_l], ascii85, len);\n            ascii85_l += len;\n        }\n    }\n\n    /*\n     * If requested add an ASCII85 End Of Data marker:\n     */\n\n    if (f_eod)\n    {\n        ascii85_p[ascii85_l++] = '~';\n        ascii85_p[ascii85_l++] = '>';\n        ascii85_p[ascii85_l++] = '\\n';\n    }\n\n    return (ascii85_l);\n\n}",
+      "fn_code_pos": [
+        [
+          3316,
+          0
+        ],
+        [
+          3417,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Ascii85EncodeBlock",
+        "parameters": {
+          "ascii85_p": "uint8_t",
+          "f_eod": "unsigned",
+          "raw_p": "uint8_t",
+          "raw_l": "tsize_t"
+        },
+        "return_type": "tsize_t"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"%s\\n\\n\", TIFFGetVersion());\n    fprintf(out, \"%s\", usage_info);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          3463,
+          0
+        ],
+        [
+          3470,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "TIFF2PS(FILE *, TIFF *, double, double, double, double, int)",
+      "fn_dec_pos": [
+        [
+          214,
+          4
+        ],
+        [
+          214,
+          64
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFF2PS",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "PSpage(FILE *, TIFF *, uint32_t, uint32_t)",
+      "fn_dec_pos": [
+        [
+          215,
+          5
+        ],
+        [
+          215,
+          47
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSpage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PSColorContigPreamble(FILE *, uint32_t, uint32_t, int)",
+      "fn_dec_pos": [
+        [
+          216,
+          5
+        ],
+        [
+          216,
+          59
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSColorContigPreamble",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PSColorSeparatePreamble(FILE *, uint32_t, uint32_t, int)",
+      "fn_dec_pos": [
+        [
+          217,
+          5
+        ],
+        [
+          217,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSColorSeparatePreamble",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PSDataColorContig(FILE *, TIFF *, uint32_t, uint32_t, int)",
+      "fn_dec_pos": [
+        [
+          218,
+          5
+        ],
+        [
+          218,
+          63
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSDataColorContig",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PSDataColorSeparate(FILE *, TIFF *, uint32_t, uint32_t, int)",
+      "fn_dec_pos": [
+        [
+          219,
+          5
+        ],
+        [
+          219,
+          65
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSDataColorSeparate",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PSDataPalette(FILE *, TIFF *, uint32_t, uint32_t)",
+      "fn_dec_pos": [
+        [
+          220,
+          5
+        ],
+        [
+          220,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSDataPalette",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PSDataBW(FILE *, TIFF *, uint32_t, uint32_t)",
+      "fn_dec_pos": [
+        [
+          221,
+          5
+        ],
+        [
+          221,
+          49
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSDataBW",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PSRawDataBW(FILE *, TIFF *, uint32_t, uint32_t)",
+      "fn_dec_pos": [
+        [
+          222,
+          5
+        ],
+        [
+          222,
+          52
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSRawDataBW",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "Ascii85Init(void)",
+      "fn_dec_pos": [
+        [
+          223,
+          5
+        ],
+        [
+          223,
+          22
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Ascii85Init",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "Ascii85Put(unsigned char code, FILE *fd)",
+      "fn_dec_pos": [
+        [
+          224,
+          5
+        ],
+        [
+          224,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Ascii85Put",
+        "parameters": {
+          "code": "unsigned char",
+          "fd": "FILE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "Ascii85Flush(FILE *fd)",
+      "fn_dec_pos": [
+        [
+          225,
+          5
+        ],
+        [
+          225,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Ascii85Flush",
+        "parameters": {
+          "fd": "FILE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PSHead(FILE *, double, double, double, double)",
+      "fn_dec_pos": [
+        [
+          226,
+          5
+        ],
+        [
+          226,
+          51
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSHead",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "PSTail(FILE *, int)",
+      "fn_dec_pos": [
+        [
+          227,
+          5
+        ],
+        [
+          227,
+          24
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PSTail",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "psStart(FILE *, int, int, int *, double *, double, double, double, double,\n            double, double, double, double, double, double)",
+      "fn_dec_pos": [
+        [
+          228,
+          4
+        ],
+        [
+          229,
+          59
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "psStart",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "psPageSize(FILE *, int, double, double, double, double, double, double)",
+      "fn_dec_pos": [
+        [
+          230,
+          4
+        ],
+        [
+          230,
+          75
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "psPageSize",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "psRotateImage(FILE *, int, double, double, double, double)",
+      "fn_dec_pos": [
+        [
+          231,
+          4
+        ],
+        [
+          231,
+          62
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "psRotateImage",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "psMaskImage(FILE *, TIFF *, int, int, int *, double, double, double, double,\n                double, double, double, double, double)",
+      "fn_dec_pos": [
+        [
+          232,
+          4
+        ],
+        [
+          233,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "psMaskImage",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "psScaleImage(FILE *, double, int, int, double, double, double, double,\n                 double, double)",
+      "fn_dec_pos": [
+        [
+          234,
+          4
+        ],
+        [
+          235,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "psScaleImage",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "get_viewport(double, double, double, double, double *, double *, int)",
+      "fn_dec_pos": [
+        [
+          236,
+          4
+        ],
+        [
+          236,
+          73
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "get_viewport",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "exportMaskedImage(FILE *, double, double, double, double, int, int, double,\n                      double, double, int, int)",
+      "fn_dec_pos": [
+        [
+          237,
+          4
+        ],
+        [
+          238,
+          47
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "exportMaskedImage",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "Ascii85EncodeBlock(uint8_t *ascii85_p, unsigned f_eod,\n                           const uint8_t *raw_p, tsize_t raw_l)",
+      "fn_dec_pos": [
+        [
+          241,
+          8
+        ],
+        [
+          242,
+          63
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Ascii85EncodeBlock",
+        "parameters": {
+          "ascii85_p": "uint8_t",
+          "f_eod": "unsigned",
+          "raw_p": "uint8_t",
+          "raw_l": "tsize_t"
+        },
+        "return_type": "tsize_t"
+      }
+    },
+    {
+      "fn_code": "usage(int)",
+      "fn_dec_pos": [
+        [
+          245,
+          12
+        ],
+        [
+          245,
+          22
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "limitMalloc(tmsize_t s)",
+      "fn_dec_pos": [
+        [
+          250,
+          13
+        ],
+        [
+          250,
+          36
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "limitMalloc",
+        "parameters": {
+          "s": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "Ascii85Flush(fd)",
+      "fn_dec_pos": [
+        [
+          2599,
+          12
+        ],
+        [
+          2599,
+          28
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Ascii85Flush",
+        "parameters": {},
+        "return_type": "else"
+      }
+    },
+    {
+      "fn_code": "Ascii85Flush(fd)",
+      "fn_dec_pos": [
+        [
+          3081,
+          8
+        ],
+        [
+          3081,
+          24
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Ascii85Flush",
+        "parameters": {},
+        "return_type": "else"
+      }
+    },
+    {
+      "fn_code": "Ascii85Encode(unsigned char *raw)",
+      "fn_dec_pos": [
+        [
+          3204,
+          13
+        ],
+        [
+          3204,
+          46
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Ascii85Encode",
+        "parameters": {
+          "raw": "unsigned char"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h> /* for atof */\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <time.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

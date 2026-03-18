@@ -1,0 +1,194 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nvoid* MyMtxCreate(cmsContext id)\n{\n   return (void*) CreateMutex( NULL, FALSE, NULL);   \n}",
+      "fn_code_pos": [
+        [
+          9,
+          0
+        ],
+        [
+          13,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyMtxCreate",
+        "parameters": {
+          "id": "cmsContext"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid MyMtxDestroy(cmsContext id, void* mtx)\n{\n    CloseHandle((HANDLE) mtx);\n}",
+      "fn_code_pos": [
+        [
+          15,
+          0
+        ],
+        [
+          19,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyMtxDestroy",
+        "parameters": {
+          "id": "cmsContext",
+          "mtx": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool MyMtxLock(cmsContext id, void* mtx)\n{\n    WaitForSingleObject((HANDLE) mtx, INFINITE);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          21,
+          0
+        ],
+        [
+          26,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyMtxLock",
+        "parameters": {
+          "id": "cmsContext",
+          "mtx": "void"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid MyMtxUnlock(cmsContext id, void* mtx)\n{\n    ReleaseMutex((HANDLE) mtx);\n}",
+      "fn_code_pos": [
+        [
+          28,
+          0
+        ],
+        [
+          32,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyMtxUnlock",
+        "parameters": {
+          "id": "cmsContext",
+          "mtx": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static DWORD WINAPI one_thread(LPVOID lpParameter)\n{\n    int i, j;\n    cmsUInt8Number rgb[3*1000];\n    cmsUInt8Number cmyk[4*1000];\n\n    Sleep(rand() % 500 );\n    cmsHTRANSFORM xform = cmsCreateTransformTHR(ctx, prof_rgb, TYPE_RGB_8, prof_cmyk, TYPE_CMYK_8, 0, 0);\n\n    for (i=0; i < 100000; i++) {\n\n        for (j=0; j < 1000; j++) \n        {\n            rgb[j * 3    ] = 189;\n            rgb[j * 3 + 1] = 100;\n            rgb[j * 3 + 2] = 75;\n        }\n        cmsDoTransform(xform, rgb, cmyk, 1000);\n        for (j=0; j < 1000; j++) \n        {\n            if (cmyk[j * 4 ] != 37 ||\n                cmyk[j * 4 + 1 ] != 188 ||\n                cmyk[j * 4 + 2 ] != 195 ||\n                cmyk[j * 4 + 3 ] != 7) \n            {\n                OutputDebugString(L\"ERROR\\n\"); \n                rc = 1;\n            }\n\n        }\n\n    }\n        \n    cmsDeleteTransform(xform);\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          43,
+          0
+        ],
+        [
+          79,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "one_thread",
+        "parameters": {
+          "lpParameter": "LPVOID"
+        },
+        "return_type": "DWORD"
+      }
+    },
+    {
+      "fn_code": "int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine,int nCmdShow)\n{\n    int i;\n    cmsContext ctx;\n\n    OutputDebugString(L\"Test in progress...\\n\"); \n\n    ctx = cmsCreateContext(NULL, 0);\n\n    prof_cmyk = cmsOpenProfileFromFileTHR(ctx, \"USWebCoatedSWOP.icc\", \"r\");\n    prof_rgb = cmsOpenProfileFromFileTHR(ctx, \"AdobeRGB1998.icc\",\"r\");\n   \n\n#define NWORKERS 10\n\n    HANDLE workers[NWORKERS];\n\n\n    for (int i=0; i<NWORKERS; ++i)\n    {\n        DWORD threadid;\n\n        workers[i] = CreateThread(NULL,0,one_thread,NULL,0,&threadid);\n    }\n\n    WaitForMultipleObjects(NWORKERS,workers,TRUE,INFINITE);\n\n    for ( i=0;i<NWORKERS;++i)\n        CloseHandle(workers[i]);\n\n\n    cmsCloseProfile(prof_rgb);\n    cmsCloseProfile(prof_cmyk);\n    cmsDeleteContext(ctx);\n\n    OutputDebugString(L\"Test Done\\n\"); \n\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          81,
+          0
+        ],
+        [
+          119,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "WinMain",
+        "parameters": {
+          "hInstance": "HINSTANCE",
+          "hPrevInstance": "HINSTANCE",
+          "lpCmdLine": "LPSTR",
+          "nCmdShow": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "MyMtxCreate(cmsContext id)",
+      "fn_dec_pos": [
+        [
+          10,
+          6
+        ],
+        [
+          10,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MyMtxCreate",
+        "parameters": {
+          "id": "cmsContext"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <windows.h>\n",
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    [
+      "#include \"lcms2_plugin.h\"\n",
+      [
+        2,
+        0
+      ],
+      [
+        3,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

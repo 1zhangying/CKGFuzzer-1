@@ -1,0 +1,418 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void pack_none(unsigned char *buf, unsigned int smpls, uint16_t bps)\n{\n    (void)buf;\n    (void)smpls;\n    (void)bps;\n    return;\n}",
+      "fn_code_pos": [
+        [
+          65,
+          0
+        ],
+        [
+          71,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "pack_none",
+        "parameters": {
+          "buf": "unsigned char",
+          "smpls": "unsigned int",
+          "bps": "uint16_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void pack_swab(unsigned char *buf, unsigned int smpls, uint16_t bps)\n{\n    unsigned int s;\n    unsigned char h;\n    unsigned char l;\n    (void)bps;\n\n    for (s = 0; smpls > s; s++)\n    {\n\n        h = buf[s * 2 + 0];\n        l = buf[s * 2 + 1];\n\n        buf[s * 2 + 0] = l;\n        buf[s * 2 + 1] = h;\n    }\n    return;\n}",
+      "fn_code_pos": [
+        [
+          73,
+          0
+        ],
+        [
+          90,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "pack_swab",
+        "parameters": {
+          "buf": "unsigned char",
+          "smpls": "unsigned int",
+          "bps": "uint16_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void pack_bytes(unsigned char *buf, unsigned int smpls, uint16_t bps)\n{\n    unsigned int s;\n    unsigned int in;\n    unsigned int out;\n    int bits;\n    uint16_t t;\n\n    in = 0;\n    out = 0;\n    bits = 0;\n    t = 0;\n\n    for (s = 0; smpls > s; s++)\n    {\n\n        t <<= bps;\n        t |= (uint16_t)buf[in++];\n\n        bits += bps;\n\n        if (8 <= bits)\n        {\n            bits -= 8;\n            buf[out++] = (t >> bits) & 0xFF;\n        }\n    }\n    if (0 != bits)\n        buf[out] = (t << (8 - bits)) & 0xFF;\n}",
+      "fn_code_pos": [
+        [
+          92,
+          0
+        ],
+        [
+          121,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "pack_bytes",
+        "parameters": {
+          "buf": "unsigned char",
+          "smpls": "unsigned int",
+          "bps": "uint16_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void pack_words(unsigned char *buf, unsigned int smpls, uint16_t bps)\n{\n    unsigned int s;\n    unsigned int in;\n    unsigned int out;\n    int bits;\n    uint32_t t;\n\n    in = 0;\n    out = 0;\n    bits = 0;\n    t = 0;\n\n    for (s = 0; smpls > s; s++)\n    {\n\n        t <<= bps;\n        t |= (uint32_t)buf[in++] << 8;\n        t |= (uint32_t)buf[in++] << 0;\n\n        bits += bps;\n\n        if (16 <= bits)\n        {\n\n            bits -= 16;\n            buf[out++] = (t >> (bits + 8));\n            buf[out++] = (t >> (bits + 0));\n        }\n    }\n    if (0 != bits)\n    {\n        t <<= 16 - bits;\n\n        buf[out++] = (t >> (16 + 8));\n        buf[out++] = (t >> (16 + 0));\n    }\n}",
+      "fn_code_pos": [
+        [
+          123,
+          0
+        ],
+        [
+          160,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "pack_words",
+        "parameters": {
+          "buf": "unsigned char",
+          "smpls": "unsigned int",
+          "bps": "uint16_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void BadPPM(char *file)\n{\n    fprintf(stderr, \"%s: Not a PPM file.\\n\", file);\n    exit(EXIT_FAILURE);\n}",
+      "fn_code_pos": [
+        [
+          162,
+          0
+        ],
+        [
+          166,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BadPPM",
+        "parameters": {
+          "file": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static tmsize_t multiply_ms(tmsize_t m1, tmsize_t m2)\n{\n    if (m1 == 0 || m2 > TIFF_TMSIZE_T_MAX / m1)\n        return 0;\n    return m1 * m2;\n}",
+      "fn_code_pos": [
+        [
+          168,
+          0
+        ],
+        [
+          173,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "multiply_ms",
+        "parameters": {
+          "m1": "tmsize_t",
+          "m2": "tmsize_t"
+        },
+        "return_type": "tmsize_t"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    uint16_t photometric = 0;\n    uint32_t rowsperstrip = (uint32_t)-1;\n    double resolution = -1;\n    unsigned char *buf = NULL;\n    tmsize_t linebytes = 0;\n    int pbm;\n    uint16_t spp = 1;\n    uint16_t bpp = 8;\n    void (*pack_func)(unsigned char *buf, unsigned int smpls, uint16_t bps);\n    TIFF *out;\n    FILE *in;\n    unsigned int w, h, prec, row;\n    char *infile;\n    int c;\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n    tmsize_t scanline_size;\n\n    if (argc < 2)\n    {\n        fprintf(stderr, \"%s: Too few arguments\\n\", argv[0]);\n        usage(EXIT_FAILURE);\n    }\n    while ((c = getopt(argc, argv, \"c:r:R:h\")) != -1)\n        switch (c)\n        {\n            case 'c': /* compression scheme */\n                if (!processCompressOptions(optarg))\n                    usage(EXIT_FAILURE);\n                break;\n            case 'r': /* rows/strip */\n                rowsperstrip = atoi(optarg);\n                break;\n            case 'R': /* resolution */\n                resolution = atof(optarg);\n                break;\n            case 'h':\n                usage(EXIT_SUCCESS);\n                break;\n            case '?':\n                usage(EXIT_FAILURE);\n                /*NOTREACHED*/\n        }\n\n    if (optind + 2 < argc)\n    {\n        fprintf(stderr, \"%s: Too many arguments\\n\", argv[0]);\n        usage(EXIT_FAILURE);\n    }\n\n    /*\n     * If only one file is specified, read input from\n     * stdin; otherwise usage is: ppm2tiff input output.\n     */\n    if (argc - optind > 1)\n    {\n        infile = argv[optind++];\n        in = fopen(infile, \"rb\");\n        if (in == NULL)\n        {\n            fprintf(stderr, \"%s: Can not open.\\n\", infile);\n            return (EXIT_FAILURE);\n        }\n    }\n    else\n    {\n        infile = \"<stdin>\";\n        in = stdin;\n#if defined(HAVE_SETMODE) && defined(O_BINARY)\n        setmode(fileno(stdin), O_BINARY);\n#endif\n    }\n\n    if (fgetc(in) != 'P')\n        BadPPM(infile);\n    switch (fgetc(in))\n    {\n        case '4': /* it's a PBM file */\n            pbm = !0;\n            spp = 1;\n            photometric = PHOTOMETRIC_MINISWHITE;\n            break;\n        case '5': /* it's a PGM file */\n            pbm = 0;\n            spp = 1;\n            photometric = PHOTOMETRIC_MINISBLACK;\n            break;\n        case '6': /* it's a PPM file */\n            pbm = 0;\n            spp = 3;\n            photometric = PHOTOMETRIC_RGB;\n            if (compression == COMPRESSION_JPEG &&\n                jpegcolormode == JPEGCOLORMODE_RGB)\n                photometric = PHOTOMETRIC_YCBCR;\n            break;\n        default:\n            BadPPM(infile);\n    }\n\n    /* Parse header */\n    while (1)\n    {\n        if (feof(in))\n            BadPPM(infile);\n        c = fgetc(in);\n        /* Skip whitespaces (blanks, TABs, CRs, LFs) */\n        if (strchr(\" \\t\\r\\n\", c))\n            continue;\n\n        /* Check for comment line */\n        if (c == '#')\n        {\n            do\n            {\n                c = fgetc(in);\n            } while (!(strchr(\"\\r\\n\", c) || feof(in)));\n            continue;\n        }\n\n        ungetc(c, in);\n        break;\n    }\n    if (pbm)\n    {\n        if (fscanf(in, \" %u %u\", &w, &h) != 2)\n            BadPPM(infile);\n        if (fgetc(in) != '\\n')\n            BadPPM(infile);\n        bpp = 1;\n        pack_func = pack_none;\n    }\n    else\n    {\n        if (fscanf(in, \" %u %u %u\", &w, &h, &prec) != 3)\n            BadPPM(infile);\n        if (fgetc(in) != '\\n' || 0 == prec || 65535 < prec)\n            BadPPM(infile);\n\n        if (0 != (prec & (prec + 1)))\n        {\n            fprintf(stderr, \"%s: unsupported maxval %u.\\n\", infile, prec);\n            exit(EXIT_FAILURE);\n        }\n        bpp = 0;\n        if ((prec + 1) & 0xAAAAAAAA)\n            bpp |= 1;\n        if ((prec + 1) & 0xCCCCCCCC)\n            bpp |= 2;\n        if ((prec + 1) & 0xF0F0F0F0)\n            bpp |= 4;\n        if ((prec + 1) & 0xFF00FF00)\n            bpp |= 8;\n        if ((prec + 1) & 0xFFFF0000)\n            bpp |= 16;\n\n        switch (bpp)\n        {\n            case 8:\n                pack_func = pack_none;\n                break;\n            case 16:\n            {\n                const unsigned short i = 0x0100;\n\n                if (0 == *(unsigned char *)&i)\n                    pack_func = pack_swab;\n                else\n                    pack_func = pack_none;\n            }\n            break;\n            default:\n                if (8 >= bpp)\n                    pack_func = pack_bytes;\n                else\n                    pack_func = pack_words;\n                break;\n        }\n    }\n    out = TIFFOpen(argv[optind], \"w\");\n    if (out == NULL)\n        return (EXIT_FAILURE);\n    TIFFSetField(out, TIFFTAG_IMAGEWIDTH, (uint32_t)w);\n    TIFFSetField(out, TIFFTAG_IMAGELENGTH, (uint32_t)h);\n    TIFFSetField(out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);\n    TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, spp);\n    TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, bpp);\n    TIFFSetField(out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);\n    TIFFSetField(out, TIFFTAG_PHOTOMETRIC, photometric);\n    TIFFSetField(out, TIFFTAG_COMPRESSION, compression);\n    switch (compression)\n    {\n        case COMPRESSION_JPEG:\n            TIFFSetField(out, TIFFTAG_JPEGQUALITY, quality);\n            TIFFSetField(out, TIFFTAG_JPEGCOLORMODE, jpegcolormode);\n            break;\n        case COMPRESSION_LZW:\n        case COMPRESSION_ADOBE_DEFLATE:\n        case COMPRESSION_DEFLATE:\n            if (predictor != 0)\n                TIFFSetField(out, TIFFTAG_PREDICTOR, predictor);\n            break;\n        case COMPRESSION_CCITTFAX3:\n            TIFFSetField(out, TIFFTAG_GROUP3OPTIONS, g3opts);\n            break;\n    }\n    if (pbm)\n    {\n        /* if round-up overflows, result will be zero, OK */\n        linebytes = (multiply_ms(spp, w) + (8 - 1)) / 8;\n    }\n    else if (bpp <= 8)\n    {\n        linebytes = multiply_ms(spp, w);\n    }\n    else\n    {\n        linebytes = multiply_ms(2 * spp, w);\n    }\n    if (rowsperstrip == (uint32_t)-1)\n    {\n        TIFFSetField(out, TIFFTAG_ROWSPERSTRIP, h);\n    }\n    else\n    {\n        TIFFSetField(out, TIFFTAG_ROWSPERSTRIP,\n                     TIFFDefaultStripSize(out, rowsperstrip));\n    }\n    if (linebytes == 0)\n    {\n        fprintf(stderr, \"%s: scanline size overflow\\n\", infile);\n        (void)TIFFClose(out);\n        exit(EXIT_FAILURE);\n    }\n    scanline_size = TIFFScanlineSize(out);\n    if (scanline_size == 0)\n    {\n        /* overflow - TIFFScanlineSize already printed a message */\n        (void)TIFFClose(out);\n        exit(EXIT_FAILURE);\n    }\n    if (scanline_size < linebytes)\n        buf = (unsigned char *)_TIFFmalloc(linebytes);\n    else\n        buf = (unsigned char *)_TIFFmalloc(scanline_size);\n    if (buf == NULL)\n    {\n        fprintf(stderr, \"%s: Not enough memory\\n\", infile);\n        (void)TIFFClose(out);\n        exit(EXIT_FAILURE);\n    }\n    if (resolution > 0)\n    {\n        TIFFSetField(out, TIFFTAG_XRESOLUTION, resolution);\n        TIFFSetField(out, TIFFTAG_YRESOLUTION, resolution);\n        TIFFSetField(out, TIFFTAG_RESOLUTIONUNIT, RESUNIT_INCH);\n    }\n    for (row = 0; row < h; row++)\n    {\n        if (fread(buf, linebytes, 1, in) != 1)\n        {\n            fprintf(stderr, \"%s: scanline %u: Read error.\\n\", infile, row);\n            break;\n        }\n        pack_func(buf, w * spp, bpp);\n        if (TIFFWriteScanline(out, buf, row, 0) < 0)\n            break;\n    }\n    if (in != stdin)\n        fclose(in);\n    (void)TIFFClose(out);\n    if (buf)\n        _TIFFfree(buf);\n    return (EXIT_SUCCESS);\n}",
+      "fn_code_pos": [
+        [
+          175,
+          0
+        ],
+        [
+          452,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void processG3Options(char *cp)\n{\n    g3opts = 0;\n    if ((cp = strchr(cp, ':')))\n    {\n        do\n        {\n            cp++;\n            if (strneq(cp, \"1d\", 2))\n                g3opts &= ~GROUP3OPT_2DENCODING;\n            else if (strneq(cp, \"2d\", 2))\n                g3opts |= GROUP3OPT_2DENCODING;\n            else if (strneq(cp, \"fill\", 4))\n                g3opts |= GROUP3OPT_FILLBITS;\n            else\n                usage(EXIT_FAILURE);\n        } while ((cp = strchr(cp, ':')));\n    }\n}",
+      "fn_code_pos": [
+        [
+          454,
+          0
+        ],
+        [
+          472,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processG3Options",
+        "parameters": {
+          "cp": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int processCompressOptions(char *opt)\n{\n    if (streq(opt, \"none\"))\n        compression = COMPRESSION_NONE;\n    else if (streq(opt, \"packbits\"))\n        compression = COMPRESSION_PACKBITS;\n    else if (strneq(opt, \"jpeg\", 4))\n    {\n        char *cp = strchr(opt, ':');\n\n        compression = COMPRESSION_JPEG;\n        while (cp)\n        {\n            if (isdigit((int)cp[1]))\n                quality = atoi(cp + 1);\n            else if (cp[1] == 'r')\n                jpegcolormode = JPEGCOLORMODE_RAW;\n            else\n                usage(EXIT_FAILURE);\n\n            cp = strchr(cp + 1, ':');\n        }\n    }\n    else if (strneq(opt, \"g3\", 2))\n    {\n        processG3Options(opt);\n        compression = COMPRESSION_CCITTFAX3;\n    }\n    else if (streq(opt, \"g4\"))\n    {\n        compression = COMPRESSION_CCITTFAX4;\n    }\n    else if (strneq(opt, \"lzw\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_LZW;\n    }\n    else if (strneq(opt, \"zip\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_ADOBE_DEFLATE;\n    }\n    else\n        return (0);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          474,
+          0
+        ],
+        [
+          523,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {
+          "opt": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"%s\\n\\n\", TIFFGetVersion());\n    fprintf(out, \"%s\", usage_info);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          563,
+          0
+        ],
+        [
+          570,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "usage(int code)",
+      "fn_dec_pos": [
+        [
+          62,
+          12
+        ],
+        [
+          62,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "processCompressOptions(char *)",
+      "fn_dec_pos": [
+        [
+          63,
+          11
+        ],
+        [
+          63,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "(*pack_func)(unsigned char *buf, unsigned int smpls, uint16_t bps)",
+      "fn_dec_pos": [
+        [
+          185,
+          9
+        ],
+        [
+          185,
+          75
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "buf": "unsigned char",
+          "smpls": "unsigned int",
+          "bps": "uint16_t"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <ctype.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include <fcntl.h>\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ],
+    [
+      "#include <io.h>\n",
+      [
+        41,
+        0
+      ],
+      [
+        42,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        44,
+        0
+      ],
+      [
+        45,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

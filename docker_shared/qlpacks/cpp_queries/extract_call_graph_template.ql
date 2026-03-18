@@ -75,6 +75,12 @@ predicate isEntryPoint(Function f) {
   )
 }
 
+
+
+
+
+
+
 // Main query
 from Function start, Function end, Location start_loc, Location end_loc
 where

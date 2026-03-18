@@ -1,0 +1,415 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "cmsHTRANSFORM _cmsChain2Lab(cmsContext            ContextID,\n                            cmsUInt32Number        nProfiles,\n                            cmsUInt32Number        InputFormat,\n                            cmsUInt32Number        OutputFormat,\n                            const cmsUInt32Number  Intents[],\n                            const cmsHPROFILE      hProfiles[],\n                            const cmsBool          BPC[],\n                            const cmsFloat64Number AdaptationStates[],\n                            cmsUInt32Number        dwFlags)\n{\n    cmsHTRANSFORM xform;\n    cmsHPROFILE   hLab;\n    cmsHPROFILE   ProfileList[256];\n    cmsBool       BPCList[256];\n    cmsFloat64Number AdaptationList[256];\n    cmsUInt32Number IntentList[256];\n    cmsUInt32Number i;\n\n    // This is a rather big number and there is no need of dynamic memory\n    // since we are adding a profile, 254 + 1 = 255 and this is the limit\n    if (nProfiles > 254) return NULL;\n\n    // The output space\n    hLab = cmsCreateLab4ProfileTHR(ContextID, NULL);\n    if (hLab == NULL) return NULL;\n\n    // Create a copy of parameters\n    for (i=0; i < nProfiles; i++) {\n\n        ProfileList[i]    = hProfiles[i];\n        BPCList[i]        = BPC[i];\n        AdaptationList[i] = AdaptationStates[i];\n        IntentList[i]     = Intents[i];\n    }\n\n    // Place Lab identity at chain's end.\n    ProfileList[nProfiles]    = hLab;\n    BPCList[nProfiles]        = 0;\n    AdaptationList[nProfiles] = 1.0;\n    IntentList[nProfiles]     = INTENT_RELATIVE_COLORIMETRIC;\n\n    // Create the transform\n    xform = cmsCreateExtendedTransform(ContextID, nProfiles + 1, ProfileList,\n                                       BPCList,\n                                       IntentList,\n                                       AdaptationList,\n                                       NULL, 0,\n                                       InputFormat,\n                                       OutputFormat,\n                                       dwFlags);\n\n    cmsCloseProfile(hLab);\n\n    return xform;\n}",
+      "fn_code_pos": [
+        [
+          31,
+          0
+        ],
+        [
+          85,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsChain2Lab",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "Intents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsHTRANSFORM"
+      }
+    },
+    {
+      "fn_code": "static\ncmsToneCurve* ComputeKToLstar(cmsContext            ContextID,\n                               cmsUInt32Number       nPoints,\n                               cmsUInt32Number       nProfiles,\n                               const cmsUInt32Number Intents[],\n                               const cmsHPROFILE     hProfiles[],\n                               const cmsBool         BPC[],\n                               const cmsFloat64Number AdaptationStates[],\n                               cmsUInt32Number dwFlags)\n{\n    cmsToneCurve* out = NULL;\n    cmsUInt32Number i;\n    cmsHTRANSFORM xform;\n    cmsCIELab Lab;\n    cmsFloat32Number cmyk[4];\n    cmsFloat32Number* SampledPoints;\n\n    xform = _cmsChain2Lab(ContextID, nProfiles, TYPE_CMYK_FLT, TYPE_Lab_DBL, Intents, hProfiles, BPC, AdaptationStates, dwFlags);\n    if (xform == NULL) return NULL;\n\n    SampledPoints = (cmsFloat32Number*) _cmsCalloc(ContextID, nPoints, sizeof(cmsFloat32Number));\n    if (SampledPoints  == NULL) goto Error;\n\n    for (i=0; i < nPoints; i++) {\n\n        cmyk[0] = 0;\n        cmyk[1] = 0;\n        cmyk[2] = 0;\n        cmyk[3] = (cmsFloat32Number) ((i * 100.0) / (nPoints-1));\n\n        cmsDoTransform(xform, cmyk, &Lab, 1);\n        SampledPoints[i]= (cmsFloat32Number) (1.0 - Lab.L / 100.0); // Negate K for easier operation\n    }\n\n    out = cmsBuildTabulatedToneCurveFloat(ContextID, nPoints, SampledPoints);\n\nError:\n\n    cmsDeleteTransform(xform);\n    if (SampledPoints) _cmsFree(ContextID, SampledPoints);\n\n    return out;\n}",
+      "fn_code_pos": [
+        [
+          90,
+          0
+        ],
+        [
+          132,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComputeKToLstar",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nPoints": "cmsUInt32Number",
+          "nProfiles": "cmsUInt32Number",
+          "Intents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsToneCurve"
+      }
+    },
+    {
+      "fn_code": "cmsToneCurve* _cmsBuildKToneCurve(cmsContext        ContextID,\n                                   cmsUInt32Number   nPoints,\n                                   cmsUInt32Number   nProfiles,\n                                   const cmsUInt32Number Intents[],\n                                   const cmsHPROFILE hProfiles[],\n                                   const cmsBool     BPC[],\n                                   const cmsFloat64Number AdaptationStates[],\n                                   cmsUInt32Number   dwFlags)\n{\n    cmsToneCurve *in, *out, *KTone;\n\n    // Make sure CMYK -> CMYK\n    if (cmsGetColorSpace(hProfiles[0]) != cmsSigCmykData ||\n        cmsGetColorSpace(hProfiles[nProfiles-1])!= cmsSigCmykData) return NULL;\n\n\n    // Make sure last is an output profile\n    if (cmsGetDeviceClass(hProfiles[nProfiles - 1]) != cmsSigOutputClass) return NULL;\n\n    // Create individual curves. BPC works also as each K to L* is\n    // computed as a BPC to zero black point in case of L*\n    in  = ComputeKToLstar(ContextID, nPoints, nProfiles - 1, Intents, hProfiles, BPC, AdaptationStates, dwFlags);\n    if (in == NULL) return NULL;\n\n    out = ComputeKToLstar(ContextID, nPoints, 1,\n                            Intents + (nProfiles - 1),\n                            &hProfiles [nProfiles - 1],\n                            BPC + (nProfiles - 1),\n                            AdaptationStates + (nProfiles - 1),\n                            dwFlags);\n    if (out == NULL) {\n        cmsFreeToneCurve(in);\n        return NULL;\n    }\n\n    // Build the relationship. This effectively limits the maximum accuracy to 16 bits, but\n    // since this is used on black-preserving LUTs, we are not losing  accuracy in any case\n    KTone = cmsJoinToneCurve(ContextID, in, out, nPoints);\n\n    // Get rid of components\n    cmsFreeToneCurve(in); cmsFreeToneCurve(out);\n\n    // Something went wrong...\n    if (KTone == NULL) return NULL;\n\n    // Make sure it is monotonic\n    if (!cmsIsToneCurveMonotonic(KTone)) {\n        cmsFreeToneCurve(KTone);\n        return NULL;\n    }\n\n    return KTone;\n}",
+      "fn_code_pos": [
+        [
+          138,
+          0
+        ],
+        [
+          190,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsBuildKToneCurve",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nPoints": "cmsUInt32Number",
+          "nProfiles": "cmsUInt32Number",
+          "Intents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsToneCurve"
+      }
+    },
+    {
+      "fn_code": "static\nint GamutSampler(CMSREGISTER const cmsUInt16Number In[], CMSREGISTER cmsUInt16Number Out[], CMSREGISTER void* Cargo)\n{\n    GAMUTCHAIN*  t = (GAMUTCHAIN* ) Cargo;\n    cmsCIELab LabIn1, LabOut1;\n    cmsCIELab LabIn2, LabOut2;\n    cmsUInt16Number Proof[cmsMAXCHANNELS], Proof2[cmsMAXCHANNELS];\n    cmsFloat64Number dE1, dE2, ErrorRatio;\n\n    // Assume in-gamut by default.\n    ErrorRatio = 1.0;\n\n    // Convert input to Lab\n    cmsDoTransform(t -> hInput, In, &LabIn1, 1);\n\n    // converts from PCS to colorant. This always\n    // does return in-gamut values,\n    cmsDoTransform(t -> hForward, &LabIn1, Proof, 1);\n\n    // Now, do the inverse, from colorant to PCS.\n    cmsDoTransform(t -> hReverse, Proof, &LabOut1, 1);\n\n    memmove(&LabIn2, &LabOut1, sizeof(cmsCIELab));\n\n    // Try again, but this time taking Check as input\n    cmsDoTransform(t -> hForward, &LabOut1, Proof2, 1);\n    cmsDoTransform(t -> hReverse, Proof2, &LabOut2, 1);\n\n    // Take difference of direct value\n    dE1 = cmsDeltaE(&LabIn1, &LabOut1);\n\n    // Take difference of converted value\n    dE2 = cmsDeltaE(&LabIn2, &LabOut2);\n\n\n    // if dE1 is small and dE2 is small, value is likely to be in gamut\n    if (dE1 < t->Threshold && dE2 < t->Threshold)\n        Out[0] = 0;\n    else {\n\n        // if dE1 is small and dE2 is big, undefined. Assume in gamut\n        if (dE1 < t->Threshold && dE2 > t->Threshold)\n            Out[0] = 0;\n        else\n            // dE1 is big and dE2 is small, clearly out of gamut\n            if (dE1 > t->Threshold && dE2 < t->Threshold)\n                Out[0] = (cmsUInt16Number) _cmsQuickFloor((dE1 - t->Threshold) + .5);\n            else  {\n\n                // dE1 is big and dE2 is also big, could be due to perceptual mapping\n                // so take error ratio\n                if (dE2 == 0.0)\n                    ErrorRatio = dE1;\n                else\n                    ErrorRatio = dE1 / dE2;\n\n                if (ErrorRatio > t->Threshold)\n                    Out[0] = (cmsUInt16Number)  _cmsQuickFloor((ErrorRatio - t->Threshold) + .5);\n                else\n                    Out[0] = 0;\n            }\n    }\n\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          212,
+          0
+        ],
+        [
+          277,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GamutSampler",
+        "parameters": {
+          "In": "CMSREGISTER",
+          "Out": "CMSREGISTER",
+          "void": "CMSREGISTER"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cmsPipeline* _cmsCreateGamutCheckPipeline(cmsContext ContextID,\n                                          cmsHPROFILE hProfiles[],\n                                          cmsBool  BPC[],\n                                          cmsUInt32Number Intents[],\n                                          cmsFloat64Number AdaptationStates[],\n                                          cmsUInt32Number nGamutPCSposition,\n                                          cmsHPROFILE hGamut)\n{\n    cmsHPROFILE hLab;\n    cmsPipeline* Gamut;\n    cmsStage* CLUT;\n    cmsUInt32Number dwFormat;\n    GAMUTCHAIN Chain;\n    cmsUInt32Number nGridpoints;\n    cmsInt32Number nChannels;\n    cmsColorSpaceSignature ColorSpace;\n    cmsUInt32Number i;\n    cmsHPROFILE ProfileList[256];\n    cmsBool     BPCList[256];\n    cmsFloat64Number AdaptationList[256];\n    cmsUInt32Number IntentList[256];\n\n    memset(&Chain, 0, sizeof(GAMUTCHAIN));\n\n\n    if (nGamutPCSposition <= 0 || nGamutPCSposition > 255) {\n        cmsSignalError(ContextID, cmsERROR_RANGE, \"Wrong position of PCS. 1..255 expected, %d found.\", nGamutPCSposition);\n        return NULL;\n    }\n\n    hLab = cmsCreateLab4ProfileTHR(ContextID, NULL);\n    if (hLab == NULL) return NULL;\n\n\n    // The figure of merit. On matrix-shaper profiles, should be almost zero as\n    // the conversion is pretty exact. On LUT based profiles, different resolutions\n    // of input and output CLUT may result in differences.\n\n    if (cmsIsMatrixShaper(hGamut)) {\n\n        Chain.Threshold = 1.0;\n    }\n    else {\n        Chain.Threshold = ERR_THRESHOLD;\n    }\n\n\n    // Create a copy of parameters\n    for (i=0; i < nGamutPCSposition; i++) {\n        ProfileList[i]    = hProfiles[i];\n        BPCList[i]        = BPC[i];\n        AdaptationList[i] = AdaptationStates[i];\n        IntentList[i]     = Intents[i];\n    }\n\n    // Fill Lab identity\n    ProfileList[nGamutPCSposition] = hLab;\n    BPCList[nGamutPCSposition] = 0;\n    AdaptationList[nGamutPCSposition] = 1.0;\n    IntentList[nGamutPCSposition] = INTENT_RELATIVE_COLORIMETRIC;\n\n\n    ColorSpace  = cmsGetColorSpace(hGamut);\n    nChannels   = cmsChannelsOfColorSpace(ColorSpace);\n    nGridpoints = _cmsReasonableGridpointsByColorspace(ColorSpace, cmsFLAGS_HIGHRESPRECALC);\n    dwFormat    = (CHANNELS_SH(nChannels)|BYTES_SH(2));\n\n    // 16 bits to Lab double\n    Chain.hInput = cmsCreateExtendedTransform(ContextID,\n        nGamutPCSposition + 1,\n        ProfileList,\n        BPCList,\n        IntentList,\n        AdaptationList,\n        NULL, 0,\n        dwFormat, TYPE_Lab_DBL,\n        cmsFLAGS_NOCACHE);\n\n\n    // Does create the forward step. Lab double to device\n    dwFormat    = (CHANNELS_SH(nChannels)|BYTES_SH(2));\n    Chain.hForward = cmsCreateTransformTHR(ContextID,\n        hLab, TYPE_Lab_DBL,\n        hGamut, dwFormat,\n        INTENT_RELATIVE_COLORIMETRIC,\n        cmsFLAGS_NOCACHE);\n\n    // Does create the backwards step\n    Chain.hReverse = cmsCreateTransformTHR(ContextID, hGamut, dwFormat,\n        hLab, TYPE_Lab_DBL,\n        INTENT_RELATIVE_COLORIMETRIC,\n        cmsFLAGS_NOCACHE);\n\n\n    // All ok?\n    if (Chain.hInput && Chain.hForward && Chain.hReverse) {\n\n        // Go on, try to compute gamut LUT from PCS. This consist on a single channel containing\n        // dE when doing a transform back and forth on the colorimetric intent.\n\n        Gamut = cmsPipelineAlloc(ContextID, 3, 1);\n        if (Gamut != NULL) {\n\n            CLUT = cmsStageAllocCLut16bit(ContextID, nGridpoints, nChannels, 1, NULL);\n            if (!cmsPipelineInsertStage(Gamut, cmsAT_BEGIN, CLUT)) {\n                cmsPipelineFree(Gamut);\n                Gamut = NULL;\n            } \n            else {\n                cmsStageSampleCLut16bit(CLUT, GamutSampler, (void*) &Chain, 0);\n            }\n        }\n    }\n    else\n        Gamut = NULL;   // Didn't work...\n\n    // Free all needed stuff.\n    if (Chain.hInput)   cmsDeleteTransform(Chain.hInput);\n    if (Chain.hForward) cmsDeleteTransform(Chain.hForward);\n    if (Chain.hReverse) cmsDeleteTransform(Chain.hReverse);\n    if (hLab) cmsCloseProfile(hLab);\n\n    // And return computed hull\n    return Gamut;\n}",
+      "fn_code_pos": [
+        [
+          286,
+          0
+        ],
+        [
+          410,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCreateGamutCheckPipeline",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "Intents": "cmsUInt32Number",
+          "AdaptationStates": "cmsFloat64Number",
+          "nGamutPCSposition": "cmsUInt32Number",
+          "hGamut": "cmsHPROFILE"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "static\nint EstimateTAC(CMSREGISTER const cmsUInt16Number In[], CMSREGISTER cmsUInt16Number Out[], CMSREGISTER void * Cargo)\n{\n    cmsTACestimator* bp = (cmsTACestimator*) Cargo;\n    cmsFloat32Number RoundTrip[cmsMAXCHANNELS];\n    cmsUInt32Number i;\n    cmsFloat32Number Sum;\n\n\n    // Evaluate the xform\n    cmsDoTransform(bp->hRoundTrip, In, RoundTrip, 1);\n\n    // All all amounts of ink\n    for (Sum=0, i=0; i < bp ->nOutputChans; i++)\n            Sum += RoundTrip[i];\n\n    // If above maximum, keep track of input values\n    if (Sum > bp ->MaxTAC) {\n\n            bp ->MaxTAC = Sum;\n\n            for (i=0; i < bp ->nOutputChans; i++) {\n                bp ->MaxInput[i] = In[i];\n            }\n    }\n\n    return TRUE;\n\n    cmsUNUSED_PARAMETER(Out);\n}",
+      "fn_code_pos": [
+        [
+          425,
+          0
+        ],
+        [
+          454,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EstimateTAC",
+        "parameters": {
+          "In": "CMSREGISTER",
+          "Out": "CMSREGISTER",
+          "void": "CMSREGISTER"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cmsFloat64Number CMSEXPORT cmsDetectTAC(cmsHPROFILE hProfile)\n{\n    cmsTACestimator bp;\n    cmsUInt32Number dwFormatter;\n    cmsUInt32Number GridPoints[MAX_INPUT_DIMENSIONS];\n    cmsHPROFILE hLab;\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n\n    // TAC only works on output profiles\n    if (cmsGetDeviceClass(hProfile) != cmsSigOutputClass) {\n        return 0;\n    }\n\n    // Create a fake formatter for result\n    dwFormatter = cmsFormatterForColorspaceOfProfile(hProfile, 4, TRUE);\n\n    // Unsupported color space?\n    if (dwFormatter == 0) return 0;\n\n    bp.nOutputChans = T_CHANNELS(dwFormatter);\n    bp.MaxTAC = 0;    // Initial TAC is 0\n\n    //  for safety\n    if (bp.nOutputChans >= cmsMAXCHANNELS) return 0;\n\n    hLab = cmsCreateLab4ProfileTHR(ContextID, NULL);\n    if (hLab == NULL) return 0;\n    // Setup a roundtrip on perceptual intent in output profile for TAC estimation\n    bp.hRoundTrip = cmsCreateTransformTHR(ContextID, hLab, TYPE_Lab_16,\n                                          hProfile, dwFormatter, INTENT_PERCEPTUAL, cmsFLAGS_NOOPTIMIZE|cmsFLAGS_NOCACHE);\n\n    cmsCloseProfile(hLab);\n    if (bp.hRoundTrip == NULL) return 0;\n\n    // For L* we only need black and white. For C* we need many points\n    GridPoints[0] = 6;\n    GridPoints[1] = 74;\n    GridPoints[2] = 74;\n\n\n    if (!cmsSliceSpace16(3, GridPoints, EstimateTAC, &bp)) {\n        bp.MaxTAC = 0;\n    }\n\n    cmsDeleteTransform(bp.hRoundTrip);\n\n    // Results in %\n    return bp.MaxTAC;\n}",
+      "fn_code_pos": [
+        [
+          458,
+          0
+        ],
+        [
+          506,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsDetectTAC",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsDesaturateLab(cmsCIELab* Lab,\n                                   double amax, double amin,\n                                   double bmax, double bmin)\n{\n\n    // Whole Luma surface to zero\n\n    if (Lab -> L < 0) {\n\n        Lab-> L = Lab->a = Lab-> b = 0.0;\n        return FALSE;\n    }\n\n    // Clamp white, DISCARD HIGHLIGHTS. This is done\n    // in such way because icc spec doesn't allow the\n    // use of L>100 as a highlight means.\n\n    if (Lab->L > 100)\n        Lab -> L = 100;\n\n    // Check out gamut prism, on a, b faces\n\n    if (Lab -> a < amin || Lab->a > amax||\n        Lab -> b < bmin || Lab->b > bmax) {\n\n            cmsCIELCh LCh;\n            double h, slope;\n\n            // Falls outside a, b limits. Transports to LCh space,\n            // and then do the clipping\n\n\n            if (Lab -> a == 0.0) { // Is hue exactly 90?\n\n                // atan will not work, so clamp here\n                Lab -> b = Lab->b < 0 ? bmin : bmax;\n                return TRUE;\n            }\n\n            cmsLab2LCh(&LCh, Lab);\n\n            slope = Lab -> b / Lab -> a;\n            h = LCh.h;\n\n            // There are 4 zones\n\n            if ((h >= 0. && h < 45.) ||\n                (h >= 315 && h <= 360.)) {\n\n                    // clip by amax\n                    Lab -> a = amax;\n                    Lab -> b = amax * slope;\n            }\n            else\n                if (h >= 45. && h < 135.)\n                {\n                    // clip by bmax\n                    Lab -> b = bmax;\n                    Lab -> a = bmax / slope;\n                }\n                else\n                    if (h >= 135. && h < 225.) {\n                        // clip by amin\n                        Lab -> a = amin;\n                        Lab -> b = amin * slope;\n\n                    }\n                    else\n                        if (h >= 225. && h < 315.) {\n                            // clip by bmin\n                            Lab -> b = bmin;\n                            Lab -> a = bmin / slope;\n                        }\n                        else  {\n                            cmsSignalError(0, cmsERROR_RANGE, \"Invalid angle\");\n                            return FALSE;\n                        }\n\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          511,
+          0
+        ],
+        [
+          592,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsDesaturateLab",
+        "parameters": {
+          "Lab": "cmsCIELab",
+          "amax": "double",
+          "amin": "double",
+          "bmax": "double",
+          "bmin": "double"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsFloat64Number CMSEXPORT cmsDetectRGBProfileGamma(cmsHPROFILE hProfile, cmsFloat64Number threshold)\n{\n    cmsContext ContextID;\n    cmsHPROFILE hXYZ;\n    cmsHTRANSFORM xform;\n    cmsToneCurve* Y_curve;\n    cmsUInt16Number rgb[256][3];\n    cmsCIEXYZ XYZ[256];\n    cmsFloat32Number Y_normalized[256];\n    cmsFloat64Number gamma;\n    cmsProfileClassSignature cl;\n    int i;\n\n    if (cmsGetColorSpace(hProfile) != cmsSigRgbData)\n        return -1;\n\n    cl = cmsGetDeviceClass(hProfile);\n    if (cl != cmsSigInputClass && cl != cmsSigDisplayClass && \n        cl != cmsSigOutputClass && cl != cmsSigColorSpaceClass)\n        return -1;\n\n    ContextID = cmsGetProfileContextID(hProfile);\n    hXYZ = cmsCreateXYZProfileTHR(ContextID);\n    if (hXYZ == NULL)\n        return -1;\n    xform = cmsCreateTransformTHR(ContextID, hProfile, TYPE_RGB_16, hXYZ, TYPE_XYZ_DBL, \n                                    INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOOPTIMIZE);\n\n    if (xform == NULL) { // If not RGB or forward direction is not supported, regret with the previous error\n\n        cmsCloseProfile(hXYZ);        \n        return -1;\n    }\n\n    for (i = 0; i < 256; i++) {\n        rgb[i][0] = rgb[i][1] = rgb[i][2] = FROM_8_TO_16(i);       \n    }\n\n    cmsDoTransform(xform, rgb, XYZ, 256);\n\n    cmsDeleteTransform(xform);\n    cmsCloseProfile(hXYZ);\n\n    for (i = 0; i < 256; i++) {\n        Y_normalized[i] = (cmsFloat32Number) XYZ[i].Y;\n    }\n\n    Y_curve = cmsBuildTabulatedToneCurveFloat(ContextID, 256, Y_normalized);\n    if (Y_curve == NULL)     \n        return -1;\n    \n    gamma = cmsEstimateGamma(Y_curve, threshold);\n\n    cmsFreeToneCurve(Y_curve);\n\n    return gamma;\n}",
+      "fn_code_pos": [
+        [
+          601,
+          0
+        ],
+        [
+          657,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsDetectRGBProfileGamma",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "threshold": "cmsFloat64Number"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "ComputeKToLstar(cmsContext            ContextID,\n                               cmsUInt32Number       nPoints,\n                               cmsUInt32Number       nProfiles,\n                               const cmsUInt32Number Intents[],\n                               const cmsHPROFILE     hProfiles[],\n                               const cmsBool         BPC[],\n                               const cmsFloat64Number AdaptationStates[],\n                               cmsUInt32Number dwFlags)",
+      "fn_dec_pos": [
+        [
+          91,
+          14
+        ],
+        [
+          98,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComputeKToLstar",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nPoints": "cmsUInt32Number",
+          "nProfiles": "cmsUInt32Number",
+          "Intents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsBuildKToneCurve(cmsContext        ContextID,\n                                   cmsUInt32Number   nPoints,\n                                   cmsUInt32Number   nProfiles,\n                                   const cmsUInt32Number Intents[],\n                                   const cmsHPROFILE hProfiles[],\n                                   const cmsBool     BPC[],\n                                   const cmsFloat64Number AdaptationStates[],\n                                   cmsUInt32Number   dwFlags)",
+      "fn_dec_pos": [
+        [
+          138,
+          14
+        ],
+        [
+          145,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsBuildKToneCurve",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nPoints": "cmsUInt32Number",
+          "nProfiles": "cmsUInt32Number",
+          "Intents": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "AdaptationStates": "cmsFloat64Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsCreateGamutCheckPipeline(cmsContext ContextID,\n                                          cmsHPROFILE hProfiles[],\n                                          cmsBool  BPC[],\n                                          cmsUInt32Number Intents[],\n                                          cmsFloat64Number AdaptationStates[],\n                                          cmsUInt32Number nGamutPCSposition,\n                                          cmsHPROFILE hGamut)",
+      "fn_dec_pos": [
+        [
+          286,
+          13
+        ],
+        [
+          292,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCreateGamutCheckPipeline",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "hProfiles": "cmsHPROFILE",
+          "BPC": "cmsBool",
+          "Intents": "cmsUInt32Number",
+          "AdaptationStates": "cmsFloat64Number",
+          "nGamutPCSposition": "cmsUInt32Number",
+          "hGamut": "cmsHPROFILE"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n\n    cmsHTRANSFORM hInput;               // From whatever input color space. 16 bits to DBL\n    cmsHTRANSFORM hForward, hReverse;   // Transforms going from Lab to colorant and back\n    cmsFloat64Number Threshold;         // The threshold after which is considered out of gamut\n\n    } GAMUTCHAIN;",
+      {
+        "hInput": "cmsHTRANSFORM",
+        "hForward": "cmsHTRANSFORM",
+        "Threshold": "cmsFloat64Number"
+      },
+      "GAMUTCHAIN",
+      [
+        197,
+        0
+      ],
+      [
+        203,
+        17
+      ]
+    ],
+    [
+      "typedef struct {\n    cmsUInt32Number  nOutputChans;\n    cmsHTRANSFORM    hRoundTrip;\n    cmsFloat32Number MaxTAC;\n    cmsFloat32Number MaxInput[cmsMAXCHANNELS];\n\n} cmsTACestimator;",
+      {
+        "nOutputChans": "cmsUInt32Number",
+        "hRoundTrip": "cmsHTRANSFORM",
+        "MaxTAC": "cmsFloat32Number",
+        "MaxInput[cmsMAXCHANNELS]": "cmsFloat32Number"
+      },
+      "cmsTACestimator",
+      [
+        414,
+        0
+      ],
+      [
+        420,
+        18
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsHTRANSFORM hInput;               // From whatever input color space. 16 bits to DBL\n    cmsHTRANSFORM hForward, hReverse;   // Transforms going from Lab to colorant and back\n    cmsFloat64Number Threshold;         // The threshold after which is considered out of gamut\n\n    } GAMUTCHAIN;",
+      {
+        "hInput": "cmsHTRANSFORM",
+        "hForward": "cmsHTRANSFORM",
+        "Threshold": "cmsFloat64Number"
+      },
+      "GAMUTCHAIN",
+      [
+        197,
+        0
+      ],
+      [
+        203,
+        17
+      ]
+    ],
+    [
+      "typedef struct {\n    cmsUInt32Number  nOutputChans;\n    cmsHTRANSFORM    hRoundTrip;\n    cmsFloat32Number MaxTAC;\n    cmsFloat32Number MaxInput[cmsMAXCHANNELS];\n\n} cmsTACestimator;",
+      {
+        "nOutputChans": "cmsUInt32Number",
+        "hRoundTrip": "cmsHTRANSFORM",
+        "MaxTAC": "cmsFloat32Number",
+        "MaxInput[cmsMAXCHANNELS]": "cmsFloat32Number"
+      },
+      "cmsTACestimator",
+      [
+        414,
+        0
+      ],
+      [
+        420,
+        18
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"lcms2_internal.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

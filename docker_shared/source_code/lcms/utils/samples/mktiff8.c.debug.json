@@ -1,0 +1,192 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\ndouble DecodeAbTIFF(double ab)\n{\n\tif (ab <= 128.)\n\t\tab += 127.;\n\telse\n\t\tab -= 127.;\n\n\treturn ab;\n}",
+      "fn_code_pos": [
+        [
+          28,
+          0
+        ],
+        [
+          37,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "DecodeAbTIFF",
+        "parameters": {
+          "ab": "double"
+        },
+        "return_type": "double"
+      }
+    },
+    {
+      "fn_code": "static\ncmsToneCurve* CreateStep(void)\n{\n\tcmsToneCurve* Gamma;\n\tcmsUInt16Number* Table;\n\tint i;\n\tdouble a;\n\n\tTable = calloc(4096, sizeof(cmsUInt16Number));\n\tif (Table == NULL) return NULL;\n\n\tfor (i=0; i < 4096; i++) {\n\n\t\ta = (double) i * 255. / 4095.;\n\n\t\ta = DecodeAbTIFF(a);\n\n\t\tTable[i] = (cmsUInt16Number) floor(a * 257. + 0.5);\n\t}\n\n\tGamma = cmsBuildTabulatedToneCurve16(0, 4096, Table);\n\tfree(Table);\n\n\treturn Gamma;\n}",
+      "fn_code_pos": [
+        [
+          39,
+          0
+        ],
+        [
+          63,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CreateStep",
+        "parameters": {},
+        "return_type": "cmsToneCurve"
+      }
+    },
+    {
+      "fn_code": "static\ncmsToneCurve* CreateLinear(void)\n{\n\tcmsUInt16Number Linear[2] = { 0, 0xffff };\n\n\treturn cmsBuildTabulatedToneCurve16(0, 2, Linear);          \n}",
+      "fn_code_pos": [
+        [
+          66,
+          0
+        ],
+        [
+          72,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CreateLinear",
+        "parameters": {},
+        "return_type": "cmsToneCurve"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool SetTextTags(cmsHPROFILE hProfile)\n{\n    cmsMLU *DescriptionMLU, *CopyrightMLU;\n    cmsBool  rc = FALSE;\n  \n    DescriptionMLU  = cmsMLUalloc(0, 1);\n    CopyrightMLU    = cmsMLUalloc(0, 1);\n\n    if (DescriptionMLU == NULL || CopyrightMLU == NULL) goto Error;\n\n    if (!cmsMLUsetASCII(DescriptionMLU,  \"en\", \"US\", \"Little cms Tiff8 CIELab\")) goto Error;\n    if (!cmsMLUsetASCII(CopyrightMLU,    \"en\", \"US\", \"Copyright (c) Marti Maria, 2010. All rights reserved.\")) goto Error;\n\n    if (!cmsWriteTag(hProfile, cmsSigProfileDescriptionTag,  DescriptionMLU)) goto Error;\n    if (!cmsWriteTag(hProfile, cmsSigCopyrightTag,           CopyrightMLU)) goto Error;     \n\n    rc = TRUE;\n\nError:\n\n    if (DescriptionMLU)\n        cmsMLUfree(DescriptionMLU);\n    if (CopyrightMLU)\n        cmsMLUfree(CopyrightMLU);\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          77,
+          0
+        ],
+        [
+          103,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetTextTags",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n\tcmsHPROFILE hProfile;\n\tcmsPipeline *AToB0;\n\tcmsToneCurve* PreLinear[3];\n\tcmsToneCurve *Lin, *Step;\n\n\tfprintf(stderr, \"Creating lcmstiff8.icm...\");\n    \n    remove(\"lcmstiff8.icm\");\n\thProfile = cmsOpenProfileFromFile(\"lcmstiff8.icm\", \"w\");\n\n\t// Create linearization\n\tLin  = CreateLinear();\n\tStep = CreateStep();\n\n\tPreLinear[0] = Lin;\n\tPreLinear[1] = Step;\n\tPreLinear[2] = Step;\n\n    AToB0 = cmsPipelineAlloc(0, 3, 3);\n\n\tcmsPipelineInsertStage(AToB0, \n\t\tcmsAT_BEGIN, cmsStageAllocToneCurves(0, 3, PreLinear));\n\n\tcmsSetColorSpace(hProfile, cmsSigLabData);\n\tcmsSetPCS(hProfile, cmsSigLabData);\n\tcmsSetDeviceClass(hProfile, cmsSigLinkClass);\n\tcmsSetProfileVersion(hProfile, 4.2);\n\n    cmsWriteTag(hProfile, cmsSigAToB0Tag, AToB0);\n\t\n    SetTextTags(hProfile);\n\n\tcmsCloseProfile(hProfile);\n\n\tcmsFreeToneCurve(Lin);\n\tcmsFreeToneCurve(Step);\n\tcmsPipelineFree(AToB0);\n\t\t\n\tfprintf(stderr, \"Done.\\n\");\n\n\treturn 0;\n}",
+      "fn_code_pos": [
+        [
+          106,
+          0
+        ],
+        [
+          149,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "CreateStep(void)",
+      "fn_dec_pos": [
+        [
+          40,
+          14
+        ],
+        [
+          40,
+          30
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CreateStep",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "CreateLinear(void)",
+      "fn_dec_pos": [
+        [
+          67,
+          14
+        ],
+        [
+          67,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CreateLinear",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"lcms2.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

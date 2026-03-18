@@ -1,0 +1,290 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16		#include "ares_setup.h"	
+17			
+18		#ifdef HAVE_NETINET_IN_H	
+19		#  include <netinet/in.h>	
+20		#endif	
+21		#ifdef HAVE_NETDB_H	
+22		#  include <netdb.h>	
+23		#endif	
+24		#ifdef HAVE_ARPA_INET_H	
+25		#  include <arpa/inet.h>	
+26		#endif	
+27			
+28		#include "ares_nameser.h"	
+29			
+30		#include "ares.h"	
+31		#include "ares_inet_net_pton.h"	
+32		#include "ares_platform.h"	
+33		#include "ares_private.h"	
+34			
+35		#ifdef WATT32	
+36		#undef WIN32	
+37		#endif	
+38			
+39		struct addr_query {	
+40		/* Arguments passed to ares_gethostbyaddr() */	
+41		ares_channel channel;	
+42		struct ares_addr addr;	
+43		ares_host_callback callback;	
+44		void *arg;	
+45			
+46		const char *remaining_lookups;	
+47		int timeouts;	
+48		};	
+49			
+50		static void next_lookup(struct addr_query *aquery);	
+51		static void addr_callback(void *arg, int status, int timeouts,	
+52		unsigned char *abuf, int alen);	
+53		static void end_aquery(struct addr_query *aquery, int status,	
+54		struct hostent *host);	
+55		static int file_lookup(struct ares_addr *addr, struct hostent **host);	
+56		static void ptr_rr_name(char *name, const struct ares_addr *addr);	
+57			
+58		void ares_gethostbyaddr(ares_channel channel, const void *addr, int addrlen,	
+59		int family, ares_host_callback callback, void *arg)	
+60	0	{	
+61	0	struct addr_query *aquery;	
+62			
+63	0	if (family !=AF_INET&&family !=AF_INET6)	
+64	0	{	
+65	0	callback(arg,ARES_ENOTIMP, 0,NULL);	
+66	0	return;	
+67	0	}	
+68			
+69	0	if ((family ==AF_INET&&addrlen != sizeof(aquery->addr.addrV4)) ||	
+70	0	(family ==AF_INET6&&addrlen != sizeof(aquery->addr.addrV6)))	
+71	0	{	
+72	0	callback(arg,ARES_ENOTIMP, 0,NULL);	
+73	0	return;	
+74	0	}	
+75			
+76	0	aquery = ares_malloc(sizeof(struct addr_query));	
+77	0	if (!aquery)	
+78	0	{	
+79	0	callback(arg,ARES_ENOMEM, 0,NULL);	
+80	0	return;	
+81	0	}	
+82	0	aquery->channel = channel;	
+83	0	if (family ==AF_INET)	
+84	0	memcpy(&aquery->addr.addrV4, addr, sizeof(aquery->addr.addrV4));	
+85	0	else	
+86	0	memcpy(&aquery->addr.addrV6, addr, sizeof(aquery->addr.addrV6));	
+87	0	aquery->addr.family = family;	
+88	0	aquery->callback = callback;	
+89	0	aquery->arg = arg;	
+90	0	aquery->remaining_lookups = channel->lookups;	
+91	0	aquery->timeouts = 0;	
+92			
+93	0	next_lookup(aquery);	
+94	0	}	
+95			
+96		static void next_lookup(struct addr_query *aquery)	
+97	0	{	
+98	0	const char *p;	
+99	0	char name[128];	
+100	0	int status;	
+101	0	struct hostent *host;	
+102			
+103	0	for (p = aquery->remaining_lookups;*p;p++)	
+104	0	{	
+105	0	switch (*p)	
+106	0	{	
+107	0	case 'b':	
+108	0	ptr_rr_name(name, &aquery->addr);	
+109	0	aquery->remaining_lookups = p + 1;	
+110	0	ares_query(aquery->channel, name,C_IN,T_PTR, addr_callback,	
+111	0	aquery);	
+112	0	return;	
+113	0	case 'f':	
+114	0	status = file_lookup(&aquery->addr, &host);	
+115			
+116		/* this status check below previously checked for !ARES_ENOTFOUND,	
+117		but we should not assume that this single error code is the one	
+118		that can occur, as that is in fact no longer the case */	
+119	0	if (status ==ARES_SUCCESS)	
+120	0	{	
+121	0	end_aquery(aquery, status, host);	
+122	0	return;	
+123	0	}	
+124	0	break;	
+125	0	}	
+126	0	}	
+127	0	end_aquery(aquery,ARES_ENOTFOUND,NULL);	
+128	0	}	
+129			
+130		static void addr_callback(void *arg, int status, int timeouts,	
+131		unsigned char *abuf, int alen)	
+132	0	{	
+133	0	struct addr_query *aquery = (struct addr_query *) arg;	
+134	0	struct hostent *host;	
+135	0	size_t addrlen;	
+136			
+137	0	aquery->timeouts += timeouts;	
+138	0	if (status ==ARES_SUCCESS)	
+139	0	{	
+140	0	if (aquery->addr.family ==AF_INET)	
+141	0	{	
+142	0	addrlen = sizeof(aquery->addr.addrV4);	
+143	0	status = ares_parse_ptr_reply(abuf, alen, &aquery->addr.addrV4,	
+144	0	(int)addrlen,AF_INET, &host);	
+145	0	}	
+146	0	else	
+147	0	{	
+148	0	addrlen = sizeof(aquery->addr.addrV6);	
+149	0	status = ares_parse_ptr_reply(abuf, alen, &aquery->addr.addrV6,	
+150	0	(int)addrlen,AF_INET6, &host);	
+151	0	}	
+152	0	end_aquery(aquery, status, host);	
+153	0	}	
+154	0	elseif (status ==ARES_EDESTRUCTION||status ==ARES_ECANCELLED)	
+155	0	end_aquery(aquery, status,NULL);	
+156	0	else	
+157	0	next_lookup(aquery);	
+158	0	}	
+159			
+160		static void end_aquery(struct addr_query *aquery, int status,	
+161		struct hostent *host)	
+162	0	{	
+163	0	aquery->callback(aquery->arg, status, aquery->timeouts, host);	
+164	0	if (host)	
+165	0	ares_free_hostent(host);	
+166	0	ares_free(aquery);	
+167	0	}	
+168			
+169		static int file_lookup(struct ares_addr *addr, struct hostent **host)	
+170	0	{	
+171	0	FILE *fp;	
+172	0	int status;	
+173	0	int error;	
+174			
+175		#ifdef WIN32	
+176		char PATH_HOSTS[MAX_PATH];	
+177		win_platform platform;	
+178			
+179		PATH_HOSTS[0] = '\0';	
+180			
+181		platform = ares__getplatform();	
+182			
+183		if (platform == WIN_NT) {	
+184		char tmp[MAX_PATH];	
+185		HKEY hkeyHosts;	
+186			
+187		if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, WIN_NS_NT_KEY, 0, KEY_READ,	
+188		&hkeyHosts) == ERROR_SUCCESS)	
+189		{	
+190		DWORD dwLength = MAX_PATH;	
+191		RegQueryValueExA(hkeyHosts, DATABASEPATH, NULL, NULL, (LPBYTE)tmp,	
+192		&dwLength);	
+193		ExpandEnvironmentStringsA(tmp, PATH_HOSTS, MAX_PATH);	
+194		RegCloseKey(hkeyHosts);	
+195		}	
+196		}	
+197		else if (platform == WIN_9X)	
+198		GetWindowsDirectoryA(PATH_HOSTS, MAX_PATH);	
+199		else	
+200		return ARES_ENOTFOUND;	
+201			
+202		strcat(PATH_HOSTS, WIN_PATH_HOSTS);	
+203			
+204		#elif defined(WATT32)	
+205		const char *PATH_HOSTS = _w32_GetHostsFile();	
+206			
+207		if (!PATH_HOSTS)	
+208		return ARES_ENOTFOUND;	
+209		#endif	
+210			
+211	0	fp = fopen(PATH_HOSTS, "r");	
+212	0	if (!fp)	
+213	0	{	
+214	0	error =ERRNO;	
+215	0	switch(error)	
+216	0	{	
+217	0	caseENOENT:	
+218	0	caseESRCH:	
+219	0	returnARES_ENOTFOUND;	
+220	0	default:	
+221	0	DEBUGF(fprintf(stderr, "fopen() failed with error: %d %s\n",	
+222	0	error, strerror(error)));	
+223	0	DEBUGF(fprintf(stderr, "Error opening file: %s\n",	
+224	0	PATH_HOSTS));	
+225	0	*host =NULL;	
+226	0	returnARES_EFILE;	
+227	0	}	
+228	0	}	
+229	0	while ((status = ares__get_hostent(fp, addr->family, host)) ==ARES_SUCCESS)	
+230	0	{	
+231	0	if (addr->family != (*host)->h_addrtype)	
+232	0	{	
+233	0	ares_free_hostent(*host);	
+234	0	continue;	
+235	0	}	
+236	0	if (addr->family ==AF_INET)	
+237	0	{	
+238	0	if (memcmp((*host)->h_addr, &addr->addrV4,	
+239	0	sizeof(addr->addrV4)) == 0)	
+240	0	break;	
+241	0	}	
+242	0	elseif (addr->family ==AF_INET6)	
+243	0	{	
+244	0	if (memcmp((*host)->h_addr, &addr->addrV6,	
+245	0	sizeof(addr->addrV6)) == 0)	
+246	0	break;	
+247	0	}	
+248	0	ares_free_hostent(*host);	
+249	0	}	
+250	0	fclose(fp);	
+251	0	if (status ==ARES_EOF)	
+252	0	status =ARES_ENOTFOUND;	
+253	0	if (status !=ARES_SUCCESS)	
+254	0	*host =NULL;	
+255	0	return status;	
+256	0	}	
+257			
+258		static void ptr_rr_name(char *name, const struct ares_addr *addr)	
+259	0	{	
+260	0	if (addr->family ==AF_INET)	
+261	0	{	
+262	0	unsigned long laddr =ntohl(addr->addrV4.s_addr);	
+263	0	unsigned long a1 = (laddr >> 24UL) & 0xFFUL;	
+264	0	unsigned long a2 = (laddr >> 16UL) & 0xFFUL;	
+265	0	unsigned long a3 = (laddr >>  8UL) & 0xFFUL;	
+266	0	unsigned long a4 = laddr & 0xFFUL;	
+267	0	sprintf(name, "%lu.%lu.%lu.%lu.in-addr.arpa", a4, a3, a2, a1);	
+268	0	}	
+269	0	else	
+270	0	{	
+271	0	unsigned char *bytes = (unsigned char *)&addr->addrV6;	
+272		/* There are too many arguments to do this in one line using	
+273		* minimally C89-compliant compilers */	
+274	0	sprintf(name,	
+275	0	"%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.",	
+276	0	bytes[15]&0xf, bytes[15] >> 4, bytes[14]&0xf, bytes[14] >> 4,	
+277	0	bytes[13]&0xf, bytes[13] >> 4, bytes[12]&0xf, bytes[12] >> 4,	
+278	0	bytes[11]&0xf, bytes[11] >> 4, bytes[10]&0xf, bytes[10] >> 4,	
+279	0	bytes[9]&0xf, bytes[9] >> 4, bytes[8]&0xf, bytes[8] >> 4);	
+280	0	sprintf(name+strlen(name),	
+281	0	"%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.ip6.arpa",	
+282	0	bytes[7]&0xf, bytes[7] >> 4, bytes[6]&0xf, bytes[6] >> 4,	
+283	0	bytes[5]&0xf, bytes[5] >> 4, bytes[4]&0xf, bytes[4] >> 4,	
+284	0	bytes[3]&0xf, bytes[3] >> 4, bytes[2]&0xf, bytes[2] >> 4,	
+285	0	bytes[1]&0xf, bytes[1] >> 4, bytes[0]&0xf, bytes[0] >> 4);	
+286	0	}	
+287	0	}	
+
+

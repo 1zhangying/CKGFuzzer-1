@@ -1,0 +1,127 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int ThunderSetupDecode(TIFF *tif)\n{\n    static const char module[] = \"ThunderSetupDecode\";\n\n    if (tif->tif_dir.td_bitspersample != 4)\n    {\n        TIFFErrorExtR(tif, module,\n                      \"Wrong bitspersample value (%d), Thunder decoder only \"\n                      \"supports 4bits per sample.\",\n                      (int)tif->tif_dir.td_bitspersample);\n        return 0;\n    }\n\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          68,
+          0
+        ],
+        [
+          82,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ThunderSetupDecode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ThunderDecode(TIFF *tif, uint8_t *op0, tmsize_t maxpixels)\n{\n    static const char module[] = \"ThunderDecode\";\n    register unsigned char *bp;\n    register tmsize_t cc;\n    unsigned int lastpixel;\n    tmsize_t npixels;\n    uint8_t *op = op0;\n\n    bp = (unsigned char *)tif->tif_rawcp;\n    cc = tif->tif_rawcc;\n    lastpixel = 0;\n    npixels = 0;\n    while (cc > 0 && npixels < maxpixels)\n    {\n        int n, delta;\n\n        n = *bp++;\n        cc--;\n        switch (n & THUNDER_CODE)\n        {\n            case THUNDER_RUN: /* pixel run */\n                /*\n                 * Replicate the last pixel n times,\n                 * where n is the lower-order 6 bits.\n                 */\n                if (n == 0)\n                    break;\n                if (npixels & 1)\n                {\n                    op[0] |= lastpixel;\n                    lastpixel = *op++;\n                    npixels++;\n                    n--;\n                }\n                else\n                    lastpixel |= lastpixel << 4;\n                npixels += n;\n                if (npixels > maxpixels)\n                    break;\n                for (; n > 0; n -= 2)\n                    *op++ = (uint8_t)lastpixel;\n                if (n == -1)\n                    *--op &= 0xf0;\n                lastpixel &= 0xf;\n                break;\n            case THUNDER_2BITDELTAS: /* 2-bit deltas */\n                if ((delta = ((n >> 4) & 3)) != DELTA2_SKIP)\n                    SETPIXEL(op,\n                             (unsigned)((int)lastpixel + twobitdeltas[delta]));\n                if ((delta = ((n >> 2) & 3)) != DELTA2_SKIP)\n                    SETPIXEL(op,\n                             (unsigned)((int)lastpixel + twobitdeltas[delta]));\n                if ((delta = (n & 3)) != DELTA2_SKIP)\n                    SETPIXEL(op,\n                             (unsigned)((int)lastpixel + twobitdeltas[delta]));\n                break;\n            case THUNDER_3BITDELTAS: /* 3-bit deltas */\n                if ((delta = ((n >> 3) & 7)) != DELTA3_SKIP)\n                    SETPIXEL(\n                        op, (unsigned)((int)lastpixel + threebitdeltas[delta]));\n                if ((delta = (n & 7)) != DELTA3_SKIP)\n                    SETPIXEL(\n                        op, (unsigned)((int)lastpixel + threebitdeltas[delta]));\n                break;\n            case THUNDER_RAW: /* raw data */\n                SETPIXEL(op, n);\n                break;\n        }\n    }\n    tif->tif_rawcp = (uint8_t *)bp;\n    tif->tif_rawcc = cc;\n    if (npixels != maxpixels)\n    {\n        uint8_t *op_end = op0 + (maxpixels + 1) / 2;\n        memset(op, 0, (size_t)(op_end - op));\n        TIFFErrorExtR(tif, module,\n                      \"%s data at scanline %lu (%\" PRIu64 \" != %\" PRIu64 \")\",\n                      npixels < maxpixels ? \"Not enough\" : \"Too much\",\n                      (unsigned long)tif->tif_row, (uint64_t)npixels,\n                      (uint64_t)maxpixels);\n        return (0);\n    }\n\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          84,
+          0
+        ],
+        [
+          169,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ThunderDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "op0": "uint8_t",
+          "maxpixels": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ThunderDecodeRow(TIFF *tif, uint8_t *buf, tmsize_t occ, uint16_t s)\n{\n    static const char module[] = \"ThunderDecodeRow\";\n    uint8_t *row = buf;\n\n    (void)s;\n    if (occ % tif->tif_scanlinesize)\n    {\n        TIFFErrorExtR(tif, module, \"Fractional scanlines cannot be read\");\n        return (0);\n    }\n    while (occ > 0)\n    {\n        if (!ThunderDecode(tif, row, tif->tif_dir.td_imagewidth))\n            return (0);\n        occ -= tif->tif_scanlinesize;\n        row += tif->tif_scanlinesize;\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          171,
+          0
+        ],
+        [
+          190,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ThunderDecodeRow",
+        "parameters": {
+          "tif": "TIFF",
+          "buf": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFInitThunderScan(TIFF *tif, int scheme)\n{\n    (void)scheme;\n\n    tif->tif_setupdecode = ThunderSetupDecode;\n    tif->tif_decoderow = ThunderDecodeRow;\n    tif->tif_decodestrip = ThunderDecodeRow;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          192,
+          0
+        ],
+        [
+          200,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFInitThunderScan",
+        "parameters": {
+          "tif": "TIFF",
+          "scheme": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include <assert.h>\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

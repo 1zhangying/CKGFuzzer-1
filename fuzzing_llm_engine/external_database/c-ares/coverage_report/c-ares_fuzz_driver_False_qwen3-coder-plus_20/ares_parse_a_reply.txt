@@ -1,0 +1,93 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		* Copyright (C) 2019 by Andrew Selivanov	
+4		*	
+5		* Permission to use, copy, modify, and distribute this	
+6		* software and its documentation for any purpose and without	
+7		* fee is hereby granted, provided that the above copyright	
+8		* notice appear in all copies and that both that copyright	
+9		* notice and this permission notice appear in supporting	
+10		* documentation, and that the name of M.I.T. not be used in	
+11		* advertising or publicity pertaining to distribution of the	
+12		* software without specific, written prior permission.	
+13		* M.I.T. makes no representations about the suitability of	
+14		* this software for any purpose.  It is provided "as is"	
+15		* without express or implied warranty.	
+16		*/	
+17			
+18		#include "ares_setup.h"	
+19			
+20		#ifdef HAVE_NETINET_IN_H	
+21		#  include <netinet/in.h>	
+22		#endif	
+23		#ifdef HAVE_NETDB_H	
+24		#  include <netdb.h>	
+25		#endif	
+26		#ifdef HAVE_ARPA_INET_H	
+27		#  include <arpa/inet.h>	
+28		#endif	
+29			
+30		#include "ares_nameser.h"	
+31			
+32		#ifdef HAVE_STRINGS_H	
+33		#  include <strings.h>	
+34		#endif	
+35			
+36		#ifdef HAVE_LIMITS_H	
+37		#  include <limits.h>	
+38		#endif	
+39			
+40		#include "ares.h"	
+41		#include "ares_dns.h"	
+42		#include "ares_private.h"	
+43			
+44		int ares_parse_a_reply(const unsigned char *abuf, int alen,	
+45		struct hostent **host, struct ares_addrttl *addrttls,	
+46		int *naddrttls)	
+47	435	{	
+48	435	struct ares_addrinfo ai;	
+49	435	char *question_hostname = NULL;	
+50	435	int status;	
+51	435	int req_naddrttls = 0;	
+52			
+53	435	if (naddrttls)	
+54	435	{	
+55	435	req_naddrttls = *naddrttls;	
+56	435	*naddrttls = 0;	
+57	435	}	
+58			
+59	435	memset(&ai, 0, sizeof(ai));	
+60			
+61	435	status = ares__parse_into_addrinfo(abuf, alen, 0, 0, &ai);	
+62	435	if (status != ARES_SUCCESS && status != ARES_ENODATA)	
+63	369	{	
+64	369	goto fail;	
+65	369	}	
+66			
+67	66	if (host != NULL)	
+68	66	{	
+69	66	status = ares__addrinfo2hostent(&ai, AF_INET, host);	
+70	66	if (status != ARES_SUCCESS && status != ARES_ENODATA)	
+71	0	{	
+72	0	goto fail;	
+73	0	}	
+74	66	}	
+75			
+76	66	if (addrttls != NULL && req_naddrttls)	
+77	66	{	
+78	66	ares__addrinfo2addrttl(&ai, AF_INET, req_naddrttls, addrttls,	
+79	66	NULL, naddrttls);	
+80	66	}	
+81			
+82			
+83	435	fail:	
+84	435	ares__freeaddrinfo_cnames(ai.cnames);	
+85	435	ares__freeaddrinfo_nodes(ai.nodes);	
+86	435	ares_free(ai.name);	
+87	435	ares_free(question_hostname);	
+88			
+89	435	return status;	
+90	66	}	
+
+

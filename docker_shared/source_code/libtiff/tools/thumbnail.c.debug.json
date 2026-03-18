@@ -1,0 +1,640 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    TIFF *in;\n    TIFF *out;\n    int c;\n\n    while ((c = getopt(argc, argv, \"w:h:c:\")) != -1)\n    {\n        switch (c)\n        {\n            case 'w':\n                tnw = strtoul(optarg, NULL, 0);\n                break;\n            case 'h':\n                tnh = strtoul(optarg, NULL, 0);\n                break;\n            case 'c':\n                contrast = streq(optarg, \"exp50\")    ? EXP50\n                           : streq(optarg, \"exp60\")  ? EXP60\n                           : streq(optarg, \"exp70\")  ? EXP70\n                           : streq(optarg, \"exp80\")  ? EXP80\n                           : streq(optarg, \"exp90\")  ? EXP90\n                           : streq(optarg, \"exp\")    ? EXP\n                           : streq(optarg, \"linear\") ? LINEAR\n                                                     : EXP;\n                break;\n            default:\n                usage(EXIT_FAILURE);\n        }\n    }\n    if (argc - optind != 2)\n        usage(EXIT_FAILURE);\n\n    out = TIFFOpen(argv[optind + 1], \"w\");\n    if (out == NULL)\n        return 2;\n    in = TIFFOpen(argv[optind], \"r\");\n    if (in == NULL)\n        return 2;\n\n    thumbnail = (uint8_t *)_TIFFmalloc(tnw * tnh);\n    if (!thumbnail)\n    {\n        TIFFError(TIFFFileName(in),\n                  \"Can't allocate space for thumbnail buffer.\");\n        return EXIT_FAILURE;\n    }\n\n    if (in != NULL)\n    {\n        initScale();\n        do\n        {\n            if (!generateThumbnail(in, out))\n                goto bad;\n            if (!cpIFD(in, out) || !TIFFWriteDirectory(out))\n                goto bad;\n        } while (TIFFReadDirectory(in));\n        (void)TIFFClose(in);\n    }\n    (void)TIFFClose(out);\n    return EXIT_SUCCESS;\nbad:\n    (void)TIFFClose(out);\n    return EXIT_FAILURE;\n}",
+      "fn_code_pos": [
+        [
+          78,
+          0
+        ],
+        [
+          143,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void cpTag(TIFF *in, TIFF *out, uint16_t tag, uint16_t count,\n                  TIFFDataType type)\n{\n    switch (type)\n    {\n        case TIFF_SHORT:\n            if (count == 1)\n            {\n                uint16_t shortv;\n                CopyField(tag, shortv);\n            }\n            else if (count == 2)\n            {\n                uint16_t shortv1, shortv2;\n                CopyField2(tag, shortv1, shortv2);\n            }\n            else if (count == 4)\n            {\n                uint16_t *tr, *tg, *tb, *ta;\n                CopyField4(tag, tr, tg, tb, ta);\n            }\n            else if (count == (uint16_t)-1)\n            {\n                uint16_t shortv1;\n                uint16_t *shortav;\n                CopyField2(tag, shortv1, shortav);\n            }\n            break;\n        case TIFF_LONG:\n        {\n            uint32_t longv;\n            CopyField(tag, longv);\n        }\n        break;\n        case TIFF_LONG8:\n        {\n            uint64_t longv8;\n            CopyField(tag, longv8);\n        }\n        break;\n        case TIFF_SLONG8:\n        {\n            int64_t longv8;\n            CopyField(tag, longv8);\n        }\n        break;\n        case TIFF_RATIONAL:\n            if (count == 1)\n            {\n                float floatv;\n                CopyField(tag, floatv);\n            }\n            else if (count == (uint16_t)-1)\n            {\n                float *floatav;\n                CopyField(tag, floatav);\n            }\n            break;\n        case TIFF_ASCII:\n        {\n            char *stringv;\n            CopyField(tag, stringv);\n        }\n        break;\n        case TIFF_DOUBLE:\n            if (count == 1)\n            {\n                double doublev;\n                CopyField(tag, doublev);\n            }\n            else if (count == (uint16_t)-1)\n            {\n                double *doubleav;\n                CopyField(tag, doubleav);\n            }\n            break;\n        case TIFF_IFD8:\n        {\n            toff_t ifd8;\n            CopyField(tag, ifd8);\n        }\n        break;\n        default:\n            TIFFError(TIFFFileName(in),\n                      \"Data type %d is not supported, tag %d skipped.\", tag,\n                      type);\n    }\n}",
+      "fn_code_pos": [
+        [
+          158,
+          0
+        ],
+        [
+          245,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpTag",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF",
+          "tag": "uint16_t",
+          "count": "uint16_t",
+          "type": "TIFFDataType"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void cpTags(TIFF *in, TIFF *out)\n{\n    const struct cpTag *p;\n    for (p = tags; p < &tags[NTAGS]; p++)\n    {\n        /* Horrible: but TIFFGetField() expects 2 arguments to be passed */\n        /* if we request a tag that is defined in a codec, but that codec */\n        /* isn't used */\n        if (p->tag == TIFFTAG_GROUP3OPTIONS)\n        {\n            uint16_t compression;\n            if (!TIFFGetField(in, TIFFTAG_COMPRESSION, &compression) ||\n                compression != COMPRESSION_CCITTFAX3)\n                continue;\n        }\n        if (p->tag == TIFFTAG_GROUP4OPTIONS)\n        {\n            uint16_t compression;\n            if (!TIFFGetField(in, TIFFTAG_COMPRESSION, &compression) ||\n                compression != COMPRESSION_CCITTFAX4)\n                continue;\n        }\n        cpTag(in, out, p->tag, p->count, p->type);\n    }\n}",
+      "fn_code_pos": [
+        [
+          312,
+          0
+        ],
+        [
+          336,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpTags",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int cpStrips(TIFF *in, TIFF *out)\n{\n    tsize_t bufsize = TIFFStripSize(in);\n    unsigned char *buf = (unsigned char *)_TIFFmalloc(bufsize);\n\n    if (buf)\n    {\n        tstrip_t s, ns = TIFFNumberOfStrips(in);\n        uint64_t *bytecounts;\n\n        TIFFGetField(in, TIFFTAG_STRIPBYTECOUNTS, &bytecounts);\n        for (s = 0; s < ns; s++)\n        {\n            if (bytecounts[s] > (uint64_t)bufsize)\n            {\n                buf =\n                    (unsigned char *)_TIFFrealloc(buf, (tmsize_t)bytecounts[s]);\n                if (!buf)\n                    goto bad;\n                bufsize = (tmsize_t)bytecounts[s];\n            }\n            if (TIFFReadRawStrip(in, s, buf, (tmsize_t)bytecounts[s]) < 0 ||\n                TIFFWriteRawStrip(out, s, buf, (tmsize_t)bytecounts[s]) < 0)\n            {\n                _TIFFfree(buf);\n                return 0;\n            }\n        }\n        _TIFFfree(buf);\n        return 1;\n    }\n\nbad:\n    TIFFError(TIFFFileName(in), \"Can't allocate space for strip buffer.\");\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          339,
+          0
+        ],
+        [
+          374,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpStrips",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int cpTiles(TIFF *in, TIFF *out)\n{\n    tsize_t bufsize = TIFFTileSize(in);\n    unsigned char *buf = (unsigned char *)_TIFFmalloc(bufsize);\n\n    if (buf)\n    {\n        ttile_t t, nt = TIFFNumberOfTiles(in);\n        uint64_t *bytecounts;\n\n        TIFFGetField(in, TIFFTAG_TILEBYTECOUNTS, &bytecounts);\n        for (t = 0; t < nt; t++)\n        {\n            if (bytecounts[t] > (uint64_t)bufsize)\n            {\n                buf =\n                    (unsigned char *)_TIFFrealloc(buf, (tmsize_t)bytecounts[t]);\n                if (!buf)\n                    goto bad;\n                bufsize = (tmsize_t)bytecounts[t];\n            }\n            if (TIFFReadRawTile(in, t, buf, (tmsize_t)bytecounts[t]) < 0 ||\n                TIFFWriteRawTile(out, t, buf, (tmsize_t)bytecounts[t]) < 0)\n            {\n                _TIFFfree(buf);\n                return 0;\n            }\n        }\n        _TIFFfree(buf);\n        return 1;\n    }\n\nbad:\n    TIFFError(TIFFFileName(in), \"Can't allocate space for tile buffer.\");\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          376,
+          0
+        ],
+        [
+          411,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpTiles",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int cpIFD(TIFF *in, TIFF *out)\n{\n    cpTags(in, out);\n    if (TIFFIsTiled(in))\n    {\n        if (!cpTiles(in, out))\n            return (0);\n    }\n    else\n    {\n        if (!cpStrips(in, out))\n            return (0);\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          413,
+          0
+        ],
+        [
+          427,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpIFD",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void setupBitsTables()\n{\n    int i;\n    for (i = 0; i < 256; i++)\n    {\n        int n = 0;\n        if (i & 0x01)\n            n++;\n        if (i & 0x02)\n            n++;\n        if (i & 0x04)\n            n++;\n        if (i & 0x08)\n            n++;\n        if (i & 0x10)\n            n++;\n        if (i & 0x20)\n            n++;\n        if (i & 0x40)\n            n++;\n        if (i & 0x80)\n            n++;\n        bits[i] = n;\n    }\n}",
+      "fn_code_pos": [
+        [
+          440,
+          0
+        ],
+        [
+          464,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setupBitsTables",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int clamp(float v, int low, int high)\n{\n    return (v < low ? low : v > high ? high : (int)v);\n}",
+      "fn_code_pos": [
+        [
+          466,
+          0
+        ],
+        [
+          469,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "clamp",
+        "parameters": {
+          "v": "float",
+          "low": "int",
+          "high": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void expFill(float pct[], uint32_t p, uint32_t n)\n{\n    uint32_t i;\n    uint32_t c = (p * n) / 100;\n    for (i = 1; i < c; i++)\n        pct[i] = (float)(1 - exp(i / ((double)(n - 1))) / M_E);\n    for (; i < n; i++)\n        pct[i] = 0.;\n}",
+      "fn_code_pos": [
+        [
+          475,
+          0
+        ],
+        [
+          483,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "expFill",
+        "parameters": {
+          "pct": "float",
+          "p": "uint32_t",
+          "n": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void setupCmap()\n{\n    float pct[256]; /* known to be large enough */\n    uint32_t i;\n    pct[0] = 1; /* force white */\n    switch (contrast)\n    {\n        case EXP50:\n            expFill(pct, 50, 256);\n            break;\n        case EXP60:\n            expFill(pct, 60, 256);\n            break;\n        case EXP70:\n            expFill(pct, 70, 256);\n            break;\n        case EXP80:\n            expFill(pct, 80, 256);\n            break;\n        case EXP90:\n            expFill(pct, 90, 256);\n            break;\n        case EXP:\n            expFill(pct, 100, 256);\n            break;\n        case LINEAR:\n            for (i = 1; i < 256; i++)\n                pct[i] = 1 - ((float)i) / (256 - 1);\n            break;\n    }\n    switch (photometric)\n    {\n        case PHOTOMETRIC_MINISWHITE:\n            for (i = 0; i < 256; i++)\n                cmap[i] = clamp(255 * pct[(256 - 1) - i], 0, 255);\n            break;\n        case PHOTOMETRIC_MINISBLACK:\n            for (i = 0; i < 256; i++)\n                cmap[i] = clamp(255 * pct[i], 0, 255);\n            break;\n    }\n}",
+      "fn_code_pos": [
+        [
+          485,
+          0
+        ],
+        [
+          526,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setupCmap",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void initScale()\n{\n    src0 = (uint8_t *)_TIFFmalloc(sizeof(uint8_t) * tnw);\n    src1 = (uint8_t *)_TIFFmalloc(sizeof(uint8_t) * tnw);\n    src2 = (uint8_t *)_TIFFmalloc(sizeof(uint8_t) * tnw);\n    rowoff = (uint32_t *)_TIFFmalloc(sizeof(uint32_t) * tnw);\n    filterWidth = 0;\n    stepDstWidth = stepSrcWidth = 0;\n    setupBitsTables();\n}",
+      "fn_code_pos": [
+        [
+          528,
+          0
+        ],
+        [
+          537,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "initScale",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void setupStepTables(uint32_t sw)\n{\n    if (stepSrcWidth != sw || stepDstWidth != tnw)\n    {\n        int step = sw;\n        int limit = tnw;\n        int err = 0;\n        uint32_t sx = 0;\n        uint32_t x;\n        int fw;\n        uint8_t b;\n        for (x = 0; x < tnw; x++)\n        {\n            uint32_t sx0 = sx;\n            err += step;\n            while (err >= limit)\n            {\n                err -= limit;\n                sx++;\n            }\n            rowoff[x] = sx0 >> 3;\n            fw = sx - sx0; /* width */\n            b = (fw < 8) ? (uint8_t)(0xff << (8 - fw)) : (uint8_t)0xff;\n            src0[x] = b >> (sx0 & 7);\n            fw -= 8 - (sx0 & 7);\n            if (fw < 0)\n                fw = 0;\n            src1[x] = fw >> 3;\n            fw -= (fw >> 3) << 3;\n            src2[x] = 0xff << (8 - fw);\n        }\n        stepSrcWidth = sw;\n        stepDstWidth = tnw;\n    }\n}",
+      "fn_code_pos": [
+        [
+          543,
+          0
+        ],
+        [
+          577,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setupStepTables",
+        "parameters": {
+          "sw": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void setrow(uint8_t *row, uint32_t nrows, const uint8_t *rows[])\n{\n    uint32_t x;\n    uint32_t area = nrows * filterWidth;\n    for (x = 0; x < tnw; x++)\n    {\n        uint32_t mask0 = src0[x];\n        uint32_t fw = src1[x];\n        uint32_t mask1 = src1[x];\n        uint32_t off = rowoff[x];\n        uint32_t acc = 0;\n        uint32_t y, i;\n        for (y = 0; y < nrows; y++)\n        {\n            const uint8_t *src = rows[y] + off;\n            acc += bits[*src++ & mask0];\n            switch (fw)\n            {\n                default:\n                    for (i = fw; i > 8; i--)\n                        acc += bits[*src++];\n                    /* fall through... */\n                case 8:\n                    acc += bits[*src++]; /* fall through */\n                case 7:\n                    acc += bits[*src++]; /* fall through */\n                case 6:\n                    acc += bits[*src++]; /* fall through */\n                case 5:\n                    acc += bits[*src++]; /* fall through */\n                case 4:\n                    acc += bits[*src++]; /* fall through */\n                case 3:\n                    acc += bits[*src++]; /* fall through */\n                case 2:\n                    acc += bits[*src++]; /* fall through */\n                case 1:\n                    acc += bits[*src++]; /* fall through */\n                case 0:\n                    break;\n            }\n            acc += bits[*src & mask1];\n        }\n        *row++ = cmap[(255 * acc) / area];\n    }\n}",
+      "fn_code_pos": [
+        [
+          579,
+          0
+        ],
+        [
+          624,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setrow",
+        "parameters": {
+          "row": "uint8_t",
+          "nrows": "uint32_t",
+          "rows": "uint8_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void setImage1(const uint8_t *br, uint32_t rw, uint32_t rh)\n{\n    int step = rh;\n    int limit = tnh;\n    int err = 0;\n    int bpr = TIFFhowmany8(rw);\n    int sy = 0;\n    uint8_t *row = thumbnail;\n    uint32_t dy;\n    for (dy = 0; dy < tnh; dy++)\n    {\n        const uint8_t *rows[256];\n        uint32_t nrows = 1;\n        fprintf(stderr, \"bpr=%d, sy=%d, bpr*sy=%d\\n\", bpr, sy, bpr * sy);\n        rows[0] = br + bpr * sy;\n        err += step;\n        while (err >= limit)\n        {\n            err -= limit;\n            sy++;\n            if (err >= limit)\n            {\n                /* We should perhaps error loudly, but I can't make sense of\n                 * that */\n                /* code... */\n                if (nrows == 256)\n                    break;\n                rows[nrows++] = br + bpr * sy;\n            }\n        }\n        setrow(row, nrows, rows);\n        row += tnw;\n    }\n}",
+      "fn_code_pos": [
+        [
+          632,
+          0
+        ],
+        [
+          665,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setImage1",
+        "parameters": {
+          "br": "uint8_t",
+          "rw": "uint32_t",
+          "rh": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void setImage(const uint8_t *br, uint32_t rw, uint32_t rh)\n{\n    filterWidth = (uint16_t)ceil((double)rw / (double)tnw);\n    setupStepTables(rw);\n    setImage1(br, rw, rh);\n}",
+      "fn_code_pos": [
+        [
+          667,
+          0
+        ],
+        [
+          672,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setImage",
+        "parameters": {
+          "br": "uint8_t",
+          "rw": "uint32_t",
+          "rh": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int generateThumbnail(TIFF *in, TIFF *out)\n{\n    unsigned char *raster;\n    unsigned char *rp;\n    uint32_t sw, sh, rps;\n    uint16_t bps, spp;\n    tsize_t rowsize, rastersize;\n    tstrip_t s, ns = TIFFNumberOfStrips(in);\n    toff_t diroff[1];\n\n    TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &sw);\n    TIFFGetField(in, TIFFTAG_IMAGELENGTH, &sh);\n    TIFFGetFieldDefaulted(in, TIFFTAG_BITSPERSAMPLE, &bps);\n    TIFFGetFieldDefaulted(in, TIFFTAG_SAMPLESPERPIXEL, &spp);\n    TIFFGetFieldDefaulted(in, TIFFTAG_ROWSPERSTRIP, &rps);\n    if (spp != 1 || bps != 1)\n        return 0;\n    rowsize = TIFFScanlineSize(in);\n    rastersize = sh * rowsize;\n    fprintf(stderr, \"rastersize=%u\\n\", (unsigned int)rastersize);\n    /* +3 : add a few guard bytes since setrow() can read a bit */\n    /* outside buffer */\n    raster = (unsigned char *)_TIFFmalloc(rastersize + 3);\n    if (!raster)\n    {\n        TIFFError(TIFFFileName(in), \"Can't allocate space for raster buffer.\");\n        return 0;\n    }\n    raster[rastersize] = 0;\n    raster[rastersize + 1] = 0;\n    raster[rastersize + 2] = 0;\n    rp = raster;\n    for (s = 0; s < ns; s++)\n    {\n        (void)TIFFReadEncodedStrip(in, s, rp, -1);\n        rp += rps * rowsize;\n    }\n    TIFFGetField(in, TIFFTAG_PHOTOMETRIC, &photometric);\n    setupCmap();\n    setImage(raster, sw, sh);\n    _TIFFfree(raster);\n\n    TIFFSetField(out, TIFFTAG_SUBFILETYPE, FILETYPE_REDUCEDIMAGE);\n    TIFFSetField(out, TIFFTAG_IMAGEWIDTH, (uint32_t)tnw);\n    TIFFSetField(out, TIFFTAG_IMAGELENGTH, (uint32_t)tnh);\n    TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, (uint16_t)8);\n    TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, (uint16_t)1);\n    TIFFSetField(out, TIFFTAG_COMPRESSION, COMPRESSION_PACKBITS);\n    TIFFSetField(out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISWHITE);\n    TIFFSetField(out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);\n    TIFFSetField(out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);\n    cpTag(in, out, TIFFTAG_SOFTWARE, (uint16_t)-1, TIFF_ASCII);\n    cpTag(in, out, TIFFTAG_IMAGEDESCRIPTION, (uint16_t)-1, TIFF_ASCII);\n    cpTag(in, out, TIFFTAG_DATETIME, (uint16_t)-1, TIFF_ASCII);\n    cpTag(in, out, TIFFTAG_HOSTCOMPUTER, (uint16_t)-1, TIFF_ASCII);\n    diroff[0] = 0UL;\n    TIFFSetField(out, TIFFTAG_SUBIFD, 1, diroff);\n    return (TIFFWriteEncodedStrip(out, 0, thumbnail, tnw * tnh) != -1 &&\n            TIFFWriteDirectory(out) != -1);\n}",
+      "fn_code_pos": [
+        [
+          674,
+          0
+        ],
+        [
+          733,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "generateThumbnail",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    int i;\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"%s\\n\\n\", TIFFGetVersion());\n    for (i = 0; usage_info[i] != NULL; i++)\n        fprintf(out, \"%s\\n\", usage_info[i]);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          751,
+          0
+        ],
+        [
+          760,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "cpIFD(TIFF *, TIFF *)",
+      "fn_dec_pos": [
+        [
+          68,
+          11
+        ],
+        [
+          68,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpIFD",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "generateThumbnail(TIFF *, TIFF *)",
+      "fn_dec_pos": [
+        [
+          69,
+          11
+        ],
+        [
+          69,
+          44
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "generateThumbnail",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "initScale()",
+      "fn_dec_pos": [
+        [
+          70,
+          12
+        ],
+        [
+          70,
+          23
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "initScale",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "usage(int code)",
+      "fn_dec_pos": [
+        [
+          71,
+          12
+        ],
+        [
+          71,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct cpTag\n{\n    uint16_t tag;\n    uint16_t count;\n    TIFFDataType type;\n}",
+      {
+        "tag": "uint16_t",
+        "count": "uint16_t",
+        "type": "TIFFDataType"
+      },
+      "cpTag",
+      [
+        252,
+        13
+      ],
+      [
+        257,
+        1
+      ]
+    ],
+    [
+      "struct cpTag\n{\n    uint16_t tag;\n    uint16_t count;\n    TIFFDataType type;\n}",
+      {
+        "tag": "uint16_t",
+        "count": "uint16_t",
+        "type": "TIFFDataType"
+      },
+      "cpTag",
+      [
+        252,
+        13
+      ],
+      [
+        257,
+        1
+      ]
+    ],
+    [
+      "struct cpTag",
+      {},
+      "",
+      [
+        314,
+        10
+      ],
+      [
+        314,
+        22
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": [
+    [
+      "typedef enum\n{\n    EXP50,\n    EXP60,\n    EXP70,\n    EXP80,\n    EXP90,\n    EXP,\n    LINEAR\n} Contrast;",
+      {
+        "EXP50": "",
+        "EXP60": "",
+        "EXP70": "",
+        "EXP80": "",
+        "EXP90": "",
+        "EXP": "",
+        "LINEAR": ""
+      },
+      "Contrast",
+      [
+        52,
+        0
+      ],
+      [
+        61,
+        11
+      ]
+    ]
+  ]
+}

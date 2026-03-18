@@ -1,0 +1,402 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void *limitMalloc(tmsize_t s)\n{\n    /* tmsize_t is signed and _TIFFmalloc() converts s to size_t. Therefore\n     * check for negative s. */\n    if (maxMalloc && ((s > maxMalloc) || (s < 0)))\n    {\n        fprintf(stderr,\n                \"MemoryLimitError: allocation of %\" TIFF_SSIZE_FORMAT\n                \" bytes is forbidden. Limit is %\" TIFF_SSIZE_FORMAT \".\\n\",\n                s, maxMalloc);\n        fprintf(stderr, \"                  use -M option to change limit.\\n\");\n        return NULL;\n    }\n    return _TIFFmalloc(s);\n}",
+      "fn_code_pos": [
+        [
+          72,
+          0
+        ],
+        [
+          86,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "limitMalloc",
+        "parameters": {
+          "s": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void *limitRealloc(void *buf, tmsize_t s)\n{\n    if (maxMalloc && ((s > maxMalloc) || (s < 0)))\n    {\n        fprintf(stderr,\n                \"MemoryLimitError: re-allocation of %\" TIFF_SSIZE_FORMAT\n                \" bytes is forbidden. Limit is %\" TIFF_SSIZE_FORMAT \".\\n\",\n                s, maxMalloc);\n        fprintf(stderr, \"                  use -M option to change limit.\\n\");\n        if (buf != NULL)\n            _TIFFfree(buf);\n        return NULL;\n    }\n    return _TIFFrealloc(buf, s);\n}",
+      "fn_code_pos": [
+        [
+          88,
+          0
+        ],
+        [
+          102,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "limitRealloc",
+        "parameters": {
+          "buf": "void",
+          "s": "tmsize_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    TIFF *in, *out;\n#if !HAVE_DECL_OPTARG\n    extern char *optarg;\n    extern int optind;\n#endif\n    int c;\n\n    while ((c = getopt(argc, argv, \"M:\")) != -1)\n    {\n        switch (c)\n        {\n            case 'M':\n                maxMalloc = (tmsize_t)strtoul(optarg, NULL, 0) << 20;\n                if ((maxMalloc == 0) && (optarg[0] != '0'))\n                {\n                    fprintf(stderr,\n                            \"tiffsplit: Error: Option -M was not followed by a \"\n                            \"number but <%s>\\n\",\n                            optarg);\n                    usage(EXIT_FAILURE);\n                }\n                break;\n            case '?':\n                usage(EXIT_SUCCESS);\n                break;\n            default:\n                break;\n        }\n    }\n\n    c = argc - optind;\n    if (c < 1 || c > 2)\n        usage(EXIT_FAILURE);\n    if (c > 1)\n    {\n        strncpy(fname, argv[optind + 1], sizeof(fname));\n        fname[sizeof(fname) - 1] = '\\0';\n    }\n\n    TIFFOpenOptions *opts = TIFFOpenOptionsAlloc();\n    if (opts == NULL)\n    {\n        return EXIT_FAILURE;\n    }\n    TIFFOpenOptionsSetMaxSingleMemAlloc(opts, maxMalloc);\n    in = TIFFOpenExt(argv[optind], \"r\", opts);\n    if (in == NULL)\n    {\n        fprintf(stderr, \"tiffsplit: Error: Could not open %s \\n\", argv[optind]);\n        TIFFOpenOptionsFree(opts);\n        usage(EXIT_FAILURE);\n    }\n\n    do\n    {\n        size_t path_len;\n        char *path = NULL;\n\n        newfilename();\n\n        path_len = strlen(fname) + sizeof(TIFF_SUFFIX);\n        path = (char *)limitMalloc(path_len);\n        if (!path)\n        {\n            fprintf(stderr,\n                    \"tiffsplit: Error: Can't allocate %\" TIFF_SIZE_FORMAT\n                    \" bytes for path-variable.\\n\",\n                    path_len);\n            TIFFClose(in);\n            TIFFOpenOptionsFree(opts);\n            return (EXIT_FAILURE);\n        }\n        strncpy(path, fname, path_len);\n        path[path_len - 1] = '\\0';\n        strncat(path, TIFF_SUFFIX, path_len - strlen(path) - 1);\n        out = TIFFOpenExt(path, TIFFIsBigEndian(in) ? \"wb\" : \"wl\", opts);\n\n        if (out == NULL)\n        {\n            TIFFClose(in);\n            fprintf(stderr,\n                    \"tiffsplit: Error: Could not open output file %s \\n\", path);\n            _TIFFfree(path);\n            TIFFOpenOptionsFree(opts);\n            return (EXIT_FAILURE);\n        }\n        _TIFFfree(path);\n        if (!tiffcp(in, out))\n        {\n            TIFFClose(in);\n            TIFFClose(out);\n            TIFFOpenOptionsFree(opts);\n            fprintf(stderr, \"tiffsplit: Error: Could not copy data from input \"\n                            \"to output.\\n\");\n            return (EXIT_FAILURE);\n        }\n        TIFFClose(out);\n    } while (TIFFReadDirectory(in));\n\n    TIFFOpenOptionsFree(opts);\n    (void)TIFFClose(in);\n\n    return (EXIT_SUCCESS);\n}",
+      "fn_code_pos": [
+        [
+          104,
+          0
+        ],
+        [
+          209,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void newfilename(void)\n{\n    static int first = 1;\n    static long lastTurn;\n    static long fnum;\n    static short defname;\n    static char *fpnt;\n\n    if (first)\n    {\n        if (fname[0])\n        {\n            fpnt = fname + strlen(fname);\n            defname = 0;\n        }\n        else\n        {\n            fname[0] = 'x';\n            fpnt = fname + 1;\n            defname = 1;\n        }\n        first = 0;\n    }\n#define MAXFILES 17576\n    if (fnum == MAXFILES)\n    {\n        if (!defname || fname[0] == 'z')\n        {\n            fprintf(stderr, \"tiffsplit: too many files.\\n\");\n            exit(EXIT_FAILURE);\n        }\n        fname[0]++;\n        fnum = 0;\n    }\n    if (fnum % 676 == 0)\n    {\n        if (fnum != 0)\n        {\n            /*\n             * advance to next letter every 676 pages\n             * condition for 'z'++ will be covered above\n             */\n            fpnt[0]++;\n        }\n        else\n        {\n            /*\n             * set to 'a' if we are on the very first file\n             */\n            fpnt[0] = 'a';\n        }\n        /*\n         * set the value of the last turning point\n         */\n        lastTurn = fnum;\n    }\n    /*\n     * start from 0 every 676 times (provided by lastTurn)\n     * this keeps us within a-z boundaries\n     */\n    fpnt[1] = (char)((fnum - lastTurn) / 26) + 'a';\n    /*\n     * cycle last letter every file, from a-z, then repeat\n     */\n    fpnt[2] = (char)(fnum % 26) + 'a';\n    fnum++;\n}",
+      "fn_code_pos": [
+        [
+          211,
+          0
+        ],
+        [
+          277,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "newfilename",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int tiffcp(TIFF *in, TIFF *out)\n{\n    uint16_t bitspersample, samplesperpixel, compression, shortv, *shortav;\n    uint32_t w, l;\n    float floatv;\n    char *stringv;\n    uint32_t longv;\n\n    CopyField(TIFFTAG_SUBFILETYPE, longv);\n    CopyField(TIFFTAG_TILEWIDTH, w);\n    CopyField(TIFFTAG_TILELENGTH, l);\n    CopyField(TIFFTAG_IMAGEWIDTH, w);\n    CopyField(TIFFTAG_IMAGELENGTH, l);\n    CopyField(TIFFTAG_BITSPERSAMPLE, bitspersample);\n    CopyField(TIFFTAG_SAMPLESPERPIXEL, samplesperpixel);\n    CopyField(TIFFTAG_COMPRESSION, compression);\n    if (compression == COMPRESSION_JPEG)\n    {\n        uint32_t count = 0;\n        void *table = NULL;\n        if (TIFFGetField(in, TIFFTAG_JPEGTABLES, &count, &table) && count > 0 &&\n            table)\n        {\n            TIFFSetField(out, TIFFTAG_JPEGTABLES, count, table);\n        }\n    }\n    CopyField(TIFFTAG_PHOTOMETRIC, shortv);\n    CopyField(TIFFTAG_PREDICTOR, shortv);\n    CopyField(TIFFTAG_THRESHHOLDING, shortv);\n    CopyField(TIFFTAG_FILLORDER, shortv);\n    CopyField(TIFFTAG_ORIENTATION, shortv);\n    CopyField(TIFFTAG_MINSAMPLEVALUE, shortv);\n    CopyField(TIFFTAG_MAXSAMPLEVALUE, shortv);\n    CopyField(TIFFTAG_XRESOLUTION, floatv);\n    CopyField(TIFFTAG_YRESOLUTION, floatv);\n    CopyField(TIFFTAG_GROUP3OPTIONS, longv);\n    CopyField(TIFFTAG_GROUP4OPTIONS, longv);\n    CopyField(TIFFTAG_RESOLUTIONUNIT, shortv);\n    CopyField(TIFFTAG_PLANARCONFIG, shortv);\n    CopyField(TIFFTAG_ROWSPERSTRIP, longv);\n    CopyField(TIFFTAG_XPOSITION, floatv);\n    CopyField(TIFFTAG_YPOSITION, floatv);\n    CopyField(TIFFTAG_IMAGEDEPTH, longv);\n    CopyField(TIFFTAG_TILEDEPTH, longv);\n    CopyField(TIFFTAG_SAMPLEFORMAT, shortv);\n    CopyField2(TIFFTAG_EXTRASAMPLES, shortv, shortav);\n    {\n        uint16_t *red, *green, *blue;\n        CopyField3(TIFFTAG_COLORMAP, red, green, blue);\n    }\n    {\n        uint16_t shortv2;\n        CopyField2(TIFFTAG_PAGENUMBER, shortv, shortv2);\n    }\n    CopyField(TIFFTAG_ARTIST, stringv);\n    CopyField(TIFFTAG_IMAGEDESCRIPTION, stringv);\n    CopyField(TIFFTAG_MAKE, stringv);\n    CopyField(TIFFTAG_MODEL, stringv);\n    CopyField(TIFFTAG_SOFTWARE, stringv);\n    CopyField(TIFFTAG_DATETIME, stringv);\n    CopyField(TIFFTAG_HOSTCOMPUTER, stringv);\n    CopyField(TIFFTAG_PAGENAME, stringv);\n    CopyField(TIFFTAG_DOCUMENTNAME, stringv);\n    CopyField(TIFFTAG_BADFAXLINES, longv);\n    CopyField(TIFFTAG_CLEANFAXDATA, longv);\n    CopyField(TIFFTAG_CONSECUTIVEBADFAXLINES, longv);\n    CopyField(TIFFTAG_FAXRECVPARAMS, longv);\n    CopyField(TIFFTAG_FAXRECVTIME, longv);\n    CopyField(TIFFTAG_FAXSUBADDRESS, stringv);\n    CopyField(TIFFTAG_FAXDCS, stringv);\n    if (TIFFIsTiled(in))\n        return (cpTiles(in, out));\n    else\n        return (cpStrips(in, out));\n}",
+      "fn_code_pos": [
+        [
+          279,
+          0
+        ],
+        [
+          353,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tiffcp",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int cpStrips(TIFF *in, TIFF *out)\n{\n    tmsize_t bufsize = TIFFStripSize(in);\n    unsigned char *buf = (unsigned char *)limitMalloc(bufsize);\n    if (buf)\n    {\n        tstrip_t s, ns = TIFFNumberOfStrips(in);\n        uint64_t *bytecounts;\n\n        if (!TIFFGetField(in, TIFFTAG_STRIPBYTECOUNTS, &bytecounts))\n        {\n            fprintf(stderr, \"tiffsplit: strip byte counts are missing\\n\");\n            _TIFFfree(buf);\n            return (0);\n        }\n        for (s = 0; s < ns; s++)\n        {\n            if (bytecounts[s] > (uint64_t)bufsize)\n            {\n                buf =\n                    (unsigned char *)limitRealloc(buf, (tmsize_t)bytecounts[s]);\n                if (!buf)\n                {\n                    fprintf(stderr,\n                            \"tiffsplit: Error: Can't re-allocate \"\n                            \"%\" TIFF_SSIZE_FORMAT \" bytes for strip-size.\\n\",\n                            (tmsize_t)bytecounts[s]);\n                    return (0);\n                }\n                bufsize = (tmsize_t)bytecounts[s];\n            }\n            if (TIFFReadRawStrip(in, s, buf, (tmsize_t)bytecounts[s]) < 0 ||\n                TIFFWriteRawStrip(out, s, buf, (tmsize_t)bytecounts[s]) < 0)\n            {\n                _TIFFfree(buf);\n                return (0);\n            }\n        }\n        _TIFFfree(buf);\n        return (1);\n    }\n    else\n    {\n        fprintf(stderr,\n                \"tiffsplit: Error: Can't allocate %\" TIFF_SSIZE_FORMAT\n                \" bytes for strip-size.\\n\",\n                bufsize);\n    }\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          355,
+          0
+        ],
+        [
+          404,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpStrips",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int cpTiles(TIFF *in, TIFF *out)\n{\n    tmsize_t bufsize = TIFFTileSize(in);\n    unsigned char *buf = (unsigned char *)limitMalloc(bufsize);\n\n    if (buf)\n    {\n        ttile_t t, nt = TIFFNumberOfTiles(in);\n        uint64_t *bytecounts;\n\n        if (!TIFFGetField(in, TIFFTAG_TILEBYTECOUNTS, &bytecounts))\n        {\n            fprintf(stderr, \"tiffsplit: tile byte counts are missing\\n\");\n            _TIFFfree(buf);\n            return (0);\n        }\n        for (t = 0; t < nt; t++)\n        {\n            if (bytecounts[t] > (uint64_t)bufsize)\n            {\n                buf =\n                    (unsigned char *)limitRealloc(buf, (tmsize_t)bytecounts[t]);\n                if (!buf)\n                {\n                    fprintf(stderr,\n                            \"tiffsplit: Error: Can't re-allocate \"\n                            \"%\" TIFF_SSIZE_FORMAT \" bytes for tile-size.\\n\",\n                            (tmsize_t)bytecounts[t]);\n                    return (0);\n                }\n                bufsize = (tmsize_t)bytecounts[t];\n            }\n            if (TIFFReadRawTile(in, t, buf, (tmsize_t)bytecounts[t]) < 0 ||\n                TIFFWriteRawTile(out, t, buf, (tmsize_t)bytecounts[t]) < 0)\n            {\n                _TIFFfree(buf);\n                return (0);\n            }\n        }\n        _TIFFfree(buf);\n        return (1);\n    }\n    else\n    {\n        fprintf(stderr,\n                \"tiffsplit: Error: Can't allocate %\" TIFF_SSIZE_FORMAT\n                \" bytes for tile-size.\\n\",\n                bufsize);\n    }\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          406,
+          0
+        ],
+        [
+          456,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpTiles",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"\\n\\n%s\\n\\n\", TIFFGetVersion());\n    fprintf(out, \"Split a multi-image TIFF into single-image TIFF files\\n\\n\");\n    fprintf(out, \"usage: tiffsplit [option] input.tif [prefix]\\n\");\n    fprintf(out, \"where option is:\\n\");\n    fprintf(out, \" -M size       set the memory allocation limit in MiB. 0 to \"\n                 \"disable limit.\\n\");\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          458,
+          0
+        ],
+        [
+          469,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "tiffcp(TIFF *, TIFF *)",
+      "fn_dec_pos": [
+        [
+          62,
+          11
+        ],
+        [
+          62,
+          33
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tiffcp",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "newfilename(void)",
+      "fn_dec_pos": [
+        [
+          63,
+          12
+        ],
+        [
+          63,
+          29
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "newfilename",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cpStrips(TIFF *, TIFF *)",
+      "fn_dec_pos": [
+        [
+          64,
+          11
+        ],
+        [
+          64,
+          35
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpStrips",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cpTiles(TIFF *, TIFF *)",
+      "fn_dec_pos": [
+        [
+          65,
+          11
+        ],
+        [
+          65,
+          34
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpTiles",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "usage(int)",
+      "fn_dec_pos": [
+        [
+          67,
+          12
+        ],
+        [
+          67,
+          22
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "limitMalloc(tmsize_t s)",
+      "fn_dec_pos": [
+        [
+          72,
+          13
+        ],
+        [
+          72,
+          36
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "limitMalloc",
+        "parameters": {
+          "s": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "limitRealloc(void *buf, tmsize_t s)",
+      "fn_dec_pos": [
+        [
+          88,
+          13
+        ],
+        [
+          88,
+          48
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "limitRealloc",
+        "parameters": {
+          "buf": "void",
+          "s": "tmsize_t"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

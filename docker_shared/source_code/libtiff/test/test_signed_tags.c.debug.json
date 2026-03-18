@@ -1,0 +1,175 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void extender(TIFF *tif)\n{\n    TIFFMergeFieldInfo(tif, tiff_field_info,\n                       sizeof(tiff_field_info) / sizeof(tiff_field_info[0]));\n    if (parent)\n    {\n        (*parent)(tif);\n    }\n}",
+      "fn_code_pos": [
+        [
+          87,
+          0
+        ],
+        [
+          95,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "extender",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int writeTestTiff(const char *szFileName, int isBigTiff)\n{\n    int ret;\n    TIFF *tif;\n    int retcode = FAULT_RETURN;\n\n    unlink(szFileName);\n    if (isBigTiff)\n    {\n        fprintf(stdout, \"\\n-- Writing signed values to BigTIFF...\\n\");\n        tif = TIFFOpen(szFileName, \"w8\");\n    }\n    else\n    {\n        fprintf(stdout, \"\\n-- Writing signed values to ClassicTIFF...\\n\");\n        tif = TIFFOpen(szFileName, \"w\");\n    }\n    if (!tif)\n    {\n        fprintf(stdout, \"Can't create test TIFF file %s.\\n\", szFileName);\n        return (FAULT_RETURN);\n    }\n\n    ret = TIFFSetField(tif, SINT8, s8[idxSingle]);\n    if (ret != 1)\n    {\n        fprintf(stdout, \"Error writing SINT8: ret=%d\\n\", ret);\n        GOTOFAILURE;\n    }\n    ret = TIFFSetField(tif, SINT16, s16[idxSingle]);\n    if (ret != 1)\n    {\n        fprintf(stdout, \"Error writing SINT16: ret=%d\\n\", ret);\n        GOTOFAILURE;\n    }\n    ret = TIFFSetField(tif, SINT32, s32[idxSingle]);\n    if (ret != 1)\n    {\n        fprintf(stdout, \"Error writing SINT32: ret=%d\\n\", ret);\n        GOTOFAILURE;\n    }\n\n    TIFFSetField(tif, C0_SINT8, &s8);\n    TIFFSetField(tif, C0_SINT16, &s16);\n    TIFFSetField(tif, C0_SINT32, &s32);\n\n    TIFFSetField(tif, C16_SINT8, 6, &s8);\n    TIFFSetField(tif, C16_SINT16, 6, &s16);\n    TIFFSetField(tif, C16_SINT32, 6, &s32);\n\n    TIFFSetField(tif, C16_SINT8, 6, &s8);\n    TIFFSetField(tif, C16_SINT16, 6, &s16);\n    TIFFSetField(tif, C16_SINT32, 6, &s32);\n\n    TIFFSetField(tif, C32_SINT8, 6, &s8);\n    TIFFSetField(tif, C32_SINT16, 6, &s16);\n    TIFFSetField(tif, C32_SINT32, 6, &s32);\n\n    if (isBigTiff)\n    {\n        ret = TIFFSetField(tif, SINT64, s64[0]);\n        if (ret != 1)\n        {\n            fprintf(stdout, \"Error writing SINT64: ret=%d\\n\", ret);\n            GOTOFAILURE;\n        }\n        ret = TIFFSetField(tif, C0_SINT64, &s64);\n        if (ret != 1)\n        {\n            fprintf(stdout, \"Error writing C0_SINT64: ret=%d\\n\", ret);\n            GOTOFAILURE;\n        }\n        ret = TIFFSetField(tif, C16_SINT64, N(s64), &s64);\n        if (ret != 1)\n        {\n            fprintf(stdout, \"Error writing C16_SINT64: ret=%d\\n\", ret);\n            GOTOFAILURE;\n        }\n        ret = TIFFSetField(tif, C32_SINT64, N(s64), &s64);\n        if (ret != 1)\n        {\n            fprintf(stdout, \"Error writing C32_SINT64: ret=%d\\n\", ret);\n            GOTOFAILURE;\n        }\n    }\n\n    TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, 1);\n    TIFFSetField(tif, TIFFTAG_IMAGELENGTH, 1);\n    TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8);\n    TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_NONE);\n    TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);\n    TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);\n    TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, 1);\n    ret = (int)TIFFWriteEncodedStrip(tif, 0, \"\\0\", 1);\n    if (ret != 1)\n    {\n        fprintf(stdout, \"Error TIFFWriteEncodedStrip: ret=%d\\n\", ret);\n        GOTOFAILURE;\n    }\n\n    retcode = OK_RETURN;\nfailure:\n    TIFFClose(tif);\n    return (retcode);\n}",
+      "fn_code_pos": [
+        [
+          105,
+          0
+        ],
+        [
+          209,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "writeTestTiff",
+        "parameters": {
+          "szFileName": "char",
+          "isBigTiff": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int main(void)\n{\n    parent = TIFFSetTagExtender(&extender);\n    if (writeTestTiff(\"temp.tif\", 0) != OK_RETURN)\n        return (-1);\n    if (readTestTiff(\"temp.tif\", 0) != OK_RETURN)\n        return (-1);\n    unlink(\"temp.tif\");\n    if (writeTestTiff(\"tempBig.tif\", 1) != OK_RETURN)\n        return (-1);\n    if (readTestTiff(\"tempBig.tif\", 1) != OK_RETURN)\n        return (-1);\n    unlink(\"tempBig.tif\");\n    fprintf(stdout, \"---------- Test finished OK -----------\\n\");\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          509,
+          0
+        ],
+        [
+          524,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "readTestTiff(const char *szFileName, int isBigTiff)",
+      "fn_dec_pos": [
+        [
+          211,
+          11
+        ],
+        [
+          211,
+          62
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "readTestTiff",
+        "parameters": {
+          "szFileName": "char",
+          "isBigTiff": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\" /* necessary for linux compiler to get HAVE_UNISTD_H */\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h> /* for unlink() on linux */\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <tiffio.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": [
+    [
+      "enum\n{\n    SINT8 = 65100,\n    SINT16,\n    SINT32,\n    SINT64,\n    C0_SINT8,\n    C0_SINT16,\n    C0_SINT32,\n    C0_SINT64,\n    C16_SINT8,\n    C16_SINT16,\n    C16_SINT32,\n    C16_SINT64,\n    C32_SINT8,\n    C32_SINT16,\n    C32_SINT32,\n    C32_SINT64,\n}",
+      {
+        "SINT8": "",
+        "SINT16": "",
+        "SINT32": "",
+        "SINT64": "",
+        "C0_SINT8": "",
+        "C0_SINT16": "",
+        "C0_SINT32": "",
+        "C0_SINT64": "",
+        "C16_SINT8": "",
+        "C16_SINT16": "",
+        "C16_SINT32": "",
+        "C16_SINT64": "",
+        "C32_SINT8": "",
+        "C32_SINT16": "",
+        "C32_SINT32": "",
+        "C32_SINT64": ""
+      },
+      "",
+      [
+        38,
+        0
+      ],
+      [
+        56,
+        1
+      ]
+    ]
+  ]
+}

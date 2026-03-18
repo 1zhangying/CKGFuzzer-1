@@ -1,0 +1,139 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nvoid ITU2Lab(WORD In[3], LPcmsCIELab Lab)\n{\n   Lab -> L = (double) In[0] / 655.35;\n   Lab -> a = (double) 170.* (In[1] - 32768.) / 65535.;\n   Lab -> b = (double) 200.* (In[2] - 24576.) / 65535.;\n}",
+      "fn_code_pos": [
+        [
+          38,
+          0
+        ],
+        [
+          44,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ITU2Lab",
+        "parameters": {
+          "In": "WORD",
+          "Lab": "LPcmsCIELab"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid Lab2ITU(LPcmsCIELab Lab, WORD Out[3])\n{\n\tOut[0] = (WORD) floor((double) (Lab -> L / 100.)* 65535. + 0.5);\n    Out[1] = (WORD) floor((double) (Lab -> a / 170.)* 65535. + 32768. + 0.5);\n    Out[2] = (WORD) floor((double) (Lab -> b / 200.)* 65535. + 24576. + 0.5);\n}",
+      "fn_code_pos": [
+        [
+          47,
+          0
+        ],
+        [
+          53,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Lab2ITU",
+        "parameters": {
+          "Lab": "LPcmsCIELab",
+          "Out": "WORD"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nint InputDirection(register WORD In[], register WORD Out[], register LPVOID Cargo)\n{\t   \n    cmsCIELab Lab;\n\n    cmsLabEncoded2Float(&Lab, In);    \n    cmsClampLab(&Lab, 85, -85, 125, -75);    // This function does the necessary gamut remapping  \n    Lab2ITU(&Lab, Out);\n\n\treturn TRUE;\n}",
+      "fn_code_pos": [
+        [
+          66,
+          0
+        ],
+        [
+          76,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "InputDirection",
+        "parameters": {
+          "In": "WORD",
+          "Out": "WORD",
+          "Cargo": "LPVOID"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nint OutputDirection(register WORD In[], register WORD Out[], register LPVOID Cargo)\n{\t\n\n\tcmsCIELab Lab;\n\n    ITU2Lab(In, &Lab);\n    cmsFloat2LabEncoded(Out, &Lab);    \n\n\treturn TRUE;\n}",
+      "fn_code_pos": [
+        [
+          79,
+          0
+        ],
+        [
+          89,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OutputDirection",
+        "parameters": {
+          "In": "WORD",
+          "Out": "WORD",
+          "Cargo": "LPVOID"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n\tLPLUT AToB0, BToA0;\n\tcmsHPROFILE hProfile;\n\n\tfprintf(stderr, \"Creating itufax.icm...\");\n\n\tunlink(\"itufax.icm\");\n\thProfile = cmsOpenProfileFromFile(\"itufax.icm\", \"w\");\n\t\n    AToB0 = cmsAllocLUT();\n\tBToA0 = cmsAllocLUT(); \n\n\tcmsAlloc3DGrid(AToB0, GRID_POINTS, 3, 3);\n\tcmsAlloc3DGrid(BToA0, GRID_POINTS, 3, 3);\n    \n\tcmsSample3DGrid(AToB0, InputDirection, NULL, 0);\n\tcmsSample3DGrid(BToA0, OutputDirection, NULL, 0);\n\t\t\n    cmsAddTag(hProfile, icSigAToB0Tag, AToB0);\n\tcmsAddTag(hProfile, icSigBToA0Tag, BToA0);\n\n                                \n\tcmsSetColorSpace(hProfile, icSigLabData);\n    cmsSetPCS(hProfile, icSigLabData);\n    cmsSetDeviceClass(hProfile, icSigColorSpaceClass);\n\n\tcmsAddTag(hProfile, icSigProfileDescriptionTag, \"ITU T.42/Fax JPEG CIEL*a*b*\");\n    cmsAddTag(hProfile, icSigCopyrightTag,          \"No Copyright, use freely.\");\n    cmsAddTag(hProfile, icSigDeviceMfgDescTag,      \"Little cms\");    \n    cmsAddTag(hProfile, icSigDeviceModelDescTag,    \"ITU T.42/Fax JPEG CIEL*a*b*\");\n\t\n\tcmsCloseProfile(hProfile);\n    \n\tcmsFreeLUT(AToB0);\n\tcmsFreeLUT(BToA0);\n\n\tfprintf(stderr, \"Done.\\n\");\n\n\treturn 0;\n}",
+      "fn_code_pos": [
+        [
+          97,
+          0
+        ],
+        [
+          137,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"lcms.h\"\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

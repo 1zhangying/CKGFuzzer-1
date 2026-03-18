@@ -1,0 +1,478 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static const char *LZMAStrerror(lzma_ret ret)\n{\n    switch (ret)\n    {\n        case LZMA_OK:\n            return \"operation completed successfully\";\n        case LZMA_STREAM_END:\n            return \"end of stream was reached\";\n        case LZMA_NO_CHECK:\n            return \"input stream has no integrity check\";\n        case LZMA_UNSUPPORTED_CHECK:\n            return \"cannot calculate the integrity check\";\n        case LZMA_GET_CHECK:\n            return \"integrity check type is now available\";\n        case LZMA_MEM_ERROR:\n            return \"cannot allocate memory\";\n        case LZMA_MEMLIMIT_ERROR:\n            return \"memory usage limit was reached\";\n        case LZMA_FORMAT_ERROR:\n            return \"file format not recognized\";\n        case LZMA_OPTIONS_ERROR:\n            return \"invalid or unsupported options\";\n        case LZMA_DATA_ERROR:\n            return \"data is corrupt\";\n        case LZMA_BUF_ERROR:\n            return \"no progress is possible (stream is truncated or corrupt)\";\n        case LZMA_PROG_ERROR:\n            return \"programming error\";\n        default:\n            return \"unidentified liblzma error\";\n    }\n}",
+      "fn_code_pos": [
+        [
+          69,
+          0
+        ],
+        [
+          100,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMAStrerror",
+        "parameters": {
+          "ret": "lzma_ret"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static int LZMAFixupTags(TIFF *tif)\n{\n    (void)tif;\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          102,
+          0
+        ],
+        [
+          106,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMAFixupTags",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LZMASetupDecode(TIFF *tif)\n{\n    LZMAState *sp = LZMADecoderState(tif);\n\n    assert(sp != NULL);\n\n    /* if we were last encoding, terminate this mode */\n    if (sp->state & LSTATE_INIT_ENCODE)\n    {\n        lzma_end(&sp->stream);\n        sp->state = 0;\n    }\n\n    sp->state |= LSTATE_INIT_DECODE;\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          108,
+          0
+        ],
+        [
+          123,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMASetupDecode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LZMAPreDecode(TIFF *tif, uint16_t s)\n{\n    static const char module[] = \"LZMAPreDecode\";\n    LZMAState *sp = LZMADecoderState(tif);\n    lzma_ret ret;\n\n    (void)s;\n    assert(sp != NULL);\n\n    if ((sp->state & LSTATE_INIT_DECODE) == 0)\n        tif->tif_setupdecode(tif);\n\n    sp->stream.next_in = tif->tif_rawdata;\n    sp->stream.avail_in = (size_t)tif->tif_rawcc;\n    if ((tmsize_t)sp->stream.avail_in != tif->tif_rawcc)\n    {\n        TIFFErrorExtR(tif, module,\n                      \"Liblzma cannot deal with buffers this size\");\n        return 0;\n    }\n\n    /*\n     * Disable memory limit when decoding. UINT64_MAX is a flag to disable\n     * the limit, we are passing (uint64_t)-1 which should be the same.\n     */\n    ret = lzma_stream_decoder(&sp->stream, (uint64_t)-1, 0);\n    if (ret != LZMA_OK)\n    {\n        TIFFErrorExtR(tif, module, \"Error initializing the stream decoder, %s\",\n                      LZMAStrerror(ret));\n        return 0;\n    }\n\n    sp->read_error = 0;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          128,
+          0
+        ],
+        [
+          164,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMAPreDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LZMADecode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)\n{\n    static const char module[] = \"LZMADecode\";\n    LZMAState *sp = LZMADecoderState(tif);\n\n    (void)s;\n    assert(sp != NULL);\n    assert(sp->state == LSTATE_INIT_DECODE);\n\n    if (sp->read_error)\n    {\n        memset(op, 0, (size_t)occ);\n        TIFFErrorExtR(tif, module,\n                      \"LZMADecode: Scanline %\" PRIu32 \" cannot be read due to \"\n                      \"previous error\",\n                      tif->tif_row);\n        return 0;\n    }\n\n    sp->stream.next_in = tif->tif_rawcp;\n    sp->stream.avail_in = (size_t)tif->tif_rawcc;\n\n    sp->stream.next_out = op;\n    sp->stream.avail_out = (size_t)occ;\n    if ((tmsize_t)sp->stream.avail_out != occ)\n    {\n        // read_error not set here as this is a usage issue that can be\n        // recovered in a following call.\n        memset(op, 0, (size_t)occ);\n        TIFFErrorExtR(tif, module,\n                      \"Liblzma cannot deal with buffers this size\");\n        return 0;\n    }\n\n    do\n    {\n        /*\n         * Save the current stream state to properly recover from the\n         * decoding errors later.\n         */\n        const uint8_t *next_in = sp->stream.next_in;\n        size_t avail_in = sp->stream.avail_in;\n\n        lzma_ret ret = lzma_code(&sp->stream, LZMA_RUN);\n        if (ret == LZMA_STREAM_END)\n            break;\n        if (ret == LZMA_MEMLIMIT_ERROR)\n        {\n            lzma_ret r =\n                lzma_stream_decoder(&sp->stream, lzma_memusage(&sp->stream), 0);\n            if (r != LZMA_OK)\n            {\n                sp->read_error = 1;\n                memset(op, 0, (size_t)occ);\n                TIFFErrorExtR(tif, module,\n                              \"Error initializing the stream decoder, %s\",\n                              LZMAStrerror(r));\n                break;\n            }\n            sp->stream.next_in = next_in;\n            sp->stream.avail_in = avail_in;\n            continue;\n        }\n        if (ret != LZMA_OK)\n        {\n            TIFFErrorExtR(tif, module,\n                          \"Decoding error at scanline %\" PRIu32 \", %s\",\n                          tif->tif_row, LZMAStrerror(ret));\n            break;\n        }\n    } while (sp->stream.avail_out > 0);\n    if (sp->stream.avail_out != 0)\n    {\n        sp->read_error = 1;\n        memset(sp->stream.next_out, 0, sp->stream.avail_out);\n        TIFFErrorExtR(tif, module,\n                      \"Not enough data at scanline %\" PRIu32\n                      \" (short %\" TIFF_SIZE_FORMAT \" bytes)\",\n                      tif->tif_row, sp->stream.avail_out);\n        return 0;\n    }\n\n    tif->tif_rawcp = (uint8_t *)sp->stream.next_in; /* cast away const */\n    tif->tif_rawcc = sp->stream.avail_in;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          166,
+          0
+        ],
+        [
+          252,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMADecode",
+        "parameters": {
+          "tif": "TIFF",
+          "op": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LZMASetupEncode(TIFF *tif)\n{\n    LZMAState *sp = LZMAEncoderState(tif);\n\n    assert(sp != NULL);\n    if (sp->state & LSTATE_INIT_DECODE)\n    {\n        lzma_end(&sp->stream);\n        sp->state = 0;\n    }\n\n    sp->state |= LSTATE_INIT_ENCODE;\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          254,
+          0
+        ],
+        [
+          267,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMASetupEncode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LZMAPreEncode(TIFF *tif, uint16_t s)\n{\n    static const char module[] = \"LZMAPreEncode\";\n    LZMAState *sp = LZMAEncoderState(tif);\n    lzma_ret ret;\n\n    (void)s;\n    assert(sp != NULL);\n    if (sp->state != LSTATE_INIT_ENCODE)\n        tif->tif_setupencode(tif);\n\n    sp->stream.next_out = tif->tif_rawdata;\n    sp->stream.avail_out = (size_t)tif->tif_rawdatasize;\n    if ((tmsize_t)sp->stream.avail_out != tif->tif_rawdatasize)\n    {\n        TIFFErrorExtR(tif, module,\n                      \"Liblzma cannot deal with buffers this size\");\n        return 0;\n    }\n    ret = lzma_stream_encoder(&sp->stream, sp->filters, sp->check);\n    if (ret != LZMA_OK)\n    {\n        TIFFErrorExtR(tif, module, \"Error in lzma_stream_encoder(): %s\",\n                      LZMAStrerror(ret));\n        return 0;\n    }\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          272,
+          0
+        ],
+        [
+          299,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMAPreEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LZMAEncode(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)\n{\n    static const char module[] = \"LZMAEncode\";\n    LZMAState *sp = LZMAEncoderState(tif);\n\n    assert(sp != NULL);\n    assert(sp->state == LSTATE_INIT_ENCODE);\n\n    (void)s;\n    sp->stream.next_in = bp;\n    sp->stream.avail_in = (size_t)cc;\n    if ((tmsize_t)sp->stream.avail_in != cc)\n    {\n        TIFFErrorExtR(tif, module,\n                      \"Liblzma cannot deal with buffers this size\");\n        return 0;\n    }\n    do\n    {\n        lzma_ret ret = lzma_code(&sp->stream, LZMA_RUN);\n        if (ret != LZMA_OK)\n        {\n            TIFFErrorExtR(tif, module,\n                          \"Encoding error at scanline %\" PRIu32 \", %s\",\n                          tif->tif_row, LZMAStrerror(ret));\n            return 0;\n        }\n        if (sp->stream.avail_out == 0)\n        {\n            tif->tif_rawcc = tif->tif_rawdatasize;\n            if (!TIFFFlushData1(tif))\n                return 0;\n            sp->stream.next_out = tif->tif_rawdata;\n            sp->stream.avail_out =\n                (size_t)\n                    tif->tif_rawdatasize; /* this is a safe typecast, as check\n                                             is made already in LZMAPreEncode */\n        }\n    } while (sp->stream.avail_in > 0);\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          304,
+          0
+        ],
+        [
+          344,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMAEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LZMAPostEncode(TIFF *tif)\n{\n    static const char module[] = \"LZMAPostEncode\";\n    LZMAState *sp = LZMAEncoderState(tif);\n    lzma_ret ret;\n\n    sp->stream.avail_in = 0;\n    do\n    {\n        ret = lzma_code(&sp->stream, LZMA_FINISH);\n        switch (ret)\n        {\n            case LZMA_STREAM_END:\n            case LZMA_OK:\n                if ((tmsize_t)sp->stream.avail_out != tif->tif_rawdatasize)\n                {\n                    tif->tif_rawcc =\n                        tif->tif_rawdatasize - sp->stream.avail_out;\n                    if (!TIFFFlushData1(tif))\n                        return 0;\n                    sp->stream.next_out = tif->tif_rawdata;\n                    sp->stream.avail_out =\n                        (size_t)\n                            tif->tif_rawdatasize; /* this is a safe typecast, as\n                                                     check is made already in\n                                                     ZIPPreEncode */\n                }\n                break;\n            default:\n                TIFFErrorExtR(tif, module, \"Liblzma error: %s\",\n                              LZMAStrerror(ret));\n                return 0;\n        }\n    } while (ret != LZMA_STREAM_END);\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          350,
+          0
+        ],
+        [
+          385,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMAPostEncode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void LZMACleanup(TIFF *tif)\n{\n    LZMAState *sp = GetLZMAState(tif);\n\n    assert(sp != 0);\n\n    (void)TIFFPredictorCleanup(tif);\n\n    tif->tif_tagmethods.vgetfield = sp->vgetparent;\n    tif->tif_tagmethods.vsetfield = sp->vsetparent;\n\n    if (sp->state)\n    {\n        lzma_end(&sp->stream);\n        sp->state = 0;\n    }\n    _TIFFfreeExt(tif, sp);\n    tif->tif_data = NULL;\n\n    _TIFFSetDefaultCompressionState(tif);\n}",
+      "fn_code_pos": [
+        [
+          387,
+          0
+        ],
+        [
+          407,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMACleanup",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int LZMAVSetField(TIFF *tif, uint32_t tag, va_list ap)\n{\n    static const char module[] = \"LZMAVSetField\";\n    LZMAState *sp = GetLZMAState(tif);\n\n    switch (tag)\n    {\n        case TIFFTAG_LZMAPRESET:\n            sp->preset = (int)va_arg(ap, int);\n            lzma_lzma_preset(&sp->opt_lzma, sp->preset);\n            if (sp->state & LSTATE_INIT_ENCODE)\n            {\n                lzma_ret ret =\n                    lzma_stream_encoder(&sp->stream, sp->filters, sp->check);\n                if (ret != LZMA_OK)\n                {\n                    TIFFErrorExtR(tif, module, \"Liblzma error: %s\",\n                                  LZMAStrerror(ret));\n                }\n            }\n            return 1;\n        default:\n            return (*sp->vsetparent)(tif, tag, ap);\n    }\n    /*NOTREACHED*/\n}",
+      "fn_code_pos": [
+        [
+          409,
+          0
+        ],
+        [
+          434,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMAVSetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int LZMAVGetField(TIFF *tif, uint32_t tag, va_list ap)\n{\n    LZMAState *sp = GetLZMAState(tif);\n\n    switch (tag)\n    {\n        case TIFFTAG_LZMAPRESET:\n            *va_arg(ap, int *) = sp->preset;\n            break;\n        default:\n            return (*sp->vgetparent)(tif, tag, ap);\n    }\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          436,
+          0
+        ],
+        [
+          449,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMAVGetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFInitLZMA(TIFF *tif, int scheme)\n{\n    static const char module[] = \"TIFFInitLZMA\";\n    LZMAState *sp;\n    lzma_stream tmp_stream = LZMA_STREAM_INIT;\n\n    (void)scheme;\n    assert(scheme == COMPRESSION_LZMA);\n\n    /*\n     * Merge codec-specific tag information.\n     */\n    if (!_TIFFMergeFields(tif, lzmaFields, TIFFArrayCount(lzmaFields)))\n    {\n        TIFFErrorExtR(tif, module, \"Merging LZMA2 codec-specific tags failed\");\n        return 0;\n    }\n\n    /*\n     * Allocate state block so tag methods have storage to record values.\n     */\n    tif->tif_data = (uint8_t *)_TIFFmallocExt(tif, sizeof(LZMAState));\n    if (tif->tif_data == NULL)\n        goto bad;\n    sp = GetLZMAState(tif);\n    memcpy(&sp->stream, &tmp_stream, sizeof(lzma_stream));\n\n    /*\n     * Override parent get/set field methods.\n     */\n    sp->vgetparent = tif->tif_tagmethods.vgetfield;\n    tif->tif_tagmethods.vgetfield = LZMAVGetField; /* hook for codec tags */\n    sp->vsetparent = tif->tif_tagmethods.vsetfield;\n    tif->tif_tagmethods.vsetfield = LZMAVSetField; /* hook for codec tags */\n\n    /* Default values for codec-specific fields */\n    sp->preset = LZMA_PRESET_DEFAULT; /* default comp. level */\n    sp->check = LZMA_CHECK_NONE;\n    sp->state = 0;\n\n    /* Data filters. So far we are using delta and LZMA2 filters only. */\n    sp->opt_delta.type = LZMA_DELTA_TYPE_BYTE;\n    /*\n     * The sample size in bytes seems to be reasonable distance for delta\n     * filter.\n     */\n    sp->opt_delta.dist = (tif->tif_dir.td_bitspersample % 8)\n                             ? 1\n                             : tif->tif_dir.td_bitspersample / 8;\n    sp->filters[0].id = LZMA_FILTER_DELTA;\n    sp->filters[0].options = &sp->opt_delta;\n\n    lzma_lzma_preset(&sp->opt_lzma, sp->preset);\n    sp->filters[1].id = LZMA_FILTER_LZMA2;\n    sp->filters[1].options = &sp->opt_lzma;\n\n    sp->filters[2].id = LZMA_VLI_UNKNOWN;\n    sp->filters[2].options = NULL;\n\n    /*\n     * Install codec methods.\n     */\n    tif->tif_fixuptags = LZMAFixupTags;\n    tif->tif_setupdecode = LZMASetupDecode;\n    tif->tif_predecode = LZMAPreDecode;\n    tif->tif_decoderow = LZMADecode;\n    tif->tif_decodestrip = LZMADecode;\n    tif->tif_decodetile = LZMADecode;\n    tif->tif_setupencode = LZMASetupEncode;\n    tif->tif_preencode = LZMAPreEncode;\n    tif->tif_postencode = LZMAPostEncode;\n    tif->tif_encoderow = LZMAEncode;\n    tif->tif_encodestrip = LZMAEncode;\n    tif->tif_encodetile = LZMAEncode;\n    tif->tif_cleanup = LZMACleanup;\n    /*\n     * Setup predictor setup.\n     */\n    (void)TIFFPredictorInit(tif);\n    return 1;\nbad:\n    TIFFErrorExtR(tif, module, \"No space for LZMA2 state block\");\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          457,
+          0
+        ],
+        [
+          540,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFInitLZMA",
+        "parameters": {
+          "tif": "TIFF",
+          "scheme": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "LZMAEncode(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)",
+      "fn_dec_pos": [
+        [
+          66,
+          11
+        ],
+        [
+          66,
+          70
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMAEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "LZMADecode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)",
+      "fn_dec_pos": [
+        [
+          67,
+          11
+        ],
+        [
+          67,
+          71
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMADecode",
+        "parameters": {
+          "tif": "TIFF",
+          "op": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "LZMAStrerror(lzma_ret ret)",
+      "fn_dec_pos": [
+        [
+          69,
+          19
+        ],
+        [
+          69,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LZMAStrerror",
+        "parameters": {
+          "ret": "lzma_ret"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct\n{\n    TIFFPredictorState predict;\n    int read_error; /* whether a read error has occurred, and which should cause\n                       further reads in the same strip/tile to be aborted */\n    lzma_stream stream;\n    lzma_filter filters[LZMA_FILTERS_MAX + 1];\n    lzma_options_delta opt_delta; /* delta filter options */\n    lzma_options_lzma opt_lzma;   /* LZMA2 filter options */\n    int preset;                   /* compression level */\n    lzma_check check;             /* type of the integrity check */\n    int state;                    /* state flags */\n#define LSTATE_INIT_DECODE 0x01\n#define LSTATE_INIT_ENCODE 0x02\n\n    TIFFVGetMethod vgetparent; /* super-class method */\n    TIFFVSetMethod vsetparent; /* super-class method */\n} LZMAState;",
+      {
+        "predict": "TIFFPredictorState",
+        "read_error": "int",
+        "stream": "lzma_stream",
+        "filters[LZMA_FILTERS_MAX + 1]": "lzma_filter",
+        "opt_delta": "lzma_options_delta",
+        "opt_lzma": "lzma_options_lzma",
+        "preset": "int",
+        "check": "lzma_check",
+        "state": "int",
+        "vgetparent": "TIFFVGetMethod",
+        "vsetparent": "TIFFVSetMethod"
+      },
+      "LZMAState",
+      [
+        43,
+        0
+      ],
+      [
+        60,
+        12
+      ]
+    ],
+    [
+      "typedef struct\n{\n    TIFFPredictorState predict;\n    int read_error; /* whether a read error has occurred, and which should cause\n                       further reads in the same strip/tile to be aborted */\n    lzma_stream stream;\n    lzma_filter filters[LZMA_FILTERS_MAX + 1];\n    lzma_options_delta opt_delta; /* delta filter options */\n    lzma_options_lzma opt_lzma;   /* LZMA2 filter options */\n    int preset;                   /* compression level */\n    lzma_check check;             /* type of the integrity check */\n    int state;                    /* state flags */\n#define LSTATE_INIT_DECODE 0x01\n#define LSTATE_INIT_ENCODE 0x02\n\n    TIFFVGetMethod vgetparent; /* super-class method */\n    TIFFVSetMethod vsetparent; /* super-class method */\n} LZMAState;",
+      {
+        "predict": "TIFFPredictorState",
+        "read_error": "int",
+        "stream": "lzma_stream",
+        "filters[LZMA_FILTERS_MAX + 1]": "lzma_filter",
+        "opt_delta": "lzma_options_delta",
+        "opt_lzma": "lzma_options_lzma",
+        "preset": "int",
+        "check": "lzma_check",
+        "state": "int",
+        "vgetparent": "TIFFVGetMethod",
+        "vsetparent": "TIFFVSetMethod"
+      },
+      "LZMAState",
+      [
+        43,
+        0
+      ],
+      [
+        60,
+        12
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include \"lzma.h\"\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_predict.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        38,
+        0
+      ],
+      [
+        39,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -16,8 +16,9 @@
 
 FROM gcr.io/oss-fuzz-base/base-builder
 RUN apt-get update && apt-get install -y make autoconf automake libtool
-RUN git clone --depth 1 https://github.com/c-ares/c-ares.git
+RUN git clone https://github.com/c-ares/c-ares.git
 WORKDIR c-ares
+RUN git checkout cares-1_18_0
 COPY build.sh $SRC/
 # This is to fix Fuzz Introspector build by using LLVM old pass manager
 # re https://github.com/ossf/fuzz-introspector/issues/305

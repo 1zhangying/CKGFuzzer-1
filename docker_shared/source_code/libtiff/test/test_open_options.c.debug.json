@@ -1,0 +1,320 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int myErrorHandler(TIFF *tiff, void *user_data, const char *module,\n                          const char *fmt, va_list ap)\n{\n    MyErrorHandlerUserDataStruct *errorhandler_user_data =\n        (MyErrorHandlerUserDataStruct *)user_data;\n    vsnprintf(errorhandler_user_data->buffer,\n              errorhandler_user_data->buffer_size, fmt, ap);\n    errorhandler_user_data->tif_got_from_callback = tiff;\n    snprintf(errorhandler_user_data->module,\n             sizeof(errorhandler_user_data->module), \"%s\", module);\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          78,
+          0
+        ],
+        [
+          89,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "myErrorHandler",
+        "parameters": {
+          "tiff": "TIFF",
+          "user_data": "void",
+          "module": "char",
+          "fmt": "char",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int test_error_handler()\n{\n    int ret = 0;\n    char error_buffer[ERROR_STRING_SIZE] = {0};\n    char warn_buffer[ERROR_STRING_SIZE] = {0};\n    MyErrorHandlerUserDataStruct errorhandler_user_data = {\n        .buffer = error_buffer, .buffer_size = ERROR_STRING_SIZE};\n    MyErrorHandlerUserDataStruct warnhandler_user_data = {\n        .buffer = warn_buffer, .buffer_size = ERROR_STRING_SIZE};\n\n    TIFFOpenOptions *opts = TIFFOpenOptionsAlloc();\n    assert(opts);\n    TIFFOpenOptionsSetErrorHandlerExtR(opts, myErrorHandler,\n                                       &errorhandler_user_data);\n    TIFFOpenOptionsSetWarningHandlerExtR(opts, myErrorHandler,\n                                         &warnhandler_user_data);\n    TIFF *tif = TIFFOpenExt(\"test_error_handler.tif\", \"w\", opts);\n    TIFFOpenOptionsFree(opts);\n\n    if (tif == NULL)\n    {\n        fprintf(stderr, \"Cannot create test_error_handler.tif\");\n        exit(1);\n    }\n\n    // Simulate an error emitted by libtiff\n    TIFFErrorExtR(tif, \"my_error_module\", \"%s\", \"some error message\");\n    if (strcmp(error_buffer, \"some error message\") != 0)\n    {\n        fprintf(stderr, \"Did not get expected error message\\n\");\n        ret = 1;\n    }\n    if (strcmp(errorhandler_user_data.module, \"my_error_module\") != 0)\n    {\n        fprintf(stderr, \"Did not get expected error module\\n\");\n        ret = 1;\n    }\n    if (errorhandler_user_data.tif_got_from_callback != tif)\n    {\n        fprintf(stderr,\n                \"errorhandler_user_data.tif_got_from_callback != tif\\n\");\n        ret = 1;\n    }\n\n    // Simulate a warning emitted by libtiff\n    TIFFWarningExtR(tif, \"my_warning_module\", \"%s\", \"some warning message\");\n    if (strcmp(warn_buffer, \"some warning message\") != 0)\n    {\n        fprintf(stderr, \"Did not get expected warning message\\n\");\n        ret = 1;\n    }\n    if (strcmp(warnhandler_user_data.module, \"my_warning_module\") != 0)\n    {\n        fprintf(stderr, \"Did not get expected warning module\\n\");\n        ret = 1;\n    }\n    if (warnhandler_user_data.tif_got_from_callback != tif)\n    {\n        fprintf(stderr, \"warnhandler_user_data.tif_got_from_callback != tif\\n\");\n        ret = 1;\n    }\n\n    TIFFClose(tif);\n    unlink(\"test_error_handler.tif\");\n    return ret;\n}",
+      "fn_code_pos": [
+        [
+          91,
+          0
+        ],
+        [
+          156,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test_error_handler",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int test_TIFFOpenOptionsSetMaxSingleMemAlloc(\n    tmsize_t limit, int expected_to_fail_in_open,\n    int expected_to_fail_in_write_directory, bool is_big_tiff)\n{\n    int ret = 0;\n    TIFFOpenOptions *opts = TIFFOpenOptionsAlloc();\n    assert(opts);\n    TIFFOpenOptionsSetMaxSingleMemAlloc(opts, limit);\n    TIFF *tif =\n        TIFFOpenExt(\"test_error_handler.tif\", is_big_tiff ? \"w8\" : \"w\", opts);\n    TIFFOpenOptionsFree(opts);\n    if (expected_to_fail_in_open)\n    {\n        if (tif != NULL)\n        {\n            fprintf(\n                stderr,\n                \"Expected TIFFOpenExt() to fail due to memory limitation\\n\");\n            ret = 1;\n            TIFFClose(tif);\n        }\n    }\n    else\n    {\n        if (tif == NULL)\n        {\n            fprintf(stderr, \"Expected TIFFOpenExt() to succeed\\n\");\n            ret = 1;\n        }\n        else\n        {\n#define VALUE_SAMPLESPERPIXEL 10000\n            TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, VALUE_SAMPLESPERPIXEL);\n            TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8);\n            if (TIFFWriteDirectory(tif) == 0)\n            {\n                if (!expected_to_fail_in_write_directory)\n                {\n                    fprintf(stderr,\n                            \"Expected TIFFWriteDirectory() to succeed\\n\");\n                    ret = 1;\n                }\n            }\n            else\n            {\n                if (expected_to_fail_in_write_directory)\n                {\n                    fprintf(stderr, \"Expected TIFFWriteDirectory() to fail\\n\");\n                    ret = 1;\n                }\n            }\n            TIFFClose(tif);\n        }\n    }\n    unlink(\"test_error_handler.tif\");\n    return ret;\n}",
+      "fn_code_pos": [
+        [
+          158,
+          0
+        ],
+        [
+          214,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test_TIFFOpenOptionsSetMaxSingleMemAlloc",
+        "parameters": {
+          "limit": "tmsize_t",
+          "expected_to_fail_in_open": "int",
+          "expected_to_fail_in_write_directory": "int",
+          "is_big_tiff": "bool"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int test_TIFFOpenOptionsSetMaxCumulatedMemAlloc(\n    tmsize_t limit, int expected_to_fail_in_open,\n    int expected_to_fail_in_write_directory)\n{\n    int ret = 0;\n    TIFFOpenOptions *opts = TIFFOpenOptionsAlloc();\n    assert(opts);\n    TIFFOpenOptionsSetMaxCumulatedMemAlloc(opts, limit);\n    TIFF *tif = TIFFOpenExt(\"test_error_handler.tif\", \"w\", opts);\n    TIFFOpenOptionsFree(opts);\n    if (expected_to_fail_in_open)\n    {\n        if (tif != NULL)\n        {\n            fprintf(\n                stderr,\n                \"Expected TIFFOpenExt() to fail due to memory limitation\\n\");\n            ret = 1;\n            TIFFClose(tif);\n        }\n    }\n    else\n    {\n        if (tif == NULL)\n        {\n            fprintf(stderr, \"Expected TIFFOpenExt() to succeed\\n\");\n            ret = 1;\n        }\n        else\n        {\n#define VALUE_SAMPLESPERPIXEL 10000\n            TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, VALUE_SAMPLESPERPIXEL);\n            TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8);\n            if (TIFFWriteDirectory(tif) == 0)\n            {\n                if (!expected_to_fail_in_write_directory)\n                {\n                    fprintf(stderr,\n                            \"Expected TIFFWriteDirectory() to succeed\\n\");\n                    ret = 1;\n                }\n            }\n            else\n            {\n                if (expected_to_fail_in_write_directory)\n                {\n                    fprintf(stderr, \"Expected TIFFWriteDirectory() to fail\\n\");\n                    ret = 1;\n                }\n            }\n            TIFFClose(tif);\n        }\n    }\n    unlink(\"test_error_handler.tif\");\n    return ret;\n}",
+      "fn_code_pos": [
+        [
+          216,
+          0
+        ],
+        [
+          271,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test_TIFFOpenOptionsSetMaxCumulatedMemAlloc",
+        "parameters": {
+          "limit": "tmsize_t",
+          "expected_to_fail_in_open": "int",
+          "expected_to_fail_in_write_directory": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int test_header_byte_order(TIFF *tif, char *openModeString)\n{\n\n    if (tif->tif_header.common.tiff_magic != TIFF_BIGENDIAN &&\n        tif->tif_header.common.tiff_magic != TIFF_LITTLEENDIAN)\n    {\n        fprintf(stderr,\n                \"Bad magic number %\" PRIu16 \" (0x%4.4\" PRIx16 \") for '%s'\\n\",\n                tif->tif_header.common.tiff_magic,\n                tif->tif_header.common.tiff_magic, openModeString);\n        return 1;\n    }\n    if ((tif->tif_header.common.tiff_version != TIFF_VERSION_CLASSIC) &&\n        (tif->tif_header.common.tiff_version != TIFF_VERSION_BIG))\n    {\n        fprintf(stderr,\n                \"Bad version number %\" PRIu16 \" (0x%4.4\" PRIx16\n                \") for '%s'. Should be 0x%4.4\" PRIx16 \".\\n\",\n                tif->tif_header.common.tiff_version,\n                tif->tif_header.common.tiff_version, openModeString,\n                TIFF_VERSION_CLASSIC);\n        return 1;\n    }\n    if (TIFFIsBigTIFF(tif))\n    {\n        if (tif->tif_header.big.tiff_offsetsize != 8)\n        {\n            fprintf(stderr,\n                    \"Bad BigTIFF offset-size %\" PRIu16 \" (0x%4.4\" PRIx16\n                    \") for '%s'. Should be 8.\\n\",\n                    tif->tif_header.big.tiff_offsetsize,\n                    tif->tif_header.big.tiff_offsetsize, openModeString);\n            return 1;\n        }\n    }\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          273,
+          0
+        ],
+        [
+          310,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test_header_byte_order",
+        "parameters": {
+          "tif": "TIFF",
+          "openModeString": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int open_file_and_write(const char *filename, char *openModeString,\n                        int blnWriteIFD, int blnClose, TIFF **tifOut)\n{\n    TIFF *tif = TIFFOpen(filename, openModeString);\n    if (tifOut != NULL)\n        *tifOut = tif;\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't create or open %s\\n\", filename);\n        return 0x0100;\n    }\n    int ret = test_header_byte_order(tif, openModeString);\n    if (blnWriteIFD)\n    {\n        unsigned char buf[3] = {253, 127, 255};\n        TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, 1);\n        TIFFSetField(tif, TIFFTAG_IMAGELENGTH, 1);\n        TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);\n        TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8);\n        TIFFWriteScanline(tif, buf, 0, 0);\n        if (!TIFFWriteDirectory(tif))\n        {\n            fprintf(stderr, \"TIFFWriteDirectory() failed for %s.\\n\", filename);\n            TIFFClose(tif);\n            if (tifOut != NULL)\n                *tifOut = NULL;\n            return 0x1000;\n        }\n        if (test_header_byte_order(tif, openModeString))\n            ret += 0x0010;\n    }\n    if (blnClose)\n    {\n        TIFFClose(tif);\n        if (tifOut != NULL)\n            *tifOut = NULL;\n    }\n    return ret;\n}",
+      "fn_code_pos": [
+        [
+          312,
+          0
+        ],
+        [
+          350,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "open_file_and_write",
+        "parameters": {
+          "filename": "char",
+          "openModeString": "char",
+          "blnWriteIFD": "int",
+          "blnClose": "int",
+          "tifOut": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int test_TIFFheader_swapping(void)\n{\n\n    /* Provoke swapping and non-swapping on any host. */\n    char *openModeStrings[2][8] = {{\"wb\", \"ab\", \"w8b\", \"a8b\", \"r\"},\n                                   {\"wl\", \"al\", \"w8l\", \"a8l\", \"r\"}};\n    const char *filename = \"test_TIFFheader_swapping.tif\";\n    TIFF *tif;\n    int ret = 0;\n\n    unlink(filename);\n\n    for (unsigned int i = 0; i < 2; i++)\n    {\n        for (unsigned int k = 0; k < 4; k += 2)\n        {\n            /* Classic TIFF an BigTIFF */\n            /* Before fix, 'wb' and 'wb8' failed on little-endian hosts,\n             * and 'wl' and 'wl8' failed on big-endian hosts. */\n            unsigned int kk = k; /* Existing read-only */\n            if (open_file_and_write(filename, openModeStrings[i][kk], FALSE,\n                                    TRUE, &tif))\n            {\n                fprintf(stderr,\n                        \"TIFF header byte-order in opening mode '%s' failed.\\n\",\n                        openModeStrings[i][kk]);\n                ret++;\n            }\n            kk++; /* Existing in append */\n            if (open_file_and_write(filename, openModeStrings[i][kk], TRUE,\n                                    TRUE, &tif))\n            {\n                fprintf(stderr,\n                        \"TIFF header byte-order in opening mode '%s' failed.\\n\",\n                        openModeStrings[i][kk]);\n                ret++;\n            }\n\n            kk = 4; /* Existing read-only */\n            if (open_file_and_write(filename, openModeStrings[i][kk], FALSE,\n                                    TRUE, &tif))\n            {\n                fprintf(stderr,\n                        \"TIFF header byte-order in opening mode '%s' failed.\\n\",\n                        openModeStrings[i][kk]);\n                ret++;\n            }\n            unlink(filename);\n        }\n\n        for (unsigned int k = 1; k < 4; k += 2)\n        {\n            /* Classic and BigTIFF:\n             * Open and write two IFD with non-existing file in append\n             * mode. Test also TIFFUnlinkDirectory(1) for known bug. */\n            /* Before fix, 'wb' and 'wb8' failed on little-endian hosts,\n             * and 'wl' and 'wl8' failed on big-endian hosts. */\n            if (open_file_and_write(filename, openModeStrings[i][k], TRUE, TRUE,\n                                    &tif))\n            {\n                fprintf(stderr,\n                        \"TIFF header byte-order in opening mode '%s' failed.\\n\",\n                        openModeStrings[i][k]);\n                ret++;\n            }\n            /* Write second IFD for unlinking of first IFD and keep file open.\n             */\n            if (open_file_and_write(filename, openModeStrings[i][k], TRUE,\n                                    FALSE, &tif))\n            {\n                fprintf(stderr,\n                        \"TIFF header byte-order in opening mode '%s' failed.\\n\",\n                        openModeStrings[i][k]);\n                ret++;\n            }\n            if (!TIFFUnlinkDirectory(tif, 1))\n            {\n                fprintf(stderr,\n                        \"TIFFUnlinkDirectory(1) in opening mode '%s' failed.\\n\",\n                        openModeStrings[i][k]);\n                ret++;\n            }\n            if (test_header_byte_order(tif, openModeStrings[i][k]))\n            {\n                fprintf(\n                    stderr,\n                    \"TIFF header byte-order after TIFFUnlinkDirectory(1) in \"\n                    \"opening mode '%s' failed.\\n\",\n                    openModeStrings[i][k]);\n                ret++;\n            }\n            /* Before fix, TIFFSetDirectory() failed when BigTIFF and swapping\n             * is needed, because TIFFUnlinkDirectory() stores tiff_diroff in\n             * wrong byte-order then. */\n            if (!TIFFSetDirectory(tif, 0))\n            {\n                fprintf(stderr,\n                        \"TIFFSetDirectory(0) after TIFFUnlinkDirectory(1) in \"\n                        \"opening mode '%s' failed.\\n\",\n                        openModeStrings[i][k]);\n                ret++;\n            }\n            TIFFClose(tif);\n            unlink(filename);\n        }\n    }\n\n    unlink(filename);\n    return ret;\n}",
+      "fn_code_pos": [
+        [
+          362,
+          0
+        ],
+        [
+          471,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test_TIFFheader_swapping",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int main()\n{\n    int ret = 0;\n    fprintf(stderr, \"=== test_open_options .... ===\\n\");\n    fprintf(stderr, \"---- test_TIFFheader_swapping ---- \\n\");\n    if (ret += test_TIFFheader_swapping())\n    {\n        fprintf(stderr,\n                \"--- Failed during test_TIFFheader_swapping test with %d \"\n                \"fails. ---\\n\",\n                ret);\n    }\n\n    ret += test_error_handler();\n    fprintf(stderr, \"\\n---- test_TIFFOpenOptionsSetMaxSingleMemAlloc \"\n                    \"with non-BigTIFF ---- \\n\");\n    ret += test_TIFFOpenOptionsSetMaxSingleMemAlloc(1, TRUE, -1, FALSE);\n    ret += test_TIFFOpenOptionsSetMaxSingleMemAlloc(\n        sizeof(TIFF) + strlen(\"test_error_handler.tif\") + 1, FALSE, TRUE,\n        FALSE);\n    ret += test_TIFFOpenOptionsSetMaxSingleMemAlloc(\n        VALUE_SAMPLESPERPIXEL * sizeof(short), FALSE, FALSE, FALSE);\n\n    fprintf(stderr, \"\\n---- test_TIFFOpenOptionsSetMaxSingleMemAlloc \"\n                    \"with BigTIFF ---- \\n\");\n    ret += test_TIFFOpenOptionsSetMaxSingleMemAlloc(1, TRUE, -1, TRUE);\n    ret += test_TIFFOpenOptionsSetMaxSingleMemAlloc(\n        sizeof(TIFF) + strlen(\"test_error_handler.tif\") + 1, FALSE, TRUE, TRUE);\n    ret += test_TIFFOpenOptionsSetMaxSingleMemAlloc(\n        VALUE_SAMPLESPERPIXEL * sizeof(short), FALSE, FALSE, TRUE);\n\n    fprintf(stderr,\n            \"\\n---- test_TIFFOpenOptionsSetMaxCumulatedMemAlloc ---- \\n\");\n    ret += test_TIFFOpenOptionsSetMaxCumulatedMemAlloc(1, TRUE, -1);\n    ret += test_TIFFOpenOptionsSetMaxCumulatedMemAlloc(\n        sizeof(TIFF) + strlen(\"test_error_handler.tif\") + 1, FALSE, TRUE);\n    ret += test_TIFFOpenOptionsSetMaxCumulatedMemAlloc(\n        sizeof(TIFF) + strlen(\"test_error_handler.tif\") + 1 + 30000, FALSE,\n        FALSE);\n    if (ret > 0)\n        fprintf(stderr, \"\\n=== test_open_options failed with %d fails ===\\n\",\n                ret);\n    else\n        fprintf(stderr, \"\\n=== test_open_options finished OK ===\\n\");\n\n    return ret;\n}",
+      "fn_code_pos": [
+        [
+          473,
+          0
+        ],
+        [
+          519,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct MyErrorHandlerUserDataStruct\n{\n    char *buffer;\n    size_t buffer_size;\n    TIFF *tif_got_from_callback;\n    char module[64];\n} MyErrorHandlerUserDataStruct;",
+      {
+        "*buffer": "char",
+        "buffer_size": "size_t",
+        "*tif_got_from_callback": "TIFF",
+        "module[64]": "char"
+      },
+      "MyErrorHandlerUserDataStruct",
+      [
+        70,
+        0
+      ],
+      [
+        76,
+        31
+      ]
+    ],
+    [
+      "typedef struct MyErrorHandlerUserDataStruct\n{\n    char *buffer;\n    size_t buffer_size;\n    TIFF *tif_got_from_callback;\n    char module[64];\n} MyErrorHandlerUserDataStruct;",
+      {
+        "*buffer": "char",
+        "buffer_size": "size_t",
+        "*tif_got_from_callback": "TIFF",
+        "module[64]": "char"
+      },
+      "MyErrorHandlerUserDataStruct",
+      [
+        70,
+        0
+      ],
+      [
+        76,
+        31
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <assert.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        40,
+        0
+      ],
+      [
+        41,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\" // for struct TIFF\n",
+      [
+        41,
+        0
+      ],
+      [
+        42,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

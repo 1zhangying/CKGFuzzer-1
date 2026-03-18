@@ -1,0 +1,308 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "const cmsCIEXYZ* CMSEXPORT cmsD50_XYZ(void)\n{\n    static cmsCIEXYZ D50XYZ = {cmsD50X, cmsD50Y, cmsD50Z};\n\n    return &D50XYZ;\n}",
+      "fn_code_pos": [
+        [
+          30,
+          0
+        ],
+        [
+          35,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsD50_XYZ",
+        "parameters": {},
+        "return_type": "cmsCIEXYZ"
+      }
+    },
+    {
+      "fn_code": "const cmsCIExyY* CMSEXPORT cmsD50_xyY(void)\n{\n    static cmsCIExyY D50xyY;\n\n    cmsXYZ2xyY(&D50xyY, cmsD50_XYZ());\n\n    return &D50xyY;\n}",
+      "fn_code_pos": [
+        [
+          37,
+          0
+        ],
+        [
+          44,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsD50_xyY",
+        "parameters": {},
+        "return_type": "cmsCIExyY"
+      }
+    },
+    {
+      "fn_code": "cmsBool  CMSEXPORT cmsWhitePointFromTemp(cmsCIExyY* WhitePoint, cmsFloat64Number TempK)\n{\n    cmsFloat64Number x, y;\n    cmsFloat64Number T, T2, T3;\n    // cmsFloat64Number M1, M2;\n\n    _cmsAssert(WhitePoint != NULL);\n\n    T = TempK;\n    T2 = T*T;            // Square\n    T3 = T2*T;           // Cube\n\n    // For correlated color temperature (T) between 4000K and 7000K:\n\n    if (T >= 4000. && T <= 7000.)\n    {\n        x = -4.6070*(1E9/T3) + 2.9678*(1E6/T2) + 0.09911*(1E3/T) + 0.244063;\n    }\n    else\n        // or for correlated color temperature (T) between 7000K and 25000K:\n\n        if (T > 7000.0 && T <= 25000.0)\n        {\n            x = -2.0064*(1E9/T3) + 1.9018*(1E6/T2) + 0.24748*(1E3/T) + 0.237040;\n        }\n        else {\n            cmsSignalError(0, cmsERROR_RANGE, \"cmsWhitePointFromTemp: invalid temp\");\n            return FALSE;\n        }\n\n    // Obtain y(x)\n    y = -3.000*(x*x) + 2.870*x - 0.275;\n\n    // wave factors (not used, but here for futures extensions)\n\n    // M1 = (-1.3515 - 1.7703*x + 5.9114 *y)/(0.0241 + 0.2562*x - 0.7341*y);\n    // M2 = (0.0300 - 31.4424*x + 30.0717*y)/(0.0241 + 0.2562*x - 0.7341*y);\n\n    WhitePoint -> x = x;\n    WhitePoint -> y = y;\n    WhitePoint -> Y = 1.0;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          47,
+          0
+        ],
+        [
+          90,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsWhitePointFromTemp",
+        "parameters": {
+          "WhitePoint": "cmsCIExyY",
+          "TempK": "cmsFloat64Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool  CMSEXPORT cmsTempFromWhitePoint(cmsFloat64Number* TempK, const cmsCIExyY* WhitePoint)\n{\n    cmsUInt32Number j;\n    cmsFloat64Number us,vs;\n    cmsFloat64Number uj,vj,tj,di,dj,mi,mj;\n    cmsFloat64Number xs, ys;\n\n    _cmsAssert(WhitePoint != NULL);\n    _cmsAssert(TempK != NULL);\n\n    di = mi = 0;\n    xs = WhitePoint -> x;\n    ys = WhitePoint -> y;\n\n    // convert (x,y) to CIE 1960 (u,WhitePoint)\n\n    us = (2*xs) / (-xs + 6*ys + 1.5);\n    vs = (3*ys) / (-xs + 6*ys + 1.5);\n\n\n    for (j=0; j < NISO; j++) {\n\n        uj = isotempdata[j].ut;\n        vj = isotempdata[j].vt;\n        tj = isotempdata[j].tt;\n        mj = isotempdata[j].mirek;\n\n        dj = ((vs - vj) - tj * (us - uj)) / sqrt(1.0 + tj * tj);\n\n        if ((j != 0) && (di/dj < 0.0)) {\n\n            // Found a match\n            *TempK = 1000000.0 / (mi + (di / (di - dj)) * (mj - mi));\n            return TRUE;\n        }\n\n        di = dj;\n        mi = mj;\n    }\n\n    // Not found\n    return FALSE;\n}",
+      "fn_code_pos": [
+        [
+          142,
+          0
+        ],
+        [
+          184,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsTempFromWhitePoint",
+        "parameters": {
+          "TempK": "cmsFloat64Number",
+          "WhitePoint": "cmsCIExyY"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool ComputeChromaticAdaptation(cmsMAT3* Conversion,\n                                const cmsCIEXYZ* SourceWhitePoint,\n                                const cmsCIEXYZ* DestWhitePoint,\n                                const cmsMAT3* Chad)\n\n{\n\n    cmsMAT3 Chad_Inv;\n    cmsVEC3 ConeSourceXYZ, ConeSourceRGB;\n    cmsVEC3 ConeDestXYZ, ConeDestRGB;\n    cmsMAT3 Cone, Tmp;\n\n\n    Tmp = *Chad;\n    if (!_cmsMAT3inverse(&Tmp, &Chad_Inv)) return FALSE;\n\n    _cmsVEC3init(&ConeSourceXYZ, SourceWhitePoint -> X,\n                             SourceWhitePoint -> Y,\n                             SourceWhitePoint -> Z);\n\n    _cmsVEC3init(&ConeDestXYZ,   DestWhitePoint -> X,\n                             DestWhitePoint -> Y,\n                             DestWhitePoint -> Z);\n\n    _cmsMAT3eval(&ConeSourceRGB, Chad, &ConeSourceXYZ);\n    _cmsMAT3eval(&ConeDestRGB,   Chad, &ConeDestXYZ);\n\n    if ((fabs(ConeSourceRGB.n[0]) < MATRIX_DET_TOLERANCE) ||\n        (fabs(ConeSourceRGB.n[1]) < MATRIX_DET_TOLERANCE) ||\n        (fabs(ConeSourceRGB.n[2]) < MATRIX_DET_TOLERANCE)) return FALSE;\n\n    // Build matrix\n    _cmsVEC3init(&Cone.v[0], ConeDestRGB.n[0]/ConeSourceRGB.n[0],    0.0,  0.0);\n    _cmsVEC3init(&Cone.v[1], 0.0,   ConeDestRGB.n[1]/ConeSourceRGB.n[1],   0.0);\n    _cmsVEC3init(&Cone.v[2], 0.0,   0.0,   ConeDestRGB.n[2]/ConeSourceRGB.n[2]);\n\n    // Normalize\n    _cmsMAT3per(&Tmp, &Cone, Chad);\n    _cmsMAT3per(Conversion, &Chad_Inv, &Tmp);\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          189,
+          0
+        ],
+        [
+          231,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComputeChromaticAdaptation",
+        "parameters": {
+          "Conversion": "cmsMAT3",
+          "SourceWhitePoint": "cmsCIEXYZ",
+          "DestWhitePoint": "cmsCIEXYZ",
+          "Chad": "cmsMAT3"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool  _cmsAdaptationMatrix(cmsMAT3* r, const cmsMAT3* ConeMatrix, const cmsCIEXYZ* FromIll, const cmsCIEXYZ* ToIll)\n{\n    cmsMAT3 LamRigg   = {{ // Bradford matrix\n        {{  0.8951,  0.2664, -0.1614 }},\n        {{ -0.7502,  1.7135,  0.0367 }},\n        {{  0.0389, -0.0685,  1.0296 }}\n    }};\n\n    if (ConeMatrix == NULL)\n        ConeMatrix = &LamRigg;\n\n    return ComputeChromaticAdaptation(r, FromIll, ToIll, ConeMatrix);\n}",
+      "fn_code_pos": [
+        [
+          235,
+          0
+        ],
+        [
+          247,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsAdaptationMatrix",
+        "parameters": {
+          "r": "cmsMAT3",
+          "ConeMatrix": "cmsMAT3",
+          "FromIll": "cmsCIEXYZ",
+          "ToIll": "cmsCIEXYZ"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool _cmsAdaptMatrixToD50(cmsMAT3* r, const cmsCIExyY* SourceWhitePt)\n{\n    cmsCIEXYZ Dn;\n    cmsMAT3 Bradford;\n    cmsMAT3 Tmp;\n\n    cmsxyY2XYZ(&Dn, SourceWhitePt);\n\n    if (!_cmsAdaptationMatrix(&Bradford, NULL, &Dn, cmsD50_XYZ())) return FALSE;\n\n    Tmp = *r;\n    _cmsMAT3per(r, &Bradford, &Tmp);\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          250,
+          0
+        ],
+        [
+          265,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsAdaptMatrixToD50",
+        "parameters": {
+          "r": "cmsMAT3",
+          "SourceWhitePt": "cmsCIExyY"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool _cmsBuildRGB2XYZtransferMatrix(cmsMAT3* r, const cmsCIExyY* WhitePt, const cmsCIExyYTRIPLE* Primrs)\n{\n    cmsVEC3 WhitePoint, Coef;\n    cmsMAT3 Result, Primaries;\n    cmsFloat64Number xn, yn;\n    cmsFloat64Number xr, yr;\n    cmsFloat64Number xg, yg;\n    cmsFloat64Number xb, yb;\n\n    xn = WhitePt -> x;\n    yn = WhitePt -> y;\n    xr = Primrs -> Red.x;\n    yr = Primrs -> Red.y;\n    xg = Primrs -> Green.x;\n    yg = Primrs -> Green.y;\n    xb = Primrs -> Blue.x;\n    yb = Primrs -> Blue.y;\n\n    // Build Primaries matrix\n    _cmsVEC3init(&Primaries.v[0], xr,        xg,         xb);\n    _cmsVEC3init(&Primaries.v[1], yr,        yg,         yb);\n    _cmsVEC3init(&Primaries.v[2], (1-xr-yr), (1-xg-yg),  (1-xb-yb));\n\n\n    // Result = Primaries ^ (-1) inverse matrix\n    if (!_cmsMAT3inverse(&Primaries, &Result))\n        return FALSE;\n\n\n    _cmsVEC3init(&WhitePoint, xn/yn, 1.0, (1.0-xn-yn)/yn);\n\n    // Across inverse primaries ...\n    _cmsMAT3eval(&Coef, &Result, &WhitePoint);\n\n    // Give us the Coefs, then I build transformation matrix\n    _cmsVEC3init(&r -> v[0], Coef.n[VX]*xr,          Coef.n[VY]*xg,          Coef.n[VZ]*xb);\n    _cmsVEC3init(&r -> v[1], Coef.n[VX]*yr,          Coef.n[VY]*yg,          Coef.n[VZ]*yb);\n    _cmsVEC3init(&r -> v[2], Coef.n[VX]*(1.0-xr-yr), Coef.n[VY]*(1.0-xg-yg), Coef.n[VZ]*(1.0-xb-yb));\n\n\n    return _cmsAdaptMatrixToD50(r, WhitePt);\n\n}",
+      "fn_code_pos": [
+        [
+          280,
+          0
+        ],
+        [
+          322,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsBuildRGB2XYZtransferMatrix",
+        "parameters": {
+          "r": "cmsMAT3",
+          "WhitePt": "cmsCIExyY",
+          "Primrs": "cmsCIExyYTRIPLE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsAdaptToIlluminant(cmsCIEXYZ* Result,\n                                       const cmsCIEXYZ* SourceWhitePt,\n                                       const cmsCIEXYZ* Illuminant,\n                                       const cmsCIEXYZ* Value)\n{\n    cmsMAT3 Bradford;\n    cmsVEC3 In, Out;\n\n    _cmsAssert(Result != NULL);\n    _cmsAssert(SourceWhitePt != NULL);\n    _cmsAssert(Illuminant != NULL);\n    _cmsAssert(Value != NULL);\n\n    if (!_cmsAdaptationMatrix(&Bradford, NULL, SourceWhitePt, Illuminant)) return FALSE;\n\n    _cmsVEC3init(&In, Value -> X, Value -> Y, Value -> Z);\n    _cmsMAT3eval(&Out, &Bradford, &In);\n\n    Result -> X = Out.n[0];\n    Result -> Y = Out.n[1];\n    Result -> Z = Out.n[2];\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          327,
+          0
+        ],
+        [
+          350,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsAdaptToIlluminant",
+        "parameters": {
+          "Result": "cmsCIEXYZ",
+          "SourceWhitePt": "cmsCIEXYZ",
+          "Illuminant": "cmsCIEXYZ",
+          "Value": "cmsCIEXYZ"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "cmsD50_XYZ(void)",
+      "fn_dec_pos": [
+        [
+          30,
+          27
+        ],
+        [
+          30,
+          43
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsD50_XYZ",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "cmsD50_xyY(void)",
+      "fn_dec_pos": [
+        [
+          37,
+          27
+        ],
+        [
+          37,
+          43
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsD50_xyY",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n\n    cmsFloat64Number mirek;  // temp (in microreciprocal kelvin)\n    cmsFloat64Number ut;     // u coord of intersection w/ blackbody locus\n    cmsFloat64Number vt;     // v coord of intersection w/ blackbody locus\n    cmsFloat64Number tt;     // slope of ISOTEMPERATURE. line\n\n    } ISOTEMPERATURE;",
+      {
+        "mirek": "cmsFloat64Number",
+        "ut": "cmsFloat64Number",
+        "vt": "cmsFloat64Number",
+        "tt": "cmsFloat64Number"
+      },
+      "ISOTEMPERATURE",
+      [
+        94,
+        0
+      ],
+      [
+        101,
+        21
+      ]
+    ],
+    [
+      "typedef struct {\n\n    cmsFloat64Number mirek;  // temp (in microreciprocal kelvin)\n    cmsFloat64Number ut;     // u coord of intersection w/ blackbody locus\n    cmsFloat64Number vt;     // v coord of intersection w/ blackbody locus\n    cmsFloat64Number tt;     // slope of ISOTEMPERATURE. line\n\n    } ISOTEMPERATURE;",
+      {
+        "mirek": "cmsFloat64Number",
+        "ut": "cmsFloat64Number",
+        "vt": "cmsFloat64Number",
+        "tt": "cmsFloat64Number"
+      },
+      "ISOTEMPERATURE",
+      [
+        94,
+        0
+      ],
+      [
+        101,
+        21
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"lcms2_internal.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

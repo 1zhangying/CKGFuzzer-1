@@ -1,0 +1,46 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17		#include "ares_setup.h"	
+18			
+19		#ifdef HAVE_NETDB_H	
+20		#include <netdb.h>	
+21		#endif	
+22			
+23		#include "ares.h"	
+24		#include "ares_private.h" /* for memdebug */	
+25			
+26		void ares_free_hostent(struct hostent *host)	
+27	339	{	
+28	339	char **p;	
+29			
+30	339	if (!host)	
+31	208	return;	
+32			
+33	131	ares_free((char *)(host->h_name));	
+34	372	for (p = host->h_aliases; p && *p; p++)	
+35	241	ares_free(*p);	
+36	131	ares_free(host->h_aliases);	
+37	131	if (host->h_addr_list) {	
+38	131	ares_free(host->h_addr_list[0]); /* no matter if there is one or many entries,	
+39		there is only one malloc for all of them */	
+40	131	ares_free(host->h_addr_list);	
+41	131	}	
+42	131	ares_free(host);	
+43	131	}	
+
+

@@ -1,0 +1,99 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void TIFFCleanup(TIFF *tif)\n{\n    /*\n     * Flush buffered data and directory (if dirty).\n     */\n    if (tif->tif_mode != O_RDONLY)\n        TIFFFlush(tif);\n    (*tif->tif_cleanup)(tif);\n    TIFFFreeDirectory(tif);\n\n    _TIFFCleanupIFDOffsetAndNumberMaps(tif);\n\n    /*\n     * Clean up client info links.\n     */\n    while (tif->tif_clientinfo)\n    {\n        TIFFClientInfoLink *psLink = tif->tif_clientinfo;\n\n        tif->tif_clientinfo = psLink->next;\n        _TIFFfreeExt(tif, psLink->name);\n        _TIFFfreeExt(tif, psLink);\n    }\n\n    if (tif->tif_rawdata && (tif->tif_flags & TIFF_MYBUFFER))\n        _TIFFfreeExt(tif, tif->tif_rawdata);\n    if (isMapped(tif))\n        TIFFUnmapFileContents(tif, tif->tif_base, (toff_t)tif->tif_size);\n\n    /*\n     * Clean up custom fields.\n     */\n    if (tif->tif_fields && tif->tif_nfields > 0)\n    {\n        uint32_t i;\n\n        for (i = 0; i < tif->tif_nfields; i++)\n        {\n            TIFFField *fld = tif->tif_fields[i];\n            if (fld->field_name != NULL)\n            {\n                if (fld->field_bit == FIELD_CUSTOM &&\n                    /* caution: tif_fields[i] must not be the beginning of a\n                     * fields-array. Otherwise the following tags are also freed\n                     * with the first free().\n                     */\n                    TIFFFieldIsAnonymous(fld))\n                {\n                    _TIFFfreeExt(tif, fld->field_name);\n                    _TIFFfreeExt(tif, fld);\n                }\n            }\n        }\n\n        _TIFFfreeExt(tif, tif->tif_fields);\n    }\n\n    if (tif->tif_nfieldscompat > 0)\n    {\n        uint32_t i;\n\n        for (i = 0; i < tif->tif_nfieldscompat; i++)\n        {\n            if (tif->tif_fieldscompat[i].allocated_size)\n                _TIFFfreeExt(tif, tif->tif_fieldscompat[i].fields);\n        }\n        _TIFFfreeExt(tif, tif->tif_fieldscompat);\n    }\n\n    if (tif->tif_cur_cumulated_mem_alloc != 0)\n    {\n        TIFFErrorExtR(tif, \"TIFFCleanup\",\n                      \"tif_cur_cumulated_mem_alloc = %\" PRIu64 \" whereas it \"\n                      \"should be 0\",\n                      (uint64_t)tif->tif_cur_cumulated_mem_alloc);\n    }\n\n    _TIFFfreeExt(NULL, tif);\n}",
+      "fn_code_pos": [
+        [
+          43,
+          0
+        ],
+        [
+          121,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFCleanup",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void _TIFFCleanupIFDOffsetAndNumberMaps(TIFF *tif)\n{\n    if (tif->tif_map_dir_offset_to_number)\n    {\n        TIFFHashSetDestroy(tif->tif_map_dir_offset_to_number);\n        tif->tif_map_dir_offset_to_number = NULL;\n    }\n    if (tif->tif_map_dir_number_to_offset)\n    {\n        TIFFHashSetDestroy(tif->tif_map_dir_number_to_offset);\n        tif->tif_map_dir_number_to_offset = NULL;\n    }\n}",
+      "fn_code_pos": [
+        [
+          127,
+          0
+        ],
+        [
+          139,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFCleanupIFDOffsetAndNumberMaps",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void TIFFClose(TIFF *tif)\n{\n    if (tif != NULL)\n    {\n        TIFFCloseProc closeproc = tif->tif_closeproc;\n        thandle_t fd = tif->tif_clientdata;\n\n        TIFFCleanup(tif);\n        (void)(*closeproc)(fd);\n    }\n}",
+      "fn_code_pos": [
+        [
+          155,
+          0
+        ],
+        [
+          165,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFClose",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

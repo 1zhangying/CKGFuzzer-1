@@ -1,0 +1,321 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nDWORD WINAPI thread_adaptor(LPVOID p)\n{\n    thread_adaptor_param* ap = (thread_adaptor_param*)p;\n    _cmsWorkSlice* s = ap->param;\n\n    ap->worker(s->CMMcargo, s->InputBuffer, s->OutputBuffer, \n               s->PixelsPerLine, s->LineCount, s->Stride);\n    _cmsFree(0, p);\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          40,
+          0
+        ],
+        [
+          50,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "thread_adaptor",
+        "parameters": {
+          "p": "LPVOID"
+        },
+        "return_type": "DWORD"
+      }
+    },
+    {
+      "fn_code": "cmsHANDLE _cmsThrCreateWorker(cmsContext ContextID, _cmsTransform2Fn worker, _cmsWorkSlice* param)\n{\n    DWORD ThreadID;\n    thread_adaptor_param* p;\n    HANDLE handle;\n\n    p = (thread_adaptor_param*)_cmsMalloc(0, sizeof(thread_adaptor_param));\n    if (p == NULL) return NULL;\n\n    p->worker = worker;\n    p->param = param;\n\n    handle  = CreateThread(NULL, 0, thread_adaptor, (LPVOID) p, 0, &ThreadID);\n    if (handle == NULL)\n    {\n        cmsSignalError(ContextID, cmsERROR_UNDEFINED, \"Cannot create thread\");\n    }\n\n    return (cmsHANDLE)handle;\n}",
+      "fn_code_pos": [
+        [
+          54,
+          0
+        ],
+        [
+          73,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsThrCreateWorker",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "worker": "_cmsTransform2Fn",
+          "param": "_cmsWorkSlice"
+        },
+        "return_type": "cmsHANDLE"
+      }
+    },
+    {
+      "fn_code": "void _cmsThrJoinWorker(cmsContext ContextID, cmsHANDLE hWorker)\n{\n    if (WaitForSingleObject((HANDLE)hWorker, INFINITE) != WAIT_OBJECT_0)\n    {\n        cmsSignalError(ContextID, cmsERROR_UNDEFINED, \"Cannot join thread\");\n    }\n}",
+      "fn_code_pos": [
+        [
+          76,
+          0
+        ],
+        [
+          82,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsThrJoinWorker",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "hWorker": "cmsHANDLE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number _cmsThrIdealThreadCount(void)\n{\n    SYSTEM_INFO sysinfo;\n\n    GetSystemInfo(&sysinfo);\n    return sysinfo.dwNumberOfProcessors; //Returns the number of processors in the system.\n}",
+      "fn_code_pos": [
+        [
+          85,
+          0
+        ],
+        [
+          91,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsThrIdealThreadCount",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* thread_adaptor(void* p)\n{\n    thread_adaptor_param* ap = (thread_adaptor_param*)p;\n    _cmsWorkSlice* s = ap->param;\n\n    ap->worker(s->CMMcargo, s->InputBuffer, s->OutputBuffer,\n               s->PixelsPerLine, s->LineCount, s->Stride);\n    _cmsFree(0, p);\n\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          109,
+          0
+        ],
+        [
+          120,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "thread_adaptor",
+        "parameters": {
+          "p": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsHANDLE _cmsThrCreateWorker(cmsContext ContextID, _cmsTransform2Fn worker, _cmsWorkSlice* param)\n{\n    pthread_t threadId;\n    thread_adaptor_param* p;\n\n    p = (thread_adaptor_param*)_cmsMalloc(0, sizeof(thread_adaptor_param));\n    if (p == NULL) return NULL;\n\n    p->worker = worker;\n    p->param = param;\n\n    int err = pthread_create(&threadId, NULL, thread_adaptor, p);\n    if (err != 0)\n    {\n        cmsSignalError(ContextID, cmsERROR_UNDEFINED, \"Cannot create thread [pthread error %d]\", err);\n        return NULL;\n    }\n    else\n        return (cmsHANDLE) threadId;\n}",
+      "fn_code_pos": [
+        [
+          124,
+          0
+        ],
+        [
+          143,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsThrCreateWorker",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "worker": "_cmsTransform2Fn",
+          "param": "_cmsWorkSlice"
+        },
+        "return_type": "cmsHANDLE"
+      }
+    },
+    {
+      "fn_code": "void _cmsThrJoinWorker(cmsContext ContextID, cmsHANDLE hWorker)\n{\n    int err = pthread_join((pthread_t)hWorker, NULL);\n    if (err != 0)\n    {\n        cmsSignalError(ContextID, cmsERROR_UNDEFINED, \"Cannot join thread [pthread error %d]\", err); \n    }\n}",
+      "fn_code_pos": [
+        [
+          146,
+          0
+        ],
+        [
+          153,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsThrJoinWorker",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "hWorker": "cmsHANDLE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number _cmsThrIdealThreadCount(void)\n{    \n    long cores = sysconf(_SC_NPROCESSORS_ONLN);\n    if (cores == -1L)\n        return 1;\n    else\n        return (cmsInt32Number)cores;\n}",
+      "fn_code_pos": [
+        [
+          155,
+          0
+        ],
+        [
+          162,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsThrIdealThreadCount",
+        "parameters": {},
+        "return_type": "cmsInt32Number"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "thread_adaptor(void* p)",
+      "fn_dec_pos": [
+        [
+          110,
+          6
+        ],
+        [
+          110,
+          29
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "thread_adaptor",
+        "parameters": {
+          "p": "void"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct\n{\n    _cmsTransform2Fn worker;\n    _cmsWorkSlice* param;\n\n} thread_adaptor_param;",
+      {
+        "worker": "_cmsTransform2Fn",
+        "* param": "_cmsWorkSlice"
+      },
+      "thread_adaptor_param",
+      [
+        31,
+        0
+      ],
+      [
+        36,
+        23
+      ]
+    ],
+    [
+      "typedef struct\n{\n    _cmsTransform2Fn worker;\n    _cmsWorkSlice* param;\n\n} thread_adaptor_param;",
+      {
+        "worker": "_cmsTransform2Fn",
+        "* param": "_cmsWorkSlice"
+      },
+      "thread_adaptor_param",
+      [
+        100,
+        0
+      ],
+      [
+        105,
+        23
+      ]
+    ],
+    [
+      "typedef struct\n{\n    _cmsTransform2Fn worker;\n    _cmsWorkSlice* param;\n\n} thread_adaptor_param;",
+      {
+        "worker": "_cmsTransform2Fn",
+        "* param": "_cmsWorkSlice"
+      },
+      "thread_adaptor_param",
+      [
+        31,
+        0
+      ],
+      [
+        36,
+        23
+      ]
+    ],
+    [
+      "typedef struct\n{\n    _cmsTransform2Fn worker;\n    _cmsWorkSlice* param;\n\n} thread_adaptor_param;",
+      {
+        "worker": "_cmsTransform2Fn",
+        "* param": "_cmsWorkSlice"
+      },
+      "thread_adaptor_param",
+      [
+        100,
+        0
+      ],
+      [
+        105,
+        23
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"threaded_internal.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#include <windows.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <pthread.h>\n",
+      [
+        96,
+        0
+      ],
+      [
+        97,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        97,
+        0
+      ],
+      [
+        98,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

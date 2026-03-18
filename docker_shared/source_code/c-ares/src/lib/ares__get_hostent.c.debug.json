@@ -1,0 +1,176 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int ares__get_hostent(FILE *fp, int family, struct hostent **host)\n{\n  char *line = NULL, *p, *q, **alias;\n  char *txtaddr, *txthost, *txtalias;\n  int status;\n  size_t addrlen, linesize, naliases;\n  struct ares_addr addr;\n  struct hostent *hostent = NULL;\n\n  *host = NULL; /* Assume failure */\n\n  /* Validate family */\n  switch (family) {\n    case AF_INET:\n    case AF_INET6:\n    case AF_UNSPEC:\n      break;\n    default:\n      return ARES_EBADFAMILY;\n  }\n\n  while ((status = ares__read_line(fp, &line, &linesize)) == ARES_SUCCESS)\n    {\n\n      /* Trim line comment. */\n      p = line;\n      while (*p && (*p != '#'))\n        p++;\n      *p = '\\0';\n\n      /* Trim trailing whitespace. */\n      q = p - 1;\n      while ((q >= line) && ISSPACE(*q))\n        q--;\n      *++q = '\\0';\n\n      /* Skip leading whitespace. */\n      p = line;\n      while (*p && ISSPACE(*p))\n        p++;\n      if (!*p)\n        /* Ignore line if empty. */\n        continue;\n\n      /* Pointer to start of IPv4 or IPv6 address part. */\n      txtaddr = p;\n\n      /* Advance past address part. */\n      while (*p && !ISSPACE(*p))\n        p++;\n      if (!*p)\n        /* Ignore line if reached end of line. */\n        continue;\n\n      /* Null terminate address part. */\n      *p = '\\0';\n\n      /* Advance to host name */\n      p++;\n      while (*p && ISSPACE(*p))\n        p++;\n      if (!*p)\n        /* Ignore line if reached end of line. */\n        continue;  /* LCOV_EXCL_LINE: trailing whitespace already stripped */\n\n      /* Pointer to start of host name. */\n      txthost = p;\n\n      /* Advance past host name. */\n      while (*p && !ISSPACE(*p))\n        p++;\n\n      /* Pointer to start of first alias. */\n      txtalias = NULL;\n      if (*p)\n        {\n          q = p + 1;\n          while (*q && ISSPACE(*q))\n            q++;\n          if (*q)\n            txtalias = q;\n        }\n\n      /* Null terminate host name. */\n      *p = '\\0';\n\n      /* find out number of aliases. */\n      naliases = 0;\n      if (txtalias)\n        {\n          p = txtalias;\n          while (*p)\n            {\n              while (*p && !ISSPACE(*p))\n                p++;\n              while (*p && ISSPACE(*p))\n                p++;\n              naliases++;\n            }\n        }\n\n      /* Convert address string to network address for the requested family. */\n      addrlen = 0;\n      addr.family = AF_UNSPEC;\n      addr.addrV4.s_addr = INADDR_NONE;\n      if ((family == AF_INET) || (family == AF_UNSPEC))\n        {\n          if (ares_inet_pton(AF_INET, txtaddr, &addr.addrV4) > 0)\n            {\n              /* Actual network address family and length. */\n              addr.family = AF_INET;\n              addrlen = sizeof(addr.addrV4);\n            }\n        }\n      if ((family == AF_INET6) || ((family == AF_UNSPEC) && (!addrlen)))\n        {\n          if (ares_inet_pton(AF_INET6, txtaddr, &addr.addrV6) > 0)\n            {\n              /* Actual network address family and length. */\n              addr.family = AF_INET6;\n              addrlen = sizeof(addr.addrV6);\n            }\n        }\n      if (!addrlen)\n        /* Ignore line if invalid address string for the requested family. */\n        continue;\n\n      /*\n      ** Actual address family possible values are AF_INET and AF_INET6 only.\n      */\n\n      /* Allocate memory for the hostent structure. */\n      hostent = ares_malloc(sizeof(struct hostent));\n      if (!hostent)\n        break;\n\n      /* Initialize fields for out of memory condition. */\n      hostent->h_aliases = NULL;\n      hostent->h_addr_list = NULL;\n\n      /* Copy official host name. */\n      hostent->h_name = ares_strdup(txthost);\n      if (!hostent->h_name)\n        break;\n\n      /* Copy network address. */\n      hostent->h_addr_list = ares_malloc(2 * sizeof(char *));\n      if (!hostent->h_addr_list)\n        break;\n      hostent->h_addr_list[1] = NULL;\n      hostent->h_addr_list[0] = ares_malloc(addrlen);\n      if (!hostent->h_addr_list[0])\n        break;\n      if (addr.family == AF_INET)\n        memcpy(hostent->h_addr_list[0], &addr.addrV4, sizeof(addr.addrV4));\n      else\n        memcpy(hostent->h_addr_list[0], &addr.addrV6, sizeof(addr.addrV6));\n\n      /* Copy aliases. */\n      hostent->h_aliases = ares_malloc((naliases + 1) * sizeof(char *));\n      if (!hostent->h_aliases)\n        break;\n      alias = hostent->h_aliases;\n      while (naliases)\n        *(alias + naliases--) = NULL;\n      *alias = NULL;\n      while (txtalias)\n        {\n          p = txtalias;\n          while (*p && !ISSPACE(*p))\n            p++;\n          q = p;\n          while (*q && ISSPACE(*q))\n            q++;\n          *p = '\\0';\n          if ((*alias = ares_strdup(txtalias)) == NULL)\n            break;\n          alias++;\n          txtalias = *q ? q : NULL;\n        }\n      if (txtalias)\n        /* Alias memory allocation failure. */\n        break;\n\n      /* Copy actual network address family and length. */\n      hostent->h_addrtype = aresx_sitoss(addr.family);\n      hostent->h_length = aresx_uztoss(addrlen);\n\n      /* Free line buffer. */\n      ares_free(line);\n\n      /* Return hostent successfully */\n      *host = hostent;\n      return ARES_SUCCESS;\n\n    }\n\n  /* If allocated, free line buffer. */\n  if (line)\n    ares_free(line);\n\n  if (status == ARES_SUCCESS)\n    {\n      /* Memory allocation failure; clean up. */\n      if (hostent)\n        {\n          if (hostent->h_name)\n            ares_free((char *) hostent->h_name);\n          if (hostent->h_aliases)\n            {\n              for (alias = hostent->h_aliases; *alias; alias++)\n                ares_free(*alias);\n              ares_free(hostent->h_aliases);\n            }\n          if (hostent->h_addr_list)\n            {\n              if (hostent->h_addr_list[0])\n                ares_free(hostent->h_addr_list[0]);\n              ares_free(hostent->h_addr_list);\n            }\n          ares_free(hostent);\n        }\n      return ARES_ENOMEM;\n    }\n\n  return status;\n}",
+      "fn_code_pos": [
+        [
+          33,
+          0
+        ],
+        [
+          259,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__get_hostent",
+        "parameters": {
+          "fp": "FILE",
+          "family": "int",
+          "host": "struct hostent"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        33,
+        44
+      ],
+      [
+        33,
+        58
+      ]
+    ],
+    [
+      "struct ares_addr",
+      {},
+      "",
+      [
+        39,
+        2
+      ],
+      [
+        39,
+        18
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        40,
+        2
+      ],
+      [
+        40,
+        16
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        165,
+        35
+      ],
+      [
+        165,
+        49
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#  include <netdb.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_inet_net_pton.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nowarn.h\"\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

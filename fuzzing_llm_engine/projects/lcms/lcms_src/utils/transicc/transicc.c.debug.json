@@ -1,0 +1,507 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nvoid Help(void)\n{           \n\n    fprintf(stderr, \"usage: transicc [flags] [CGATS input] [CGATS output]\\n\\n\");\n\n    fprintf(stderr, \"flags:\\n\\n\");\n    fprintf(stderr, \"-v<0..3> - Verbosity level\\n\"); \n\n    fprintf(stderr, \"-e[op] - Encoded representation of numbers\\n\");\n    fprintf(stderr, \"\\t-w - use 16 bits\\n\");     \n    fprintf(stderr, \"\\t-x - Hexadecimal\\n\\n\");\n\n    fprintf(stderr, \"-s - bounded mode (clip negatives and highlights)\\n\");\n    fprintf(stderr, \"-q - Quantize (round decimals)\\n\\n\");\n\n    fprintf(stderr, \"-i<profile> - Input profile (defaults to sRGB)\\n\");\n    fprintf(stderr, \"-o<profile> - Output profile (defaults to sRGB)\\n\");   \n    fprintf(stderr, \"-l<profile> - Transform by device-link profile\\n\");   \n   \n    PrintBuiltins();\n\n    PrintRenderingIntents();\n\n    fprintf(stderr, \"\\n\");\n\n    fprintf(stderr, \"-d<0..1> - Observer adaptation state (abs.col. only)\\n\\n\");\n\n    fprintf(stderr, \"-b - Black point compensation\\n\");\n\n    fprintf(stderr, \"-c<0,1,2,3> Precalculates transform (0=Off, 1=Normal, 2=Hi-res, 3=LoRes)\\n\\n\");     \n    fprintf(stderr, \"-n - Terse output, intended for pipe usage\\n\");\n\n    fprintf(stderr, \"-p<profile> - Soft proof profile\\n\");\n    fprintf(stderr, \"-m<0,1,2,3> - Soft proof intent\\n\");\n    fprintf(stderr, \"-g - Marks out-of-gamut colors on softproof\\n\\n\");\n\n\n\n    fprintf(stderr, \"This program is intended to be a demo of the Little CMS\\n\"\n        \"color engine. Both lcms and this program are open source.\\n\"\n        \"You can obtain both in source code at https://www.littlecms.com\\n\"\n        \"For suggestions, comments, bug reports etc. send mail to\\n\"\n        \"info@littlecms.com\\n\\n\");\n\n}",
+      "fn_code_pos": [
+        [
+          91,
+          0
+        ],
+        [
+          136,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Help",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid HandleSwitches(int argc, char *argv[])\n{\n    int s;\n\n    while ((s = xgetopt(argc, argv,\n        \"bBC:c:d:D:eEgGI:i:L:l:m:M:nNO:o:p:P:QqSsT:t:V:v:WwxX!:-:\")) != EOF) {\n\n    switch (s){\n\n        case '-':\n            if (strcmp(xoptarg, \"help\") == 0)\n            {\n                Help();\n                exit(0);\n            }\n            else\n            {\n                FatalError(\"Unknown option - run without args to see valid ones.\\n\");\n            }\n            break;\n            \n        case '!': \n            IncludePart = xoptarg;\n            break;\n\n        case 'b':\n        case 'B': \n            BlackPointCompensation = TRUE;\n            break;\n\n        case 'c':\n        case 'C':\n            PrecalcMode = atoi(xoptarg);\n            if (PrecalcMode < 0 || PrecalcMode > 3)\n                FatalError(\"Unknown precalc mode '%d'\", PrecalcMode);\n            break;\n\n        case 'd':\n        case 'D': {\n            cmsFloat64Number ObserverAdaptationState = atof(xoptarg);\n            if (ObserverAdaptationState < 0 || \n                ObserverAdaptationState > 1.0)\n                FatalError(\"Adaptation states should be between 0 and 1\");\n\n            cmsSetAdaptationState(ObserverAdaptationState);\n                  }\n                  break;\n\n        case 'e':\n        case 'E': \n            lIsFloat = FALSE;\n            break;\n\n        case 'g':\n        case 'G':\n            GamutCheck = TRUE;\n            break;\n\n        case 'i':\n        case 'I':\n            if (lIsDeviceLink)\n                FatalError(\"icctrans: Device-link already specified\");\n\n            cInProf = xoptarg;\n            break;  \n\n        case 'l':\n        case 'L': \n            cInProf = xoptarg;\n            lIsDeviceLink = TRUE;\n            break;\n\n            // No extra intents for proofing\n        case 'm':\n        case 'M':\n            ProofingIntent = atoi(xoptarg);\n            if (ProofingIntent > 3)\n                FatalError(\"Unknown Proofing Intent '%d'\", ProofingIntent);        \n            break;      \n\n            // For compatibility\n        case 'n':\n        case 'N':\n            Verbose = 0;\n            break;\n\n            // Output profile        \n        case 'o':\n        case 'O':\n            if (lIsDeviceLink)\n                FatalError(\"icctrans: Device-link already specified\"); \n            cOutProf = xoptarg;\n            break;\n\n            // Proofing profile\n        case 'p':\n        case 'P':\n            cProofing = xoptarg;\n            break;      \n\n            // Quantize (get rid of decimals)\n        case 'q':\n        case 'Q': \n            lQuantize = TRUE;\n            break;\n\n            // Inhibit unbounded mode\n        case 's':\n        case 'S':\n               lUnbounded = FALSE;\n               break;\n\n            // The intent\n        case 't':\n        case 'T':\n            Intent = atoi(xoptarg);            \n            break;\n\n            // Verbosity level\n        case 'V':\n        case 'v':\n            Verbose = atoi(xoptarg);\n            if (Verbose < 0 || Verbose > 3) {\n                FatalError(\"Unknown verbosity level '%d'\", Verbose);\n            }\n            break;\n\n            // Wide (16 bits)\n        case 'W':\n        case 'w':\n            Width16 = TRUE;\n            break;\n\n            // Hexadecimal        \n        case 'x':\n        case 'X':\n            InHexa = TRUE;\n            break;\n\n        default:            \n            FatalError(\"Unknown option - run without args to see valid ones.\\n\");\n            }       \n    }\n\n\n    // If output CGATS involved, switch to float\n    if ((argc - xoptind) > 2) {\n        lIsFloat = TRUE;\n    }\n}",
+      "fn_code_pos": [
+        [
+          142,
+          0
+        ],
+        [
+          292,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "HandleSwitches",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid SetRange(cmsFloat64Number range, cmsBool IsInput)\n{\n    if (IsInput)\n        InputRange = range;\n    else\n        OutputRange = range;\n}",
+      "fn_code_pos": [
+        [
+          296,
+          0
+        ],
+        [
+          303,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetRange",
+        "parameters": {
+          "range": "cmsFloat64Number",
+          "IsInput": "cmsBool"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsNAMEDCOLORLIST* ComponentNames(cmsColorSpaceSignature space, cmsBool IsInput)\n{\n    cmsNAMEDCOLORLIST* out;\n    int i, n;\n    char Buffer[cmsMAX_PATH];\n\n    out = cmsAllocNamedColorList(0, 12, cmsMAXCHANNELS, \"\", \"\");\n    if (out == NULL) return NULL;\n\n    switch (space) {\n\n    case cmsSigXYZData:\n        SetRange(100, IsInput);\n        cmsAppendNamedColor(out, \"X\", NULL, NULL);\n        cmsAppendNamedColor(out, \"Y\", NULL, NULL);\n        cmsAppendNamedColor(out, \"Z\", NULL, NULL);\n        break;\n\n    case cmsSigLabData:\n        SetRange(1, IsInput);\n        cmsAppendNamedColor(out, \"L*\", NULL, NULL);\n        cmsAppendNamedColor(out, \"a*\", NULL, NULL);\n        cmsAppendNamedColor(out, \"b*\", NULL, NULL);\n        break;\n\n    case cmsSigLuvData:\n        SetRange(1, IsInput);\n        cmsAppendNamedColor(out, \"L\", NULL, NULL);\n        cmsAppendNamedColor(out, \"u\", NULL, NULL);\n        cmsAppendNamedColor(out, \"v\", NULL, NULL);\n        break;\n\n    case cmsSigYCbCrData:\n        SetRange(255, IsInput);\n        cmsAppendNamedColor(out, \"Y\", NULL, NULL );\n        cmsAppendNamedColor(out, \"Cb\", NULL, NULL);\n        cmsAppendNamedColor(out, \"Cr\", NULL, NULL);\n        break;\n\n\n    case cmsSigYxyData:\n        SetRange(1, IsInput);\n        cmsAppendNamedColor(out, \"Y\", NULL, NULL);\n        cmsAppendNamedColor(out, \"x\", NULL, NULL);\n        cmsAppendNamedColor(out, \"y\", NULL, NULL);\n        break;\n\n    case cmsSigRgbData:\n        SetRange(255, IsInput);\n        cmsAppendNamedColor(out, \"R\", NULL, NULL);\n        cmsAppendNamedColor(out, \"G\", NULL, NULL);\n        cmsAppendNamedColor(out, \"B\", NULL, NULL);\n        break;\n\n    case cmsSigGrayData:\n        SetRange(255, IsInput);\n        cmsAppendNamedColor(out, \"G\", NULL, NULL);      \n        break;\n\n    case cmsSigHsvData:\n        SetRange(255, IsInput);\n        cmsAppendNamedColor(out, \"H\", NULL, NULL);\n        cmsAppendNamedColor(out, \"s\", NULL, NULL);\n        cmsAppendNamedColor(out, \"v\", NULL, NULL);\n        break;\n\n    case cmsSigHlsData:\n        SetRange(255, IsInput);\n        cmsAppendNamedColor(out, \"H\", NULL, NULL);\n        cmsAppendNamedColor(out, \"l\", NULL, NULL);\n        cmsAppendNamedColor(out, \"s\", NULL, NULL);\n        break;\n\n    case cmsSigCmykData:\n        SetRange(1, IsInput);\n        cmsAppendNamedColor(out, \"C\", NULL, NULL);\n        cmsAppendNamedColor(out, \"M\", NULL, NULL);\n        cmsAppendNamedColor(out, \"Y\", NULL, NULL);                     \n        cmsAppendNamedColor(out, \"K\", NULL, NULL);\n        break;\n\n    case cmsSigCmyData:\n        SetRange(1, IsInput);\n        cmsAppendNamedColor(out, \"C\", NULL, NULL);\n        cmsAppendNamedColor(out, \"M\", NULL, NULL);\n        cmsAppendNamedColor(out, \"Y\", NULL, NULL);\n        break;\n\n    default:\n\n        SetRange(1, IsInput);\n\n        n = cmsChannelsOfColorSpace(space);\n\n        for (i=0; i < n; i++) {\n\n            sprintf(Buffer, \"Channel #%d\", i + 1);\n            cmsAppendNamedColor(out, Buffer, NULL, NULL);\n        }\n    }\n\n    return out;\n\n}",
+      "fn_code_pos": [
+        [
+          308,
+          0
+        ],
+        [
+          412,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComponentNames",
+        "parameters": {
+          "space": "cmsColorSpaceSignature",
+          "IsInput": "cmsBool"
+        },
+        "return_type": "cmsNAMEDCOLORLIST"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool OpenTransforms(void)\n{\n    cmsHPROFILE hInput, hOutput, hProof;\n    cmsUInt32Number dwIn, dwOut, dwFlags;\n    cmsNAMEDCOLORLIST* List;\n    int i;\n\n    // We don't need cache\n    dwFlags = cmsFLAGS_NOCACHE;\n\n    if (lIsDeviceLink) {\n\n        hInput  = OpenStockProfile(0, cInProf);\n        if (hInput == NULL) return FALSE; \n        hOutput = NULL;\n        hProof  = NULL;\n\n        if (cmsGetDeviceClass(hInput) == cmsSigNamedColorClass) {\n            OutputColorSpace  = cmsGetColorSpace(hInput);\n            InputColorSpace = cmsGetPCS(hInput);\n        }\n        else {\n            InputColorSpace  = cmsGetColorSpace(hInput);\n            OutputColorSpace = cmsGetPCS(hInput);\n        }\n\n        // Read colorant tables if present\n        if (cmsIsTag(hInput, cmsSigColorantTableTag)) {\n            List = cmsReadTag(hInput, cmsSigColorantTableTag);\n            InputColorant = cmsDupNamedColorList(List);\n            InputRange = 1;\n        }\n        else InputColorant = ComponentNames(InputColorSpace, TRUE);\n\n        if (cmsIsTag(hInput, cmsSigColorantTableOutTag)){\n\n            List = cmsReadTag(hInput, cmsSigColorantTableOutTag);\n            OutputColorant = cmsDupNamedColorList(List);\n            OutputRange = 1;\n        }\n        else OutputColorant = ComponentNames(OutputColorSpace, FALSE);\n\n    }\n    else {\n\n        hInput  = OpenStockProfile(0, cInProf);\n        if (hInput == NULL) return FALSE;\n\n        hOutput = OpenStockProfile(0, cOutProf);    \n        if (hOutput == NULL) return FALSE;\n        hProof  = NULL;\n\n\n        if (cmsGetDeviceClass(hInput) == cmsSigLinkClass ||\n            cmsGetDeviceClass(hOutput) == cmsSigLinkClass)   \n            FatalError(\"Use -l flag for devicelink profiles!\\n\");\n\n\n        InputColorSpace   = cmsGetColorSpace(hInput);\n        OutputColorSpace  = cmsGetColorSpace(hOutput);\n\n        // Read colorant tables if present\n        if (cmsIsTag(hInput, cmsSigColorantTableTag)) {\n            List = cmsReadTag(hInput, cmsSigColorantTableTag);\n            InputColorant = cmsDupNamedColorList(List);\n            if (cmsNamedColorCount(InputColorant) <= 3) \n                SetRange(255, TRUE);\n            else\n                SetRange(1, TRUE);  // Inks are already divided by 100 in the formatter\n\n        }\n        else InputColorant = ComponentNames(InputColorSpace, TRUE);\n\n        if (cmsIsTag(hOutput, cmsSigColorantTableTag)){\n\n            List = cmsReadTag(hOutput, cmsSigColorantTableTag);\n            OutputColorant = cmsDupNamedColorList(List);\n            if (cmsNamedColorCount(OutputColorant) <= 3) \n                SetRange(255, FALSE);\n            else\n                SetRange(1, FALSE);  // Inks are already divided by 100 in the formatter\n        }\n        else OutputColorant = ComponentNames(OutputColorSpace, FALSE);\n\n\n        if (cProofing != NULL) {\n\n            hProof = OpenStockProfile(0, cProofing);\n            if (hProof == NULL) return FALSE;\n            dwFlags |= cmsFLAGS_SOFTPROOFING;\n        }\n    }\n\n    // Print information on profiles\n    if (Verbose > 2) {\n\n        printf(\"Profile:\\n\");\n        PrintProfileInformation(hInput);\n\n        if (hOutput) {\n\n            printf(\"Output profile:\\n\");\n            PrintProfileInformation(hOutput);\n        }  \n\n        if (hProof != NULL) {\n            printf(\"Proofing profile:\\n\");\n            PrintProfileInformation(hProof);\n        }\n    }\n\n\n    // Input is always in floating point\n    dwIn  = cmsFormatterForColorspaceOfProfile(hInput, 0, TRUE);\n\n    if (lIsDeviceLink) {\n\n        dwOut = cmsFormatterForPCSOfProfile(hInput, lIsFloat ? 0 : 2, lIsFloat);\n    }\n    else {\n\n        // 16 bits or floating point (only on output)   \n        dwOut = cmsFormatterForColorspaceOfProfile(hOutput, lIsFloat ? 0 : 2, lIsFloat);\n    }\n\n    // For named color, there is a specialized formatter\n    if (cmsGetDeviceClass(hInput) == cmsSigNamedColorClass) {\n        \n        dwIn = TYPE_NAMED_COLOR_INDEX;\n        InputNamedColor = TRUE;\n    }\n\n    // Precision mode\n    switch (PrecalcMode) {\n\n       case 0: dwFlags |= cmsFLAGS_NOOPTIMIZE; break;\n       case 2: dwFlags |= cmsFLAGS_HIGHRESPRECALC; break;\n       case 3: dwFlags |= cmsFLAGS_LOWRESPRECALC; break;\n       case 1: break;\n\n       default: \n           FatalError(\"Unknown precalculation mode '%d'\", PrecalcMode);\n    }\n\n\n    if (BlackPointCompensation) \n        dwFlags |= cmsFLAGS_BLACKPOINTCOMPENSATION;\n\n\n    if (GamutCheck) {\n\n        cmsUInt16Number Alarm[cmsMAXCHANNELS];\n\n        if (hProof == NULL)\n            FatalError(\"I need proofing profile -p for gamut checking!\");\n\n        for (i=0; i < cmsMAXCHANNELS; i++)\n            Alarm[i] = 0xFFFF;\n\n        cmsSetAlarmCodes(Alarm);\n        dwFlags |= cmsFLAGS_GAMUTCHECK;            \n    }\n\n\n    // The main transform\n    hTrans = cmsCreateProofingTransform(hInput,  dwIn, hOutput, dwOut, hProof, Intent, ProofingIntent, dwFlags);\n\n    if (hProof) cmsCloseProfile(hProof);\n\n    if (hTrans == NULL) return FALSE;\n\n\n    // PCS Dump if requested\n    hTransXYZ = NULL; hTransLab = NULL;\n\n    if (hOutput && Verbose > 1) {\n\n        cmsHPROFILE hXYZ = cmsCreateXYZProfile();\n        cmsHPROFILE hLab = cmsCreateLab4Profile(NULL);\n\n        hTransXYZ = cmsCreateTransform(hInput, dwIn, hXYZ,  lIsFloat ? TYPE_XYZ_DBL : TYPE_XYZ_16, Intent, cmsFLAGS_NOCACHE);        \n        if (hTransXYZ == NULL) return FALSE;\n\n        hTransLab = cmsCreateTransform(hInput, dwIn, hLab,  lIsFloat? TYPE_Lab_DBL : TYPE_Lab_16, Intent, cmsFLAGS_NOCACHE);    \n        if (hTransLab == NULL) return FALSE;\n\n        cmsCloseProfile(hXYZ);\n        cmsCloseProfile(hLab);\n    } \n\n    if (hInput) cmsCloseProfile(hInput);\n    if (hOutput) cmsCloseProfile(hOutput); \n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          416,
+          0
+        ],
+        [
+          611,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OpenTransforms",
+        "parameters": {},
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid CloseTransforms(void)\n{\n    if (InputColorant) cmsFreeNamedColorList(InputColorant);\n    if (OutputColorant) cmsFreeNamedColorList(OutputColorant);\n\n    if (hTrans) cmsDeleteTransform(hTrans);\n    if (hTransLab) cmsDeleteTransform(hTransLab);\n    if (hTransXYZ) cmsDeleteTransform(hTransXYZ);\n\n}",
+      "fn_code_pos": [
+        [
+          615,
+          0
+        ],
+        [
+          625,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CloseTransforms",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid GetLine(char* Buffer, const char* frm, ...)\n{    \n    int res;\n    va_list args;\n\n    va_start(args, frm);\n\n    do {\n        if (xisatty(stdin)) \n            vfprintf(stderr, frm, args);\n\n        res = scanf(\"%4095s\", Buffer);\n\n        if (res < 0 || toupper(Buffer[0]) == 'Q') { // Quit?\n\n            CloseTransforms();\n\n            if (xisatty(stdin))  \n                fprintf(stderr, \"Done.\\n\");\n\n            exit(0);        \n        }\n    } while (res == 0);\n\n    va_end(args);  \n}",
+      "fn_code_pos": [
+        [
+          630,
+          0
+        ],
+        [
+          656,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetLine",
+        "parameters": {
+          "Buffer": "char",
+          "frm": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid PrintFloatResults(cmsFloat64Number Value[])\n{\n    cmsUInt32Number i, n;\n    char ChannelName[cmsMAX_PATH];\n    cmsFloat64Number v;\n\n    n = cmsChannelsOfColorSpace(OutputColorSpace);\n    for (i=0; i < n; i++) {\n\n        if (OutputColorant != NULL) {\n\n            cmsNamedColorInfo(OutputColorant, i, ChannelName, NULL, NULL, NULL, NULL);         \n        }\n        else {\n            OutputRange = 1;\n            sprintf(ChannelName, \"Channel #%u\", i + 1);\n        }\n\n        v = (cmsFloat64Number) Value[i]* OutputRange;\n\n        if (lQuantize) \n            v = floor(v + 0.5);\n\n        if (!lUnbounded) {\n\n               if (v < 0)\n                      v = 0;\n               if (v > OutputRange)\n                      v = OutputRange;\n        }\n\n        if (Verbose <= 0)\n            printf(\"%.4f \", v);\n        else\n            printf(\"%s=%.4f \", ChannelName, v);\n    }   \n\n    printf(\"\\n\");\n}",
+      "fn_code_pos": [
+        [
+          660,
+          0
+        ],
+        [
+          699,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintFloatResults",
+        "parameters": {
+          "Value": "cmsFloat64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt16Number GetIndex(void)\n{\n    char Buffer[4096], Name[cmsMAX_PATH], Prefix[40], Suffix[40];\n    int index, max;\n    const cmsNAMEDCOLORLIST* NamedColorList;\n    \n    NamedColorList = cmsGetNamedColorList(hTrans);\n    if (NamedColorList == NULL) return 0;\n\n    max = cmsNamedColorCount(NamedColorList)-1;\n\n    GetLine(Buffer, \"Color index (0..%d)? \", max);\n    index = atoi(Buffer);\n\n    if (index > max)\n        FatalError(\"Named color %d out of range!\", index);\n\n    cmsNamedColorInfo(NamedColorList, index, Name, Prefix, Suffix, NULL, NULL);\n\n    printf(\"\\n%s %s %s\\n\", Prefix, Name, Suffix);\n\n    return (cmsUInt16Number) index;\n}",
+      "fn_code_pos": [
+        [
+          703,
+          0
+        ],
+        [
+          726,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetIndex",
+        "parameters": {},
+        "return_type": "cmsUInt16Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid TakeFloatValues(cmsFloat64Number Float[])\n{\n    cmsUInt32Number i, n;\n    char ChannelName[cmsMAX_PATH];\n    char Buffer[4096];\n\n    if (xisatty(stdin))\n        fprintf(stderr, \"\\nEnter values, 'q' to quit\\n\");\n\n    if (InputNamedColor) {\n\n        // This is named color index, which is always cmsUInt16Number\n        cmsUInt16Number index = GetIndex();\n        memcpy(Float, &index, sizeof(cmsUInt16Number));\n        return;\n    }\n\n    n = cmsChannelsOfColorSpace(InputColorSpace);\n    for (i=0; i < n; i++) {\n\n        if (InputColorant) {\n            cmsNamedColorInfo(InputColorant, i, ChannelName, NULL, NULL, NULL, NULL);          \n        }\n        else {\n            InputRange = 1;\n            sprintf(ChannelName, \"Channel #%u\", i+1);\n        }\n\n        GetLine(Buffer, \"%s? \", ChannelName);\n\n        Float[i] = (cmsFloat64Number) atof(Buffer) / InputRange;\n    }       \n\n    if (xisatty(stdin))\n        fprintf(stderr, \"\\n\");\n}",
+      "fn_code_pos": [
+        [
+          729,
+          0
+        ],
+        [
+          765,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TakeFloatValues",
+        "parameters": {
+          "Float": "cmsFloat64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid PrintPCSFloat(cmsFloat64Number Input[])\n{\n    if (Verbose > 1 && hTransXYZ && hTransLab) {\n\n        cmsCIEXYZ XYZ = { 0, 0, 0 };\n        cmsCIELab Lab = { 0, 0, 0 };\n\n        if (hTransXYZ) cmsDoTransform(hTransXYZ, Input, &XYZ, 1);\n        if (hTransLab) cmsDoTransform(hTransLab, Input, &Lab, 1);\n\n        printf(\"[PCS] Lab=(%.4f,%.4f,%.4f) XYZ=(%.4f,%.4f,%.4f)\\n\", Lab.L, Lab.a, Lab.b, \n            XYZ.X * 100.0, XYZ.Y * 100.0, XYZ.Z * 100.0);\n\n    }\n}",
+      "fn_code_pos": [
+        [
+          767,
+          0
+        ],
+        [
+          782,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintPCSFloat",
+        "parameters": {
+          "Input": "cmsFloat64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid PrintEncodedResults(cmsUInt16Number Encoded[])\n{\n    cmsUInt32Number i, n;\n    char ChannelName[cmsMAX_PATH];\n    cmsUInt32Number v;\n\n    n = cmsChannelsOfColorSpace(OutputColorSpace);\n    for (i=0; i < n; i++) {\n\n        if (OutputColorant != NULL) {\n\n            cmsNamedColorInfo(OutputColorant, i, ChannelName, NULL, NULL, NULL, NULL);          \n        }\n        else {          \n            sprintf(ChannelName, \"Channel #%u\", i + 1);\n        }\n\n        if (Verbose > 0)\n            printf(\"%s=\", ChannelName);\n\n        v = Encoded[i];\n\n        if (InHexa) {\n\n            if (Width16)\n                printf(\"0x%04X \", (int) floor(v + .5));\n            else\n                printf(\"0x%02X \", (int) floor(v / 257. + .5));\n\n        } else {\n\n            if (Width16)\n                printf(\"%d \", (int) floor(v + .5));\n            else\n                printf(\"%d \", (int) floor(v / 257. + .5));\n        }\n\n    }   \n\n    printf(\"\\n\");\n}",
+      "fn_code_pos": [
+        [
+          789,
+          0
+        ],
+        [
+          830,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintEncodedResults",
+        "parameters": {
+          "Encoded": "cmsUInt16Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid PrintPCSEncoded(cmsFloat64Number Input[])\n{\n    if (Verbose > 1 && hTransXYZ && hTransLab) {\n\n        cmsUInt16Number XYZ[3], Lab[3];\n\n        if (hTransXYZ) cmsDoTransform(hTransXYZ, Input, XYZ, 1);\n        if (hTransLab) cmsDoTransform(hTransLab, Input, Lab, 1);\n\n        printf(\"[PCS] Lab=(0x%04X,0x%04X,0x%04X) XYZ=(0x%04X,0x%04X,0x%04X)\\n\", Lab[0], Lab[1], Lab[2], \n            XYZ[0], XYZ[1], XYZ[2]);\n\n    }\n}",
+      "fn_code_pos": [
+        [
+          834,
+          0
+        ],
+        [
+          848,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintPCSEncoded",
+        "parameters": {
+          "Input": "cmsFloat64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsFloat64Number GetIT8Val(const char* Name, cmsFloat64Number Max)\n{\n    const char* Val = cmsIT8GetData(hIT8in, CGATSPatch, Name);\n\n    if (Val == NULL) \n        FatalError(\"Field '%s' not found\", Name);\n\n    return atof(Val) / Max;\n\n}",
+      "fn_code_pos": [
+        [
+          857,
+          0
+        ],
+        [
+          867,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetIT8Val",
+        "parameters": {
+          "Name": "char",
+          "Max": "cmsFloat64Number"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid TakeCGATSValues(int nPatch, cmsFloat64Number Float[])\n{\n\n    // At first take the name if SAMPLE_ID is present\n    if (cmsIT8GetPatchName(hIT8in, nPatch, CGATSPatch) == NULL) {\n        FatalError(\"Sorry, I need 'SAMPLE_ID' on input CGATS to operate.\");\n    }\n\n\n    // Special handling for named color profiles. \n    // Lookup the name in the names database (the transform)\n\n    if (InputNamedColor) {\n\n        const cmsNAMEDCOLORLIST* NamedColorList;\n        int index;\n\n        NamedColorList = cmsGetNamedColorList(hTrans);\n        if (NamedColorList == NULL) \n            FatalError(\"Malformed named color profile\");\n\n        index = cmsNamedColorIndex(NamedColorList, CGATSPatch);\n        if (index < 0) \n            FatalError(\"Named color '%s' not found in the profile\", CGATSPatch); \n\n        Float[0] = index;\n        return;\n    }\n\n    // Color is not a spot color, proceed.\n\n    switch (InputColorSpace) {\n\n        // Encoding should follow CGATS specification.\n\n    case cmsSigXYZData:\n        Float[0] = cmsIT8GetDataDbl(hIT8in, CGATSPatch, \"XYZ_X\") / 100.0;\n        Float[1] = cmsIT8GetDataDbl(hIT8in, CGATSPatch, \"XYZ_Y\") / 100.0;\n        Float[2] = cmsIT8GetDataDbl(hIT8in, CGATSPatch, \"XYZ_Z\") / 100.0;        \n        break;\n\n    case cmsSigLabData:\n        Float[0] = cmsIT8GetDataDbl(hIT8in, CGATSPatch, \"LAB_L\");\n        Float[1] = cmsIT8GetDataDbl(hIT8in, CGATSPatch, \"LAB_A\");\n        Float[2] = cmsIT8GetDataDbl(hIT8in, CGATSPatch, \"LAB_B\");        \n        break;\n\n\n    case cmsSigRgbData:\n        Float[0] = GetIT8Val(\"RGB_R\", 255.0);\n        Float[1] = GetIT8Val(\"RGB_G\", 255.0);\n        Float[2] = GetIT8Val(\"RGB_B\", 255.0);\n        break;\n\n    case cmsSigGrayData:\n        Float[0] = GetIT8Val(\"GRAY\", 255.0);\n        break;\n\n    case cmsSigCmykData:\n        Float[0] = GetIT8Val(\"CMYK_C\", 1.0);\n        Float[1] = GetIT8Val(\"CMYK_M\", 1.0);\n        Float[2] = GetIT8Val(\"CMYK_Y\", 1.0);\n        Float[3] = GetIT8Val(\"CMYK_K\", 1.0);\n        break;\n\n    case cmsSigCmyData:                        \n        Float[0] = GetIT8Val(\"CMY_C\", 1.0);\n        Float[1] = GetIT8Val(\"CMY_M\", 1.0);\n        Float[2] = GetIT8Val(\"CMY_Y\", 1.0);\n        break;\n\n    case cmsSig1colorData:\n    case cmsSig2colorData:\n    case cmsSig3colorData:\n    case cmsSig4colorData:\n    case cmsSig5colorData:\n    case cmsSig6colorData:\n    case cmsSig7colorData:\n    case cmsSig8colorData:\n    case cmsSig9colorData:\n    case cmsSig10colorData:\n    case cmsSig11colorData:\n    case cmsSig12colorData:\n    case cmsSig13colorData:\n    case cmsSig14colorData:\n    case cmsSig15colorData:\n        {\n            cmsUInt32Number i, n;\n\n            n = cmsChannelsOfColorSpace(InputColorSpace);\n            for (i=0; i < n; i++) { \n\n                char Buffer[255];\n\n                sprintf(Buffer, \"%uCLR_%u\", n, i+1);\n                Float[i] = GetIT8Val(Buffer, 100.0);\n            }\n\n        }\n        break;\n\n    default: \n        {\n            cmsUInt32Number i, n;\n\n            n = cmsChannelsOfColorSpace(InputColorSpace);\n            for (i=0; i < n; i++) { \n\n                char Buffer[255];\n\n                sprintf(Buffer, \"CHAN_%u\", i+1);\n                Float[i] = GetIT8Val(Buffer, 1.0);\n            }\n\n        }\n    }\n\n}",
+      "fn_code_pos": [
+        [
+          872,
+          0
+        ],
+        [
+          990,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TakeCGATSValues",
+        "parameters": {
+          "nPatch": "int",
+          "Float": "cmsFloat64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid SetCGATSfld(const char* Col, cmsFloat64Number Val)\n{\n    if (lQuantize) \n        Val = floor(Val + 0.5);\n\n    if (!cmsIT8SetDataDbl(hIT8out, CGATSPatch, Col, Val)) {\n        FatalError(\"couldn't set '%s' on output cgats '%s'\", Col, CGATSoutFilename);\n    }\n}",
+      "fn_code_pos": [
+        [
+          992,
+          0
+        ],
+        [
+          1001,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetCGATSfld",
+        "parameters": {
+          "Col": "char",
+          "Val": "cmsFloat64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid PutCGATSValues(cmsFloat64Number Float[])\n{   \n    cmsIT8SetData(hIT8out, CGATSPatch, \"SAMPLE_ID\", CGATSPatch);\n    switch (OutputColorSpace) {\n\n\n    // Encoding should follow CGATS specification.\n\n    case cmsSigXYZData:\n\n        SetCGATSfld(\"XYZ_X\", Float[0] * 100.0);\n        SetCGATSfld(\"XYZ_Y\", Float[1] * 100.0);\n        SetCGATSfld(\"XYZ_Z\", Float[2] * 100.0);                    \n        break;\n\n    case cmsSigLabData:\n\n        SetCGATSfld(\"LAB_L\", Float[0]);\n        SetCGATSfld(\"LAB_A\", Float[1]);\n        SetCGATSfld(\"LAB_B\", Float[2]);                    \n        break;\n\n\n    case cmsSigRgbData:\n        SetCGATSfld(\"RGB_R\", Float[0] * 255.0);\n        SetCGATSfld(\"RGB_G\", Float[1] * 255.0);\n        SetCGATSfld(\"RGB_B\", Float[2] * 255.0);\n        break;\n\n    case cmsSigGrayData:\n        SetCGATSfld(\"GRAY\", Float[0] * 255.0);                    \n        break;\n\n    case cmsSigCmykData:\n        SetCGATSfld(\"CMYK_C\", Float[0]);\n        SetCGATSfld(\"CMYK_M\", Float[1]);\n        SetCGATSfld(\"CMYK_Y\", Float[2]);\n        SetCGATSfld(\"CMYK_K\", Float[3]);\n        break;\n\n    case cmsSigCmyData:\n        SetCGATSfld(\"CMY_C\", Float[0]);\n        SetCGATSfld(\"CMY_M\", Float[1]);\n        SetCGATSfld(\"CMY_Y\", Float[2]);                 \n        break;\n\n    case cmsSig1colorData:\n    case cmsSig2colorData:\n    case cmsSig3colorData:\n    case cmsSig4colorData:\n    case cmsSig5colorData:\n    case cmsSig6colorData:\n    case cmsSig7colorData:\n    case cmsSig8colorData:\n    case cmsSig9colorData:\n    case cmsSig10colorData:\n    case cmsSig11colorData:\n    case cmsSig12colorData:\n    case cmsSig13colorData:\n    case cmsSig14colorData:\n    case cmsSig15colorData:\n        {\n\n            cmsInt32Number i, n;\n\n            n = cmsChannelsOfColorSpace(InputColorSpace);\n            for (i=0; i < n; i++) { \n\n                char Buffer[255];\n\n                sprintf(Buffer, \"%uCLR_%u\", n, i+1);\n\n                SetCGATSfld(Buffer, Float[i] * 100.0);\n            }\n        }\n        break;\n\n    default: \n        {\n\n            cmsInt32Number i, n;\n\n            n = cmsChannelsOfColorSpace(InputColorSpace);\n            for (i=0; i < n; i++) { \n\n                char Buffer[255];\n\n                sprintf(Buffer, \"CHAN_%u\", i+1);\n\n                SetCGATSfld(Buffer, Float[i]);\n            }\n        }\n    }\n}",
+      "fn_code_pos": [
+        [
+          1005,
+          0
+        ],
+        [
+          1099,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PutCGATSValues",
+        "parameters": {
+          "Float": "cmsFloat64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid SetOutputDataFormat(void) \n{\n    cmsIT8DefineDblFormat(hIT8out, \"%.4g\");\n    cmsIT8SetPropertyStr(hIT8out, \"ORIGINATOR\", \"icctrans\");\n\n    if (IncludePart != NULL) \n        cmsIT8SetPropertyStr(hIT8out, \".INCLUDE\", IncludePart);\n\n    cmsIT8SetComment(hIT8out, \"Data follows\");\n    cmsIT8SetPropertyDbl(hIT8out, \"NUMBER_OF_SETS\", nMaxPatches);\n\n\n    switch (OutputColorSpace) {\n\n\n        // Encoding should follow CGATS specification.\n\n    case cmsSigXYZData:\n        cmsIT8SetPropertyDbl(hIT8out, \"NUMBER_OF_FIELDS\", 4);\n        cmsIT8SetDataFormat(hIT8out, 0, \"SAMPLE_ID\");\n        cmsIT8SetDataFormat(hIT8out, 1, \"XYZ_X\");\n        cmsIT8SetDataFormat(hIT8out, 2, \"XYZ_Y\");\n        cmsIT8SetDataFormat(hIT8out, 3, \"XYZ_Z\");\n        break;\n\n    case cmsSigLabData:\n        cmsIT8SetPropertyDbl(hIT8out, \"NUMBER_OF_FIELDS\", 4);\n        cmsIT8SetDataFormat(hIT8out, 0, \"SAMPLE_ID\");\n        cmsIT8SetDataFormat(hIT8out, 1, \"LAB_L\");\n        cmsIT8SetDataFormat(hIT8out, 2, \"LAB_A\");\n        cmsIT8SetDataFormat(hIT8out, 3, \"LAB_B\");\n        break;\n\n\n    case cmsSigRgbData:\n        cmsIT8SetPropertyDbl(hIT8out, \"NUMBER_OF_FIELDS\", 4);\n        cmsIT8SetDataFormat(hIT8out, 0, \"SAMPLE_ID\");\n        cmsIT8SetDataFormat(hIT8out, 1, \"RGB_R\");\n        cmsIT8SetDataFormat(hIT8out, 2, \"RGB_G\");\n        cmsIT8SetDataFormat(hIT8out, 3, \"RGB_B\");\n        break;\n\n    case cmsSigGrayData:                \n        cmsIT8SetPropertyDbl(hIT8out, \"NUMBER_OF_FIELDS\", 2);\n        cmsIT8SetDataFormat(hIT8out, 0, \"SAMPLE_ID\");\n        cmsIT8SetDataFormat(hIT8out, 1, \"GRAY\");\n        break;\n\n    case cmsSigCmykData:\n        cmsIT8SetPropertyDbl(hIT8out, \"NUMBER_OF_FIELDS\", 5);\n        cmsIT8SetDataFormat(hIT8out, 0, \"SAMPLE_ID\");\n        cmsIT8SetDataFormat(hIT8out, 1, \"CMYK_C\");\n        cmsIT8SetDataFormat(hIT8out, 2, \"CMYK_M\");\n        cmsIT8SetDataFormat(hIT8out, 3, \"CMYK_Y\");\n        cmsIT8SetDataFormat(hIT8out, 4, \"CMYK_K\");\n        break;\n\n    case cmsSigCmyData:\n        cmsIT8SetPropertyDbl(hIT8out, \"NUMBER_OF_FIELDS\", 4);\n        cmsIT8SetDataFormat(hIT8out, 0, \"SAMPLE_ID\");\n        cmsIT8SetDataFormat(hIT8out, 1, \"CMY_C\");\n        cmsIT8SetDataFormat(hIT8out, 2, \"CMY_M\");\n        cmsIT8SetDataFormat(hIT8out, 3, \"CMY_Y\");                   \n        break;\n\n    case cmsSig1colorData:\n    case cmsSig2colorData:\n    case cmsSig3colorData:\n    case cmsSig4colorData:\n    case cmsSig5colorData:\n    case cmsSig6colorData:\n    case cmsSig7colorData:\n    case cmsSig8colorData:\n    case cmsSig9colorData:\n    case cmsSig10colorData:\n    case cmsSig11colorData:\n    case cmsSig12colorData:\n    case cmsSig13colorData:\n    case cmsSig14colorData:\n    case cmsSig15colorData:\n        {\n            int i, n;\n            char Buffer[255];\n\n            n = cmsChannelsOfColorSpace(OutputColorSpace);\n            cmsIT8SetPropertyDbl(hIT8out, \"NUMBER_OF_FIELDS\", n+1);\n            cmsIT8SetDataFormat(hIT8out, 0, \"SAMPLE_ID\");\n\n            for (i=1; i <= n; i++) {\n                sprintf(Buffer, \"%dCLR_%d\", n, i);\n                cmsIT8SetDataFormat(hIT8out, i, Buffer);\n            }\n        }\n        break;\n\n    default: {\n\n        int i, n;\n        char Buffer[255];\n\n        n = cmsChannelsOfColorSpace(OutputColorSpace);\n        cmsIT8SetPropertyDbl(hIT8out, \"NUMBER_OF_FIELDS\", n+1);\n        cmsIT8SetDataFormat(hIT8out, 0, \"SAMPLE_ID\");\n\n        for (i=1; i <= n; i++) {\n            sprintf(Buffer, \"CHAN_%d\", i);\n            cmsIT8SetDataFormat(hIT8out, i, Buffer);\n        }\n    }\n    }\n}",
+      "fn_code_pos": [
+        [
+          1104,
+          0
+        ],
+        [
+          1215,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetOutputDataFormat",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid OpenCGATSFiles(int argc, char *argv[])\n{    \n    int nParams = argc - xoptind;\n\n    if (nParams >= 1)  {\n\n        hIT8in = cmsIT8LoadFromFile(0, argv[xoptind]);\n\n        if (hIT8in == NULL) \n            FatalError(\"'%s' is not recognized as a CGATS file\", argv[xoptind]);\n\n        nMaxPatches = (int) cmsIT8GetPropertyDbl(hIT8in, \"NUMBER_OF_SETS\");     \n    }\n\n    if (nParams == 2) {\n\n        hIT8out = cmsIT8Alloc(NULL);            \n        SetOutputDataFormat();\n        strncpy(CGATSoutFilename, argv[xoptind+1], cmsMAX_PATH-1);      \n    }\n\n    if (nParams > 2) FatalError(\"Too many CGATS files\");\n}",
+      "fn_code_pos": [
+        [
+          1219,
+          0
+        ],
+        [
+          1242,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OpenCGATSFiles",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{    \n    cmsUInt16Number Output[cmsMAXCHANNELS];\n    cmsFloat64Number OutputFloat[cmsMAXCHANNELS];\n    cmsFloat64Number InputFloat[cmsMAXCHANNELS];\n\n    int nPatch = 0;\n\n    fprintf(stderr, \"LittleCMS ColorSpace conversion calculator - 5.1 [LittleCMS %2.2f]\\n\", cmsGetEncodedCMMversion() / 1000.0);\n    fprintf(stderr, \"Copyright (c) 1998-2023 Marti Maria Saguer. See COPYING file for details.\\n\");\n    fflush(stderr);\n\n    InitUtils(\"transicc\");\n\n    Verbose = 1;\n\n    if (argc == 1) {\n\n        Help();              \n        return 0;\n    }\n\n    HandleSwitches(argc, argv);\n\n    // Open profiles, create transforms\n    if (!OpenTransforms()) return 1;\n\n    // Open CGATS input if specified\n    OpenCGATSFiles(argc, argv);\n\n    // Main loop: read all values and convert them\n    for(;;) {\n\n        if (hIT8in != NULL) {\n\n            if (nPatch >= nMaxPatches) break;\n            TakeCGATSValues(nPatch++, InputFloat);\n\n        } else {\n\n            if (feof(stdin)) break;         \n            TakeFloatValues(InputFloat);\n\n        }\n\n        if (lIsFloat) \n            cmsDoTransform(hTrans, InputFloat, OutputFloat, 1);\n        else\n            cmsDoTransform(hTrans, InputFloat, Output, 1);\n\n\n        if (hIT8out != NULL) {\n\n            PutCGATSValues(OutputFloat);\n        }\n        else {\n\n            if (lIsFloat) {\n                PrintFloatResults(OutputFloat); PrintPCSFloat(InputFloat);\n            }\n            else {\n                PrintEncodedResults(Output);   PrintPCSEncoded(InputFloat);      \n            }\n\n        }\n    }\n\n\n    // Cleanup\n    CloseTransforms();\n\n    if (hIT8in)\n        cmsIT8Free(hIT8in);\n\n    if (hIT8out) {      \n        cmsIT8SaveToFile(hIT8out, CGATSoutFilename);\n        cmsIT8Free(hIT8out);\n    }\n\n    // All is ok\n    return 0;     \n}",
+      "fn_code_pos": [
+        [
+          1247,
+          0
+        ],
+        [
+          1328,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "ComponentNames(cmsColorSpaceSignature space, cmsBool IsInput)",
+      "fn_dec_pos": [
+        [
+          309,
+          19
+        ],
+        [
+          309,
+          80
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ComponentNames",
+        "parameters": {
+          "space": "cmsColorSpaceSignature",
+          "IsInput": "cmsBool"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"utils.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#    include <unistd.h>",
+      [
+        29,
+        0
+      ],
+      [
+        29,
+        23
+      ]
+    ],
+    [
+      "#    include <io.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

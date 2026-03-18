@@ -1,0 +1,203 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		* Copyright (C) 2004-2009 by Daniel Stenberg	
+4		*	
+5		* Permission to use, copy, modify, and distribute this	
+6		* software and its documentation for any purpose and without	
+7		* fee is hereby granted, provided that the above copyright	
+8		* notice appear in all copies and that both that copyright	
+9		* notice and this permission notice appear in supporting	
+10		* documentation, and that the name of M.I.T. not be used in	
+11		* advertising or publicity pertaining to distribution of the	
+12		* software without specific, written prior permission.	
+13		* M.I.T. makes no representations about the suitability of	
+14		* this software for any purpose.  It is provided "as is"	
+15		* without express or implied warranty.	
+16		*/	
+17			
+18		#include "ares_setup.h"	
+19			
+20		#include "ares.h"	
+21		#include "ares_library_init.h"	
+22		#include "ares_private.h"	
+23			
+24		/* library-private global and unique instance vars */	
+25			
+26		#ifdef USE_WINSOCK	
+27		fpGetNetworkParams_t ares_fpGetNetworkParams = ZERO_NULL;	
+28		fpSystemFunction036_t ares_fpSystemFunction036 = ZERO_NULL;	
+29		fpGetAdaptersAddresses_t ares_fpGetAdaptersAddresses = ZERO_NULL;	
+30		fpGetBestRoute2_t ares_fpGetBestRoute2 = ZERO_NULL;	
+31		#endif	
+32			
+33		#if defined(ANDROID) || defined(__ANDROID__)	
+34		#include "ares_android.h"	
+35		#endif	
+36			
+37		/* library-private global vars with source visibility restricted to this file */	
+38			
+39		static unsigned int ares_initialized;	
+40		static int          ares_init_flags;	
+41			
+42		/* library-private global vars with visibility across the whole library */	
+43			
+44		/* Some systems may return either NULL or a valid pointer on malloc(0).  c-ares should	
+45		* never call malloc(0) so lets return NULL so we're more likely to find an issue if it	
+46		* were to occur. */	
+47			
+48	52.6k	static void *default_malloc(size_t size) { if (size == 0){ returnNULL; }return malloc(size); }	
+49			
+50		#if defined(WIN32)	
+51		/* We need indirections to handle Windows DLL rules. */	
+52		static void *default_realloc(void *p, size_t size) { return realloc(p, size); }	
+53		static void default_free(void *p) { free(p); }	
+54		#else	
+55		# define default_realloc realloc	
+56		# define default_free free	
+57		#endif	
+58		void *(*ares_malloc)(size_t size) = default_malloc;	
+59		void *(*ares_realloc)(void *ptr, size_t size) = default_realloc;	
+60		void (*ares_free)(void *ptr) = default_free;	
+61			
+62		#ifdef USE_WINSOCK	
+63		static HMODULE hnd_iphlpapi;	
+64		static HMODULE hnd_advapi32;	
+65		#endif	
+66			
+67			
+68		static int ares_win32_init(void)	
+69	0	{	
+70		#ifdef USE_WINSOCK	
+71			
+72		hnd_iphlpapi = 0;	
+73		hnd_iphlpapi = LoadLibraryW(L"iphlpapi.dll");	
+74		if (!hnd_iphlpapi)	
+75		return ARES_ELOADIPHLPAPI;	
+76			
+77		ares_fpGetNetworkParams = (fpGetNetworkParams_t)	
+78		GetProcAddress(hnd_iphlpapi, "GetNetworkParams");	
+79		if (!ares_fpGetNetworkParams)	
+80		{	
+81		FreeLibrary(hnd_iphlpapi);	
+82		return ARES_EADDRGETNETWORKPARAMS;	
+83		}	
+84			
+85		ares_fpGetAdaptersAddresses = (fpGetAdaptersAddresses_t)	
+86		GetProcAddress(hnd_iphlpapi, "GetAdaptersAddresses");	
+87		if (!ares_fpGetAdaptersAddresses)	
+88		{	
+89		/* This can happen on clients before WinXP, I don't	
+90		think it should be an error, unless we don't want to	
+91		support Windows 2000 anymore */	
+92		}	
+93			
+94		ares_fpGetBestRoute2 = (fpGetBestRoute2_t)	
+95		GetProcAddress(hnd_iphlpapi, "GetBestRoute2");	
+96		if (!ares_fpGetBestRoute2)	
+97		{	
+98		/* This can happen on clients before Vista, I don't	
+99		think it should be an error, unless we don't want to	
+100		support Windows XP anymore */	
+101		}	
+102			
+103		/*	
+104		* When advapi32.dll is unavailable or advapi32.dll has no SystemFunction036,	
+105		* also known as RtlGenRandom, which is the case for Windows versions prior	
+106		* to WinXP then c-ares uses portable rand() function. Then don't error here.	
+107		*/	
+108			
+109		hnd_advapi32 = 0;	
+110		hnd_advapi32 = LoadLibraryW(L"advapi32.dll");	
+111		if (hnd_advapi32)	
+112		{	
+113		ares_fpSystemFunction036 = (fpSystemFunction036_t)	
+114		GetProcAddress(hnd_advapi32, "SystemFunction036");	
+115		}	
+116			
+117		#endif	
+118	0	returnARES_SUCCESS;	
+119	0	}	
+120			
+121			
+122		static void ares_win32_cleanup(void)	
+123	0	{	
+124		#ifdef USE_WINSOCK	
+125		if (hnd_advapi32)	
+126		FreeLibrary(hnd_advapi32);	
+127		if (hnd_iphlpapi)	
+128		FreeLibrary(hnd_iphlpapi);	
+129		#endif	
+130	0	}	
+131			
+132			
+133		int ares_library_init(int flags)	
+134	0	{	
+135	0	int res;	
+136			
+137	0	if (ares_initialized)	
+138	0	{	
+139	0	ares_initialized++;	
+140	0	returnARES_SUCCESS;	
+141	0	}	
+142	0	ares_initialized++;	
+143			
+144	0	if (flags &ARES_LIB_INIT_WIN32)	
+145	0	{	
+146	0	res = ares_win32_init();	
+147	0	if (res !=ARES_SUCCESS)	
+148	0	return res;  /* LCOV_EXCL_LINE: can't test Win32 init failure */	
+149	0	}	
+150			
+151	0	ares_init_flags = flags;	
+152			
+153	0	returnARES_SUCCESS;	
+154	0	}	
+155			
+156		int ares_library_init_mem(int flags,	
+157		void *(*amalloc)(size_t size),	
+158		void (*afree)(void *ptr),	
+159		void *(*arealloc)(void *ptr, size_t size))	
+160	0	{	
+161	0	if (amalloc)	
+162	0	ares_malloc = amalloc;	
+163	0	if (arealloc)	
+164	0	ares_realloc = arealloc;	
+165	0	if (afree)	
+166	0	ares_free = afree;	
+167	0	return ares_library_init(flags);	
+168	0	}	
+169			
+170			
+171		void ares_library_cleanup(void)	
+172	0	{	
+173	0	if (!ares_initialized)	
+174	0	return;	
+175	0	ares_initialized--;	
+176	0	if (ares_initialized)	
+177	0	return;	
+178			
+179	0	if (ares_init_flags &ARES_LIB_INIT_WIN32)	
+180	0	ares_win32_cleanup();	
+181			
+182		#if defined(ANDROID) || defined(__ANDROID__)	
+183		ares_library_cleanup_android();	
+184		#endif	
+185			
+186	0	ares_init_flags =ARES_LIB_INIT_NONE;	
+187	0	ares_malloc = malloc;	
+188	0	ares_realloc = realloc;	
+189	0	ares_free = free;	
+190	0	}	
+191			
+192			
+193		int ares_library_initialized(void)	
+194	0	{	
+195		#ifdef USE_WINSOCK	
+196		if (!ares_initialized)	
+197		return ARES_ENOTINITIALIZED;	
+198		#endif	
+199	0	returnARES_SUCCESS;	
+200	0	}	
+
+

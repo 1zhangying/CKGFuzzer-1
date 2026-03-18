@@ -1,0 +1,398 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    TIFF *in, *out;\n    int c;\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n\n    while ((c = getopt(argc, argv, \"c:h:r:v:z\")) != -1)\n        switch (c)\n        {\n            case 'c':\n                if (streq(optarg, \"none\"))\n                    compression = COMPRESSION_NONE;\n                else if (streq(optarg, \"packbits\"))\n                    compression = COMPRESSION_PACKBITS;\n                else if (streq(optarg, \"lzw\"))\n                    compression = COMPRESSION_LZW;\n                else if (streq(optarg, \"jpeg\"))\n                    compression = COMPRESSION_JPEG;\n                else if (streq(optarg, \"zip\"))\n                    compression = COMPRESSION_ADOBE_DEFLATE;\n                else\n                    usage(EXIT_FAILURE);\n                break;\n            case 'h':\n                horizSubSampling = atoi(optarg);\n                if (horizSubSampling != 1 && horizSubSampling != 2 &&\n                    horizSubSampling != 4)\n                    usage(EXIT_FAILURE);\n                break;\n            case 'v':\n                vertSubSampling = atoi(optarg);\n                if (vertSubSampling != 1 && vertSubSampling != 2 &&\n                    vertSubSampling != 4)\n                    usage(EXIT_FAILURE);\n                break;\n            case 'r':\n                rowsperstrip = atoi(optarg);\n                break;\n            case 'z': /* CCIR Rec 601-1 w/ headroom/footroom */\n                refBlackWhite[0] = 16.;\n                refBlackWhite[1] = 235.;\n                refBlackWhite[2] = 128.;\n                refBlackWhite[3] = 240.;\n                refBlackWhite[4] = 128.;\n                refBlackWhite[5] = 240.;\n                break;\n            case '?':\n                usage(EXIT_FAILURE);\n                /*NOTREACHED*/\n        }\n    if (argc - optind < 2)\n        usage(EXIT_FAILURE);\n    out = TIFFOpen(argv[argc - 1], \"w\");\n    if (out == NULL)\n        return (EXIT_FAILURE);\n    setupLumaTables();\n    for (; optind < argc - 1; optind++)\n    {\n        in = TIFFOpen(argv[optind], \"r\");\n        if (in != NULL)\n        {\n            do\n            {\n                if (!tiffcvt(in, out) || !TIFFWriteDirectory(out))\n                {\n                    (void)TIFFClose(out);\n                    (void)TIFFClose(in);\n                    return (1);\n                }\n            } while (TIFFReadDirectory(in));\n            (void)TIFFClose(in);\n        }\n    }\n    (void)TIFFClose(out);\n    return (EXIT_SUCCESS);\n}",
+      "fn_code_pos": [
+        [
+          72,
+          0
+        ],
+        [
+          150,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static float *setupLuma(float c)\n{\n    float *v = (float *)_TIFFmalloc(256 * sizeof(float));\n    int i;\n    for (i = 0; i < 256; i++)\n        v[i] = c * i;\n    return (v);\n}",
+      "fn_code_pos": [
+        [
+          158,
+          0
+        ],
+        [
+          165,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setupLuma",
+        "parameters": {
+          "c": "float"
+        },
+        "return_type": "float"
+      }
+    },
+    {
+      "fn_code": "static unsigned V2Code(float f, float RB, float RW, int CR)\n{\n    unsigned int c = (unsigned int)((((f) * (RW - RB) / CR) + RB) + .5);\n    return (c > 255 ? 255 : c);\n}",
+      "fn_code_pos": [
+        [
+          167,
+          0
+        ],
+        [
+          171,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "V2Code",
+        "parameters": {
+          "f": "float",
+          "RB": "float",
+          "RW": "float",
+          "CR": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static void setupLumaTables(void)\n{\n    lumaRed = setupLuma(LumaRed);\n    lumaGreen = setupLuma(LumaGreen);\n    lumaBlue = setupLuma(LumaBlue);\n    D1 = 1.F / (2.F - 2.F * LumaBlue);\n    D2 = 1.F / (2.F - 2.F * LumaRed);\n    Yzero = V2Code(0, refBlackWhite[0], refBlackWhite[1], 255);\n}",
+      "fn_code_pos": [
+        [
+          173,
+          0
+        ],
+        [
+          181,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setupLumaTables",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void cvtClump(unsigned char *op, uint32_t *raster, uint32_t ch,\n                     uint32_t cw, uint32_t w)\n{\n    float Y, Cb = 0, Cr = 0;\n    uint32_t j, k;\n    /*\n     * Convert ch-by-cw block of RGB\n     * to YCbCr and sample accordingly.\n     */\n    for (k = 0; k < ch; k++)\n    {\n        for (j = 0; j < cw; j++)\n        {\n            uint32_t RGB = (raster - k * w)[j];\n            Y = lumaRed[TIFFGetR(RGB)] + lumaGreen[TIFFGetG(RGB)] +\n                lumaBlue[TIFFGetB(RGB)];\n            /* accumulate chrominance */\n            Cb += (TIFFGetB(RGB) - Y) * D1;\n            Cr += (TIFFGetR(RGB) - Y) * D2;\n            /* emit luminence */\n            *op++ = V2Code(Y, refBlackWhite[0], refBlackWhite[1], 255);\n        }\n        for (; j < horizSubSampling; j++)\n            *op++ = Yzero;\n    }\n    for (; k < vertSubSampling; k++)\n    {\n        for (j = 0; j < horizSubSampling; j++)\n            *op++ = Yzero;\n    }\n    /* emit sampled chrominance values */\n    *op++ = V2Code(Cb / (ch * cw), refBlackWhite[2], refBlackWhite[3], 127);\n    *op++ = V2Code(Cr / (ch * cw), refBlackWhite[4], refBlackWhite[5], 127);\n}",
+      "fn_code_pos": [
+        [
+          183,
+          0
+        ],
+        [
+          216,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cvtClump",
+        "parameters": {
+          "op": "unsigned char",
+          "raster": "uint32_t",
+          "ch": "uint32_t",
+          "cw": "uint32_t",
+          "w": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void cvtStrip(unsigned char *op, uint32_t *raster, uint32_t nrows,\n                     uint32_t width)\n{\n    uint32_t x;\n    int clumpSize = vertSubSampling * horizSubSampling + 2;\n    uint32_t *tp;\n\n    for (; nrows >= vertSubSampling; nrows -= vertSubSampling)\n    {\n        tp = raster;\n        for (x = width; x >= horizSubSampling; x -= horizSubSampling)\n        {\n            cvtClump(op, tp, vertSubSampling, horizSubSampling, width);\n            op += clumpSize;\n            tp += horizSubSampling;\n        }\n        if (x > 0)\n        {\n            cvtClump(op, tp, vertSubSampling, x, width);\n            op += clumpSize;\n        }\n        raster -= vertSubSampling * width;\n    }\n    if (nrows > 0)\n    {\n        tp = raster;\n        for (x = width; x >= horizSubSampling; x -= horizSubSampling)\n        {\n            cvtClump(op, tp, nrows, horizSubSampling, width);\n            op += clumpSize;\n            tp += horizSubSampling;\n        }\n        if (x > 0)\n            cvtClump(op, tp, nrows, x, width);\n    }\n}",
+      "fn_code_pos": [
+        [
+          226,
+          0
+        ],
+        [
+          261,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cvtStrip",
+        "parameters": {
+          "op": "unsigned char",
+          "raster": "uint32_t",
+          "nrows": "uint32_t",
+          "width": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int cvtRaster(TIFF *tif, uint32_t *raster, uint32_t width,\n                     uint32_t height)\n{\n    uint32_t y;\n    tstrip_t strip = 0;\n    tsize_t cc, acc;\n    unsigned char *buf;\n    uint32_t rwidth = roundup(width, horizSubSampling);\n    uint32_t rheight = roundup(height, vertSubSampling);\n    uint32_t nrows = (rowsperstrip > rheight ? rheight : rowsperstrip);\n    uint32_t rnrows = roundup(nrows, vertSubSampling);\n\n    cc = (tsize_t)rnrows * rwidth +\n         2 * ((rnrows * rwidth) / (horizSubSampling * vertSubSampling));\n    buf = (unsigned char *)_TIFFmalloc(cc);\n    // FIXME unchecked malloc\n    for (y = height; (int32_t)y > 0; y -= nrows)\n    {\n        uint32_t nr = (y > nrows ? nrows : y);\n        cvtStrip(buf, raster + (y - 1) * width, nr, width);\n        nr = roundup(nr, vertSubSampling);\n        acc = (tsize_t)nr * rwidth +\n              2 * ((nr * rwidth) / (horizSubSampling * vertSubSampling));\n        if (!TIFFWriteEncodedStrip(tif, strip++, buf, acc))\n        {\n            _TIFFfree(buf);\n            return (0);\n        }\n    }\n    _TIFFfree(buf);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          263,
+          0
+        ],
+        [
+          294,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cvtRaster",
+        "parameters": {
+          "tif": "TIFF",
+          "raster": "uint32_t",
+          "width": "uint32_t",
+          "height": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int tiffcvt(TIFF *in, TIFF *out)\n{\n    uint32_t width, height; /* image width & height */\n    uint32_t *raster;       /* retrieve RGBA image */\n    uint16_t shortv;\n    float floatv;\n    char *stringv;\n    uint32_t longv;\n    int result;\n    size_t pixel_count;\n\n    TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &width);\n    TIFFGetField(in, TIFFTAG_IMAGELENGTH, &height);\n    pixel_count = width * height;\n\n    /* XXX: Check the integer overflow. */\n    if (!width || !height || pixel_count / width != height)\n    {\n        TIFFError(TIFFFileName(in),\n                  \"Malformed input file; \"\n                  \"can't allocate buffer for raster of %\" PRIu32 \"x%\" PRIu32\n                  \" size\",\n                  width, height);\n        return 0;\n    }\n\n    raster = (uint32_t *)_TIFFCheckMalloc(in, pixel_count, sizeof(uint32_t),\n                                          \"raster buffer\");\n    if (raster == 0)\n    {\n        TIFFError(TIFFFileName(in),\n                  \"Failed to allocate buffer (%\" TIFF_SIZE_FORMAT\n                  \" elements of %\" TIFF_SIZE_FORMAT \" each)\",\n                  pixel_count, sizeof(uint32_t));\n        return (0);\n    }\n\n    if (!TIFFReadRGBAImage(in, width, height, raster, 0))\n    {\n        _TIFFfree(raster);\n        return (0);\n    }\n\n    CopyField(TIFFTAG_SUBFILETYPE, longv);\n    TIFFSetField(out, TIFFTAG_IMAGEWIDTH, width);\n    TIFFSetField(out, TIFFTAG_IMAGELENGTH, height);\n    TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, 8);\n    TIFFSetField(out, TIFFTAG_COMPRESSION, compression);\n    TIFFSetField(out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_YCBCR);\n    if (compression == COMPRESSION_JPEG)\n        TIFFSetField(out, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RAW);\n    CopyField(TIFFTAG_FILLORDER, shortv);\n    TIFFSetField(out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);\n    TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, 3);\n    CopyField(TIFFTAG_XRESOLUTION, floatv);\n    CopyField(TIFFTAG_YRESOLUTION, floatv);\n    CopyField(TIFFTAG_RESOLUTIONUNIT, shortv);\n    TIFFSetField(out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);\n    {\n        char buf[2048];\n        char *cp = strrchr(TIFFFileName(in), '/');\n        snprintf(buf, sizeof(buf), \"YCbCr conversion of %s\",\n                 cp ? cp + 1 : TIFFFileName(in));\n        TIFFSetField(out, TIFFTAG_IMAGEDESCRIPTION, buf);\n    }\n    TIFFSetField(out, TIFFTAG_SOFTWARE, TIFFGetVersion());\n    CopyField(TIFFTAG_DOCUMENTNAME, stringv);\n\n    TIFFSetField(out, TIFFTAG_REFERENCEBLACKWHITE, refBlackWhite);\n    TIFFSetField(out, TIFFTAG_YCBCRSUBSAMPLING, horizSubSampling,\n                 vertSubSampling);\n    TIFFSetField(out, TIFFTAG_YCBCRPOSITIONING, YCBCRPOSITION_CENTERED);\n    TIFFSetField(out, TIFFTAG_YCBCRCOEFFICIENTS, ycbcrCoeffs);\n    rowsperstrip = TIFFDefaultStripSize(out, rowsperstrip);\n    TIFFSetField(out, TIFFTAG_ROWSPERSTRIP, rowsperstrip);\n\n    result = cvtRaster(out, raster, width, height);\n    _TIFFfree(raster);\n    return result;\n}",
+      "fn_code_pos": [
+        [
+          296,
+          0
+        ],
+        [
+          375,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tiffcvt",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void usage(int code)\n{\n    int i;\n    FILE *out = (code == EXIT_SUCCESS) ? stdout : stderr;\n\n    fprintf(out, \"%s\\n\\n\", TIFFGetVersion());\n    for (i = 0; usage_info[i] != NULL; i++)\n        fprintf(out, \"%s\\n\", usage_info[i]);\n    exit(code);\n}",
+      "fn_code_pos": [
+        [
+          407,
+          0
+        ],
+        [
+          416,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "tiffcvt(TIFF *in, TIFF *out)",
+      "fn_dec_pos": [
+        [
+          68,
+          11
+        ],
+        [
+          68,
+          39
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tiffcvt",
+        "parameters": {
+          "in": "TIFF",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "usage(int code)",
+      "fn_dec_pos": [
+        [
+          69,
+          12
+        ],
+        [
+          69,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {
+          "code": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "setupLumaTables(void)",
+      "fn_dec_pos": [
+        [
+          70,
+          12
+        ],
+        [
+          70,
+          33
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setupLumaTables",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "setupLuma(float c)",
+      "fn_dec_pos": [
+        [
+          158,
+          14
+        ],
+        [
+          158,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "setupLuma",
+        "parameters": {
+          "c": "float"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"libport.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

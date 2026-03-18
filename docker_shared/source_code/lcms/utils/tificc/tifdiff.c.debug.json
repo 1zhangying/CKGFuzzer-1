@@ -1,0 +1,564 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nvoid ConsoleWarningHandler(const char* module, const char* fmt, va_list ap)\n{\n        char e[512] = { '\\0' };\n        if (module != NULL)\n              strcat(strcpy(e, module), \": \");\n\n        vsprintf(e+strlen(e), fmt, ap);\n        strcat(e, \".\");\n        if (Verbose) {\n\n              fprintf(stderr, \"\\nWarning\");\n              fprintf(stderr, \" %s\\n\", e);\n              fflush(stderr);\n              }\n}",
+      "fn_code_pos": [
+        [
+          52,
+          0
+        ],
+        [
+          67,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ConsoleWarningHandler",
+        "parameters": {
+          "module": "char",
+          "fmt": "char",
+          "ap": "va_list"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ConsoleErrorHandler(const char* module, const char* fmt, va_list ap)\n{\n       char e[512] = { '\\0' };\n\n       if (module != NULL)\n              strcat(strcpy(e, module), \": \");\n\n       vsprintf(e+strlen(e), fmt, ap);\n       strcat(e, \".\");\n       fprintf(stderr, \"\\nError\");\n       fprintf(stderr, \" %s\\n\", e);\n       fflush(stderr);\n}",
+      "fn_code_pos": [
+        [
+          69,
+          0
+        ],
+        [
+          82,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ConsoleErrorHandler",
+        "parameters": {
+          "module": "char",
+          "fmt": "char",
+          "ap": "va_list"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid Help()\n{\n    fprintf(stderr, \"Little CMS TIFF compare utility. v1.1\\n\\n\");\n\n    fprintf(stderr, \"usage: tiffdiff [flags] input.tif output.tif\\n\");\n\n    fprintf(stderr, \"\\nflags:\\n\\n\");\n\n\n    fprintf(stderr, \"-o<tiff>   - Output TIFF file\\n\");   \n    fprintf(stderr, \"-g<CGATS>  - Output results in CGATS file\\n\");       \n    \n    fprintf(stderr, \"\\n\");\n\n    fprintf(stderr, \"-v - Verbose (show warnings)\\n\");\n    fprintf(stderr, \"-h - This help\\n\");\n\n\n    fflush(stderr);\n    exit(0);\n}",
+      "fn_code_pos": [
+        [
+          86,
+          0
+        ],
+        [
+          107,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Help",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid HandleSwitches(int argc, char *argv[])\n{\n       int s;\n      \n       while ((s=xgetopt(argc,argv,\"o:O:hHvVg:G:\")) != EOF) {\n\n       switch (s) {\n\n\n       case 'v':\n       case 'V':\n            Verbose = TRUE;\n            break;\n\n       case 'o':\n       case 'O':           \n           TiffDiffFilename  = xoptarg;\n           break;\n\n                \n        case 'H':\n        case 'h':             \n            Help();            \n            break;\n\n        case 'g':\n        case 'G':\n            CGATSout = xoptarg;\n            break;\n\n  default:\n\n       FatalError(\"Unknown option - run without args to see valid ones\");\n    }       \n    }\n}",
+      "fn_code_pos": [
+        [
+          113,
+          0
+        ],
+        [
+          149,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "HandleSwitches",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ClearStatistics(LPSTAT st) \n{\n\n    st ->n = st ->x = st->x2 = st->Peak = 0;    \n    st ->Min = 1E10;     \n    \n}",
+      "fn_code_pos": [
+        [
+          152,
+          0
+        ],
+        [
+          159,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ClearStatistics",
+        "parameters": {
+          "st": "LPSTAT"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid AddOnePixel(LPSTAT st, double dE) \n{ \n    \n    st-> x += dE; st ->x2 += (dE * dE); st->n  += 1.0; \n    if (dE > st ->Peak) st ->Peak = dE;\n    if (dE < st ->Min)  st ->Min= dE;    \n}",
+      "fn_code_pos": [
+        [
+          162,
+          0
+        ],
+        [
+          169,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AddOnePixel",
+        "parameters": {
+          "st": "LPSTAT",
+          "dE": "double"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static    \ndouble Std(LPSTAT st)  \n{ \n    return sqrt((st->n * st->x2 - st->x * st->x) / (st->n*(st->n-1))); \n}",
+      "fn_code_pos": [
+        [
+          171,
+          0
+        ],
+        [
+          175,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Std",
+        "parameters": {
+          "st": "LPSTAT"
+        },
+        "return_type": "double"
+      }
+    },
+    {
+      "fn_code": "static\ndouble Mean(LPSTAT st) \n{ \n    return st ->x/st ->n; \n}",
+      "fn_code_pos": [
+        [
+          177,
+          0
+        ],
+        [
+          181,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Mean",
+        "parameters": {
+          "st": "LPSTAT"
+        },
+        "return_type": "double"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number GetInputPixelType(TIFF *Bank)\n{\n     uint16 Photometric, bps, spp, extra, PlanarConfig, *info;\n     uint16 Compression, reverse = 0;\n     int ColorChannels, IsPlanar = 0, pt = 0;\n\n     TIFFGetField(Bank,           TIFFTAG_PHOTOMETRIC,   &Photometric);\n     TIFFGetFieldDefaulted(Bank,  TIFFTAG_BITSPERSAMPLE, &bps);\n\n     if (bps == 1)\n       FatalError(\"Sorry, bilevel TIFFs has nothig to do with ICC profiles\");\n\n     if (bps != 8 && bps != 16)\n              FatalError(\"Sorry, 8 or 16 bits per sample only\");\n\n     TIFFGetFieldDefaulted(Bank, TIFFTAG_SAMPLESPERPIXEL, &spp);\n     TIFFGetFieldDefaulted(Bank, TIFFTAG_PLANARCONFIG, &PlanarConfig);\n\n     switch (PlanarConfig)\n     {\n     case PLANARCONFIG_CONTIG: IsPlanar = 0; break;\n     case PLANARCONFIG_SEPARATE: FatalError(\"Planar TIFF are not supported\");\n     default:\n\n     FatalError(\"Unsupported planar configuration (=%d) \", (int) PlanarConfig);\n     }\n\n     // If Samples per pixel == 1, PlanarConfiguration is irrelevant and need\n     // not to be included.\n\n     if (spp == 1) IsPlanar = 0;\n\n\n     // Any alpha?\n\n     TIFFGetFieldDefaulted(Bank, TIFFTAG_EXTRASAMPLES, &extra, &info);\n\n     \n     ColorChannels = spp - extra;\n\n     switch (Photometric) {\n\n     case PHOTOMETRIC_MINISWHITE:\n                                   \n            reverse = 1;\n\n     case PHOTOMETRIC_MINISBLACK:\n                                   \n            pt = PT_GRAY;                                \n            break;\n\n     case PHOTOMETRIC_RGB:\n                                   \n            pt = PT_RGB;\n            break;\n\n\n     case PHOTOMETRIC_PALETTE:\n                                             \n            FatalError(\"Sorry, palette images not supported (at least on this version)\"); \n\n     case PHOTOMETRIC_SEPARATED:\n           pt = PixelTypeFromChanCount(ColorChannels);\n           break;\n\n     case PHOTOMETRIC_YCBCR:\n           TIFFGetField(Bank, TIFFTAG_COMPRESSION, &Compression);\n           {\n                  uint16 subx, suby;\n\n                  pt = PT_YCbCr;\n                  TIFFGetFieldDefaulted(Bank, TIFFTAG_YCBCRSUBSAMPLING, &subx, &suby);\n                  if (subx != 1 || suby != 1)\n                         FatalError(\"Sorry, subsampled images not supported\");\n\n           }\n           break;\n\n     case 9:\n     case PHOTOMETRIC_CIELAB:\n           pt = PT_Lab;\n           break;\n\n    \n     case PHOTOMETRIC_LOGLUV:      /* CIE Log2(L) (u',v') */\n\n           TIFFSetField(Bank, TIFFTAG_SGILOGDATAFMT, SGILOGDATAFMT_16BIT);\n           pt = PT_YUV;             // *ICCSpace = icSigLuvData;\n           bps = 16;               // 16 bits forced by LibTiff\n           break;\n\n     default:\n           FatalError(\"Unsupported TIFF color space (Photometric %d)\", Photometric);\n     }\n\n     // Convert bits per sample to bytes per sample\n\n     bps >>= 3; \n\n     return (COLORSPACE_SH(pt)|PLANAR_SH(IsPlanar)|EXTRA_SH(extra)|CHANNELS_SH(ColorChannels)|BYTES_SH(bps)|FLAVOR_SH(reverse));\n}",
+      "fn_code_pos": [
+        [
+          186,
+          0
+        ],
+        [
+          287,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetInputPixelType",
+        "parameters": {
+          "Bank": "TIFF"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number OpenEmbedded(TIFF* tiff, cmsHPROFILE* PtrProfile, cmsHTRANSFORM* PtrXform)\n{\n\n    cmsUInt32Number EmbedLen, dwFormat = 0;\n    cmsUInt8Number* EmbedBuffer;\n    \n    *PtrProfile = NULL;\n    *PtrXform   = NULL;\n\n    if (TIFFGetField(tiff, TIFFTAG_ICCPROFILE, &EmbedLen, &EmbedBuffer)) {\n\n              *PtrProfile = cmsOpenProfileFromMem(EmbedBuffer, EmbedLen);\n   \n              if (Verbose) {\n                  \n\t\t\t\t  fprintf(stdout, \"Embedded profile found:\\n\");                          \n\t\t\t\t  PrintProfileInformation(*PtrProfile);\n                  \n              }\n\n              dwFormat  = GetInputPixelType(tiff);\n              *PtrXform = cmsCreateTransform(*PtrProfile, dwFormat, \n                                          hLab, TYPE_Lab_DBL, INTENT_RELATIVE_COLORIMETRIC, 0);\n\n      }\n\n    return dwFormat;\n}",
+      "fn_code_pos": [
+        [
+          291,
+          0
+        ],
+        [
+          319,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OpenEmbedded",
+        "parameters": {
+          "tiff": "TIFF",
+          "PtrProfile": "cmsHPROFILE",
+          "PtrXform": "cmsHTRANSFORM"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nsize_t PixelSize(cmsUInt32Number dwFormat)\n{\n    return T_BYTES(dwFormat) * (T_CHANNELS(dwFormat) + T_EXTRA(dwFormat));\n}",
+      "fn_code_pos": [
+        [
+          322,
+          0
+        ],
+        [
+          326,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PixelSize",
+        "parameters": {
+          "dwFormat": "cmsUInt32Number"
+        },
+        "return_type": "size_t"
+      }
+    },
+    {
+      "fn_code": "static\nint CmpImages(TIFF* tiff1, TIFF* tiff2, TIFF* diff)\n{\n    cmsUInt8Number* buf1, *buf2, *buf3=NULL;\n    int row, cols, imagewidth = 0, imagelength = 0;\n    uint16   Photometric;\n    double dE = 0;    \n    double dR, dG, dB, dC, dM, dY, dK;\n    int rc = 0;\n    cmsHPROFILE hProfile1 = 0, hProfile2 = 0;\n    cmsHTRANSFORM xform1 = 0, xform2 = 0;\n    cmsUInt32Number dwFormat1, dwFormat2;\n    \n\n\n      TIFFGetField(tiff1, TIFFTAG_PHOTOMETRIC, &Photometric);\n      TIFFGetField(tiff1, TIFFTAG_IMAGEWIDTH,  &imagewidth);\n      TIFFGetField(tiff1, TIFFTAG_IMAGELENGTH, &imagelength);\n      TIFFGetField(tiff1, TIFFTAG_SAMPLESPERPIXEL, &Channels);\n      \n      dwFormat1 = OpenEmbedded(tiff1, &hProfile1, &xform1);\n      dwFormat2 = OpenEmbedded(tiff2, &hProfile2, &xform2);\n    \n      \n      \n      buf1 = (cmsUInt8Number*)_TIFFmalloc(TIFFScanlineSize(tiff1));\n      buf2 = (cmsUInt8Number*)_TIFFmalloc(TIFFScanlineSize(tiff2));\n    \n      if (diff) {\n                    \n           TIFFSetField(diff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);\n           TIFFSetField(diff, TIFFTAG_COMPRESSION, COMPRESSION_NONE);\n           TIFFSetField(diff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG); \n\n           TIFFSetField(diff, TIFFTAG_IMAGEWIDTH,  imagewidth);\n           TIFFSetField(diff, TIFFTAG_IMAGELENGTH, imagelength);\n\n           TIFFSetField(diff, TIFFTAG_SAMPLESPERPIXEL, 1);\n           TIFFSetField(diff, TIFFTAG_BITSPERSAMPLE, 8);\n                      \n           buf3 = (cmsUInt8Number*)_TIFFmalloc(TIFFScanlineSize(diff));                        \n      }\n      \n\n\n      for (row = 0; row < imagelength; row++) {\n\n        if (TIFFReadScanline(tiff1, buf1, row, 0) < 0) goto Error;\n        if (TIFFReadScanline(tiff2, buf2, row, 0) < 0) goto Error;                  \n\n                \n        for (cols = 0; cols < imagewidth; cols++) {\n\n              \n            switch (Photometric) {\n\n            case PHOTOMETRIC_MINISWHITE:\n            case PHOTOMETRIC_MINISBLACK:\n\n                    dE = fabs(buf2[cols] - buf1[cols]); \n                \n                    AddOnePixel(&ColorantStat[0], dE);\n                    AddOnePixel(&EuclideanStat, dE);\n                    break;\n\n            case PHOTOMETRIC_RGB:\n                \n                    {\n                        int index = 3 * cols;\n\n                        dR = fabs(buf2[index+0] - buf1[index+0]); \n                        dG = fabs(buf2[index+1] - buf1[index+1]); \n                        dB = fabs(buf2[index+2] - buf1[index+2]); \n\n                        dE = sqrt(dR * dR + dG * dG + dB * dB) / sqrt(3.);\n                    }\n\n                    AddOnePixel(&ColorantStat[0], dR);\n                    AddOnePixel(&ColorantStat[1], dG);\n                    AddOnePixel(&ColorantStat[2], dB);\n                    AddOnePixel(&EuclideanStat,   dE);\n                    break;\n\n            case PHOTOMETRIC_SEPARATED:\n                \n                {\n                        int index = 4 * cols;\n\n                        dC = fabs(buf2[index+0] - buf1[index+0]); \n                        dM = fabs(buf2[index+1] - buf1[index+1]); \n                        dY = fabs(buf2[index+2] - buf1[index+2]); \n                        dK = fabs(buf2[index+3] - buf1[index+3]); \n\n                        dE = sqrt(dC * dC + dM * dM + dY * dY + dK * dK) / 2.;\n                    }\n                    AddOnePixel(&ColorantStat[0], dC);\n                    AddOnePixel(&ColorantStat[1], dM);\n                    AddOnePixel(&ColorantStat[2], dY);\n                    AddOnePixel(&ColorantStat[3], dK);\n                    AddOnePixel(&EuclideanStat,   dE);\n                    break;\n            \n            default:\n                    FatalError(\"Unsupported channels: %d\", Channels);                 \n            }\n\n            \n            if (xform1 && xform2) {\n\n    \n                cmsCIELab Lab1, Lab2;\n                size_t index1 = cols * PixelSize(dwFormat1);\n                size_t index2 = cols * PixelSize(dwFormat2);\n\n                cmsDoTransform(xform1, &buf1[index1], &Lab1,  1);\n                cmsDoTransform(xform2, &buf2[index2], &Lab2,  1);\n\n                dE = cmsDeltaE(&Lab1, &Lab2);               \n                AddOnePixel(&ColorimetricStat, dE);\n            }\n\n\n            if (diff) {\n                buf3[cols] = (cmsUInt8Number) floor(dE + 0.5);\n        }\n\n        }\n\n        if (diff) {\n\n                if (TIFFWriteScanline(diff, buf3, row, 0) < 0) goto Error;\n        }\n        \n\n      }\n\n     rc = 1;\n\nError:\n         \n     if (hProfile1) cmsCloseProfile(hProfile1);\n     if (hProfile2) cmsCloseProfile(hProfile2);\n     if (xform1) cmsDeleteTransform(xform1);\n     if (xform2) cmsDeleteTransform(xform2);\n      _TIFFfree(buf1); _TIFFfree(buf2); \n      if (diff) {\n           TIFFWriteDirectory(diff);\n          if (buf3 != NULL) _TIFFfree(buf3);\n      }\n      return rc;\n}",
+      "fn_code_pos": [
+        [
+          329,
+          0
+        ],
+        [
+          479,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CmpImages",
+        "parameters": {
+          "tiff1": "TIFF",
+          "tiff2": "TIFF",
+          "diff": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nvoid AssureShortTagIs(TIFF* tif1, TIFF* tiff2, int tag, int Val, const char* Error)\n{\n        uint16 v1;\n\n        \n        if (!TIFFGetField(tif1, tag, &v1)) goto Err;\n        if (v1 != Val) goto Err;\n\n        if (!TIFFGetField(tiff2, tag, &v1)) goto Err;\n        if (v1 != Val) goto Err;\n\n        return;\nErr:\n        FatalError(\"%s is not proper\", Error);\n}",
+      "fn_code_pos": [
+        [
+          482,
+          0
+        ],
+        [
+          497,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AssureShortTagIs",
+        "parameters": {
+          "tif1": "TIFF",
+          "tiff2": "TIFF",
+          "tag": "int",
+          "Val": "int",
+          "Error": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nint CmpShortTag(TIFF* tif1, TIFF* tif2, int tag)\n{\n        uint16 v1, v2;\n\n        if (!TIFFGetField(tif1, tag, &v1)) return 0;\n        if (!TIFFGetField(tif2, tag, &v2)) return 0;\n\n        return v1 == v2;\n}",
+      "fn_code_pos": [
+        [
+          500,
+          0
+        ],
+        [
+          509,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CmpShortTag",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF",
+          "tag": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nint CmpLongTag(TIFF* tif1, TIFF* tif2, int tag)\n{\n        uint32 v1, v2;\n\n        if (!TIFFGetField(tif1, tag, &v1)) return 0;\n        if (!TIFFGetField(tif2, tag, &v2)) return 0;\n\n        return v1 == v2;\n}",
+      "fn_code_pos": [
+        [
+          511,
+          0
+        ],
+        [
+          520,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CmpLongTag",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF",
+          "tag": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nvoid EqualShortTag(TIFF* tif1, TIFF* tif2, int tag, const char* Error)\n{\n    if (!CmpShortTag(tif1, tif2, tag))\n        FatalError(\"%s is different\", Error);\n}",
+      "fn_code_pos": [
+        [
+          523,
+          0
+        ],
+        [
+          528,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EqualShortTag",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF",
+          "tag": "int",
+          "Error": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid EqualLongTag(TIFF* tif1, TIFF* tif2, int tag, const char* Error)\n{\n    if (!CmpLongTag(tif1, tif2, tag))\n        FatalError(\"%s is different\", Error);\n}",
+      "fn_code_pos": [
+        [
+          532,
+          0
+        ],
+        [
+          537,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EqualLongTag",
+        "parameters": {
+          "tif1": "TIFF",
+          "tif2": "TIFF",
+          "tag": "int",
+          "Error": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid AddOneCGATSRow(cmsHANDLE hIT8, char *Name, LPSTAT st)\n{\n\n    double Per100 = 100.0 * ((255.0 - Mean(st)) / 255.0);\n\n    cmsIT8SetData(hIT8,    Name, \"SAMPLE_ID\", Name);\n    cmsIT8SetDataDbl(hIT8, Name, \"PER100_EQUAL\", Per100);\n    cmsIT8SetDataDbl(hIT8, Name, \"MEAN_DE\", Mean(st));\n    cmsIT8SetDataDbl(hIT8, Name, \"STDEV_DE\", Std(st));\n    cmsIT8SetDataDbl(hIT8, Name, \"MIN_DE\", st ->Min);\n    cmsIT8SetDataDbl(hIT8, Name, \"MAX_DE\", st ->Peak);\n\n}",
+      "fn_code_pos": [
+        [
+          541,
+          0
+        ],
+        [
+          554,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AddOneCGATSRow",
+        "parameters": {
+          "hIT8": "cmsHANDLE",
+          "Name": "char",
+          "st": "LPSTAT"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid CreateCGATS(const char* TiffName1, const char* TiffName2)\n{\n    cmsHANDLE hIT8 = cmsIT8Alloc(0);\n    time_t ltime;\n    char Buffer[256];\n\n    cmsIT8SetSheetType(hIT8, \"TIFFDIFF\");\n    \n   \n    sprintf(Buffer, \"Differences between %s and %s\", TiffName1, TiffName2);\n  \n    cmsIT8SetComment(hIT8, Buffer);\n\n    cmsIT8SetPropertyStr(hIT8, \"ORIGINATOR\", \"TIFFDIFF\");\n    time( &ltime );\n    strcpy(Buffer, ctime(&ltime));\n    Buffer[strlen(Buffer)-1] = 0;     // Remove the nasty \"\\n\"\n\n    cmsIT8SetPropertyStr(hIT8, \"CREATED\", Buffer);\n\n    cmsIT8SetComment(hIT8, \" \");\n\n    cmsIT8SetPropertyDbl(hIT8, \"NUMBER_OF_FIELDS\", 6);\n    \n    \n    cmsIT8SetDataFormat(hIT8, 0, \"SAMPLE_ID\");\n    cmsIT8SetDataFormat(hIT8, 1, \"PER100_EQUAL\");\n    cmsIT8SetDataFormat(hIT8, 2, \"MEAN_DE\");\n    cmsIT8SetDataFormat(hIT8, 3, \"STDEV_DE\");\n    cmsIT8SetDataFormat(hIT8, 4, \"MIN_DE\");\n    cmsIT8SetDataFormat(hIT8, 5, \"MAX_DE\");\n\n       \n    switch (Channels) {\n\n    case 1:\n            cmsIT8SetPropertyDbl(hIT8, \"NUMBER_OF_SETS\", 3);\n            AddOneCGATSRow(hIT8, \"GRAY_PLANE\", &ColorantStat[0]);            \n            break;\n\n    case 3:\n            cmsIT8SetPropertyDbl(hIT8, \"NUMBER_OF_SETS\", 5);\n            AddOneCGATSRow(hIT8, \"R_PLANE\", &ColorantStat[0]);            \n            AddOneCGATSRow(hIT8, \"G_PLANE\", &ColorantStat[1]);            \n            AddOneCGATSRow(hIT8, \"B_PLANE\", &ColorantStat[2]);            \n            break;\n            \n            \n    case 4:\n            cmsIT8SetPropertyDbl(hIT8, \"NUMBER_OF_SETS\", 6);\n            AddOneCGATSRow(hIT8, \"C_PLANE\", &ColorantStat[0]);            \n            AddOneCGATSRow(hIT8, \"M_PLANE\", &ColorantStat[1]);            \n            AddOneCGATSRow(hIT8, \"Y_PLANE\", &ColorantStat[2]);            \n            AddOneCGATSRow(hIT8, \"K_PLANE\", &ColorantStat[3]);            \n            break;\n            \n    default: FatalError(\"Internal error: Bad ColorSpace\");\n\n    }\n\n    AddOneCGATSRow(hIT8, \"EUCLIDEAN\",    &EuclideanStat);    \n    AddOneCGATSRow(hIT8, \"COLORIMETRIC\", &ColorimetricStat);    \n\n    cmsIT8SaveToFile(hIT8, CGATSout);\n    cmsIT8Free(hIT8);\n}",
+      "fn_code_pos": [
+        [
+          557,
+          0
+        ],
+        [
+          623,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CreateCGATS",
+        "parameters": {
+          "TiffName1": "char",
+          "TiffName2": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char* argv[])\n{\n      int i;\n\n      Tiff1 = Tiff2 = TiffDiff = NULL;\n\n\t  InitUtils(\"tiffdiff\");\n\n      HandleSwitches(argc, argv);\n\n      if ((argc - xoptind) != 2) {\n\n              Help();              \n              }\n            \n      TIFFSetErrorHandler(ConsoleErrorHandler);\n      TIFFSetWarningHandler(ConsoleWarningHandler);\n\n      Tiff1 = TIFFOpen(argv[xoptind], \"r\");\n      if (Tiff1 == NULL) FatalError(\"Unable to open '%s'\", argv[xoptind]);\n\n      Tiff2 = TIFFOpen(argv[xoptind+1], \"r\");\n      if (Tiff2 == NULL) FatalError(\"Unable to open '%s'\", argv[xoptind+1]);\n             \n      if (TiffDiffFilename) {\n\n          TiffDiff = TIFFOpen(TiffDiffFilename, \"w\");\n          if (TiffDiff == NULL) FatalError(\"Unable to create '%s'\", TiffDiffFilename);\n\n      }\n\n \n      AssureShortTagIs(Tiff1, Tiff2, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG, \"Planar Config\");\n      AssureShortTagIs(Tiff1, Tiff2, TIFFTAG_BITSPERSAMPLE, 8, \"8 bit per sample\");\n\n      EqualLongTag(Tiff1, Tiff2, TIFFTAG_IMAGEWIDTH,  \"Image width\");\n      EqualLongTag(Tiff1, Tiff2, TIFFTAG_IMAGELENGTH, \"Image length\");\n      \n      EqualShortTag(Tiff1, Tiff2, TIFFTAG_SAMPLESPERPIXEL, \"Samples per pixel\");\n\n\n      hLab = cmsCreateLab4Profile(NULL);\n\n      ClearStatistics(&EuclideanStat);\n      for (i=0; i < 4; i++)\n            ClearStatistics(&ColorantStat[i]);\n\n      if (!CmpImages(Tiff1, Tiff2, TiffDiff))\n                FatalError(\"Error comparing images\");\n\n      if (CGATSout) {\n            CreateCGATS(argv[xoptind], argv[xoptind+1]);\n      }\n      else {\n\n        double  Per100 = 100.0 * ((255.0 - Mean(&EuclideanStat)) / 255.0);\n\n        printf(\"Digital counts  %g%% equal. mean %g, min %g, max %g, Std %g\\n\", Per100, Mean(&EuclideanStat), \n                                                                                EuclideanStat.Min, \n                                                                                EuclideanStat.Peak, \n                                                                                Std(&EuclideanStat));\n\n        if (ColorimetricStat.n > 0) {\n\n            Per100 = 100.0 * ((255.0 - Mean(&ColorimetricStat)) / 255.0);\n\n            printf(\"dE Colorimetric %g%% equal. mean %g, min %g, max %g, Std %g\\n\", Per100, Mean(&ColorimetricStat), \n                                                                                    ColorimetricStat.Min, \n                                                                                    ColorimetricStat.Peak, \n                                                                                    Std(&ColorimetricStat));\n        }\n      \n      }\n\n      if (hLab)     cmsCloseProfile(hLab);\n      if (Tiff1)    TIFFClose(Tiff1);\n      if (Tiff2)    TIFFClose(Tiff2);      \n      if (TiffDiff) TIFFClose(TiffDiff);\n\n      return 0;\n}",
+      "fn_code_pos": [
+        [
+          625,
+          0
+        ],
+        [
+          705,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n                double  n, x, x2;                    \n                double  Min, Peak;   \n\n    } STAT, *LPSTAT;",
+      {
+        "n": "double",
+        "Min": "double"
+      },
+      "STAT",
+      [
+        36,
+        0
+      ],
+      [
+        40,
+        20
+      ]
+    ],
+    [
+      "typedef struct {\n                double  n, x, x2;                    \n                double  Min, Peak;   \n\n    } STAT, *LPSTAT;",
+      {
+        "n": "double",
+        "Min": "double"
+      },
+      "LPSTAT",
+      [
+        36,
+        0
+      ],
+      [
+        40,
+        20
+      ]
+    ],
+    [
+      "typedef struct {\n                double  n, x, x2;                    \n                double  Min, Peak;   \n\n    } STAT, *LPSTAT;",
+      {
+        "n": "double",
+        "Min": "double"
+      },
+      "STAT",
+      [
+        36,
+        0
+      ],
+      [
+        40,
+        20
+      ]
+    ],
+    [
+      "typedef struct {\n                double  n, x, x2;                    \n                double  Min, Peak;   \n\n    } STAT, *LPSTAT;",
+      {
+        "n": "double",
+        "Min": "double"
+      },
+      "LPSTAT",
+      [
+        36,
+        0
+      ],
+      [
+        40,
+        20
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"utils.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

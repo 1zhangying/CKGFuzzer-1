@@ -64,6 +64,7 @@ class FuzzingGenerationAgent:
             "{api_sum}\n\n"
             "If file operations are required, you firstly need to convert the fuzz input into a string and create the corresponding object (e.g., TIFFStreamOpen()) directly in memory with the string rather than reading input files from disk. If an output file is needed, name it uniformly as 'output_file.'\n"
             "Add any non-code content as comments. Generate an executable {lang} fuzz driver according to the above descriptions, focusing on safety, proper resource management, and error handling."
+
         )
   
         self.fuzz_driver_generation_prompt_with_memory = PromptTemplate(

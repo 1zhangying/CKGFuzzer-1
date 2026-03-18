@@ -1,0 +1,141 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int is_requested_directory(TIFF *tif, int requested_dir_number,\n                           const char *filename)\n{\n    char *ptr = NULL;\n    char *auxStr = NULL;\n\n    if (!TIFFGetField(tif, TIFFTAG_PAGENAME, &ptr))\n    {\n        fprintf(stderr, \"Can't get TIFFTAG_PAGENAME tag.\\n\");\n        return 0;\n    }\n\n    /* Check for reading errors */\n    if (ptr != NULL)\n        auxStr = strchr(ptr, ' ');\n\n    if (ptr == NULL || auxStr == NULL || strncmp(auxStr, \" th.\", 4))\n    {\n        ptr = ptr == NULL ? \"(null)\" : ptr;\n        fprintf(stderr,\n                \"Error reading IFD directory number from PageName tag: %s\\n\",\n                ptr);\n        return 0;\n    }\n\n    /* Retrieve IFD identification number from ASCII string */\n    const int nthIFD = atoi(ptr);\n    if (nthIFD == requested_dir_number)\n    {\n        return 1;\n    }\n    fprintf(stderr, \"Expected directory %d from %s was not loaded but: %s\\n\",\n            requested_dir_number, filename, ptr);\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          40,
+          0
+        ],
+        [
+          75,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "is_requested_directory",
+        "parameters": {
+          "tif": "TIFF",
+          "requested_dir_number": "int",
+          "filename": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int test_subifd_loop(void)\n{\n    const char *filename = SOURCE_DIR \"/images/test_ifd_loop_subifd.tif\";\n    TIFF *tif;\n    int i, n;\n    int ret = 0;\n#define NUMBER_OF_SUBIFDs 3\n    toff_t sub_IFDs_offsets[NUMBER_OF_SUBIFDs] = {\n        0UL}; /* array for SubIFD tag */\n    void *ptr;\n    uint16_t number_of_sub_IFDs = 0;\n\n    tif = TIFFOpen(filename, \"r\");\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't open  %s\\n\", filename);\n        return 1;\n    }\n\n    /* Try to read six further main directories. Fifth read shall fail. */\n    for (i = 0; i < 6; i++)\n    {\n        if (!TIFFReadDirectory(tif))\n            break;\n    }\n    if (i != 4)\n    {\n        fprintf(stderr, \"(30) Expected fifth TIFFReadDirectory() to fail\\n\");\n        ret = 1;\n    }\n    if (!is_requested_directory(tif, 4, filename))\n    {\n        fprintf(stderr, \"(31) Expected fifth main IFD to be loaded\\n\");\n        ret = 1;\n    }\n\n    /* Switch to IFD 1 and get SubIFDs.\n     * Then read through SubIFDs and detect SubIFD loop.\n     * Finally go back to main-IFD and check if right IFD is loaded.\n     */\n    if (!TIFFSetDirectory(tif, 1))\n        ret = 1;\n\n    /* Check if there are SubIFD subfiles */\n    if (TIFFGetField(tif, TIFFTAG_SUBIFD, &number_of_sub_IFDs, &ptr) &&\n        (number_of_sub_IFDs == 3))\n    {\n        /* Copy SubIFD array from pointer */\n        memcpy(sub_IFDs_offsets, ptr,\n               number_of_sub_IFDs * sizeof(sub_IFDs_offsets[0]));\n\n        for (i = 0; i < number_of_sub_IFDs; i++)\n        {\n            /* Read SubIFD directory directly via offset.\n             * SubIFDs PageName string contains numbers 200 to 202. */\n            if (!TIFFSetSubDirectory(tif, sub_IFDs_offsets[i]))\n                ret = 1;\n            if (!is_requested_directory(tif, 200 + i, filename))\n            {\n                fprintf(stderr, \"(32) Expected SubIFD %d to be loaded.\\n\", i);\n                ret = 1;\n            }\n            /* Now test SubIFD loop detection.\n             * The (i+n).th read in the SubIFD chain shall fail. */\n            for (n = 0; n < number_of_sub_IFDs; n++)\n            {\n                if (!TIFFReadDirectory(tif))\n                    break;\n            }\n            if ((i + n) != 2)\n            {\n                fprintf(\n                    stderr,\n                    \"(33) Expected third SubIFD-TIFFReadDirectory() to fail\\n\");\n                ret = 1;\n            }\n        }\n        /* Go back to main-IFD chain and re-read that main-IFD directory */\n        if (!TIFFSetDirectory(tif, 3))\n            ret = 1;\n        if (!is_requested_directory(tif, 3, filename))\n        {\n            fprintf(stderr, \"(34) Expected fourth main IFD to be loaded\\n\");\n            ret = 1;\n        }\n    }\n    else\n    {\n        fprintf(stderr, \"(35) No or wrong expected SubIFDs within main IFD\\n\");\n        ret = 1;\n    }\n\n    TIFFClose(tif);\n    return ret;\n}",
+      "fn_code_pos": [
+        [
+          83,
+          0
+        ],
+        [
+          177,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test_subifd_loop",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int main()\n{\n    int ret = 0;\n    {\n        TIFF *tif =\n            TIFFOpen(SOURCE_DIR \"/images/test_ifd_loop_to_self.tif\", \"r\");\n        assert(tif);\n        if (TIFFReadDirectory(tif))\n        {\n            fprintf(stderr, \"(1) Expected TIFFReadDirectory() to fail\\n\");\n            ret = 1;\n        }\n        TIFFClose(tif);\n    }\n    {\n        TIFF *tif =\n            TIFFOpen(SOURCE_DIR \"/images/test_ifd_loop_to_self.tif\", \"r\");\n        assert(tif);\n        int n = TIFFNumberOfDirectories(tif);\n        if (n != 1)\n        {\n            fprintf(\n                stderr,\n                \"(2) Expected TIFFNumberOfDirectories() to return 1. Got %d\\n\",\n                n);\n            ret = 1;\n        }\n        TIFFClose(tif);\n    }\n    {\n        TIFF *tif =\n            TIFFOpen(SOURCE_DIR \"/images/test_ifd_loop_to_first.tif\", \"r\");\n        assert(tif);\n        if (TIFFReadDirectory(tif) != 1)\n        {\n            fprintf(stderr, \"(3) Expected TIFFReadDirectory() to succeed\\n\");\n            ret = 1;\n        }\n        if (TIFFReadDirectory(tif))\n        {\n            fprintf(stderr, \"(4) Expected TIFFReadDirectory() to fail\\n\");\n            ret = 1;\n        }\n        if (TIFFSetDirectory(tif, 1) != 1)\n        {\n            fprintf(stderr, \"(5) Expected TIFFSetDirectory() to succeed\\n\");\n            ret = 1;\n        }\n        if (TIFFReadDirectory(tif))\n        {\n            fprintf(stderr, \"(6) Expected TIFFReadDirectory() to fail\\n\");\n            ret = 1;\n        }\n        if (TIFFSetDirectory(tif, 0) != 1)\n        {\n            fprintf(stderr, \"(7) Expected TIFFSetDirectory() to succeed\\n\");\n            ret = 1;\n        }\n        if (TIFFReadDirectory(tif) != 1)\n        {\n            fprintf(stderr, \"(8) Expected TIFFReadDirectory() to succeed\\n\");\n            ret = 1;\n        }\n        if (TIFFReadDirectory(tif))\n        {\n            fprintf(stderr, \"(9) Expected TIFFReadDirectory() to fail\\n\");\n            ret = 1;\n        }\n        TIFFClose(tif);\n    }\n    {\n        TIFF *tif =\n            TIFFOpen(SOURCE_DIR \"/images/test_ifd_loop_to_first.tif\", \"r\");\n        assert(tif);\n        int n = TIFFNumberOfDirectories(tif);\n        if (n != 2)\n        {\n            fprintf(\n                stderr,\n                \"(10) Expected TIFFNumberOfDirectories() to return 2. Got %d\\n\",\n                n);\n            ret = 1;\n        }\n        TIFFClose(tif);\n    }\n    {\n        TIFF *tif = TIFFOpen(SOURCE_DIR \"/images/test_two_ifds.tif\", \"r\");\n        assert(tif);\n        if (TIFFReadDirectory(tif) != 1)\n        {\n            fprintf(stderr, \"(11) Expected TIFFReadDirectory() to succeed\\n\");\n            ret = 1;\n        }\n        if (TIFFReadDirectory(tif))\n        {\n            fprintf(stderr, \"(12) Expected TIFFReadDirectory() to fail\\n\");\n            ret = 1;\n        }\n        if (TIFFSetDirectory(tif, 1) != 1)\n        {\n            fprintf(stderr, \"(13) Expected TIFFSetDirectory() to succeed\\n\");\n            ret = 1;\n        }\n        if (TIFFReadDirectory(tif))\n        {\n            fprintf(stderr, \"(14) Expected TIFFReadDirectory() to fail\\n\");\n            ret = 1;\n        }\n        if (TIFFSetDirectory(tif, 0) != 1)\n        {\n            fprintf(stderr, \"(15) Expected TIFFSetDirectory() to succeed\\n\");\n            ret = 1;\n        }\n        if (TIFFReadDirectory(tif) != 1)\n        {\n            fprintf(stderr, \"(16) Expected TIFFReadDirectory() to succeed\\n\");\n            ret = 1;\n        }\n        if (TIFFReadDirectory(tif))\n        {\n            fprintf(stderr, \"(17) Expected TIFFReadDirectory() to fail\\n\");\n            ret = 1;\n        }\n        if (TIFFSetDirectory(tif, 0) != 1)\n        {\n            fprintf(stderr, \"(18) Expected TIFFSetDirectory() to succeed\\n\");\n            ret = 1;\n        }\n        if (TIFFSetDirectory(tif, 1) != 1)\n        {\n            fprintf(stderr, \"(19) Expected TIFFSetDirectory() to succeed\\n\");\n            ret = 1;\n        }\n        if (TIFFSetDirectory(tif, 2))\n        {\n            fprintf(stderr, \"(20) Expected TIFFSetDirectory() to fail\\n\");\n            ret = 1;\n        }\n        if (TIFFSetDirectory(tif, 1) != 1)\n        {\n            fprintf(stderr, \"(21) Expected TIFFSetDirectory() to succeed\\n\");\n            ret = 1;\n        }\n        if (TIFFSetDirectory(tif, 0) != 1)\n        {\n            fprintf(stderr, \"(22) Expected TIFFSetDirectory() to succeed\\n\");\n            ret = 1;\n        }\n        TIFFClose(tif);\n    }\n    {\n        TIFF *tif = TIFFOpen(SOURCE_DIR \"/images/test_two_ifds.tif\", \"r\");\n        assert(tif);\n        int n = TIFFNumberOfDirectories(tif);\n        if (n != 2)\n        {\n            fprintf(\n                stderr,\n                \"(23) Expected TIFFNumberOfDirectories() to return 2. Got %d\\n\",\n                n);\n            ret = 1;\n        }\n        TIFFClose(tif);\n    }\n    ret += test_subifd_loop();\n    return ret;\n}",
+      "fn_code_pos": [
+        [
+          179,
+          0
+        ],
+        [
+          345,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <assert.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

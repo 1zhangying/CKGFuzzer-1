@@ -1,0 +1,2058 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\ncmsUInt32Number NULLRead(cmsIOHANDLER* iohandler, void *Buffer, cmsUInt32Number size, cmsUInt32Number count)\n{\n    FILENULL* ResData = (FILENULL*) iohandler ->stream;\n\n    cmsUInt32Number len = size * count;\n    ResData -> Pointer += len;\n    return count;\n\n    cmsUNUSED_PARAMETER(Buffer);\n}",
+      "fn_code_pos": [
+        [
+          46,
+          0
+        ],
+        [
+          56,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NULLRead",
+        "parameters": {
+          "iohandler": "cmsIOHANDLER",
+          "Buffer": "void",
+          "size": "cmsUInt32Number",
+          "count": "cmsUInt32Number"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool  NULLSeek(cmsIOHANDLER* iohandler, cmsUInt32Number offset)\n{\n    FILENULL* ResData = (FILENULL*) iohandler ->stream;\n\n    ResData ->Pointer = offset;\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          58,
+          0
+        ],
+        [
+          65,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NULLSeek",
+        "parameters": {
+          "iohandler": "cmsIOHANDLER",
+          "offset": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number NULLTell(cmsIOHANDLER* iohandler)\n{\n    FILENULL* ResData = (FILENULL*) iohandler ->stream;\n    return ResData -> Pointer;\n}",
+      "fn_code_pos": [
+        [
+          67,
+          0
+        ],
+        [
+          72,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NULLTell",
+        "parameters": {
+          "iohandler": "cmsIOHANDLER"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool  NULLWrite(cmsIOHANDLER* iohandler, cmsUInt32Number size, const void *Ptr)\n{\n    FILENULL* ResData = (FILENULL*) iohandler ->stream;\n\n    ResData ->Pointer += size;\n    if (ResData ->Pointer > iohandler->UsedSpace)\n        iohandler->UsedSpace = ResData ->Pointer;\n\n    return TRUE;\n\n    cmsUNUSED_PARAMETER(Ptr);\n}",
+      "fn_code_pos": [
+        [
+          74,
+          0
+        ],
+        [
+          86,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NULLWrite",
+        "parameters": {
+          "iohandler": "cmsIOHANDLER",
+          "size": "cmsUInt32Number",
+          "Ptr": "void"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool  NULLClose(cmsIOHANDLER* iohandler)\n{\n    FILENULL* ResData = (FILENULL*) iohandler ->stream;\n\n    _cmsFree(iohandler ->ContextID, ResData);\n    _cmsFree(iohandler ->ContextID, iohandler);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          88,
+          0
+        ],
+        [
+          96,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NULLClose",
+        "parameters": {
+          "iohandler": "cmsIOHANDLER"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number MemoryRead(struct _cms_io_handler* iohandler, void *Buffer, cmsUInt32Number size, cmsUInt32Number count)\n{\n    FILEMEM* ResData = (FILEMEM*) iohandler ->stream;\n    cmsUInt8Number* Ptr;\n    cmsUInt32Number len = size * count;\n\n    if (ResData -> Pointer + len > ResData -> Size){\n\n        len = (ResData -> Size - ResData -> Pointer);\n        cmsSignalError(iohandler ->ContextID, cmsERROR_READ, \"Read from memory error. Got %d bytes, block should be of %d bytes\", len, count * size);\n        return 0;\n    }\n\n    Ptr  = ResData -> Block;\n    Ptr += ResData -> Pointer;\n    memmove(Buffer, Ptr, len);\n    ResData -> Pointer += len;\n\n    return count;\n}",
+      "fn_code_pos": [
+        [
+          145,
+          0
+        ],
+        [
+          165,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MemoryRead",
+        "parameters": {
+          "iohandler": "struct _cms_io_handler",
+          "Buffer": "void",
+          "size": "cmsUInt32Number",
+          "count": "cmsUInt32Number"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool  MemorySeek(struct _cms_io_handler* iohandler, cmsUInt32Number offset)\n{\n    FILEMEM* ResData = (FILEMEM*) iohandler ->stream;\n\n    if (offset > ResData ->Size) {\n        cmsSignalError(iohandler ->ContextID, cmsERROR_SEEK,  \"Too few data; probably corrupted profile\");\n        return FALSE;\n    }\n\n    ResData ->Pointer = offset;\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          168,
+          0
+        ],
+        [
+          180,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MemorySeek",
+        "parameters": {
+          "iohandler": "struct _cms_io_handler",
+          "offset": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number MemoryTell(struct _cms_io_handler* iohandler)\n{\n    FILEMEM* ResData = (FILEMEM*) iohandler ->stream;\n\n    if (ResData == NULL) return 0;\n    return ResData -> Pointer;\n}",
+      "fn_code_pos": [
+        [
+          183,
+          0
+        ],
+        [
+          190,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MemoryTell",
+        "parameters": {
+          "iohandler": "struct _cms_io_handler"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool MemoryWrite(struct _cms_io_handler* iohandler, cmsUInt32Number size, const void *Ptr)\n{\n    FILEMEM* ResData = (FILEMEM*) iohandler ->stream;\n\n    if (ResData == NULL) return FALSE; // Housekeeping\n\n    // Check for available space. Clip.\n    if (ResData->Pointer + size > ResData->Size) {\n        size = ResData ->Size - ResData->Pointer;\n    }\n      \n    if (size == 0) return TRUE;     // Write zero bytes is ok, but does nothing\n\n    memmove(ResData ->Block + ResData ->Pointer, Ptr, size);\n    ResData ->Pointer += size;\n\n    if (ResData ->Pointer > iohandler->UsedSpace)\n        iohandler->UsedSpace = ResData ->Pointer;\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          194,
+          0
+        ],
+        [
+          215,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MemoryWrite",
+        "parameters": {
+          "iohandler": "struct _cms_io_handler",
+          "size": "cmsUInt32Number",
+          "Ptr": "void"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool  MemoryClose(struct _cms_io_handler* iohandler)\n{\n    FILEMEM* ResData = (FILEMEM*) iohandler ->stream;\n\n    if (ResData ->FreeBlockOnClose) {\n\n        if (ResData ->Block) _cmsFree(iohandler ->ContextID, ResData ->Block);\n    }\n\n    _cmsFree(iohandler ->ContextID, ResData);\n    _cmsFree(iohandler ->ContextID, iohandler);\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          218,
+          0
+        ],
+        [
+          232,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MemoryClose",
+        "parameters": {
+          "iohandler": "struct _cms_io_handler"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number FileRead(cmsIOHANDLER* iohandler, void *Buffer, cmsUInt32Number size, cmsUInt32Number count)\n{\n    cmsUInt32Number nReaded = (cmsUInt32Number) fread(Buffer, size, count, (FILE*) iohandler->stream);\n\n    if (nReaded != count) {\n            cmsSignalError(iohandler ->ContextID, cmsERROR_FILE, \"Read error. Got %d bytes, block should be of %d bytes\", nReaded * size, count * size);\n            return 0;\n    }\n\n    return nReaded;\n}",
+      "fn_code_pos": [
+        [
+          313,
+          0
+        ],
+        [
+          324,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FileRead",
+        "parameters": {
+          "iohandler": "cmsIOHANDLER",
+          "Buffer": "void",
+          "size": "cmsUInt32Number",
+          "count": "cmsUInt32Number"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool  FileSeek(cmsIOHANDLER* iohandler, cmsUInt32Number offset)\n{\n    if (fseek((FILE*) iohandler ->stream, (long) offset, SEEK_SET) != 0) {\n\n       cmsSignalError(iohandler ->ContextID, cmsERROR_FILE, \"Seek error; probably corrupted file\");\n       return FALSE;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          327,
+          0
+        ],
+        [
+          337,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FileSeek",
+        "parameters": {
+          "iohandler": "cmsIOHANDLER",
+          "offset": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number FileTell(cmsIOHANDLER* iohandler)\n{\n    long t = ftell((FILE*)iohandler ->stream);\n    if (t == -1L) {\n        cmsSignalError(iohandler->ContextID, cmsERROR_FILE, \"Tell error; probably corrupted file\");\n        return 0;\n    }\n\n    return (cmsUInt32Number)t;\n}",
+      "fn_code_pos": [
+        [
+          340,
+          0
+        ],
+        [
+          350,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FileTell",
+        "parameters": {
+          "iohandler": "cmsIOHANDLER"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool  FileWrite(cmsIOHANDLER* iohandler, cmsUInt32Number size, const void* Buffer)\n{\n    if (size == 0) return TRUE;  // We allow to write 0 bytes, but nothing is written\n\n    iohandler->UsedSpace += size;\n    return (fwrite(Buffer, size, 1, (FILE*)iohandler->stream) == 1);\n}",
+      "fn_code_pos": [
+        [
+          353,
+          0
+        ],
+        [
+          360,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FileWrite",
+        "parameters": {
+          "iohandler": "cmsIOHANDLER",
+          "size": "cmsUInt32Number",
+          "Buffer": "void"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool  FileClose(cmsIOHANDLER* iohandler)\n{\n    if (fclose((FILE*) iohandler ->stream) != 0) return FALSE;\n    _cmsFree(iohandler ->ContextID, iohandler);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          363,
+          0
+        ],
+        [
+          369,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FileClose",
+        "parameters": {
+          "iohandler": "cmsIOHANDLER"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsCloseIOhandler(cmsIOHANDLER* io)\n{\n    return io -> Close(io);\n}",
+      "fn_code_pos": [
+        [
+          504,
+          0
+        ],
+        [
+          507,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCloseIOhandler",
+        "parameters": {
+          "io": "cmsIOHANDLER"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsCreateProfilePlaceholder(cmsContext ContextID)\n{\n    _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) _cmsMallocZero(ContextID, sizeof(_cmsICCPROFILE));\n    if (Icc == NULL) return NULL;\n\n    Icc ->ContextID = ContextID;\n\n    // Set it to empty\n    Icc -> TagCount   = 0;\n\n    // Set default version\n    Icc ->Version =  0x02100000;\n    \n    // Set default device class\n    Icc->DeviceClass = cmsSigDisplayClass;\n\n    // Set creation date/time\n    if (!_cmsGetTime(&Icc->Created))\n        goto Error;\n\n    // Create a mutex if the user provided proper plugin. NULL otherwise\n    Icc ->UsrMutex = _cmsCreateMutex(ContextID);\n\n    // Return the handle\n    return (cmsHPROFILE) Icc;\n\nError:\n    _cmsFree(ContextID, Icc);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          520,
+          0
+        ],
+        [
+          549,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCreateProfilePlaceholder",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsContext CMSEXPORT cmsGetProfileContextID(cmsHPROFILE hProfile)\n{\n     _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) hProfile;\n\n    if (Icc == NULL) return NULL;\n    return Icc -> ContextID;\n}",
+      "fn_code_pos": [
+        [
+          551,
+          0
+        ],
+        [
+          557,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetProfileContextID",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsContext"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CMSEXPORT cmsGetTagCount(cmsHPROFILE hProfile)\n{\n    _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) hProfile;\n    if (Icc == NULL) return -1;\n\n    return  (cmsInt32Number) Icc->TagCount;\n}",
+      "fn_code_pos": [
+        [
+          561,
+          0
+        ],
+        [
+          567,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetTagCount",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsTagSignature CMSEXPORT cmsGetTagSignature(cmsHPROFILE hProfile, cmsUInt32Number n)\n{\n    _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) hProfile;\n\n    if (n > Icc->TagCount) return (cmsTagSignature) 0;  // Mark as not available\n    if (n >= MAX_TABLE_TAG) return (cmsTagSignature) 0; // As double check\n\n    return Icc ->TagNames[n];\n}",
+      "fn_code_pos": [
+        [
+          570,
+          0
+        ],
+        [
+          578,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetTagSignature",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "n": "cmsUInt32Number"
+        },
+        "return_type": "cmsTagSignature"
+      }
+    },
+    {
+      "fn_code": "static\nint SearchOneTag(_cmsICCPROFILE* Profile, cmsTagSignature sig)\n{\n    int i;\n\n    for (i=0; i < (int) Profile -> TagCount; i++) {\n\n        if (sig == Profile -> TagNames[i])\n            return i;\n    }\n\n    return -1;\n}",
+      "fn_code_pos": [
+        [
+          581,
+          0
+        ],
+        [
+          593,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SearchOneTag",
+        "parameters": {
+          "Profile": "_cmsICCPROFILE",
+          "sig": "cmsTagSignature"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int _cmsSearchTag(_cmsICCPROFILE* Icc, cmsTagSignature sig, cmsBool lFollowLinks)\n{\n    int n;\n    cmsTagSignature LinkedSig;\n\n    do {\n\n        // Search for given tag in ICC profile directory\n        n = SearchOneTag(Icc, sig);\n        if (n < 0)\n            return -1;        // Not found\n\n        if (!lFollowLinks)\n            return n;         // Found, don't follow links\n\n        // Is this a linked tag?\n        LinkedSig = Icc ->TagLinked[n];\n\n        // Yes, follow link\n        if (LinkedSig != (cmsTagSignature) 0) {\n            sig = LinkedSig;\n        }\n\n    } while (LinkedSig != (cmsTagSignature) 0);\n\n    return n;\n}",
+      "fn_code_pos": [
+        [
+          597,
+          0
+        ],
+        [
+          623,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsSearchTag",
+        "parameters": {
+          "Icc": "_cmsICCPROFILE",
+          "sig": "cmsTagSignature",
+          "lFollowLinks": "cmsBool"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nvoid _cmsDeleteTagByPos(_cmsICCPROFILE* Icc, int i)\n{\n    _cmsAssert(Icc != NULL);\n    _cmsAssert(i >= 0);\n\n   \n    if (Icc -> TagPtrs[i] != NULL) {\n\n        // Free previous version\n        if (Icc ->TagSaveAsRaw[i]) {\n            _cmsFree(Icc ->ContextID, Icc ->TagPtrs[i]);\n        }\n        else {\n            cmsTagTypeHandler* TypeHandler = Icc ->TagTypeHandlers[i];\n\n            if (TypeHandler != NULL) {\n\n                cmsTagTypeHandler LocalTypeHandler = *TypeHandler;\n                LocalTypeHandler.ContextID = Icc ->ContextID;              // As an additional parameter\n                LocalTypeHandler.ICCVersion = Icc ->Version;\n                LocalTypeHandler.FreePtr(&LocalTypeHandler, Icc -> TagPtrs[i]);\n                Icc ->TagPtrs[i] = NULL;\n            }\n        }\n\n    } \n}",
+      "fn_code_pos": [
+        [
+          627,
+          0
+        ],
+        [
+          654,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsDeleteTagByPos",
+        "parameters": {
+          "Icc": "_cmsICCPROFILE",
+          "i": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool _cmsNewTag(_cmsICCPROFILE* Icc, cmsTagSignature sig, int* NewPos)\n{\n    int i;\n\n    // Search for the tag\n    i = _cmsSearchTag(Icc, sig, FALSE);\n    if (i >= 0) {\n\n        // Already exists? delete it\n        _cmsDeleteTagByPos(Icc, i);\n        *NewPos = i;\n    }\n    else  {\n\n        // No, make a new one\n        if (Icc -> TagCount >= MAX_TABLE_TAG) {\n            cmsSignalError(Icc ->ContextID, cmsERROR_RANGE, \"Too many tags (%d)\", MAX_TABLE_TAG);\n            return FALSE;\n        }\n\n        *NewPos = (int) Icc ->TagCount;\n        Icc -> TagCount++;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          658,
+          0
+        ],
+        [
+          684,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsNewTag",
+        "parameters": {
+          "Icc": "_cmsICCPROFILE",
+          "sig": "cmsTagSignature",
+          "NewPos": "int"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsIsTag(cmsHPROFILE hProfile, cmsTagSignature sig)\n{\n       _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) (void*) hProfile;\n       return _cmsSearchTag(Icc, sig, FALSE) >= 0;\n}",
+      "fn_code_pos": [
+        [
+          688,
+          0
+        ],
+        [
+          692,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIsTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "sig": "cmsTagSignature"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool CompatibleTypes(const cmsTagDescriptor* desc1, const cmsTagDescriptor* desc2)\n{\n    cmsUInt32Number i;\n\n    if (desc1 == NULL || desc2 == NULL) return FALSE;\n\n    if (desc1->nSupportedTypes != desc2->nSupportedTypes) return FALSE;\n    if (desc1->ElemCount != desc2->ElemCount) return FALSE;\n\n    for (i = 0; i < desc1->nSupportedTypes; i++)\n    {\n        if (desc1->SupportedTypes[i] != desc2->SupportedTypes[i]) return FALSE;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          697,
+          0
+        ],
+        [
+          713,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CompatibleTypes",
+        "parameters": {
+          "desc1": "cmsTagDescriptor",
+          "desc2": "cmsTagDescriptor"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static \ncmsUInt32Number _validatedVersion(cmsUInt32Number DWord)\n{\n    cmsUInt8Number* pByte = (cmsUInt8Number*) &DWord;\n    cmsUInt8Number temp1;\n    cmsUInt8Number temp2;\n\n    if (*pByte > 0x09) *pByte = (cmsUInt8Number) 0x09;\n    temp1 = (cmsUInt8Number) (*(pByte+1) & 0xf0);\n    temp2 = (cmsUInt8Number) (*(pByte+1) & 0x0f);\n    if (temp1 > 0x90U) temp1 = 0x90U;\n    if (temp2 > 0x09U) temp2 = 0x09U;\n    *(pByte+1) = (cmsUInt8Number)(temp1 | temp2);\n    *(pByte+2) = (cmsUInt8Number)0;\n    *(pByte+3) = (cmsUInt8Number)0;\n\n    return DWord;\n}",
+      "fn_code_pos": [
+        [
+          721,
+          0
+        ],
+        [
+          738,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_validatedVersion",
+        "parameters": {
+          "DWord": "cmsUInt32Number"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static \ncmsBool validDeviceClass(cmsProfileClassSignature cl)\n{\n    if ((int)cl == 0) return TRUE; // We allow zero because older lcms versions defaulted to that.\n\n    switch (cl)\n    {    \n    case cmsSigInputClass:\n    case cmsSigDisplayClass:\n    case cmsSigOutputClass:\n    case cmsSigLinkClass:\n    case cmsSigAbstractClass:\n    case cmsSigColorSpaceClass:\n    case cmsSigNamedColorClass:\n        return TRUE;\n\n    default:\n        return FALSE;\n    }\n\n}",
+      "fn_code_pos": [
+        [
+          741,
+          0
+        ],
+        [
+          761,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "validDeviceClass",
+        "parameters": {
+          "cl": "cmsProfileClassSignature"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool _cmsReadHeader(_cmsICCPROFILE* Icc)\n{\n    cmsTagEntry Tag;\n    cmsICCHeader Header;\n    cmsUInt32Number i, j;\n    cmsUInt32Number HeaderSize;\n    cmsIOHANDLER* io = Icc ->IOhandler;\n    cmsUInt32Number TagCount;\n\n\n    // Read the header\n    if (io -> Read(io, &Header, sizeof(cmsICCHeader), 1) != 1) {\n        return FALSE;\n    }\n\n    // Validate file as an ICC profile\n    if (_cmsAdjustEndianess32(Header.magic) != cmsMagicNumber) {\n        cmsSignalError(Icc ->ContextID, cmsERROR_BAD_SIGNATURE, \"not an ICC profile, invalid signature\");\n        return FALSE;\n    }\n\n    // Adjust endianness of the used parameters\n    Icc -> DeviceClass     = (cmsProfileClassSignature) _cmsAdjustEndianess32(Header.deviceClass);\n    Icc -> ColorSpace      = (cmsColorSpaceSignature)   _cmsAdjustEndianess32(Header.colorSpace);\n    Icc -> PCS             = (cmsColorSpaceSignature)   _cmsAdjustEndianess32(Header.pcs);\n   \n    Icc -> RenderingIntent = _cmsAdjustEndianess32(Header.renderingIntent);\n    Icc -> flags           = _cmsAdjustEndianess32(Header.flags);\n    Icc -> manufacturer    = _cmsAdjustEndianess32(Header.manufacturer);\n    Icc -> model           = _cmsAdjustEndianess32(Header.model);\n    Icc -> creator         = _cmsAdjustEndianess32(Header.creator);\n    \n    _cmsAdjustEndianess64(&Icc -> attributes, &Header.attributes);\n    Icc -> Version         = _cmsAdjustEndianess32(_validatedVersion(Header.version));\n\n    if (Icc->Version > 0x5000000) {\n        cmsSignalError(Icc->ContextID, cmsERROR_UNKNOWN_EXTENSION, \"Unsupported profile version '0x%x'\", Icc->Version);\n        return FALSE;\n    }\n\n    if (!validDeviceClass(Icc->DeviceClass)) {\n        cmsSignalError(Icc->ContextID, cmsERROR_UNKNOWN_EXTENSION, \"Unsupported device class '0x%x'\", Icc->DeviceClass);\n        return FALSE;\n    }\n\n    // Get size as reported in header\n    HeaderSize = _cmsAdjustEndianess32(Header.size);\n\n    // Make sure HeaderSize is lower than profile size\n    if (HeaderSize >= Icc ->IOhandler ->ReportedSize)\n            HeaderSize = Icc ->IOhandler ->ReportedSize;\n\n\n    // Get creation date/time\n    _cmsDecodeDateTimeNumber(&Header.date, &Icc ->Created);\n\n    // The profile ID are 32 raw bytes\n    memmove(Icc ->ProfileID.ID32, Header.profileID.ID32, 16);\n\n\n    // Read tag directory\n    if (!_cmsReadUInt32Number(io, &TagCount)) return FALSE;\n    if (TagCount > MAX_TABLE_TAG) {\n\n        cmsSignalError(Icc ->ContextID, cmsERROR_RANGE, \"Too many tags (%d)\", TagCount);\n        return FALSE;\n    }\n\n\n    // Read tag directory\n    Icc -> TagCount = 0;\n    for (i=0; i < TagCount; i++) {\n\n        if (!_cmsReadUInt32Number(io, (cmsUInt32Number *) &Tag.sig)) return FALSE;\n        if (!_cmsReadUInt32Number(io, &Tag.offset)) return FALSE;\n        if (!_cmsReadUInt32Number(io, &Tag.size)) return FALSE;\n\n        // Perform some sanity check. Offset + size should fall inside file.\n        if (Tag.size == 0 || Tag.offset == 0) continue;\n        if (Tag.offset + Tag.size > HeaderSize ||\n            Tag.offset + Tag.size < Tag.offset)\n                  continue;\n\n        Icc -> TagNames[Icc ->TagCount]   = Tag.sig;\n        Icc -> TagOffsets[Icc ->TagCount] = Tag.offset;\n        Icc -> TagSizes[Icc ->TagCount]   = Tag.size;\n\n       // Search for links\n        for (j=0; j < Icc ->TagCount; j++) {\n           \n            if ((Icc ->TagOffsets[j] == Tag.offset) &&\n                (Icc ->TagSizes[j]   == Tag.size)) {\n\n                // Check types. \n                if (CompatibleTypes(_cmsGetTagDescriptor(Icc->ContextID, Icc->TagNames[j]),\n                                    _cmsGetTagDescriptor(Icc->ContextID, Tag.sig))) {\n\n                    Icc->TagLinked[Icc->TagCount] = Icc->TagNames[j];\n                }\n            }\n\n        }\n\n        Icc ->TagCount++;\n    }\n\n\n    for (i = 0; i < Icc->TagCount; i++) {\n        for (j = 0; j < Icc->TagCount; j++) {\n\n            // Tags cannot be duplicate\n            if ((i != j) && (Icc->TagNames[i] == Icc->TagNames[j])) {\n                cmsSignalError(Icc->ContextID, cmsERROR_RANGE, \"Duplicate tag found\");\n                return FALSE;\n            }\n\n        }\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          764,
+          0
+        ],
+        [
+          884,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadHeader",
+        "parameters": {
+          "Icc": "_cmsICCPROFILE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool _cmsWriteHeader(_cmsICCPROFILE* Icc, cmsUInt32Number UsedSpace)\n{\n    cmsICCHeader Header;\n    cmsUInt32Number i;\n    cmsTagEntry Tag;\n    cmsUInt32Number Count;\n\n    Header.size        = _cmsAdjustEndianess32(UsedSpace);\n    Header.cmmId       = _cmsAdjustEndianess32(lcmsSignature);\n    Header.version     = _cmsAdjustEndianess32(Icc ->Version);\n\n    Header.deviceClass = (cmsProfileClassSignature) _cmsAdjustEndianess32(Icc -> DeviceClass);\n    Header.colorSpace  = (cmsColorSpaceSignature) _cmsAdjustEndianess32(Icc -> ColorSpace);\n    Header.pcs         = (cmsColorSpaceSignature) _cmsAdjustEndianess32(Icc -> PCS);\n\n    //   NOTE: in v4 Timestamp must be in UTC rather than in local time\n    _cmsEncodeDateTimeNumber(&Header.date, &Icc ->Created);\n\n    Header.magic       = _cmsAdjustEndianess32(cmsMagicNumber);\n\n#ifdef CMS_IS_WINDOWS_\n    Header.platform    = (cmsPlatformSignature) _cmsAdjustEndianess32(cmsSigMicrosoft);\n#else\n    Header.platform    = (cmsPlatformSignature) _cmsAdjustEndianess32(cmsSigMacintosh);\n#endif\n\n    Header.flags        = _cmsAdjustEndianess32(Icc -> flags);\n    Header.manufacturer = _cmsAdjustEndianess32(Icc -> manufacturer);\n    Header.model        = _cmsAdjustEndianess32(Icc -> model);\n\n    _cmsAdjustEndianess64(&Header.attributes, &Icc -> attributes);\n\n    // Rendering intent in the header (for embedded profiles)\n    Header.renderingIntent = _cmsAdjustEndianess32(Icc -> RenderingIntent);\n\n    // Illuminant is always D50\n    Header.illuminant.X = (cmsS15Fixed16Number) _cmsAdjustEndianess32((cmsUInt32Number) _cmsDoubleTo15Fixed16(cmsD50_XYZ()->X));\n    Header.illuminant.Y = (cmsS15Fixed16Number) _cmsAdjustEndianess32((cmsUInt32Number) _cmsDoubleTo15Fixed16(cmsD50_XYZ()->Y));\n    Header.illuminant.Z = (cmsS15Fixed16Number) _cmsAdjustEndianess32((cmsUInt32Number) _cmsDoubleTo15Fixed16(cmsD50_XYZ()->Z));\n\n    // Created by LittleCMS (that's me!)\n    Header.creator      = _cmsAdjustEndianess32(lcmsSignature);\n\n    memset(&Header.reserved, 0, sizeof(Header.reserved));\n\n    // Set profile ID. Endianness is always big endian\n    memmove(&Header.profileID, &Icc ->ProfileID, 16);\n\n    // Dump the header\n    if (!Icc -> IOhandler->Write(Icc->IOhandler, sizeof(cmsICCHeader), &Header)) return FALSE;\n\n    // Saves Tag directory\n\n    // Get true count\n    Count = 0;\n    for (i=0;  i < Icc -> TagCount; i++) {\n        if (Icc ->TagNames[i] != (cmsTagSignature) 0)\n            Count++;\n    }\n\n    // Store number of tags\n    if (!_cmsWriteUInt32Number(Icc ->IOhandler, Count)) return FALSE;\n\n    for (i=0; i < Icc -> TagCount; i++) {\n\n        if (Icc ->TagNames[i] == (cmsTagSignature) 0) continue;   // It is just a placeholder\n\n        Tag.sig    = (cmsTagSignature) _cmsAdjustEndianess32((cmsUInt32Number) Icc -> TagNames[i]);\n        Tag.offset = _cmsAdjustEndianess32((cmsUInt32Number) Icc -> TagOffsets[i]);\n        Tag.size   = _cmsAdjustEndianess32((cmsUInt32Number) Icc -> TagSizes[i]);\n\n        if (!Icc ->IOhandler -> Write(Icc-> IOhandler, sizeof(cmsTagEntry), &Tag)) return FALSE;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          887,
+          0
+        ],
+        [
+          962,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsWriteHeader",
+        "parameters": {
+          "Icc": "_cmsICCPROFILE",
+          "UsedSpace": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsGetHeaderRenderingIntent(cmsHPROFILE hProfile)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    return Icc -> RenderingIntent;\n}",
+      "fn_code_pos": [
+        [
+          967,
+          0
+        ],
+        [
+          971,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetHeaderRenderingIntent",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSetHeaderRenderingIntent(cmsHPROFILE hProfile, cmsUInt32Number RenderingIntent)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    Icc -> RenderingIntent = RenderingIntent;\n}",
+      "fn_code_pos": [
+        [
+          973,
+          0
+        ],
+        [
+          977,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetHeaderRenderingIntent",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "RenderingIntent": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsGetHeaderFlags(cmsHPROFILE hProfile)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    return (cmsUInt32Number) Icc -> flags;\n}",
+      "fn_code_pos": [
+        [
+          979,
+          0
+        ],
+        [
+          983,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetHeaderFlags",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSetHeaderFlags(cmsHPROFILE hProfile, cmsUInt32Number Flags)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    Icc -> flags = (cmsUInt32Number) Flags;\n}",
+      "fn_code_pos": [
+        [
+          985,
+          0
+        ],
+        [
+          989,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetHeaderFlags",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Flags": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsGetHeaderManufacturer(cmsHPROFILE hProfile)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    return Icc ->manufacturer;\n}",
+      "fn_code_pos": [
+        [
+          991,
+          0
+        ],
+        [
+          995,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetHeaderManufacturer",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSetHeaderManufacturer(cmsHPROFILE hProfile, cmsUInt32Number manufacturer)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    Icc -> manufacturer = manufacturer;\n}",
+      "fn_code_pos": [
+        [
+          997,
+          0
+        ],
+        [
+          1001,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetHeaderManufacturer",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "manufacturer": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsGetHeaderCreator(cmsHPROFILE hProfile)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    return Icc ->creator;\n}",
+      "fn_code_pos": [
+        [
+          1003,
+          0
+        ],
+        [
+          1007,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetHeaderCreator",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsGetHeaderModel(cmsHPROFILE hProfile)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    return Icc ->model;\n}",
+      "fn_code_pos": [
+        [
+          1009,
+          0
+        ],
+        [
+          1013,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetHeaderModel",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSetHeaderModel(cmsHPROFILE hProfile, cmsUInt32Number model)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    Icc -> model = model;\n}",
+      "fn_code_pos": [
+        [
+          1015,
+          0
+        ],
+        [
+          1019,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetHeaderModel",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "model": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsGetHeaderAttributes(cmsHPROFILE hProfile, cmsUInt64Number* Flags)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    memmove(Flags, &Icc -> attributes, sizeof(cmsUInt64Number));\n}",
+      "fn_code_pos": [
+        [
+          1021,
+          0
+        ],
+        [
+          1025,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetHeaderAttributes",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Flags": "cmsUInt64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSetHeaderAttributes(cmsHPROFILE hProfile, cmsUInt64Number Flags)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    memmove(&Icc -> attributes, &Flags, sizeof(cmsUInt64Number));\n}",
+      "fn_code_pos": [
+        [
+          1027,
+          0
+        ],
+        [
+          1031,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetHeaderAttributes",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Flags": "cmsUInt64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsGetHeaderProfileID(cmsHPROFILE hProfile, cmsUInt8Number* ProfileID)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    memmove(ProfileID, Icc ->ProfileID.ID8, 16);\n}",
+      "fn_code_pos": [
+        [
+          1033,
+          0
+        ],
+        [
+          1037,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetHeaderProfileID",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "ProfileID": "cmsUInt8Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSetHeaderProfileID(cmsHPROFILE hProfile, cmsUInt8Number* ProfileID)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    memmove(&Icc -> ProfileID, ProfileID, 16);\n}",
+      "fn_code_pos": [
+        [
+          1039,
+          0
+        ],
+        [
+          1043,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetHeaderProfileID",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "ProfileID": "cmsUInt8Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool  CMSEXPORT cmsGetHeaderCreationDateTime(cmsHPROFILE hProfile, struct tm *Dest)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    memmove(Dest, &Icc ->Created, sizeof(struct tm));\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1045,
+          0
+        ],
+        [
+          1050,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetHeaderCreationDateTime",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Dest": "struct tm"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsColorSpaceSignature CMSEXPORT cmsGetPCS(cmsHPROFILE hProfile)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    return Icc -> PCS;\n}",
+      "fn_code_pos": [
+        [
+          1052,
+          0
+        ],
+        [
+          1056,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetPCS",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsColorSpaceSignature"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSetPCS(cmsHPROFILE hProfile, cmsColorSpaceSignature pcs)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    Icc -> PCS = pcs;\n}",
+      "fn_code_pos": [
+        [
+          1058,
+          0
+        ],
+        [
+          1062,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetPCS",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "pcs": "cmsColorSpaceSignature"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsColorSpaceSignature CMSEXPORT cmsGetColorSpace(cmsHPROFILE hProfile)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    return Icc -> ColorSpace;\n}",
+      "fn_code_pos": [
+        [
+          1064,
+          0
+        ],
+        [
+          1068,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetColorSpace",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsColorSpaceSignature"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSetColorSpace(cmsHPROFILE hProfile, cmsColorSpaceSignature sig)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    Icc -> ColorSpace = sig;\n}",
+      "fn_code_pos": [
+        [
+          1070,
+          0
+        ],
+        [
+          1074,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetColorSpace",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "sig": "cmsColorSpaceSignature"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsProfileClassSignature CMSEXPORT cmsGetDeviceClass(cmsHPROFILE hProfile)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    return Icc -> DeviceClass;\n}",
+      "fn_code_pos": [
+        [
+          1076,
+          0
+        ],
+        [
+          1080,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetDeviceClass",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsProfileClassSignature"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSetDeviceClass(cmsHPROFILE hProfile, cmsProfileClassSignature sig)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    Icc -> DeviceClass = sig;\n}",
+      "fn_code_pos": [
+        [
+          1082,
+          0
+        ],
+        [
+          1086,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetDeviceClass",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "sig": "cmsProfileClassSignature"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsGetEncodedICCversion(cmsHPROFILE hProfile)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    return Icc -> Version;\n}",
+      "fn_code_pos": [
+        [
+          1088,
+          0
+        ],
+        [
+          1092,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetEncodedICCversion",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsSetEncodedICCversion(cmsHPROFILE hProfile, cmsUInt32Number Version)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    Icc -> Version = Version;\n}",
+      "fn_code_pos": [
+        [
+          1094,
+          0
+        ],
+        [
+          1098,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetEncodedICCversion",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Version": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number BaseToBase(cmsUInt32Number in, int BaseIn, int BaseOut)\n{\n    char Buff[100];\n    int i, len;\n    cmsUInt32Number out;\n\n    for (len=0; in > 0 && len < 100; len++) {\n\n        Buff[len] = (char) (in % BaseIn);\n        in /= BaseIn;\n    }\n\n    for (i=len-1, out=0; i >= 0; --i) {\n        out = out * BaseOut + Buff[i];\n    }\n\n    return out;\n}",
+      "fn_code_pos": [
+        [
+          1101,
+          0
+        ],
+        [
+          1119,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BaseToBase",
+        "parameters": {
+          "in": "cmsUInt32Number",
+          "BaseIn": "int",
+          "BaseOut": "int"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "void  CMSEXPORT cmsSetProfileVersion(cmsHPROFILE hProfile, cmsFloat64Number Version)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n\n    // 4.2 -> 0x4200000\n\n    Icc -> Version = BaseToBase((cmsUInt32Number) floor(Version * 100.0 + 0.5), 10, 16) << 16;\n}",
+      "fn_code_pos": [
+        [
+          1121,
+          0
+        ],
+        [
+          1128,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSetProfileVersion",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Version": "cmsFloat64Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsFloat64Number CMSEXPORT cmsGetProfileVersion(cmsHPROFILE hProfile)\n{\n    _cmsICCPROFILE*  Icc = (_cmsICCPROFILE*) hProfile;\n    cmsUInt32Number n = Icc -> Version >> 16;\n\n    return BaseToBase(n, 16, 10) / 100.0;\n}",
+      "fn_code_pos": [
+        [
+          1130,
+          0
+        ],
+        [
+          1136,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetProfileVersion",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsFloat64Number"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsOpenProfileFromIOhandlerTHR(cmsContext ContextID, cmsIOHANDLER* io)\n{\n    _cmsICCPROFILE* NewIcc;\n    cmsHPROFILE hEmpty = cmsCreateProfilePlaceholder(ContextID);\n\n    if (hEmpty == NULL) return NULL;\n\n    NewIcc = (_cmsICCPROFILE*) hEmpty;\n\n    NewIcc ->IOhandler = io;\n    if (!_cmsReadHeader(NewIcc)) goto Error;\n    return hEmpty;\n\nError:\n    cmsCloseProfile(hEmpty);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          1141,
+          0
+        ],
+        [
+          1157,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsOpenProfileFromIOhandlerTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "io": "cmsIOHANDLER"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsOpenProfileFromIOhandler2THR(cmsContext ContextID, cmsIOHANDLER* io, cmsBool write)\n{\n    _cmsICCPROFILE* NewIcc;\n    cmsHPROFILE hEmpty = cmsCreateProfilePlaceholder(ContextID);\n\n    if (hEmpty == NULL) return NULL;\n\n    NewIcc = (_cmsICCPROFILE*) hEmpty;\n\n    NewIcc ->IOhandler = io;\n    if (write) {\n\n        NewIcc -> IsWrite = TRUE;\n        return hEmpty;\n    }\n\n    if (!_cmsReadHeader(NewIcc)) goto Error;\n    return hEmpty;\n\nError:\n    cmsCloseProfile(hEmpty);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          1160,
+          0
+        ],
+        [
+          1182,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsOpenProfileFromIOhandler2THR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "io": "cmsIOHANDLER",
+          "write": "cmsBool"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsOpenProfileFromFileTHR(cmsContext ContextID, const char *lpFileName, const char *sAccess)\n{\n    _cmsICCPROFILE* NewIcc;\n    cmsHPROFILE hEmpty = cmsCreateProfilePlaceholder(ContextID);\n\n    if (hEmpty == NULL) return NULL;\n\n    NewIcc = (_cmsICCPROFILE*) hEmpty;\n\n    NewIcc ->IOhandler = cmsOpenIOhandlerFromFile(ContextID, lpFileName, sAccess);\n    if (NewIcc ->IOhandler == NULL) goto Error;\n\n    if (*sAccess == 'W' || *sAccess == 'w') {\n\n        NewIcc -> IsWrite = TRUE;\n\n        return hEmpty;\n    }\n\n    if (!_cmsReadHeader(NewIcc)) goto Error;\n    return hEmpty;\n\nError:\n    cmsCloseProfile(hEmpty);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          1186,
+          0
+        ],
+        [
+          1211,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsOpenProfileFromFileTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "lpFileName": "char",
+          "sAccess": "char"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsOpenProfileFromFile(const char *ICCProfile, const char *sAccess)\n{\n    return cmsOpenProfileFromFileTHR(NULL, ICCProfile, sAccess);\n}",
+      "fn_code_pos": [
+        [
+          1214,
+          0
+        ],
+        [
+          1217,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsOpenProfileFromFile",
+        "parameters": {
+          "ICCProfile": "char",
+          "sAccess": "char"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE  CMSEXPORT cmsOpenProfileFromStreamTHR(cmsContext ContextID, FILE* ICCProfile, const char *sAccess)\n{\n    _cmsICCPROFILE* NewIcc;\n    cmsHPROFILE hEmpty = cmsCreateProfilePlaceholder(ContextID);\n\n    if (hEmpty == NULL) return NULL;\n\n    NewIcc = (_cmsICCPROFILE*) hEmpty;\n\n    NewIcc ->IOhandler = cmsOpenIOhandlerFromStream(ContextID, ICCProfile);\n    if (NewIcc ->IOhandler == NULL) goto Error;\n\n    if (*sAccess == 'w') {\n\n        NewIcc -> IsWrite = TRUE;\n        return hEmpty;\n    }\n\n    if (!_cmsReadHeader(NewIcc)) goto Error;\n    return hEmpty;\n\nError:\n    cmsCloseProfile(hEmpty);\n    return NULL;\n\n}",
+      "fn_code_pos": [
+        [
+          1220,
+          0
+        ],
+        [
+          1245,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsOpenProfileFromStreamTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "ICCProfile": "FILE",
+          "sAccess": "char"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE  CMSEXPORT cmsOpenProfileFromStream(FILE* ICCProfile, const char *sAccess)\n{\n    return cmsOpenProfileFromStreamTHR(NULL, ICCProfile, sAccess);\n}",
+      "fn_code_pos": [
+        [
+          1247,
+          0
+        ],
+        [
+          1250,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsOpenProfileFromStream",
+        "parameters": {
+          "ICCProfile": "FILE",
+          "sAccess": "char"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsOpenProfileFromMemTHR(cmsContext ContextID, const void* MemPtr, cmsUInt32Number dwSize)\n{\n    _cmsICCPROFILE* NewIcc;\n    cmsHPROFILE hEmpty;\n\n    hEmpty = cmsCreateProfilePlaceholder(ContextID);\n    if (hEmpty == NULL) return NULL;\n\n    NewIcc = (_cmsICCPROFILE*) hEmpty;\n\n    // Ok, in this case const void* is casted to void* just because open IO handler\n    // shares read and writing modes. Don't abuse this feature!\n    NewIcc ->IOhandler = cmsOpenIOhandlerFromMem(ContextID, (void*) MemPtr, dwSize, \"r\");\n    if (NewIcc ->IOhandler == NULL) goto Error;\n\n    if (!_cmsReadHeader(NewIcc)) goto Error;\n\n    return hEmpty;\n\nError:\n    cmsCloseProfile(hEmpty);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          1254,
+          0
+        ],
+        [
+          1276,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsOpenProfileFromMemTHR",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "MemPtr": "void",
+          "dwSize": "cmsUInt32Number"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "cmsHPROFILE CMSEXPORT cmsOpenProfileFromMem(const void* MemPtr, cmsUInt32Number dwSize)\n{\n    return cmsOpenProfileFromMemTHR(NULL, MemPtr, dwSize);\n}",
+      "fn_code_pos": [
+        [
+          1278,
+          0
+        ],
+        [
+          1281,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsOpenProfileFromMem",
+        "parameters": {
+          "MemPtr": "void",
+          "dwSize": "cmsUInt32Number"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool SaveTags(_cmsICCPROFILE* Icc, _cmsICCPROFILE* FileOrig)\n{\n    cmsUInt8Number* Data;\n    cmsUInt32Number i;\n    cmsUInt32Number Begin;\n    cmsIOHANDLER* io = Icc ->IOhandler;\n    cmsTagDescriptor* TagDescriptor;\n    cmsTagTypeSignature TypeBase;\n    cmsTagTypeSignature Type;\n    cmsTagTypeHandler* TypeHandler;\n    cmsFloat64Number   Version = cmsGetProfileVersion((cmsHPROFILE) Icc);\n    cmsTagTypeHandler LocalTypeHandler;\n\n    for (i=0; i < Icc -> TagCount; i++) {\n\n        if (Icc ->TagNames[i] == (cmsTagSignature) 0) continue;\n\n        // Linked tags are not written\n        if (Icc ->TagLinked[i] != (cmsTagSignature) 0) continue;\n\n        Icc -> TagOffsets[i] = Begin = io ->UsedSpace;\n\n        Data = (cmsUInt8Number*)  Icc -> TagPtrs[i];\n\n        if (!Data) {\n\n            // Reach here if we are copying a tag from a disk-based ICC profile which has not been modified by user.\n            // In this case a blind copy of the block data is performed\n            if (FileOrig != NULL && Icc -> TagOffsets[i]) {\n\n                if (FileOrig->IOhandler != NULL)\n                {\n                    cmsUInt32Number TagSize = FileOrig->TagSizes[i];\n                    cmsUInt32Number TagOffset = FileOrig->TagOffsets[i];\n                    void* Mem;\n\n                    if (!FileOrig->IOhandler->Seek(FileOrig->IOhandler, TagOffset)) return FALSE;\n\n                    Mem = _cmsMalloc(Icc->ContextID, TagSize);\n                    if (Mem == NULL) return FALSE;\n\n                    if (FileOrig->IOhandler->Read(FileOrig->IOhandler, Mem, TagSize, 1) != 1) return FALSE;\n                    if (!io->Write(io, TagSize, Mem)) return FALSE;\n                    _cmsFree(Icc->ContextID, Mem);\n\n                    Icc->TagSizes[i] = (io->UsedSpace - Begin);\n\n\n                    // Align to 32 bit boundary.\n                    if (!_cmsWriteAlignment(io))\n                        return FALSE;\n                }\n            }\n\n            continue;\n        }\n\n\n        // Should this tag be saved as RAW? If so, tagsizes should be specified in advance (no further cooking is done)\n        if (Icc ->TagSaveAsRaw[i]) {\n\n            if (io -> Write(io, Icc ->TagSizes[i], Data) != 1) return FALSE;\n        }\n        else {\n\n            // Search for support on this tag\n            TagDescriptor = _cmsGetTagDescriptor(Icc-> ContextID, Icc -> TagNames[i]);\n            if (TagDescriptor == NULL) continue;                        // Unsupported, ignore it\n           \n            if (TagDescriptor ->DecideType != NULL) {\n\n                Type = TagDescriptor ->DecideType(Version, Data);\n            }\n            else {\n\n                Type = TagDescriptor ->SupportedTypes[0];\n            }\n\n            TypeHandler =  _cmsGetTagTypeHandler(Icc->ContextID, Type);\n\n            if (TypeHandler == NULL) {\n                cmsSignalError(Icc ->ContextID, cmsERROR_INTERNAL, \"(Internal) no handler for tag %x\", Icc -> TagNames[i]);\n                continue;\n            }\n\n            TypeBase = TypeHandler ->Signature;\n            if (!_cmsWriteTypeBase(io, TypeBase))\n                return FALSE;\n\n            LocalTypeHandler = *TypeHandler;\n            LocalTypeHandler.ContextID  = Icc ->ContextID;\n            LocalTypeHandler.ICCVersion = Icc ->Version;\n            if (!LocalTypeHandler.WritePtr(&LocalTypeHandler, io, Data, TagDescriptor ->ElemCount)) {\n\n                char String[5];\n\n                _cmsTagSignature2String(String, (cmsTagSignature) TypeBase);\n                cmsSignalError(Icc ->ContextID, cmsERROR_WRITE, \"Couldn't write type '%s'\", String);\n                return FALSE;\n            }\n        }\n\n\n        Icc -> TagSizes[i] = (io ->UsedSpace - Begin);\n\n        // Align to 32 bit boundary.\n        if (! _cmsWriteAlignment(io))\n            return FALSE;\n    }\n\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1286,
+          0
+        ],
+        [
+          1399,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SaveTags",
+        "parameters": {
+          "Icc": "_cmsICCPROFILE",
+          "FileOrig": "_cmsICCPROFILE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool SetLinks( _cmsICCPROFILE* Icc)\n{\n    cmsUInt32Number i;\n\n    for (i=0; i < Icc -> TagCount; i++) {\n\n        cmsTagSignature lnk = Icc ->TagLinked[i];\n        if (lnk != (cmsTagSignature) 0) {\n\n            int j = _cmsSearchTag(Icc, lnk, FALSE);\n            if (j >= 0) {\n\n                Icc ->TagOffsets[i] = Icc ->TagOffsets[j];\n                Icc ->TagSizes[i]   = Icc ->TagSizes[j];\n            }\n\n        }\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1403,
+          0
+        ],
+        [
+          1424,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetLinks",
+        "parameters": {
+          "Icc": "_cmsICCPROFILE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsSaveProfileToIOhandler(cmsHPROFILE hProfile, cmsIOHANDLER* io)\n{\n    _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) hProfile;\n    _cmsICCPROFILE Keep;\n    cmsIOHANDLER* PrevIO = NULL;\n    cmsUInt32Number UsedSpace;\n    cmsContext ContextID;\n\n    _cmsAssert(hProfile != NULL);\n    \n    if (!_cmsLockMutex(Icc->ContextID, Icc->UsrMutex)) return 0;\n    memmove(&Keep, Icc, sizeof(_cmsICCPROFILE));\n\n    ContextID = cmsGetProfileContextID(hProfile);\n    PrevIO = Icc ->IOhandler = cmsOpenIOhandlerFromNULL(ContextID);\n    if (PrevIO == NULL) {\n        _cmsUnlockMutex(Icc->ContextID, Icc->UsrMutex);\n        return 0;\n    }\n\n    // Pass #1 does compute offsets\n\n    if (!_cmsWriteHeader(Icc, 0)) goto Error;\n    if (!SaveTags(Icc, &Keep)) goto Error;\n\n    UsedSpace = PrevIO ->UsedSpace;\n\n    // Pass #2 does save to iohandler\n\n    if (io != NULL) {\n\n        Icc ->IOhandler = io;\n        if (!SetLinks(Icc)) goto Error;\n        if (!_cmsWriteHeader(Icc, UsedSpace)) goto Error;\n        if (!SaveTags(Icc, &Keep)) goto Error;\n    }\n\n    memmove(Icc, &Keep, sizeof(_cmsICCPROFILE));\n    if (!cmsCloseIOhandler(PrevIO)) \n        UsedSpace = 0; // As a error marker\n\n    _cmsUnlockMutex(Icc->ContextID, Icc->UsrMutex);\n\n    return UsedSpace;\n\n\nError:\n    cmsCloseIOhandler(PrevIO);\n    memmove(Icc, &Keep, sizeof(_cmsICCPROFILE));\n    _cmsUnlockMutex(Icc->ContextID, Icc->UsrMutex);\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          1429,
+          0
+        ],
+        [
+          1481,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSaveProfileToIOhandler",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "io": "cmsIOHANDLER"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsBool  CMSEXPORT cmsSaveProfileToFile(cmsHPROFILE hProfile, const char* FileName)\n{\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n    cmsIOHANDLER* io = cmsOpenIOhandlerFromFile(ContextID, FileName, \"w\");\n    cmsBool rc;\n\n    if (io == NULL) return FALSE;\n\n    rc = (cmsSaveProfileToIOhandler(hProfile, io) != 0);\n    rc &= cmsCloseIOhandler(io);\n\n    if (rc == FALSE) {          // remove() is C99 per 7.19.4.1\n            remove(FileName);   // We have to IGNORE return value in this case\n    }\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          1485,
+          0
+        ],
+        [
+          1500,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSaveProfileToFile",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "FileName": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsSaveProfileToStream(cmsHPROFILE hProfile, FILE* Stream)\n{\n    cmsBool rc;\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n    cmsIOHANDLER* io = cmsOpenIOhandlerFromStream(ContextID, Stream);\n\n    if (io == NULL) return FALSE;\n\n    rc = (cmsSaveProfileToIOhandler(hProfile, io) != 0);\n    rc &= cmsCloseIOhandler(io);\n\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          1503,
+          0
+        ],
+        [
+          1515,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSaveProfileToStream",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Stream": "FILE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsSaveProfileToMem(cmsHPROFILE hProfile, void *MemPtr, cmsUInt32Number* BytesNeeded)\n{\n    cmsBool rc;\n    cmsIOHANDLER* io;\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n\n    _cmsAssert(BytesNeeded != NULL);\n\n    // Should we just calculate the needed space?\n    if (MemPtr == NULL) {\n\n           *BytesNeeded =  cmsSaveProfileToIOhandler(hProfile, NULL);\n            return (*BytesNeeded == 0) ? FALSE : TRUE;\n    }\n\n    // That is a real write operation\n    io =  cmsOpenIOhandlerFromMem(ContextID, MemPtr, *BytesNeeded, \"w\");\n    if (io == NULL) return FALSE;\n\n    rc = (cmsSaveProfileToIOhandler(hProfile, io) != 0);\n    rc &= cmsCloseIOhandler(io);\n\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          1519,
+          0
+        ],
+        [
+          1542,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSaveProfileToMem",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "MemPtr": "void",
+          "BytesNeeded": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid freeOneTag(_cmsICCPROFILE* Icc, cmsUInt32Number i)\n{\n    if (Icc->TagPtrs[i]) {\n\n        cmsTagTypeHandler* TypeHandler = Icc->TagTypeHandlers[i];\n\n        if (TypeHandler != NULL) {\n            cmsTagTypeHandler LocalTypeHandler = *TypeHandler;\n\n            LocalTypeHandler.ContextID = Icc->ContextID;             \n            LocalTypeHandler.ICCVersion = Icc->Version;\n            LocalTypeHandler.FreePtr(&LocalTypeHandler, Icc->TagPtrs[i]);\n        }\n        else\n            _cmsFree(Icc->ContextID, Icc->TagPtrs[i]);\n    }\n}",
+      "fn_code_pos": [
+        [
+          1545,
+          0
+        ],
+        [
+          1562,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "freeOneTag",
+        "parameters": {
+          "Icc": "_cmsICCPROFILE",
+          "i": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool  CMSEXPORT cmsCloseProfile(cmsHPROFILE hProfile)\n{\n    _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) hProfile;\n    cmsBool  rc = TRUE;\n    cmsUInt32Number i;\n\n    if (!Icc) return FALSE;\n\n    // Was open in write mode?\n    if (Icc ->IsWrite) {\n\n        Icc ->IsWrite = FALSE;      // Assure no further writing\n        rc &= cmsSaveProfileToFile(hProfile, Icc ->IOhandler->PhysicalFile);\n    }\n\n    for (i=0; i < Icc -> TagCount; i++) {\n\n        freeOneTag(Icc, i);        \n    }\n\n    if (Icc ->IOhandler != NULL) {\n        rc &= cmsCloseIOhandler(Icc->IOhandler);\n    }\n\n    _cmsDestroyMutex(Icc->ContextID, Icc->UsrMutex);\n\n    _cmsFree(Icc ->ContextID, Icc);   // Free placeholder memory\n\n    return rc;\n}",
+      "fn_code_pos": [
+        [
+          1565,
+          0
+        ],
+        [
+          1594,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsCloseProfile",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool IsTypeSupported(cmsTagDescriptor* TagDescriptor, cmsTagTypeSignature Type)\n{\n    cmsUInt32Number i, nMaxTypes;\n\n    nMaxTypes = TagDescriptor->nSupportedTypes;\n    if (nMaxTypes >= MAX_TYPES_IN_LCMS_PLUGIN)\n        nMaxTypes = MAX_TYPES_IN_LCMS_PLUGIN;\n\n    for (i=0; i < nMaxTypes; i++) {\n        if (Type == TagDescriptor ->SupportedTypes[i]) return TRUE;\n    }\n\n    return FALSE;\n}",
+      "fn_code_pos": [
+        [
+          1601,
+          0
+        ],
+        [
+          1615,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "IsTypeSupported",
+        "parameters": {
+          "TagDescriptor": "cmsTagDescriptor",
+          "Type": "cmsTagTypeSignature"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "void* CMSEXPORT cmsReadTag(cmsHPROFILE hProfile, cmsTagSignature sig)\n{\n    _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) hProfile;\n    cmsIOHANDLER* io;\n    cmsTagTypeHandler* TypeHandler;\n    cmsTagTypeHandler LocalTypeHandler;\n    cmsTagDescriptor*  TagDescriptor;\n    cmsTagTypeSignature BaseType;\n    cmsUInt32Number Offset, TagSize;\n    cmsUInt32Number ElemCount;\n    int n;\n\n    if (!_cmsLockMutex(Icc->ContextID, Icc ->UsrMutex)) return NULL;\n\n    n = _cmsSearchTag(Icc, sig, TRUE);\n    if (n < 0)\n    {\n        // Not found, return NULL\n        _cmsUnlockMutex(Icc->ContextID, Icc->UsrMutex);\n        return NULL;\n    }\n\n    // If the element is already in memory, return the pointer\n    if (Icc -> TagPtrs[n]) {\n\n        if (Icc->TagTypeHandlers[n] == NULL) goto Error;\n\n        // Sanity check\n        BaseType = Icc->TagTypeHandlers[n]->Signature;\n        if (BaseType == 0) goto Error;\n\n        TagDescriptor = _cmsGetTagDescriptor(Icc->ContextID, sig);\n        if (TagDescriptor == NULL) goto Error;\n\n        if (!IsTypeSupported(TagDescriptor, BaseType)) goto Error;\n\n        if (Icc ->TagSaveAsRaw[n]) goto Error;  // We don't support read raw tags as cooked\n\n        _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n        return Icc -> TagPtrs[n];\n    }\n\n    // We need to read it. Get the offset and size to the file\n    Offset    = Icc -> TagOffsets[n];\n    TagSize   = Icc -> TagSizes[n];\n\n    if (TagSize < 8) goto Error;\n\n    io = Icc ->IOhandler;\n\n    if (io == NULL) { // This is a built-in profile that has been manipulated, abort early\n\n        cmsSignalError(Icc->ContextID, cmsERROR_CORRUPTION_DETECTED, \"Corrupted built-in profile.\");\n        goto Error;\n    }\n\n    // Seek to its location\n    if (!io -> Seek(io, Offset))\n        goto Error;\n\n    // Search for support on this tag\n    TagDescriptor = _cmsGetTagDescriptor(Icc-> ContextID, sig);\n    if (TagDescriptor == NULL) {\n\n        char String[5];\n\n        _cmsTagSignature2String(String, sig);\n\n        // An unknown element was found.\n        cmsSignalError(Icc ->ContextID, cmsERROR_UNKNOWN_EXTENSION, \"Unknown tag type '%s' found.\", String);\n        goto Error;     // Unsupported.\n    }\n\n    // if supported, get type and check if in list\n    BaseType = _cmsReadTypeBase(io);\n    if (BaseType == 0) goto Error;\n\n    if (!IsTypeSupported(TagDescriptor, BaseType)) goto Error;\n   \n    TagSize  -= 8;       // Already read by the type base logic\n\n    // Get type handler\n    TypeHandler = _cmsGetTagTypeHandler(Icc ->ContextID, BaseType);\n    if (TypeHandler == NULL) goto Error;\n    LocalTypeHandler = *TypeHandler;\n\n\n    // Read the tag\n    Icc -> TagTypeHandlers[n] = TypeHandler;\n\n    LocalTypeHandler.ContextID = Icc ->ContextID;\n    LocalTypeHandler.ICCVersion = Icc ->Version;\n    Icc -> TagPtrs[n] = LocalTypeHandler.ReadPtr(&LocalTypeHandler, io, &ElemCount, TagSize);\n\n    // The tag type is supported, but something wrong happened and we cannot read the tag.\n    // let know the user about this (although it is just a warning)\n    if (Icc -> TagPtrs[n] == NULL) {\n\n        char String[5];\n\n        _cmsTagSignature2String(String, sig);\n        cmsSignalError(Icc ->ContextID, cmsERROR_CORRUPTION_DETECTED, \"Corrupted tag '%s'\", String);\n        goto Error;\n    }\n\n    // This is a weird error that may be a symptom of something more serious, the number of\n    // stored item is actually less than the number of required elements.\n    if (ElemCount < TagDescriptor ->ElemCount) {\n\n        char String[5];\n\n        _cmsTagSignature2String(String, sig);\n        cmsSignalError(Icc ->ContextID, cmsERROR_CORRUPTION_DETECTED, \"'%s' Inconsistent number of items: expected %d, got %d\",\n            String, TagDescriptor ->ElemCount, ElemCount);\n        goto Error;\n    }\n\n\n    // Return the data\n    _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n    return Icc -> TagPtrs[n];\n\n\n    // Return error and unlock the data\nError:\n\n    freeOneTag(Icc, n);    \n    Icc->TagPtrs[n] = NULL;\n    \n    _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          1619,
+          0
+        ],
+        [
+          1750,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsReadTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "sig": "cmsTagSignature"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsTagTypeSignature _cmsGetTagTrueType(cmsHPROFILE hProfile, cmsTagSignature sig)\n{\n    _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) hProfile;\n    cmsTagTypeHandler* TypeHandler;\n    int n;\n\n    // Search for given tag in ICC profile directory\n    n = _cmsSearchTag(Icc, sig, TRUE);\n    if (n < 0) return (cmsTagTypeSignature) 0;                // Not found, return NULL\n\n    // Get the handler. The true type is there\n    TypeHandler =  Icc -> TagTypeHandlers[n];\n    return TypeHandler ->Signature;\n}",
+      "fn_code_pos": [
+        [
+          1754,
+          0
+        ],
+        [
+          1767,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsGetTagTrueType",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "sig": "cmsTagSignature"
+        },
+        "return_type": "cmsTagTypeSignature"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsWriteTag(cmsHPROFILE hProfile, cmsTagSignature sig, const void* data)\n{\n    _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) hProfile;\n    cmsTagTypeHandler* TypeHandler = NULL;\n    cmsTagTypeHandler LocalTypeHandler;\n    cmsTagDescriptor* TagDescriptor = NULL;\n    cmsTagTypeSignature Type;\n    int i;\n    cmsFloat64Number Version;\n    char TypeString[5], SigString[5];\n\n    if (!_cmsLockMutex(Icc->ContextID, Icc ->UsrMutex)) return FALSE;\n\n    // To delete tags.\n    if (data == NULL) {\n\n         // Delete the tag\n         i = _cmsSearchTag(Icc, sig, FALSE);\n         if (i >= 0) {\n                \n             // Use zero as a mark of deleted \n             _cmsDeleteTagByPos(Icc, i);\n             Icc ->TagNames[i] = (cmsTagSignature) 0;\n             _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n             return TRUE;\n         }\n         // Didn't find the tag\n        goto Error;\n    }\n\n    if (!_cmsNewTag(Icc, sig, &i)) goto Error;\n\n    // This is not raw\n    Icc ->TagSaveAsRaw[i] = FALSE;\n\n    // This is not a link\n    Icc ->TagLinked[i] = (cmsTagSignature) 0;\n\n    // Get information about the TAG.\n    TagDescriptor = _cmsGetTagDescriptor(Icc-> ContextID, sig);\n    if (TagDescriptor == NULL){\n         cmsSignalError(Icc ->ContextID, cmsERROR_UNKNOWN_EXTENSION, \"Unsupported tag '%x'\", sig);\n        goto Error;\n    }\n\n\n    // Now we need to know which type to use. It depends on the version.\n    Version = cmsGetProfileVersion(hProfile);\n\n    if (TagDescriptor ->DecideType != NULL) {\n\n        // Let the tag descriptor to decide the type base on depending on\n        // the data. This is useful for example on parametric curves, where\n        // curves specified by a table cannot be saved as parametric and needs\n        // to be casted to single v2-curves, even on v4 profiles.\n\n        Type = TagDescriptor ->DecideType(Version, data);\n    }\n    else {\n\n        Type = TagDescriptor ->SupportedTypes[0];\n    }\n\n    // Does the tag support this type?\n    if (!IsTypeSupported(TagDescriptor, Type)) {\n\n        _cmsTagSignature2String(TypeString, (cmsTagSignature) Type);\n        _cmsTagSignature2String(SigString,  sig);\n\n        cmsSignalError(Icc ->ContextID, cmsERROR_UNKNOWN_EXTENSION, \"Unsupported type '%s' for tag '%s'\", TypeString, SigString);\n        goto Error;\n    }\n\n    // Does we have a handler for this type?\n    TypeHandler =  _cmsGetTagTypeHandler(Icc->ContextID, Type);\n    if (TypeHandler == NULL) {\n\n        _cmsTagSignature2String(TypeString, (cmsTagSignature) Type);\n        _cmsTagSignature2String(SigString,  sig);\n\n        cmsSignalError(Icc ->ContextID, cmsERROR_UNKNOWN_EXTENSION, \"Unsupported type '%s' for tag '%s'\", TypeString, SigString);\n        goto Error;           // Should never happen\n    }\n\n\n    // Fill fields on icc structure\n    Icc ->TagTypeHandlers[i]  = TypeHandler;\n    Icc ->TagNames[i]         = sig;\n    Icc ->TagSizes[i]         = 0;\n    Icc ->TagOffsets[i]       = 0;\n\n    LocalTypeHandler = *TypeHandler;\n    LocalTypeHandler.ContextID  = Icc ->ContextID;\n    LocalTypeHandler.ICCVersion = Icc ->Version;\n    Icc ->TagPtrs[i]            = LocalTypeHandler.DupPtr(&LocalTypeHandler, data, TagDescriptor ->ElemCount);\n\n    if (Icc ->TagPtrs[i] == NULL)  {\n\n        _cmsTagSignature2String(TypeString, (cmsTagSignature) Type);\n        _cmsTagSignature2String(SigString,  sig);\n        cmsSignalError(Icc ->ContextID, cmsERROR_CORRUPTION_DETECTED, \"Malformed struct in type '%s' for tag '%s'\", TypeString, SigString);\n\n        goto Error;\n    }\n\n    _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n    return TRUE;\n\nError:\n    _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n    return FALSE;\n\n}",
+      "fn_code_pos": [
+        [
+          1772,
+          0
+        ],
+        [
+          1884,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsWriteTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "sig": "cmsTagSignature",
+          "data": "void"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsReadRawTag(cmsHPROFILE hProfile, cmsTagSignature sig, void* data, cmsUInt32Number BufferSize)\n{\n    _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) hProfile;\n    void *Object;\n    int i;\n    cmsIOHANDLER* MemIO;\n    cmsTagTypeHandler* TypeHandler = NULL;\n    cmsTagTypeHandler LocalTypeHandler;\n    cmsTagDescriptor* TagDescriptor = NULL;\n    cmsUInt32Number rc;\n    cmsUInt32Number Offset, TagSize;\n\n    // Sanity check\n    if (data != NULL && BufferSize == 0) return 0;\n\n    if (!_cmsLockMutex(Icc->ContextID, Icc ->UsrMutex)) return 0;\n\n    // Search for given tag in ICC profile directory\n    \n    i = _cmsSearchTag(Icc, sig, TRUE);\n    if (i < 0) goto Error;                 // Not found, \n\n    // It is already read?\n    if (Icc -> TagPtrs[i] == NULL) {\n\n        // Not yet, get original position\n        Offset   = Icc ->TagOffsets[i];\n        TagSize  = Icc ->TagSizes[i];\n\n        // read the data directly, don't keep copy\n        \n        if (data != NULL) {\n\n            if (BufferSize < TagSize)\n                TagSize = BufferSize;\n\n            if (!Icc ->IOhandler ->Seek(Icc ->IOhandler, Offset)) goto Error;\n            if (!Icc ->IOhandler ->Read(Icc ->IOhandler, data, 1, TagSize)) goto Error;\n\n            _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n            return TagSize;\n        }\n\n        _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n        return Icc ->TagSizes[i];\n    }\n\n    // The data has been already read, or written. But wait!, maybe the user choose to save as\n    // raw data. In this case, return the raw data directly\n    \n    if (Icc ->TagSaveAsRaw[i]) {\n\n        if (data != NULL)  {\n\n            TagSize  = Icc ->TagSizes[i];\n            if (BufferSize < TagSize)\n                TagSize = BufferSize;\n\n            memmove(data, Icc ->TagPtrs[i], TagSize);\n\n            _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n            return TagSize;\n        }\n\n        _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n        return Icc ->TagSizes[i];\n    }\n\n    // Already read, or previously set by cmsWriteTag(). We need to serialize that\n    // data to raw to get something that makes sense\n    \n    _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n    Object = cmsReadTag(hProfile, sig);\n    if (!_cmsLockMutex(Icc->ContextID, Icc ->UsrMutex)) return 0;\n\n    if (Object == NULL) goto Error;\n\n    // Now we need to serialize to a memory block: just use a memory iohandler\n\n    if (data == NULL) {\n        MemIO = cmsOpenIOhandlerFromNULL(cmsGetProfileContextID(hProfile));\n    } else{\n        MemIO = cmsOpenIOhandlerFromMem(cmsGetProfileContextID(hProfile), data, BufferSize, \"w\");\n    }\n    if (MemIO == NULL) goto Error;\n\n    // Obtain type handling for the tag\n    TypeHandler = Icc ->TagTypeHandlers[i];\n    TagDescriptor = _cmsGetTagDescriptor(Icc-> ContextID, sig);\n    if (TagDescriptor == NULL) {\n        cmsCloseIOhandler(MemIO);\n        goto Error;\n    }\n    \n    if (TypeHandler == NULL) goto Error;\n\n    // Serialize\n    LocalTypeHandler = *TypeHandler;\n    LocalTypeHandler.ContextID  = Icc ->ContextID;\n    LocalTypeHandler.ICCVersion = Icc ->Version;\n\n    if (!_cmsWriteTypeBase(MemIO, TypeHandler ->Signature)) {\n        cmsCloseIOhandler(MemIO);\n        goto Error;\n    }\n\n    if (!LocalTypeHandler.WritePtr(&LocalTypeHandler, MemIO, Object, TagDescriptor ->ElemCount)) {\n        cmsCloseIOhandler(MemIO);\n        goto Error;\n    }\n\n    // Get Size and close\n    rc = MemIO ->Tell(MemIO);\n    cmsCloseIOhandler(MemIO);      // Ignore return code this time\n\n    _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n    return rc;\n\nError:\n    _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          1890,
+          0
+        ],
+        [
+          2011,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsReadRawTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "sig": "cmsTagSignature",
+          "data": "void",
+          "BufferSize": "cmsUInt32Number"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsWriteRawTag(cmsHPROFILE hProfile, cmsTagSignature sig, const void* data, cmsUInt32Number Size)\n{\n    _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) hProfile;\n    int i;\n\n    if (!_cmsLockMutex(Icc->ContextID, Icc ->UsrMutex)) return 0;\n\n    if (!_cmsNewTag(Icc, sig, &i)) {\n        _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n         return FALSE;\n    }\n\n    // Mark the tag as being written as RAW\n    Icc ->TagSaveAsRaw[i] = TRUE;\n    Icc ->TagNames[i]     = sig;\n    Icc ->TagLinked[i]    = (cmsTagSignature) 0;\n\n    // Keep a copy of the block\n    Icc ->TagPtrs[i]  = _cmsDupMem(Icc ->ContextID, data, Size);\n    Icc ->TagSizes[i] = Size;\n\n    _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n\n    if (Icc->TagPtrs[i] == NULL) {           \n           Icc->TagNames[i] = (cmsTagSignature) 0;\n           return FALSE;\n    }\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          2017,
+          0
+        ],
+        [
+          2045,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsWriteRawTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "sig": "cmsTagSignature",
+          "data": "void",
+          "Size": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsLinkTag(cmsHPROFILE hProfile, cmsTagSignature sig, cmsTagSignature dest)\n{\n    _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) hProfile;\n    int i;\n\n     if (!_cmsLockMutex(Icc->ContextID, Icc ->UsrMutex)) return FALSE;\n\n    if (!_cmsNewTag(Icc, sig, &i)) {\n        _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n        return FALSE;\n    }\n\n    // Keep necessary information\n    Icc ->TagSaveAsRaw[i] = FALSE;\n    Icc ->TagNames[i]     = sig;\n    Icc ->TagLinked[i]    = dest;\n\n    Icc ->TagPtrs[i]    = NULL;\n    Icc ->TagSizes[i]   = 0;\n    Icc ->TagOffsets[i] = 0;\n\n    _cmsUnlockMutex(Icc->ContextID, Icc ->UsrMutex);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          2048,
+          0
+        ],
+        [
+          2071,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsLinkTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "sig": "cmsTagSignature",
+          "dest": "cmsTagSignature"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsTagSignature  CMSEXPORT cmsTagLinkedTo(cmsHPROFILE hProfile, cmsTagSignature sig)\n{\n    _cmsICCPROFILE* Icc = (_cmsICCPROFILE*) hProfile;\n    int i;\n\n    // Search for given tag in ICC profile directory\n    i = _cmsSearchTag(Icc, sig, FALSE);\n    if (i < 0) return (cmsTagSignature) 0;                 // Not found, return 0\n\n    return Icc -> TagLinked[i];\n}",
+      "fn_code_pos": [
+        [
+          2075,
+          0
+        ],
+        [
+          2085,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsTagLinkedTo",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "sig": "cmsTagSignature"
+        },
+        "return_type": "cmsTagSignature"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "cmsReadTag(cmsHPROFILE hProfile, cmsTagSignature sig)",
+      "fn_dec_pos": [
+        [
+          1619,
+          16
+        ],
+        [
+          1619,
+          69
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsReadTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "sig": "cmsTagSignature"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n    cmsUInt32Number Pointer;         // Points to current location\n} FILENULL;",
+      {
+        "Pointer": "cmsUInt32Number"
+      },
+      "FILENULL",
+      [
+        42,
+        0
+      ],
+      [
+        44,
+        11
+      ]
+    ],
+    [
+      "typedef struct {\n    cmsUInt8Number* Block;    // Points to allocated memory\n    cmsUInt32Number Size;     // Size of allocated memory\n    cmsUInt32Number Pointer;  // Points to current location\n    int FreeBlockOnClose;     // As title\n\n} FILEMEM;",
+      {
+        "* Block": "cmsUInt8Number",
+        "Size": "cmsUInt32Number",
+        "Pointer": "cmsUInt32Number",
+        "FreeBlockOnClose": "int"
+      },
+      "FILEMEM",
+      [
+        137,
+        0
+      ],
+      [
+        143,
+        10
+      ]
+    ],
+    [
+      "typedef struct {\n    cmsUInt32Number Pointer;         // Points to current location\n} FILENULL;",
+      {
+        "Pointer": "cmsUInt32Number"
+      },
+      "FILENULL",
+      [
+        42,
+        0
+      ],
+      [
+        44,
+        11
+      ]
+    ],
+    [
+      "struct _cms_io_handler",
+      {},
+      "",
+      [
+        101,
+        4
+      ],
+      [
+        101,
+        26
+      ]
+    ],
+    [
+      "struct _cms_io_handler",
+      {},
+      "",
+      [
+        104,
+        17
+      ],
+      [
+        104,
+        39
+      ]
+    ],
+    [
+      "struct _cms_io_handler",
+      {},
+      "",
+      [
+        104,
+        75
+      ],
+      [
+        104,
+        97
+      ]
+    ],
+    [
+      "typedef struct {\n    cmsUInt8Number* Block;    // Points to allocated memory\n    cmsUInt32Number Size;     // Size of allocated memory\n    cmsUInt32Number Pointer;  // Points to current location\n    int FreeBlockOnClose;     // As title\n\n} FILEMEM;",
+      {
+        "* Block": "cmsUInt8Number",
+        "Size": "cmsUInt32Number",
+        "Pointer": "cmsUInt32Number",
+        "FreeBlockOnClose": "int"
+      },
+      "FILEMEM",
+      [
+        137,
+        0
+      ],
+      [
+        143,
+        10
+      ]
+    ],
+    [
+      "struct _cms_io_handler",
+      {},
+      "",
+      [
+        146,
+        27
+      ],
+      [
+        146,
+        49
+      ]
+    ],
+    [
+      "struct _cms_io_handler",
+      {},
+      "",
+      [
+        169,
+        20
+      ],
+      [
+        169,
+        42
+      ]
+    ],
+    [
+      "struct _cms_io_handler",
+      {},
+      "",
+      [
+        184,
+        27
+      ],
+      [
+        184,
+        49
+      ]
+    ],
+    [
+      "struct _cms_io_handler",
+      {},
+      "",
+      [
+        195,
+        20
+      ],
+      [
+        195,
+        42
+      ]
+    ],
+    [
+      "struct _cms_io_handler",
+      {},
+      "",
+      [
+        219,
+        21
+      ],
+      [
+        219,
+        43
+      ]
+    ],
+    [
+      "struct tm",
+      {},
+      "",
+      [
+        1045,
+        70
+      ],
+      [
+        1045,
+        79
+      ]
+    ],
+    [
+      "struct tm",
+      {},
+      "",
+      [
+        1048,
+        41
+      ],
+      [
+        1048,
+        50
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"lcms2_internal.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

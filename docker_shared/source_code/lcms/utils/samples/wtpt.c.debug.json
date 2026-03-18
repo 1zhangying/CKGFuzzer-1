@@ -1,0 +1,110 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nvoid HandleSwitches(int argc, char *argv[])\n{\n       int s;\n\n       while ((s = xgetopt(argc, argv, \"lcx\")) != EOF) {\n\n              switch (s){\n\n\n              case 'l':\n                     lShowLab = TRUE;\n                     break;\n\n              case 'c':\n                     lShowLCh = TRUE;\n                     break;\n\n              case 'x':\n                     lShowXYZ = FALSE;\n                     break;\n\n              default:\n\n                     FatalError(\"Unknown option - run without args to see valid ones.\\n\");\n              }\n       }\n}",
+      "fn_code_pos": [
+        [
+          40,
+          0
+        ],
+        [
+          67,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "HandleSwitches",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid Help(void)\n{\n       fprintf(stderr, \"little CMS ICC white point utility - v3 [LittleCMS %2.2f]\\n\", LCMS_VERSION / 1000.0);\n\n       fprintf(stderr, \"usage: wtpt [flags] [<ICC profile>]\\n\\n\");\n\n       fprintf(stderr, \"flags:\\n\\n\");\n       \n       fprintf(stderr, \"%cl - CIE Lab\\n\", SW);\n       fprintf(stderr, \"%cc - CIE LCh\\n\", SW);\n       fprintf(stderr, \"%cx - Don't show XYZ\\n\", SW);\n\n       fprintf(stderr, \"\\nIf no parameters are given, then this program will\\n\");\n       fprintf(stderr, \"ask for XYZ value of media white. If parameter given, it must be\\n\");\n       fprintf(stderr, \"the profile to inspect.\\n\\n\");\n\n       fprintf(stderr, \"This program is intended to be a demo of the little cms\\n\"\n              \"engine. Both lcms and this program are freeware. You can\\n\"\n              \"obtain both in source code at http://www.littlecms.com\\n\"\n              \"For suggestions, comments, bug reports etc. send mail to\\n\"\n              \"info@littlecms.com\\n\\n\");\n       exit(0);\n}",
+      "fn_code_pos": [
+        [
+          69,
+          0
+        ],
+        [
+          92,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Help",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ShowWhitePoint(cmsCIEXYZ* WtPt)\n{\n       cmsCIELab Lab;\n       cmsCIELCh LCh;\n       cmsCIExyY xyY;\n\n\n       cmsXYZ2Lab(NULL, &Lab, WtPt);\n       cmsLab2LCh(&LCh, &Lab);\n       cmsXYZ2xyY(&xyY, WtPt);\n\n\n       if (lShowXYZ) printf(\"XYZ=(%3.1f, %3.1f, %3.1f)\\n\", WtPt->X, WtPt->Y, WtPt->Z);\n       if (lShowLab) printf(\"Lab=(%3.3f, %3.3f, %3.3f)\\n\", Lab.L, Lab.a, Lab.b);\n       if (lShowLCh) printf(\"LCh=(%3.3f, %3.3f, %3.3f)\\n\", LCh.L, LCh.C, LCh.h);\n       {\n              double Ssens = (LCh.C * 100.0 )/ sqrt(LCh.C*LCh.C + LCh.L * LCh.L) ;\n              printf(\"Sens = %f\\n\", Ssens);\n       }\n\n}",
+      "fn_code_pos": [
+        [
+          96,
+          0
+        ],
+        [
+          117,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ShowWhitePoint",
+        "parameters": {
+          "WtPt": "cmsCIEXYZ"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n       int nargs;\n\n       InitUtils(\"wtpt\");\n       \n       HandleSwitches(argc, argv);\n\n       nargs = (argc - xoptind);\n\n       if (nargs != 1)\n              Help();\n\n       else {\n              cmsCIEXYZ* WtPt;\n              cmsHPROFILE hProfile = cmsOpenProfileFromFile(argv[xoptind], \"r\");  \n              if (hProfile == NULL) return 1;\n\n              WtPt = cmsReadTag(hProfile, cmsSigMediaWhitePointTag);\n              ShowWhitePoint(WtPt);\n              cmsCloseProfile(hProfile);\n       }\n       \n       return 0;\n}",
+      "fn_code_pos": [
+        [
+          120,
+          0
+        ],
+        [
+          144,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"utils.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

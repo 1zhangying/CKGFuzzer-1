@@ -20,6 +20,7 @@ from llama_index.core.memory import (
 )
 from llama_index.core.llms import ChatMessage
 from llama_index.core import Settings
+from llama_index.core.indices.prompt_helper import PromptHelper
 
 
 def extract_code(s):
@@ -116,11 +117,20 @@ class CompilationFixAgent:
         Settings.embed_model= self.llm_embedding
 
         self.driver_retriever = self.driver_index.as_retriever(similarity_top_k=3, search_type="similarity")
+        
+        prompt_helper = PromptHelper(
+            context_window=1000000,  # 100w tokens
+            num_output=2048,         # 模型最多输出2048个tokens
+        )
+        
         self.driver_query_engine = RetrieverQueryEngine.from_args(
                     llm= self.llm_analyzer if self.llm_analyzer else Settings.llm,
                     retriever=self.driver_retriever,
                     node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.7)],
-                    response_synthesizer=get_response_synthesizer(response_mode="compact", verbose=True),
+                    response_synthesizer=get_response_synthesizer(
+                        response_mode="compact", 
+                        verbose=True, 
+                        prompt_helper=prompt_helper),
                     verbose=True
         )   
         self.chat_memory_buffer = ChatMemoryBuffer.from_defaults(llm=llm_analyzer)
@@ -141,11 +151,21 @@ class CompilationFixAgent:
         code_doc = Document(text=code)
         self.driver_index.insert(code_doc)
         self.driver_retriever = self.driver_index.as_retriever(similarity_top_k=3, search_type="similarity")
+        
+        prompt_helper = PromptHelper(
+            context_window=1000000,  # 100w tokens
+            num_output=2048,         # 模型最多输出2048个tokens
+        )   
+        
         self.driver_query_engine = RetrieverQueryEngine.from_args(
                     llm= self.llm_analyzer if self.llm_analyzer else Settings.llm,
                     retriever=self.driver_retriever,
                     node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.7)],
-                    response_synthesizer=get_response_synthesizer(response_mode="compact", verbose=True),
+                    response_synthesizer=get_response_synthesizer(
+                        response_mode="compact",
+                          verbose=True,
+                          prompt_helper=prompt_helper,
+                          ),
                     verbose=True
         )
         return self.driver_query_engine

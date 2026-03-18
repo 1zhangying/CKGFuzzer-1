@@ -1,0 +1,66 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17		#include "ares_setup.h"	
+18			
+19		#include "ares.h"	
+20		#include "ares_private.h"	
+21			
+22		/* Routines for managing doubly-linked circular linked lists with a	
+23		* dummy head.	
+24		*/	
+25			
+26		/* Initialize a new head node */	
+27	30.7k	void ares__init_list_head(struct list_node* head) {	
+28	30.7k	head->prev = head;	
+29	30.7k	head->next = head;	
+30	30.7k	head->data = NULL;	
+31	30.7k	}	
+32			
+33		/* Initialize a list node */	
+34	0	void ares__init_list_node(struct list_node* node, void* d){	
+35	0	node->prev =NULL;	
+36	0	node->next =NULL;	
+37	0	node->data = d;	
+38	0	}	
+39			
+40		/* Returns true iff the given list is empty */	
+41	30.7k	int ares__is_list_empty(struct list_node* head) {	
+42	30.7k	return ((head->next == head) && (head->prev == head));	
+43	30.7k	}	
+44			
+45		/* Inserts new_node before old_node */	
+46		void ares__insert_in_list(struct list_node* new_node,	
+47	0	struct list_node* old_node){	
+48	0	new_node->next = old_node;	
+49	0	new_node->prev = old_node->prev;	
+50	0	old_node->prev->next = new_node;	
+51	0	old_node->prev = new_node;	
+52	0	}	
+53			
+54		/* Removes the node from the list it's in, if any */	
+55	0	void ares__remove_from_list(struct list_node* node){	
+56	0	if (node->next !=NULL){	
+57	0	node->prev->next = node->next;	
+58	0	node->next->prev = node->prev;	
+59	0	node->prev =NULL;	
+60		node->next =NULL;	
+61	0	}	
+62	0	}	
+63			
+
+

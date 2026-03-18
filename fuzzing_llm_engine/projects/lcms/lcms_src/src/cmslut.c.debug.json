@@ -1,0 +1,1579 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nvoid EvaluateIdentity(const cmsFloat32Number In[],\n                            cmsFloat32Number Out[],\n                      const cmsStage *mpe)\n{\n    memmove(Out, In, mpe ->InputChannels * sizeof(cmsFloat32Number));\n}",
+      "fn_code_pos": [
+        [
+          60,
+          0
+        ],
+        [
+          66,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EvaluateIdentity",
+        "parameters": {
+          "In": "cmsFloat32Number",
+          "Out": "cmsFloat32Number",
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid FromFloatTo16(const cmsFloat32Number In[], cmsUInt16Number Out[], cmsUInt32Number n)\n{\n    cmsUInt32Number i;\n\n    for (i=0; i < n; i++) {\n        Out[i] = _cmsQuickSaturateWord(In[i] * 65535.0);\n    }\n}",
+      "fn_code_pos": [
+        [
+          81,
+          0
+        ],
+        [
+          89,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FromFloatTo16",
+        "parameters": {
+          "In": "cmsFloat32Number",
+          "Out": "cmsUInt16Number",
+          "n": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid From16ToFloat(const cmsUInt16Number In[], cmsFloat32Number Out[], cmsUInt32Number n)\n{\n    cmsUInt32Number i;\n\n    for (i=0; i < n; i++) {\n        Out[i] = (cmsFloat32Number) In[i] / 65535.0F;\n    }\n}",
+      "fn_code_pos": [
+        [
+          92,
+          0
+        ],
+        [
+          100,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "From16ToFloat",
+        "parameters": {
+          "In": "cmsUInt16Number",
+          "Out": "cmsFloat32Number",
+          "n": "cmsUInt32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool  CMSEXPORT cmsPipelineCheckAndRetreiveStages(const cmsPipeline* Lut, cmsUInt32Number n, ...)\n{\n    va_list args;\n    cmsUInt32Number i;\n    cmsStage* mpe;\n    cmsStageSignature Type;\n    void** ElemPtr;\n\n    // Make sure same number of elements\n    if (cmsPipelineStageCount(Lut) != n) return FALSE;\n\n    va_start(args, n);\n\n    // Iterate across asked types\n    mpe = Lut ->Elements;\n    for (i=0; i < n; i++) {\n\n        // Get asked type. cmsStageSignature is promoted to int by compiler\n        Type  = (cmsStageSignature)va_arg(args, int);\n        if (mpe ->Type != Type) {\n\n            va_end(args);       // Mismatch. We are done.\n            return FALSE;\n        }\n        mpe = mpe ->Next;\n    }\n\n    // Found a combination, fill pointers if not NULL\n    mpe = Lut ->Elements;\n    for (i=0; i < n; i++) {\n\n        ElemPtr = va_arg(args, void**);\n        if (ElemPtr != NULL)\n            *ElemPtr = mpe;\n\n        mpe = mpe ->Next;\n    }\n\n    va_end(args);\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          109,
+          0
+        ],
+        [
+          149,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPipelineCheckAndRetreiveStages",
+        "parameters": {
+          "Lut": "cmsPipeline",
+          "n": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsToneCurve** _cmsStageGetPtrToCurveSet(const cmsStage* mpe)\n{\n    _cmsStageToneCurvesData* Data = (_cmsStageToneCurvesData*) mpe ->Data;\n\n    return Data ->TheCurves;\n}",
+      "fn_code_pos": [
+        [
+          158,
+          0
+        ],
+        [
+          163,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {},
+        "return_type": "cmsToneCurve"
+      }
+    },
+    {
+      "fn_code": "static\nvoid EvaluateCurves(const cmsFloat32Number In[],\n                    cmsFloat32Number Out[],\n                    const cmsStage *mpe)\n{\n    _cmsStageToneCurvesData* Data;\n    cmsUInt32Number i;\n\n    _cmsAssert(mpe != NULL);\n\n    Data = (_cmsStageToneCurvesData*) mpe ->Data;\n    if (Data == NULL) return;\n\n    if (Data ->TheCurves == NULL) return;\n\n    for (i=0; i < Data ->nCurves; i++) {\n        Out[i] = cmsEvalToneCurveFloat(Data ->TheCurves[i], In[i]);\n    }\n}",
+      "fn_code_pos": [
+        [
+          165,
+          0
+        ],
+        [
+          183,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EvaluateCurves",
+        "parameters": {
+          "In": "cmsFloat32Number",
+          "Out": "cmsFloat32Number",
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid CurveSetElemTypeFree(cmsStage* mpe)\n{\n    _cmsStageToneCurvesData* Data;\n    cmsUInt32Number i;\n\n    _cmsAssert(mpe != NULL);\n\n    Data = (_cmsStageToneCurvesData*) mpe ->Data;\n    if (Data == NULL) return;\n\n    if (Data ->TheCurves != NULL) {\n        for (i=0; i < Data ->nCurves; i++) {\n            if (Data ->TheCurves[i] != NULL)\n                cmsFreeToneCurve(Data ->TheCurves[i]);\n        }\n    }\n    _cmsFree(mpe ->ContextID, Data ->TheCurves);\n    _cmsFree(mpe ->ContextID, Data);\n}",
+      "fn_code_pos": [
+        [
+          185,
+          0
+        ],
+        [
+          204,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CurveSetElemTypeFree",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* CurveSetDup(cmsStage* mpe)\n{\n    _cmsStageToneCurvesData* Data = (_cmsStageToneCurvesData*) mpe ->Data;\n    _cmsStageToneCurvesData* NewElem;\n    cmsUInt32Number i;\n\n    NewElem = (_cmsStageToneCurvesData*) _cmsMallocZero(mpe ->ContextID, sizeof(_cmsStageToneCurvesData));\n    if (NewElem == NULL) return NULL;\n\n    NewElem ->nCurves   = Data ->nCurves;\n    NewElem ->TheCurves = (cmsToneCurve**) _cmsCalloc(mpe ->ContextID, NewElem ->nCurves, sizeof(cmsToneCurve*));\n\n    if (NewElem ->TheCurves == NULL) goto Error;\n\n    for (i=0; i < NewElem ->nCurves; i++) {\n\n        // Duplicate each curve. It may fail.\n        NewElem ->TheCurves[i] = cmsDupToneCurve(Data ->TheCurves[i]);\n        if (NewElem ->TheCurves[i] == NULL) goto Error;\n\n\n    }\n    return (void*) NewElem;\n\nError:\n\n    if (NewElem ->TheCurves != NULL) {\n        for (i=0; i < NewElem ->nCurves; i++) {\n            if (NewElem ->TheCurves[i])\n                cmsFreeToneCurve(NewElem ->TheCurves[i]);\n        }\n    }\n    _cmsFree(mpe ->ContextID, NewElem ->TheCurves);\n    _cmsFree(mpe ->ContextID, NewElem);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          207,
+          0
+        ],
+        [
+          243,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CurveSetDup",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid EvaluateMatrix(const cmsFloat32Number In[],\n                    cmsFloat32Number Out[],\n                    const cmsStage *mpe)\n{\n    cmsUInt32Number i, j;\n    _cmsStageMatrixData* Data = (_cmsStageMatrixData*) mpe ->Data;\n    cmsFloat64Number Tmp;\n\n    // Input is already in 0..1.0 notation\n    for (i=0; i < mpe ->OutputChannels; i++) {\n\n        Tmp = 0;\n        for (j=0; j < mpe->InputChannels; j++) {\n            Tmp += In[j] * Data->Double[i*mpe->InputChannels + j];\n        }\n\n        if (Data ->Offset != NULL)\n            Tmp += Data->Offset[i];\n\n        Out[i] = (cmsFloat32Number) Tmp;\n    }\n\n\n    // Output in 0..1.0 domain\n}",
+      "fn_code_pos": [
+        [
+          310,
+          0
+        ],
+        [
+          335,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EvaluateMatrix",
+        "parameters": {
+          "In": "cmsFloat32Number",
+          "Out": "cmsFloat32Number",
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* MatrixElemDup(cmsStage* mpe)\n{\n    _cmsStageMatrixData* Data = (_cmsStageMatrixData*) mpe ->Data;\n    _cmsStageMatrixData* NewElem;\n    cmsUInt32Number sz;\n\n    NewElem = (_cmsStageMatrixData*) _cmsMallocZero(mpe ->ContextID, sizeof(_cmsStageMatrixData));\n    if (NewElem == NULL) return NULL;\n\n    sz = mpe ->InputChannels * mpe ->OutputChannels;\n\n    NewElem ->Double = (cmsFloat64Number*) _cmsDupMem(mpe ->ContextID, Data ->Double, sz * sizeof(cmsFloat64Number)) ;\n\n    if (Data ->Offset)\n        NewElem ->Offset = (cmsFloat64Number*) _cmsDupMem(mpe ->ContextID,\n                                                Data ->Offset, mpe -> OutputChannels * sizeof(cmsFloat64Number)) ;\n\n    return (void*) NewElem;\n}",
+      "fn_code_pos": [
+        [
+          339,
+          0
+        ],
+        [
+          358,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MatrixElemDup",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid MatrixElemTypeFree(cmsStage* mpe)\n{\n    _cmsStageMatrixData* Data = (_cmsStageMatrixData*) mpe ->Data;\n    if (Data == NULL)\n        return;\n    if (Data ->Double)\n        _cmsFree(mpe ->ContextID, Data ->Double);\n\n    if (Data ->Offset)\n        _cmsFree(mpe ->ContextID, Data ->Offset);\n\n    _cmsFree(mpe ->ContextID, mpe ->Data);\n}",
+      "fn_code_pos": [
+        [
+          361,
+          0
+        ],
+        [
+          374,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MatrixElemTypeFree",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid EvaluateCLUTfloat(const cmsFloat32Number In[], cmsFloat32Number Out[], const cmsStage *mpe)\n{\n    _cmsStageCLutData* Data = (_cmsStageCLutData*) mpe ->Data;\n\n    Data -> Params ->Interpolation.LerpFloat(In, Out, Data->Params);\n}",
+      "fn_code_pos": [
+        [
+          433,
+          0
+        ],
+        [
+          439,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EvaluateCLUTfloat",
+        "parameters": {
+          "In": "cmsFloat32Number",
+          "Out": "cmsFloat32Number",
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid EvaluateCLUTfloatIn16(const cmsFloat32Number In[], cmsFloat32Number Out[], const cmsStage *mpe)\n{\n    _cmsStageCLutData* Data = (_cmsStageCLutData*) mpe ->Data;\n    cmsUInt16Number In16[MAX_STAGE_CHANNELS], Out16[MAX_STAGE_CHANNELS];\n\n    _cmsAssert(mpe ->InputChannels  <= MAX_STAGE_CHANNELS);\n    _cmsAssert(mpe ->OutputChannels <= MAX_STAGE_CHANNELS);\n\n    FromFloatTo16(In, In16, mpe ->InputChannels);\n    Data -> Params ->Interpolation.Lerp16(In16, Out16, Data->Params);\n    From16ToFloat(Out16, Out,  mpe ->OutputChannels);\n}",
+      "fn_code_pos": [
+        [
+          443,
+          0
+        ],
+        [
+          455,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EvaluateCLUTfloatIn16",
+        "parameters": {
+          "In": "cmsFloat32Number",
+          "Out": "cmsFloat32Number",
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number CubeSize(const cmsUInt32Number Dims[], cmsUInt32Number b)\n{\n    cmsUInt32Number rv, dim;\n\n    _cmsAssert(Dims != NULL);\n\n    for (rv = 1; b > 0; b--) {\n\n        dim = Dims[b-1];\n        if (dim <= 1) return 0;  // Error\n\n        rv *= dim;\n\n        // Check for overflow\n        if (rv > UINT_MAX / dim) return 0;\n    }\n\n    return rv;\n}",
+      "fn_code_pos": [
+        [
+          459,
+          0
+        ],
+        [
+          478,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CubeSize",
+        "parameters": {
+          "Dims": "cmsUInt32Number",
+          "b": "cmsUInt32Number"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid* CLUTElemDup(cmsStage* mpe)\n{\n    _cmsStageCLutData* Data = (_cmsStageCLutData*) mpe ->Data;\n    _cmsStageCLutData* NewElem;\n\n\n    NewElem = (_cmsStageCLutData*) _cmsMallocZero(mpe ->ContextID, sizeof(_cmsStageCLutData));\n    if (NewElem == NULL) return NULL;\n\n    NewElem ->nEntries       = Data ->nEntries;\n    NewElem ->HasFloatValues = Data ->HasFloatValues;\n\n    if (Data ->Tab.T) {\n\n        if (Data ->HasFloatValues) {\n            NewElem ->Tab.TFloat = (cmsFloat32Number*) _cmsDupMem(mpe ->ContextID, Data ->Tab.TFloat, Data ->nEntries * sizeof (cmsFloat32Number));\n            if (NewElem ->Tab.TFloat == NULL)\n                goto Error;\n        } else {\n            NewElem ->Tab.T = (cmsUInt16Number*) _cmsDupMem(mpe ->ContextID, Data ->Tab.T, Data ->nEntries * sizeof (cmsUInt16Number));\n            if (NewElem ->Tab.T == NULL)\n                goto Error;\n        }\n    }\n\n    NewElem ->Params   = _cmsComputeInterpParamsEx(mpe ->ContextID,\n                                                   Data ->Params ->nSamples,\n                                                   Data ->Params ->nInputs,\n                                                   Data ->Params ->nOutputs,\n                                                   NewElem ->Tab.T,\n                                                   Data ->Params ->dwFlags);\n    if (NewElem->Params != NULL)\n        return (void*) NewElem;\n Error:\n    if (NewElem->Tab.T)\n        // This works for both types\n        _cmsFree(mpe ->ContextID, NewElem -> Tab.T);\n    _cmsFree(mpe ->ContextID, NewElem);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          480,
+          0
+        ],
+        [
+          520,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CLUTElemDup",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid CLutElemTypeFree(cmsStage* mpe)\n{\n\n    _cmsStageCLutData* Data = (_cmsStageCLutData*) mpe ->Data;\n\n    // Already empty\n    if (Data == NULL) return;\n\n    // This works for both types\n    if (Data -> Tab.T)\n        _cmsFree(mpe ->ContextID, Data -> Tab.T);\n\n    _cmsFreeInterpParams(Data ->Params);\n    _cmsFree(mpe ->ContextID, mpe ->Data);\n}",
+      "fn_code_pos": [
+        [
+          523,
+          0
+        ],
+        [
+          538,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CLutElemTypeFree",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nint IdentitySampler(CMSREGISTER const cmsUInt16Number In[], CMSREGISTER cmsUInt16Number Out[], CMSREGISTER void * Cargo)\n{\n    int nChan = *(int*) Cargo;\n    int i;\n\n    for (i=0; i < nChan; i++)\n        Out[i] = In[i];\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          695,
+          0
+        ],
+        [
+          705,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "IdentitySampler",
+        "parameters": {
+          "In": "CMSREGISTER",
+          "Out": "CMSREGISTER",
+          "void": "CMSREGISTER"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cmsUInt16Number CMSEXPORT _cmsQuantizeVal(cmsFloat64Number i, cmsUInt32Number MaxSamples)\n{\n    cmsFloat64Number x;\n\n    x = ((cmsFloat64Number) i * 65535.) / (cmsFloat64Number) (MaxSamples - 1);\n    return _cmsQuickSaturateWord(x);\n}",
+      "fn_code_pos": [
+        [
+          732,
+          0
+        ],
+        [
+          738,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsQuantizeVal",
+        "parameters": {
+          "i": "cmsFloat64Number",
+          "MaxSamples": "cmsUInt32Number"
+        },
+        "return_type": "cmsUInt16Number"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsStageSampleCLut16bit(cmsStage* mpe, cmsSAMPLER16 Sampler, void * Cargo, cmsUInt32Number dwFlags)\n{\n    int i, t, index, rest;\n    cmsUInt32Number nTotalPoints;\n    cmsUInt32Number nInputs, nOutputs;\n    cmsUInt32Number* nSamples;\n    cmsUInt16Number In[MAX_INPUT_DIMENSIONS+1], Out[MAX_STAGE_CHANNELS];\n    _cmsStageCLutData* clut;\n\n    if (mpe == NULL) return FALSE;\n\n    clut = (_cmsStageCLutData*) mpe->Data;\n\n    if (clut == NULL) return FALSE;\n\n    nSamples = clut->Params ->nSamples;\n    nInputs  = clut->Params ->nInputs;\n    nOutputs = clut->Params ->nOutputs;\n\n    if (nInputs <= 0) return FALSE;\n    if (nOutputs <= 0) return FALSE;\n    if (nInputs > MAX_INPUT_DIMENSIONS) return FALSE;\n    if (nOutputs >= MAX_STAGE_CHANNELS) return FALSE;\n\n    memset(In, 0, sizeof(In));\n    memset(Out, 0, sizeof(Out));\n\n    nTotalPoints = CubeSize(nSamples, nInputs);\n    if (nTotalPoints == 0) return FALSE;\n\n    index = 0;\n    for (i = 0; i < (int) nTotalPoints; i++) {\n\n        rest = i;\n        for (t = (int)nInputs - 1; t >= 0; --t) {\n\n            cmsUInt32Number  Colorant = rest % nSamples[t];\n\n            rest /= nSamples[t];\n\n            In[t] = _cmsQuantizeVal(Colorant, nSamples[t]);\n        }\n\n        if (clut ->Tab.T != NULL) {\n            for (t = 0; t < (int)nOutputs; t++)\n                Out[t] = clut->Tab.T[index + t];\n        }\n\n        if (!Sampler(In, Out, Cargo))\n            return FALSE;\n\n        if (!(dwFlags & SAMPLER_INSPECT)) {\n\n            if (clut ->Tab.T != NULL) {\n                for (t=0; t < (int) nOutputs; t++)\n                    clut->Tab.T[index + t] = Out[t];\n            }\n        }\n\n        index += nOutputs;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          743,
+          0
+        ],
+        [
+          806,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsStageSampleCLut16bit",
+        "parameters": {
+          "mpe": "cmsStage",
+          "Sampler": "cmsSAMPLER16",
+          "Cargo": "void",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsStageSampleCLutFloat(cmsStage* mpe, cmsSAMPLERFLOAT Sampler, void * Cargo, cmsUInt32Number dwFlags)\n{\n    int i, t, index, rest;\n    cmsUInt32Number nTotalPoints;\n    cmsUInt32Number nInputs, nOutputs;\n    cmsUInt32Number* nSamples;\n    cmsFloat32Number In[MAX_INPUT_DIMENSIONS+1], Out[MAX_STAGE_CHANNELS];\n    _cmsStageCLutData* clut = (_cmsStageCLutData*) mpe->Data;\n\n    nSamples = clut->Params ->nSamples;\n    nInputs  = clut->Params ->nInputs;\n    nOutputs = clut->Params ->nOutputs;\n\n    if (nInputs <= 0) return FALSE;\n    if (nOutputs <= 0) return FALSE;\n    if (nInputs  > MAX_INPUT_DIMENSIONS) return FALSE;\n    if (nOutputs >= MAX_STAGE_CHANNELS) return FALSE;\n\n    nTotalPoints = CubeSize(nSamples, nInputs);\n    if (nTotalPoints == 0) return FALSE;\n\n    index = 0;\n    for (i = 0; i < (int)nTotalPoints; i++) {\n\n        rest = i;\n        for (t = (int) nInputs-1; t >=0; --t) {\n\n            cmsUInt32Number  Colorant = rest % nSamples[t];\n\n            rest /= nSamples[t];\n\n            In[t] =  (cmsFloat32Number) (_cmsQuantizeVal(Colorant, nSamples[t]) / 65535.0);\n        }\n\n        if (clut ->Tab.TFloat != NULL) {\n            for (t=0; t < (int) nOutputs; t++)\n                Out[t] = clut->Tab.TFloat[index + t];\n        }\n\n        if (!Sampler(In, Out, Cargo))\n            return FALSE;\n\n        if (!(dwFlags & SAMPLER_INSPECT)) {\n\n            if (clut ->Tab.TFloat != NULL) {\n                for (t=0; t < (int) nOutputs; t++)\n                    clut->Tab.TFloat[index + t] = Out[t];\n            }\n        }\n\n        index += nOutputs;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          809,
+          0
+        ],
+        [
+          863,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsStageSampleCLutFloat",
+        "parameters": {
+          "mpe": "cmsStage",
+          "Sampler": "cmsSAMPLERFLOAT",
+          "Cargo": "void",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsSliceSpace16(cmsUInt32Number nInputs, const cmsUInt32Number clutPoints[],\n                                         cmsSAMPLER16 Sampler, void * Cargo)\n{\n    int i, t, rest;\n    cmsUInt32Number nTotalPoints;\n    cmsUInt16Number In[cmsMAXCHANNELS];\n\n    if (nInputs >= cmsMAXCHANNELS) return FALSE;\n\n    nTotalPoints = CubeSize(clutPoints, nInputs);\n    if (nTotalPoints == 0) return FALSE;\n\n    for (i = 0; i < (int) nTotalPoints; i++) {\n\n        rest = i;\n        for (t = (int) nInputs-1; t >=0; --t) {\n\n            cmsUInt32Number  Colorant = rest % clutPoints[t];\n\n            rest /= clutPoints[t];\n            In[t] = _cmsQuantizeVal(Colorant, clutPoints[t]);\n\n        }\n\n        if (!Sampler(In, NULL, Cargo))\n            return FALSE;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          869,
+          0
+        ],
+        [
+          898,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSliceSpace16",
+        "parameters": {
+          "nInputs": "cmsUInt32Number",
+          "clutPoints": "cmsUInt32Number",
+          "Sampler": "cmsSAMPLER16",
+          "Cargo": "void"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsInt32Number CMSEXPORT cmsSliceSpaceFloat(cmsUInt32Number nInputs, const cmsUInt32Number clutPoints[],\n                                            cmsSAMPLERFLOAT Sampler, void * Cargo)\n{\n    int i, t, rest;\n    cmsUInt32Number nTotalPoints;\n    cmsFloat32Number In[cmsMAXCHANNELS];\n\n    if (nInputs >= cmsMAXCHANNELS) return FALSE;\n\n    nTotalPoints = CubeSize(clutPoints, nInputs);\n    if (nTotalPoints == 0) return FALSE;\n\n    for (i = 0; i < (int) nTotalPoints; i++) {\n\n        rest = i;\n        for (t = (int) nInputs-1; t >=0; --t) {\n\n            cmsUInt32Number  Colorant = rest % clutPoints[t];\n\n            rest /= clutPoints[t];\n            In[t] =  (cmsFloat32Number) (_cmsQuantizeVal(Colorant, clutPoints[t]) / 65535.0);\n\n        }\n\n        if (!Sampler(In, NULL, Cargo))\n            return FALSE;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          900,
+          0
+        ],
+        [
+          929,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsSliceSpaceFloat",
+        "parameters": {
+          "nInputs": "cmsUInt32Number",
+          "clutPoints": "cmsUInt32Number",
+          "Sampler": "cmsSAMPLERFLOAT",
+          "Cargo": "void"
+        },
+        "return_type": "cmsInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid EvaluateLab2XYZ(const cmsFloat32Number In[],\n                     cmsFloat32Number Out[],\n                     const cmsStage *mpe)\n{\n    cmsCIELab Lab;\n    cmsCIEXYZ XYZ;\n    const cmsFloat64Number XYZadj = MAX_ENCODEABLE_XYZ;\n\n    // V4 rules\n    Lab.L = In[0] * 100.0;\n    Lab.a = In[1] * 255.0 - 128.0;\n    Lab.b = In[2] * 255.0 - 128.0;\n\n    cmsLab2XYZ(NULL, &XYZ, &Lab);\n\n    // From XYZ, range 0..19997 to 0..1.0, note that 1.99997 comes from 0xffff\n    // encoded as 1.15 fixed point, so 1 + (32767.0 / 32768.0)\n\n    Out[0] = (cmsFloat32Number) ((cmsFloat64Number) XYZ.X / XYZadj);\n    Out[1] = (cmsFloat32Number) ((cmsFloat64Number) XYZ.Y / XYZadj);\n    Out[2] = (cmsFloat32Number) ((cmsFloat64Number) XYZ.Z / XYZadj);\n    return;\n\n    cmsUNUSED_PARAMETER(mpe);\n}",
+      "fn_code_pos": [
+        [
+          936,
+          0
+        ],
+        [
+          961,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EvaluateLab2XYZ",
+        "parameters": {
+          "In": "cmsFloat32Number",
+          "Out": "cmsFloat32Number",
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsStage* _cmsStageAllocLabV2ToV4curves(cmsContext ContextID)\n{\n    cmsStage* mpe;\n    cmsToneCurve* LabTable[3];\n    int i, j;\n\n    LabTable[0] = cmsBuildTabulatedToneCurve16(ContextID, 258, NULL);\n    LabTable[1] = cmsBuildTabulatedToneCurve16(ContextID, 258, NULL);\n    LabTable[2] = cmsBuildTabulatedToneCurve16(ContextID, 258, NULL);\n\n    for (j=0; j < 3; j++) {\n\n        if (LabTable[j] == NULL) {\n            cmsFreeToneCurveTriple(LabTable);\n            return NULL;\n        }\n\n        // We need to map * (0xffff / 0xff00), that's same as (257 / 256)\n        // So we can use 258-entry tables to do the trick (i / 257) * (255 * 257) * (257 / 256);\n        for (i=0; i < 257; i++)  {\n\n            LabTable[j]->Table16[i] = (cmsUInt16Number) ((i * 0xffff + 0x80) >> 8);\n        }\n\n        LabTable[j] ->Table16[257] = 0xffff;\n    }\n\n    mpe = cmsStageAllocToneCurves(ContextID, 3, LabTable);\n    cmsFreeToneCurveTriple(LabTable);\n\n    if (mpe == NULL) return NULL;\n    mpe ->Implements = cmsSigLabV2toV4;\n    return mpe;\n}",
+      "fn_code_pos": [
+        [
+          978,
+          0
+        ],
+        [
+          1011,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageAllocLabV2ToV4curves",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsStage"
+      }
+    },
+    {
+      "fn_code": "cmsStage* _cmsStageNormalizeFromLabFloat(cmsContext ContextID)\n{\n    static const cmsFloat64Number a1[] = {\n        1.0/100.0, 0, 0,\n        0, 1.0/255.0, 0,\n        0, 0, 1.0/255.0\n    };\n\n    static const cmsFloat64Number o1[] = {\n        0,\n        128.0/255.0,\n        128.0/255.0\n    };\n\n    cmsStage *mpe = cmsStageAllocMatrix(ContextID, 3, 3, a1, o1);\n\n    if (mpe == NULL) return mpe;\n    mpe ->Implements = cmsSigLab2FloatPCS;\n    return mpe;\n}",
+      "fn_code_pos": [
+        [
+          1052,
+          0
+        ],
+        [
+          1071,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageNormalizeFromLabFloat",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsStage"
+      }
+    },
+    {
+      "fn_code": "cmsStage* _cmsStageNormalizeFromXyzFloat(cmsContext ContextID)\n{\n#define n (32768.0/65535.0)\n    static const cmsFloat64Number a1[] = {\n        n, 0, 0,\n        0, n, 0,\n        0, 0, n\n    };\n#undef n\n\n    cmsStage *mpe =  cmsStageAllocMatrix(ContextID, 3, 3, a1, NULL);\n\n    if (mpe == NULL) return mpe;\n    mpe ->Implements = cmsSigXYZ2FloatPCS;\n    return mpe;\n}",
+      "fn_code_pos": [
+        [
+          1074,
+          0
+        ],
+        [
+          1089,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageNormalizeFromXyzFloat",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsStage"
+      }
+    },
+    {
+      "fn_code": "cmsStage* _cmsStageNormalizeToLabFloat(cmsContext ContextID)\n{\n    static const cmsFloat64Number a1[] = {\n        100.0, 0, 0,\n        0, 255.0, 0,\n        0, 0, 255.0\n    };\n\n    static const cmsFloat64Number o1[] = {\n        0,\n        -128.0,\n        -128.0\n    };\n\n    cmsStage *mpe =  cmsStageAllocMatrix(ContextID, 3, 3, a1, o1);\n    if (mpe == NULL) return mpe;\n    mpe ->Implements = cmsSigFloatPCS2Lab;\n    return mpe;\n}",
+      "fn_code_pos": [
+        [
+          1091,
+          0
+        ],
+        [
+          1109,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageNormalizeToLabFloat",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsStage"
+      }
+    },
+    {
+      "fn_code": "cmsStage* _cmsStageNormalizeToXyzFloat(cmsContext ContextID)\n{\n#define n (65535.0/32768.0)\n\n    static const cmsFloat64Number a1[] = {\n        n, 0, 0,\n        0, n, 0,\n        0, 0, n\n    };\n#undef n\n\n    cmsStage *mpe = cmsStageAllocMatrix(ContextID, 3, 3, a1, NULL);\n    if (mpe == NULL) return mpe;\n    mpe ->Implements = cmsSigFloatPCS2XYZ;\n    return mpe;\n}",
+      "fn_code_pos": [
+        [
+          1111,
+          0
+        ],
+        [
+          1126,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageNormalizeToXyzFloat",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsStage"
+      }
+    },
+    {
+      "fn_code": "static\nvoid Clipper(const cmsFloat32Number In[], cmsFloat32Number Out[], const cmsStage *mpe)\n{\n       cmsUInt32Number i;\n       for (i = 0; i < mpe->InputChannels; i++) {\n\n              cmsFloat32Number n = In[i];\n              Out[i] = n < 0 ? 0 : n;\n       }\n}",
+      "fn_code_pos": [
+        [
+          1129,
+          0
+        ],
+        [
+          1138,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Clipper",
+        "parameters": {
+          "In": "cmsFloat32Number",
+          "Out": "cmsFloat32Number",
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsStage*  _cmsStageClipNegatives(cmsContext ContextID, cmsUInt32Number nChannels)\n{\n       return _cmsStageAllocPlaceholder(ContextID, cmsSigClipNegativesElemType,\n              nChannels, nChannels, Clipper, NULL, NULL, NULL);\n}",
+      "fn_code_pos": [
+        [
+          1140,
+          0
+        ],
+        [
+          1144,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageClipNegatives",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nChannels": "cmsUInt32Number"
+        },
+        "return_type": "cmsStage"
+      }
+    },
+    {
+      "fn_code": "static\nvoid EvaluateXYZ2Lab(const cmsFloat32Number In[], cmsFloat32Number Out[], const cmsStage *mpe)\n{\n    cmsCIELab Lab;\n    cmsCIEXYZ XYZ;\n    const cmsFloat64Number XYZadj = MAX_ENCODEABLE_XYZ;\n\n    // From 0..1.0 to XYZ\n\n    XYZ.X = In[0] * XYZadj;\n    XYZ.Y = In[1] * XYZadj;\n    XYZ.Z = In[2] * XYZadj;\n\n    cmsXYZ2Lab(NULL, &Lab, &XYZ);\n\n    // From V4 Lab to 0..1.0\n\n    Out[0] = (cmsFloat32Number) (Lab.L / 100.0);\n    Out[1] = (cmsFloat32Number) ((Lab.a + 128.0) / 255.0);\n    Out[2] = (cmsFloat32Number) ((Lab.b + 128.0) / 255.0);\n    return;\n\n    cmsUNUSED_PARAMETER(mpe);\n}",
+      "fn_code_pos": [
+        [
+          1150,
+          0
+        ],
+        [
+          1173,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EvaluateXYZ2Lab",
+        "parameters": {
+          "In": "cmsFloat32Number",
+          "Out": "cmsFloat32Number",
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsStage* _cmsStageAllocLabPrelin(cmsContext ContextID)\n{\n    cmsToneCurve* LabTable[3];\n    cmsFloat64Number Params[1] =  {2.4} ;\n\n    LabTable[0] = cmsBuildGamma(ContextID, 1.0);\n    LabTable[1] = cmsBuildParametricToneCurve(ContextID, 108, Params);\n    LabTable[2] = cmsBuildParametricToneCurve(ContextID, 108, Params);\n\n    return cmsStageAllocToneCurves(ContextID, 3, LabTable);\n}",
+      "fn_code_pos": [
+        [
+          1185,
+          0
+        ],
+        [
+          1195,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageAllocLabPrelin",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": "cmsStage"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsStageFree(cmsStage* mpe)\n{\n    if (mpe ->FreePtr)\n        mpe ->FreePtr(mpe);\n\n    _cmsFree(mpe ->ContextID, mpe);\n}",
+      "fn_code_pos": [
+        [
+          1199,
+          0
+        ],
+        [
+          1205,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsStageFree",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number  CMSEXPORT cmsStageInputChannels(const cmsStage* mpe)\n{\n    return mpe ->InputChannels;\n}",
+      "fn_code_pos": [
+        [
+          1208,
+          0
+        ],
+        [
+          1211,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsStageInputChannels",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number  CMSEXPORT cmsStageOutputChannels(const cmsStage* mpe)\n{\n    return mpe ->OutputChannels;\n}",
+      "fn_code_pos": [
+        [
+          1213,
+          0
+        ],
+        [
+          1216,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsStageOutputChannels",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsStageSignature CMSEXPORT cmsStageType(const cmsStage* mpe)\n{\n    return mpe -> Type;\n}",
+      "fn_code_pos": [
+        [
+          1218,
+          0
+        ],
+        [
+          1221,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsStageType",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": "cmsStageSignature"
+      }
+    },
+    {
+      "fn_code": "void* CMSEXPORT cmsStageData(const cmsStage* mpe)\n{\n    return mpe -> Data;\n}",
+      "fn_code_pos": [
+        [
+          1223,
+          0
+        ],
+        [
+          1226,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsStageData",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsContext CMSEXPORT cmsGetStageContextID(const cmsStage* mpe)\n{\n    return mpe -> ContextID;\n}",
+      "fn_code_pos": [
+        [
+          1228,
+          0
+        ],
+        [
+          1231,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetStageContextID",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": "cmsContext"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool BlessLUT(cmsPipeline* lut)\n{\n    // We can set the input/output channels only if we have elements.\n    if (lut ->Elements != NULL) {\n\n        cmsStage* prev;\n        cmsStage* next;\n        cmsStage* First;\n        cmsStage* Last;\n\n        First  = cmsPipelineGetPtrToFirstStage(lut);\n        Last   = cmsPipelineGetPtrToLastStage(lut);\n\n        if (First == NULL || Last == NULL) return FALSE;\n\n        lut->InputChannels = First->InputChannels;\n        lut->OutputChannels = Last->OutputChannels;\n\n        // Check chain consistency\n        prev = First;\n        next = prev->Next;\n\n        while (next != NULL)\n        {\n            if (next->InputChannels != prev->OutputChannels)\n                return FALSE;\n\n            next = next->Next;\n            prev = prev->Next;\n    }\n}\n\n    return TRUE;    \n}",
+      "fn_code_pos": [
+        [
+          1279,
+          0
+        ],
+        [
+          1313,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BlessLUT",
+        "parameters": {
+          "lut": "cmsPipeline"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid _LUTeval16(CMSREGISTER const cmsUInt16Number In[], CMSREGISTER cmsUInt16Number Out[],  CMSREGISTER const void* D)\n{\n    cmsPipeline* lut = (cmsPipeline*) D;\n    cmsStage *mpe;\n    cmsFloat32Number Storage[2][MAX_STAGE_CHANNELS];\n    int Phase = 0, NextPhase;\n\n    From16ToFloat(In, &Storage[Phase][0], lut ->InputChannels);\n\n    for (mpe = lut ->Elements;\n         mpe != NULL;\n         mpe = mpe ->Next) {\n\n             NextPhase = Phase ^ 1;\n             mpe ->EvalPtr(&Storage[Phase][0], &Storage[NextPhase][0], mpe);\n             Phase = NextPhase;\n    }\n\n\n    FromFloatTo16(&Storage[Phase][0], Out, lut ->OutputChannels);\n}",
+      "fn_code_pos": [
+        [
+          1317,
+          0
+        ],
+        [
+          1338,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_LUTeval16",
+        "parameters": {
+          "In": "CMSREGISTER",
+          "Out": "CMSREGISTER",
+          "void": "CMSREGISTER"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid _LUTevalFloat(const cmsFloat32Number In[], cmsFloat32Number Out[], const void* D)\n{\n    cmsPipeline* lut = (cmsPipeline*) D;\n    cmsStage *mpe;\n    cmsFloat32Number Storage[2][MAX_STAGE_CHANNELS];\n    int Phase = 0, NextPhase;\n\n    memmove(&Storage[Phase][0], In, lut ->InputChannels  * sizeof(cmsFloat32Number));\n\n    for (mpe = lut ->Elements;\n         mpe != NULL;\n         mpe = mpe ->Next) {\n\n              NextPhase = Phase ^ 1;\n              mpe ->EvalPtr(&Storage[Phase][0], &Storage[NextPhase][0], mpe);\n              Phase = NextPhase;\n    }\n\n    memmove(Out, &Storage[Phase][0], lut ->OutputChannels * sizeof(cmsFloat32Number));\n}",
+      "fn_code_pos": [
+        [
+          1343,
+          0
+        ],
+        [
+          1363,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_LUTevalFloat",
+        "parameters": {
+          "In": "cmsFloat32Number",
+          "Out": "cmsFloat32Number",
+          "D": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsContext CMSEXPORT cmsGetPipelineContextID(const cmsPipeline* lut)\n{\n    _cmsAssert(lut != NULL);\n    return lut ->ContextID;\n}",
+      "fn_code_pos": [
+        [
+          1397,
+          0
+        ],
+        [
+          1401,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetPipelineContextID",
+        "parameters": {
+          "lut": "cmsPipeline"
+        },
+        "return_type": "cmsContext"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsPipelineInputChannels(const cmsPipeline* lut)\n{\n    _cmsAssert(lut != NULL);\n    return lut ->InputChannels;\n}",
+      "fn_code_pos": [
+        [
+          1403,
+          0
+        ],
+        [
+          1407,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPipelineInputChannels",
+        "parameters": {
+          "lut": "cmsPipeline"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsPipelineOutputChannels(const cmsPipeline* lut)\n{\n    _cmsAssert(lut != NULL);\n    return lut ->OutputChannels;\n}",
+      "fn_code_pos": [
+        [
+          1409,
+          0
+        ],
+        [
+          1413,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPipelineOutputChannels",
+        "parameters": {
+          "lut": "cmsPipeline"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsPipelineFree(cmsPipeline* lut)\n{\n    cmsStage *mpe, *Next;\n\n    if (lut == NULL) return;\n\n    for (mpe = lut ->Elements;\n        mpe != NULL;\n        mpe = Next) {\n\n            Next = mpe ->Next;\n            cmsStageFree(mpe);\n    }\n\n    if (lut ->FreeDataFn) lut ->FreeDataFn(lut ->ContextID, lut ->Data);\n\n    _cmsFree(lut ->ContextID, lut);\n}",
+      "fn_code_pos": [
+        [
+          1416,
+          0
+        ],
+        [
+          1433,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPipelineFree",
+        "parameters": {
+          "lut": "cmsPipeline"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsPipelineEval16(const cmsUInt16Number In[], cmsUInt16Number Out[],  const cmsPipeline* lut)\n{\n    _cmsAssert(lut != NULL);\n    lut ->Eval16Fn(In, Out, lut->Data);\n}",
+      "fn_code_pos": [
+        [
+          1437,
+          0
+        ],
+        [
+          1441,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPipelineEval16",
+        "parameters": {
+          "In": "cmsUInt16Number",
+          "Out": "cmsUInt16Number",
+          "lut": "cmsPipeline"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsPipelineEvalFloat(const cmsFloat32Number In[], cmsFloat32Number Out[], const cmsPipeline* lut)\n{\n    _cmsAssert(lut != NULL);\n    lut ->EvalFloatFn(In, Out, lut);\n}",
+      "fn_code_pos": [
+        [
+          1445,
+          0
+        ],
+        [
+          1449,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPipelineEvalFloat",
+        "parameters": {
+          "In": "cmsFloat32Number",
+          "Out": "cmsFloat32Number",
+          "lut": "cmsPipeline"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int CMSEXPORT cmsPipelineInsertStage(cmsPipeline* lut, cmsStageLoc loc, cmsStage* mpe)\n{\n    cmsStage* Anterior = NULL, *pt;\n\n    if (lut == NULL || mpe == NULL)\n        return FALSE;\n\n    switch (loc) {\n\n        case cmsAT_BEGIN:\n            mpe ->Next = lut ->Elements;\n            lut ->Elements = mpe;\n            break;\n\n        case cmsAT_END:\n\n            if (lut ->Elements == NULL)\n                lut ->Elements = mpe;\n            else {\n\n                for (pt = lut ->Elements;\n                     pt != NULL;\n                     pt = pt -> Next) Anterior = pt;\n                \n                Anterior ->Next = mpe;\n                mpe ->Next = NULL;\n            }\n            break;\n        default:;\n            return FALSE;\n    }\n\n    return BlessLUT(lut);    \n}",
+      "fn_code_pos": [
+        [
+          1509,
+          0
+        ],
+        [
+          1542,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPipelineInsertStage",
+        "parameters": {
+          "lut": "cmsPipeline",
+          "loc": "cmsStageLoc",
+          "mpe": "cmsStage"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT cmsPipelineUnlinkStage(cmsPipeline* lut, cmsStageLoc loc, cmsStage** mpe)\n{\n    cmsStage *Anterior, *pt, *Last;\n    cmsStage *Unlinked = NULL;\n\n\n    // If empty LUT, there is nothing to remove\n    if (lut ->Elements == NULL) {\n        if (mpe) *mpe = NULL;\n        return;\n    }\n\n    // On depending on the strategy...\n    switch (loc) {\n\n        case cmsAT_BEGIN:\n            {\n                cmsStage* elem = lut ->Elements;\n\n                lut ->Elements = elem -> Next;\n                elem ->Next = NULL;\n                Unlinked = elem;\n\n            }\n            break;\n\n        case cmsAT_END:\n            Anterior = Last = NULL;\n            for (pt = lut ->Elements;\n                pt != NULL;\n                pt = pt -> Next) {\n                    Anterior = Last;\n                    Last = pt;\n            }\n\n            Unlinked = Last;  // Next already points to NULL\n\n            // Truncate the chain\n            if (Anterior)\n                Anterior ->Next = NULL;\n            else\n                lut ->Elements = NULL;\n            break;\n        default:;\n    }\n\n    if (mpe)\n        *mpe = Unlinked;\n    else\n        cmsStageFree(Unlinked);\n\n    // May fail, but we ignore it\n    BlessLUT(lut);\n}",
+      "fn_code_pos": [
+        [
+          1545,
+          0
+        ],
+        [
+          1598,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPipelineUnlinkStage",
+        "parameters": {
+          "lut": "cmsPipeline",
+          "loc": "cmsStageLoc",
+          "mpe": "cmsStage"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cmsBool  CMSEXPORT cmsPipelineCat(cmsPipeline* l1, const cmsPipeline* l2)\n{\n    cmsStage* mpe;\n\n    // If both LUTS does not have elements, we need to inherit\n    // the number of channels\n    if (l1 ->Elements == NULL && l2 ->Elements == NULL) {\n        l1 ->InputChannels  = l2 ->InputChannels;\n        l1 ->OutputChannels = l2 ->OutputChannels;\n    }\n\n    // Cat second\n    for (mpe = l2 ->Elements;\n         mpe != NULL;\n         mpe = mpe ->Next) {\n\n            // We have to dup each element\n            if (!cmsPipelineInsertStage(l1, cmsAT_END, cmsStageDup(mpe)))\n                return FALSE;\n    }\n\n    return BlessLUT(l1);    \n}",
+      "fn_code_pos": [
+        [
+          1602,
+          0
+        ],
+        [
+          1624,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPipelineCat",
+        "parameters": {
+          "l1": "cmsPipeline",
+          "l2": "cmsPipeline"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsPipelineSetSaveAs8bitsFlag(cmsPipeline* lut, cmsBool On)\n{\n    cmsBool Anterior = lut ->SaveAs8Bits;\n\n    lut ->SaveAs8Bits = On;\n    return Anterior;\n}",
+      "fn_code_pos": [
+        [
+          1627,
+          0
+        ],
+        [
+          1633,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPipelineSetSaveAs8bitsFlag",
+        "parameters": {
+          "lut": "cmsPipeline",
+          "On": "cmsBool"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsPipelineStageCount(const cmsPipeline* lut)\n{\n    cmsStage *mpe;\n    cmsUInt32Number n;\n\n    for (n=0, mpe = lut ->Elements; mpe != NULL; mpe = mpe ->Next)\n            n++;\n\n    return n;\n}",
+      "fn_code_pos": [
+        [
+          1651,
+          0
+        ],
+        [
+          1660,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPipelineStageCount",
+        "parameters": {
+          "lut": "cmsPipeline"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "void CMSEXPORT _cmsPipelineSetOptimizationParameters(cmsPipeline* Lut,\n                                        _cmsPipelineEval16Fn Eval16,\n                                        void* PrivateData,\n                                        _cmsFreeUserDataFn FreePrivateDataFn,\n                                        _cmsDupUserDataFn  DupPrivateDataFn)\n{\n\n    Lut ->Eval16Fn = Eval16;\n    Lut ->DupDataFn = DupPrivateDataFn;\n    Lut ->FreeDataFn = FreePrivateDataFn;\n    Lut ->Data = PrivateData;\n}",
+      "fn_code_pos": [
+        [
+          1664,
+          0
+        ],
+        [
+          1675,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsPipelineSetOptimizationParameters",
+        "parameters": {
+          "Lut": "cmsPipeline",
+          "Eval16": "_cmsPipelineEval16Fn",
+          "PrivateData": "void",
+          "FreePrivateDataFn": "_cmsFreeUserDataFn",
+          "DupPrivateDataFn": "_cmsDupUserDataFn"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid IncDelta(cmsFloat32Number *Val)\n{\n    if (*Val < (1.0 - JACOBIAN_EPSILON))\n\n        *Val += JACOBIAN_EPSILON;\n\n    else\n        *Val -= JACOBIAN_EPSILON;\n\n}",
+      "fn_code_pos": [
+        [
+          1704,
+          0
+        ],
+        [
+          1714,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "IncDelta",
+        "parameters": {
+          "Val": "cmsFloat32Number"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsFloat32Number EuclideanDistance(cmsFloat32Number a[], cmsFloat32Number b[], int n)\n{\n    cmsFloat32Number sum = 0;\n    int i;\n\n    for (i=0; i < n; i++) {\n        cmsFloat32Number dif = b[i] - a[i];\n        sum +=  dif * dif;\n    }\n\n    return sqrtf(sum);\n}",
+      "fn_code_pos": [
+        [
+          1719,
+          0
+        ],
+        [
+          1731,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "EuclideanDistance",
+        "parameters": {
+          "a": "cmsFloat32Number",
+          "b": "cmsFloat32Number",
+          "n": "int"
+        },
+        "return_type": "cmsFloat32Number"
+      }
+    },
+    {
+      "fn_code": "cmsBool CMSEXPORT cmsPipelineEvalReverseFloat(cmsFloat32Number Target[],\n                                              cmsFloat32Number Result[],\n                                              cmsFloat32Number Hint[],\n                                              const cmsPipeline* lut)\n{\n    cmsUInt32Number  i, j;\n    cmsFloat64Number  error, LastError = 1E20;\n    cmsFloat32Number  fx[4], x[4], xd[4], fxd[4];\n    cmsVEC3 tmp, tmp2;\n    cmsMAT3 Jacobian;\n    \n    // Only 3->3 and 4->3 are supported\n    if (lut ->InputChannels != 3 && lut ->InputChannels != 4) return FALSE;\n    if (lut ->OutputChannels != 3) return FALSE;\n   \n    // Take the hint as starting point if specified\n    if (Hint == NULL) {\n\n        // Begin at any point, we choose 1/3 of CMY axis\n        x[0] = x[1] = x[2] = 0.3f;\n    }\n    else {\n\n        // Only copy 3 channels from hint...\n        for (j=0; j < 3; j++)\n            x[j] = Hint[j];\n    }\n\n    // If Lut is 4-dimensions, then grab target[3], which is fixed\n    if (lut ->InputChannels == 4) {\n        x[3] = Target[3];\n    }\n    else x[3] = 0; // To keep lint happy\n\n\n    // Iterate\n    for (i = 0; i < INVERSION_MAX_ITERATIONS; i++) {\n\n        // Get beginning fx\n        cmsPipelineEvalFloat(x, fx, lut);\n\n        // Compute error\n        error = EuclideanDistance(fx, Target, 3);\n\n        // If not convergent, return last safe value\n        if (error >= LastError)\n            break;\n\n        // Keep latest values\n        LastError     = error;\n        for (j=0; j < lut ->InputChannels; j++)\n                Result[j] = x[j];\n\n        // Found an exact match?\n        if (error <= 0)\n            break;\n\n        // Obtain slope (the Jacobian)\n        for (j = 0; j < 3; j++) {\n\n            xd[0] = x[0];\n            xd[1] = x[1];\n            xd[2] = x[2];\n            xd[3] = x[3];  // Keep fixed channel\n\n            IncDelta(&xd[j]);\n\n            cmsPipelineEvalFloat(xd, fxd, lut);\n\n            Jacobian.v[0].n[j] = ((fxd[0] - fx[0]) / JACOBIAN_EPSILON);\n            Jacobian.v[1].n[j] = ((fxd[1] - fx[1]) / JACOBIAN_EPSILON);\n            Jacobian.v[2].n[j] = ((fxd[2] - fx[2]) / JACOBIAN_EPSILON);\n        }\n\n        // Solve system\n        tmp2.n[0] = fx[0] - Target[0];\n        tmp2.n[1] = fx[1] - Target[1];\n        tmp2.n[2] = fx[2] - Target[2];\n\n        if (!_cmsMAT3solve(&tmp, &Jacobian, &tmp2))\n            return FALSE;\n\n        // Move our guess\n        x[0] -= (cmsFloat32Number) tmp.n[0];\n        x[1] -= (cmsFloat32Number) tmp.n[1];\n        x[2] -= (cmsFloat32Number) tmp.n[2];\n\n        // Some clipping....\n        for (j=0; j < 3; j++) {\n            if (x[j] < 0) x[j] = 0;\n            else\n                if (x[j] > 1.0) x[j] = 1.0;\n        }\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          1743,
+          0
+        ],
+        [
+          1839,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsPipelineEvalReverseFloat",
+        "parameters": {
+          "Target": "cmsFloat32Number",
+          "Result": "cmsFloat32Number",
+          "Hint": "cmsFloat32Number",
+          "lut": "cmsPipeline"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "_cmsStageGetPtrToCurveSet(const cmsStage* mpe)",
+      "fn_dec_pos": [
+        [
+          158,
+          15
+        ],
+        [
+          158,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageGetPtrToCurveSet",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "CurveSetDup(cmsStage* mpe)",
+      "fn_dec_pos": [
+        [
+          208,
+          6
+        ],
+        [
+          208,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CurveSetDup",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "MatrixElemDup(cmsStage* mpe)",
+      "fn_dec_pos": [
+        [
+          340,
+          6
+        ],
+        [
+          340,
+          34
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MatrixElemDup",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "CLUTElemDup(cmsStage* mpe)",
+      "fn_dec_pos": [
+        [
+          481,
+          6
+        ],
+        [
+          481,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CLUTElemDup",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsStageAllocLabV2ToV4curves(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          978,
+          10
+        ],
+        [
+          978,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageAllocLabV2ToV4curves",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsStageNormalizeFromLabFloat(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          1052,
+          10
+        ],
+        [
+          1052,
+          62
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageNormalizeFromLabFloat",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsStageNormalizeFromXyzFloat(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          1074,
+          10
+        ],
+        [
+          1074,
+          62
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageNormalizeFromXyzFloat",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsStageNormalizeToLabFloat(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          1091,
+          10
+        ],
+        [
+          1091,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageNormalizeToLabFloat",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsStageNormalizeToXyzFloat(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          1111,
+          10
+        ],
+        [
+          1111,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageNormalizeToXyzFloat",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsStageClipNegatives(cmsContext ContextID, cmsUInt32Number nChannels)",
+      "fn_dec_pos": [
+        [
+          1140,
+          11
+        ],
+        [
+          1140,
+          82
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageClipNegatives",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nChannels": "cmsUInt32Number"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsStageAllocLabPrelin(cmsContext ContextID)",
+      "fn_dec_pos": [
+        [
+          1185,
+          10
+        ],
+        [
+          1185,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsStageAllocLabPrelin",
+        "parameters": {
+          "ContextID": "cmsContext"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "cmsStageData(const cmsStage* mpe)",
+      "fn_dec_pos": [
+        [
+          1223,
+          16
+        ],
+        [
+          1223,
+          49
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsStageData",
+        "parameters": {
+          "mpe": "cmsStage"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"lcms2_internal.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

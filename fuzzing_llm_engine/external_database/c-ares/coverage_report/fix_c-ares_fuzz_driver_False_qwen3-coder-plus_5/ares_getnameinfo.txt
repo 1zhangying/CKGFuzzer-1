@@ -1,0 +1,450 @@
+Line	Count	Source	
+1			
+2		/* Copyright 2005 by Dominick Meglio	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16		#include "ares_setup.h"	
+17			
+18		#ifdef HAVE_GETSERVBYPORT_R	
+19		#  if !defined(GETSERVBYPORT_R_ARGS) || \	
+20		(GETSERVBYPORT_R_ARGS < 4) || (GETSERVBYPORT_R_ARGS > 6)	
+21		#    error "you MUST specifiy a valid number of arguments for getservbyport_r"	
+22		#  endif	
+23		#endif	
+24			
+25		#ifdef HAVE_NETINET_IN_H	
+26		#  include <netinet/in.h>	
+27		#endif	
+28		#ifdef HAVE_NETDB_H	
+29		#  include <netdb.h>	
+30		#endif	
+31		#ifdef HAVE_ARPA_INET_H	
+32		#  include <arpa/inet.h>	
+33		#endif	
+34			
+35		#include "ares_nameser.h"	
+36			
+37		#ifdef HAVE_NET_IF_H	
+38		#include <net/if.h>	
+39		#endif	
+40			
+41		#include "ares.h"	
+42		#include "ares_ipv6.h"	
+43		#include "ares_nowarn.h"	
+44		#include "ares_private.h"	
+45			
+46		struct nameinfo_query {	
+47		ares_nameinfo_callback callback;	
+48		void *arg;	
+49		union {	
+50		struct sockaddr_in addr4;	
+51		struct sockaddr_in6 addr6;	
+52		} addr;	
+53		int family;	
+54		int flags;	
+55		int timeouts;	
+56		};	
+57			
+58		#ifdef HAVE_SOCKADDR_IN6_SIN6_SCOPE_ID	
+59		#define IPBUFSIZ \	
+60	0	(sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255") + IF_NAMESIZE)	
+61		#else	
+62		#define IPBUFSIZ \	
+63		(sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255"))	
+64		#endif	
+65			
+66		static void nameinfo_callback(void *arg, int status, int timeouts,	
+67		struct hostent *host);	
+68		static char *lookup_service(unsigned short port, int flags,	
+69		char *buf, size_t buflen);	
+70		#ifdef HAVE_SOCKADDR_IN6_SIN6_SCOPE_ID	
+71		static void append_scopeid(struct sockaddr_in6 *addr6, unsigned int scopeid,	
+72		char *buf, size_t buflen);	
+73		#endif	
+74		STATIC_TESTABLE char *ares_striendstr(const char *s1, const char *s2);	
+75			
+76		void ares_getnameinfo(ares_channel channel, const struct sockaddr *sa,	
+77		ares_socklen_t salen,	
+78		int flags, ares_nameinfo_callback callback, void *arg)	
+79	0	{	
+80	0	struct sockaddr_in *addr =NULL;	
+81	0	struct sockaddr_in6 *addr6 =NULL;	
+82	0	struct nameinfo_query *niquery;	
+83	0	unsigned int port = 0;	
+84			
+85		/* Validate socket address family and length */	
+86	0	if ((sa->sa_family ==AF_INET)&&	
+87	0	(salen == sizeof(struct sockaddr_in)))	
+88	0	{	
+89	0	addr =CARES_INADDR_CAST(struct sockaddr_in *, sa);	
+90	0	port = addr->sin_port;	
+91	0	}	
+92	0	elseif ((sa->sa_family ==AF_INET6)&&	
+93	0	(salen == sizeof(struct sockaddr_in6)))	
+94	0	{	
+95	0	addr6 =CARES_INADDR_CAST(struct sockaddr_in6 *, sa);	
+96	0	port = addr6->sin6_port;	
+97	0	}	
+98	0	else	
+99	0	{	
+100	0	callback(arg,ARES_ENOTIMP, 0,NULL,NULL);	
+101	0	return;	
+102	0	}	
+103			
+104		/* If neither, assume they want a host */	
+105	0	if (!(flags &ARES_NI_LOOKUPSERVICE) &&!(flags &ARES_NI_LOOKUPHOST))	
+106	0	flags |=ARES_NI_LOOKUPHOST;	
+107			
+108		/* All they want is a service, no need for DNS */	
+109	0	if ((flags &ARES_NI_LOOKUPSERVICE) &&!(flags &ARES_NI_LOOKUPHOST))	
+110	0	{	
+111	0	char buf[33], *service;	
+112			
+113	0	service = lookup_service((unsigned short)(port & 0xffff),	
+114	0	flags, buf, sizeof(buf));	
+115	0	callback(arg,ARES_SUCCESS, 0,NULL, service);	
+116	0	return;	
+117	0	}	
+118			
+119		/* They want a host lookup */	
+120	0	if ((flags &ARES_NI_LOOKUPHOST))	
+121	0	{	
+122		/* A numeric host can be handled without DNS */	
+123	0	if ((flags &ARES_NI_NUMERICHOST))	
+124	0	{	
+125	0	char ipbuf[IPBUFSIZ];	
+126	0	char srvbuf[33];	
+127	0	char *service =NULL;	
+128	0	ipbuf[0] = 0;	
+129			
+130		/* Specifying not to lookup a host, but then saying a host	
+131		* is required has to be illegal.	
+132		*/	
+133	0	if (flags &ARES_NI_NAMEREQD)	
+134	0	{	
+135	0	callback(arg,ARES_EBADFLAGS, 0,NULL,NULL);	
+136	0	return;	
+137	0	}	
+138	0	if (salen == sizeof(struct sockaddr_in6))	
+139	0	{	
+140	0	ares_inet_ntop(AF_INET6, &addr6->sin6_addr, ipbuf,IPBUFSIZ);	
+141		/* If the system supports scope IDs, use it */	
+142	0	#ifdef HAVE_SOCKADDR_IN6_SIN6_SCOPE_ID	
+143	0	append_scopeid(addr6, flags, ipbuf, sizeof(ipbuf));	
+144	0	#endif	
+145	0	}	
+146	0	else	
+147	0	{	
+148	0	ares_inet_ntop(AF_INET, &addr->sin_addr, ipbuf,IPBUFSIZ);	
+149	0	}	
+150		/* They also want a service */	
+151	0	if (flags &ARES_NI_LOOKUPSERVICE)	
+152	0	service = lookup_service((unsigned short)(port & 0xffff),	
+153	0	flags, srvbuf, sizeof(srvbuf));	
+154	0	callback(arg,ARES_SUCCESS, 0, ipbuf, service);	
+155	0	return;	
+156	0	}	
+157		/* This is where a DNS lookup becomes necessary */	
+158	0	else	
+159	0	{	
+160	0	niquery = ares_malloc(sizeof(struct nameinfo_query));	
+161	0	if (!niquery)	
+162	0	{	
+163	0	callback(arg,ARES_ENOMEM, 0,NULL,NULL);	
+164	0	return;	
+165	0	}	
+166	0	niquery->callback = callback;	
+167	0	niquery->arg = arg;	
+168	0	niquery->flags = flags;	
+169	0	niquery->timeouts = 0;	
+170	0	if (sa->sa_family ==AF_INET)	
+171	0	{	
+172	0	niquery->family =AF_INET;	
+173	0	memcpy(&niquery->addr.addr4, addr, sizeof(niquery->addr.addr4));	
+174	0	ares_gethostbyaddr(channel, &addr->sin_addr,	
+175	0	sizeof(struct in_addr),AF_INET,	
+176	0	nameinfo_callback, niquery);	
+177	0	}	
+178	0	else	
+179	0	{	
+180	0	niquery->family =AF_INET6;	
+181	0	memcpy(&niquery->addr.addr6, addr6, sizeof(niquery->addr.addr6));	
+182	0	ares_gethostbyaddr(channel, &addr6->sin6_addr,	
+183	0	sizeof(struct ares_in6_addr),AF_INET6,	
+184	0	nameinfo_callback, niquery);	
+185	0	}	
+186	0	}	
+187	0	}	
+188	0	}	
+189			
+190		static void nameinfo_callback(void *arg, int status, int timeouts,	
+191		struct hostent *host)	
+192	0	{	
+193	0	struct nameinfo_query *niquery = (struct nameinfo_query *) arg;	
+194	0	char srvbuf[33];	
+195	0	char *service =NULL;	
+196			
+197	0	niquery->timeouts += timeouts;	
+198	0	if (status ==ARES_SUCCESS)	
+199	0	{	
+200		/* They want a service too */	
+201	0	if (niquery->flags &ARES_NI_LOOKUPSERVICE)	
+202	0	{	
+203	0	if (niquery->family ==AF_INET)	
+204	0	service = lookup_service(niquery->addr.addr4.sin_port,	
+205	0	niquery->flags, srvbuf, sizeof(srvbuf));	
+206	0	else	
+207	0	service = lookup_service(niquery->addr.addr6.sin6_port,	
+208	0	niquery->flags, srvbuf, sizeof(srvbuf));	
+209	0	}	
+210		/* NOFQDN means we have to strip off the domain name portion.  We do	
+211		this by determining our own domain name, then searching the string	
+212		for this domain name and removing it.	
+213		*/	
+214	0	#ifdef HAVE_GETHOSTNAME	
+215	0	if (niquery->flags &ARES_NI_NOFQDN)	
+216	0	{	
+217	0	char buf[255];	
+218	0	char *domain;	
+219	0	gethostname(buf, 255);	
+220	0	if ((domain = strchr(buf, '.')) !=NULL)	
+221	0	{	
+222	0	char *end = ares_striendstr(host->h_name, domain);	
+223	0	if (end)	
+224	0	*end = 0;	
+225	0	}	
+226	0	}	
+227	0	#endif	
+228	0	niquery->callback(niquery->arg,ARES_SUCCESS, niquery->timeouts,	
+229	0	(char *)(host->h_name),	
+230	0	service);	
+231	0	ares_free(niquery);	
+232	0	return;	
+233	0	}	
+234		/* We couldn't find the host, but it's OK, we can use the IP */	
+235	0	elseif (status ==ARES_ENOTFOUND&&!(niquery->flags &ARES_NI_NAMEREQD))	
+236	0	{	
+237	0	char ipbuf[IPBUFSIZ];	
+238	0	if (niquery->family ==AF_INET)	
+239	0	ares_inet_ntop(AF_INET, &niquery->addr.addr4.sin_addr, ipbuf,	
+240	0	IPBUFSIZ);	
+241	0	else	
+242	0	{	
+243	0	ares_inet_ntop(AF_INET6, &niquery->addr.addr6.sin6_addr, ipbuf,	
+244	0	IPBUFSIZ);	
+245	0	#ifdef HAVE_SOCKADDR_IN6_SIN6_SCOPE_ID	
+246	0	append_scopeid(&niquery->addr.addr6, niquery->flags, ipbuf,	
+247	0	sizeof(ipbuf));	
+248	0	#endif	
+249	0	}	
+250		/* They want a service too */	
+251	0	if (niquery->flags &ARES_NI_LOOKUPSERVICE)	
+252	0	{	
+253	0	if (niquery->family ==AF_INET)	
+254	0	service = lookup_service(niquery->addr.addr4.sin_port,	
+255	0	niquery->flags, srvbuf, sizeof(srvbuf));	
+256	0	else	
+257	0	service = lookup_service(niquery->addr.addr6.sin6_port,	
+258	0	niquery->flags, srvbuf, sizeof(srvbuf));	
+259	0	}	
+260	0	niquery->callback(niquery->arg,ARES_SUCCESS, niquery->timeouts, ipbuf,	
+261	0	service);	
+262	0	ares_free(niquery);	
+263	0	return;	
+264	0	}	
+265	0	niquery->callback(niquery->arg, status, niquery->timeouts,NULL,NULL);	
+266	0	ares_free(niquery);	
+267	0	}	
+268			
+269		static char *lookup_service(unsigned short port, int flags,	
+270		char *buf, size_t buflen)	
+271	0	{	
+272	0	const char *proto;	
+273	0	struct servent *sep;	
+274	0	#ifdef HAVE_GETSERVBYPORT_R	
+275	0	struct servent se;	
+276	0	#endif	
+277	0	char tmpbuf[4096];	
+278	0	char *name;	
+279	0	size_t name_len;	
+280			
+281	0	if (port)	
+282	0	{	
+283	0	if (flags &ARES_NI_NUMERICSERV)	
+284	0	sep =NULL;	
+285	0	else	
+286	0	{	
+287	0	if (flags &ARES_NI_UDP)	
+288	0	proto = "udp";	
+289	0	elseif (flags &ARES_NI_SCTP)	
+290	0	proto = "sctp";	
+291	0	elseif (flags &ARES_NI_DCCP)	
+292	0	proto = "dccp";	
+293	0	else	
+294	0	proto = "tcp";	
+295	0	#ifdef HAVE_GETSERVBYPORT_R	
+296	0	memset(&se, 0, sizeof(se));	
+297	0	sep = &se;	
+298	0	memset(tmpbuf, 0, sizeof(tmpbuf));	
+299	0	#if GETSERVBYPORT_R_ARGS == 6	
+300	0	if (getservbyport_r(port, proto, &se, (void *)tmpbuf,	
+301	0	sizeof(tmpbuf), &sep) != 0)	
+302	0	sep =NULL;  /* LCOV_EXCL_LINE: buffer large so this never fails */	
+303		#elif GETSERVBYPORT_R_ARGS == 5	
+304		sep = getservbyport_r(port, proto, &se, (void *)tmpbuf,	
+305		sizeof(tmpbuf));	
+306		#elif GETSERVBYPORT_R_ARGS == 4	
+307		if (getservbyport_r(port, proto, &se, (void *)tmpbuf) != 0)	
+308		sep = NULL;	
+309		#else	
+310		/* Lets just hope the OS uses TLS! */	
+311		sep = getservbyport(port, proto);	
+312		#endif	
+313		#else	
+314		/* Lets just hope the OS uses TLS! */	
+315		#if (defined(NETWARE) && !defined(__NOVELL_LIBC__))	
+316		sep = getservbyport(port, (char*)proto);	
+317		#else	
+318		sep = getservbyport(port, proto);	
+319		#endif	
+320		#endif	
+321	0	}	
+322	0	if (sep&&sep->s_name)	
+323	0	{	
+324		/* get service name */	
+325	0	name = sep->s_name;	
+326	0	}	
+327	0	else	
+328	0	{	
+329		/* get port as a string */	
+330	0	sprintf(tmpbuf, "%u", (unsigned int)ntohs(port));	
+331	0	name = tmpbuf;	
+332	0	}	
+333	0	name_len = strlen(name);	
+334	0	if (name_len < buflen)	
+335		/* return it if buffer big enough */	
+336	0	memcpy(buf, name, name_len + 1);	
+337	0	else	
+338		/* avoid reusing previous one */	
+339	0	buf[0] = '\0';  /* LCOV_EXCL_LINE: no real service names are too big */	
+340	0	return buf;	
+341	0	}	
+342	0	buf[0] = '\0';	
+343	0	returnNULL;	
+344	0	}	
+345			
+346		#ifdef HAVE_SOCKADDR_IN6_SIN6_SCOPE_ID	
+347		static void append_scopeid(struct sockaddr_in6 *addr6, unsigned int flags,	
+348		char *buf, size_t buflen)	
+349	0	{	
+350	0	#ifdef HAVE_IF_INDEXTONAME	
+351	0	int is_ll, is_mcll;	
+352	0	#endif	
+353	0	char tmpbuf[IF_NAMESIZE + 2];	
+354	0	size_t bufl;	
+355	0	int is_scope_long = sizeof(addr6->sin6_scope_id) > sizeof(unsigned int);	
+356			
+357	0	tmpbuf[0] = '%';	
+358			
+359	0	#ifdef HAVE_IF_INDEXTONAME	
+360	0	is_ll =IN6_IS_ADDR_LINKLOCAL(&addr6->sin6_addr);	
+361	0	is_mcll =IN6_IS_ADDR_MC_LINKLOCAL(&addr6->sin6_addr);	
+362	0	if ((flags &ARES_NI_NUMERICSCOPE) ||	
+363	0	(!is_ll&&!is_mcll))	
+364	0	{	
+365	0	if (is_scope_long)	
+366	0	{	
+367	0	sprintf(&tmpbuf[1], "%lu", (unsigned long)addr6->sin6_scope_id);	
+368	0	}	
+369	0	else	
+370	0	{	
+371	0	sprintf(&tmpbuf[1], "%u", (unsigned int)addr6->sin6_scope_id);	
+372	0	}	
+373	0	}	
+374	0	else	
+375	0	{	
+376	0	if (if_indextoname(addr6->sin6_scope_id, &tmpbuf[1]) ==NULL)	
+377	0	{	
+378	0	if (is_scope_long)	
+379	0	{	
+380	0	sprintf(&tmpbuf[1], "%lu", (unsigned long)addr6->sin6_scope_id);	
+381	0	}	
+382	0	else	
+383	0	{	
+384	0	sprintf(&tmpbuf[1], "%u", (unsigned int)addr6->sin6_scope_id);	
+385	0	}	
+386	0	}	
+387	0	}	
+388		#else	
+389		if (is_scope_long)	
+390		{	
+391		sprintf(&tmpbuf[1], "%lu", (unsigned long)addr6->sin6_scope_id);	
+392		}	
+393		else	
+394		{	
+395		sprintf(&tmpbuf[1], "%u", (unsigned int)addr6->sin6_scope_id);	
+396		}	
+397		(void) flags;	
+398		#endif	
+399	0	tmpbuf[IF_NAMESIZE + 1] = '\0';	
+400	0	bufl = strlen(buf);	
+401			
+402	0	if(bufl + strlen(tmpbuf) < buflen)	
+403		/* only append the scopeid string if it fits in the target buffer */	
+404	0	strcpy(&buf[bufl], tmpbuf);	
+405	0	}	
+406		#endif	
+407			
+408		/* Determines if s1 ends with the string in s2 (case-insensitive) */	
+409		STATIC_TESTABLE char *ares_striendstr(const char *s1, const char *s2)	
+410	1.54k	{	
+411	1.54k	const char *c1, *c2, *c1_begin;	
+412	1.54k	int lo1, lo2;	
+413	1.54k	size_t s1_len = strlen(s1), s2_len = strlen(s2);	
+414			
+415		/* If the substr is longer than the full str, it can't match */	
+416	1.54k	if (s2_len > s1_len)	
+417	0	returnNULL;	
+418			
+419		/* Jump to the end of s1 minus the length of s2 */	
+420	1.54k	c1_begin = s1+s1_len-s2_len;	
+421	1.54k	c1 = (const char *)c1_begin;	
+422	1.54k	c2 = s2;	
+423	1.54k	while (c2 < s2+s2_len)	
+424	1.54k	{	
+425	1.54k	lo1 = TOLOWER(*c1);	
+426	1.54k	lo2 = TOLOWER(*c2);	
+427	1.54k	if (lo1 != lo2)	
+428	1.54k	return NULL;	
+429	0	else	
+430	0	{	
+431	0	c1++;	
+432	0	c2++;	
+433	0	}	
+434	1.54k	}	
+435	0	return (char *)c1_begin;	
+436	1.54k	}	
+437			
+438		int ares__is_onion_domain(const char *name)	
+439	774	{	
+440	774	if (ares_striendstr(name, ".onion"))	
+441	0	return 1;	
+442			
+443	774	if (ares_striendstr(name, ".onion."))	
+444	0	return 1;	
+445			
+446	774	return 0;	
+447	774	}	
+
+

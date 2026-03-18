@@ -1,0 +1,239 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int ares__parse_into_addrinfo(const unsigned char *abuf,\n                              int alen, int cname_only_is_enodata,\n                              unsigned short port,\n                              struct ares_addrinfo *ai)\n{\n  unsigned int qdcount, ancount;\n  int status, i, rr_type, rr_class, rr_len, rr_ttl;\n  int got_a = 0, got_aaaa = 0, got_cname = 0;\n  long len;\n  const unsigned char *aptr;\n  char *question_hostname = NULL;\n  char *hostname, *rr_name = NULL, *rr_data;\n  struct ares_addrinfo_cname *cname, *cnames = NULL;\n  struct ares_addrinfo_node *nodes = NULL;\n\n  /* Give up if abuf doesn't have room for a header. */\n  if (alen < HFIXEDSZ)\n    return ARES_EBADRESP;\n\n  /* Fetch the question and answer count from the header. */\n  qdcount = DNS_HEADER_QDCOUNT(abuf);\n  ancount = DNS_HEADER_ANCOUNT(abuf);\n  if (qdcount != 1)\n    return ARES_EBADRESP;\n\n\n  /* Expand the name from the question, and skip past the question. */\n  aptr = abuf + HFIXEDSZ;\n  status = ares__expand_name_for_response(aptr, abuf, alen, &question_hostname, &len, 0);\n  if (status != ARES_SUCCESS)\n    return status;\n  if (aptr + len + QFIXEDSZ > abuf + alen)\n    {\n      status = ARES_EBADRESP;\n      goto failed_stat;\n    }\n\n  hostname = question_hostname;\n\n  aptr += len + QFIXEDSZ;\n\n  /* Examine each answer resource record (RR) in turn. */\n  for (i = 0; i < (int)ancount; i++)\n    {\n      /* Decode the RR up to the data field. */\n      status = ares__expand_name_for_response(aptr, abuf, alen, &rr_name, &len, 0);\n      if (status != ARES_SUCCESS)\n        {\n          rr_name = NULL;\n          goto failed_stat;\n        }\n\n      aptr += len;\n      if (aptr + RRFIXEDSZ > abuf + alen)\n        {\n          status = ARES_EBADRESP;\n          goto failed_stat;\n        }\n      rr_type = DNS_RR_TYPE(aptr);\n      rr_class = DNS_RR_CLASS(aptr);\n      rr_len = DNS_RR_LEN(aptr);\n      rr_ttl = DNS_RR_TTL(aptr);\n      aptr += RRFIXEDSZ;\n      if (aptr + rr_len > abuf + alen)\n        {\n          status = ARES_EBADRESP;\n          goto failed_stat;\n        }\n\n      if (rr_class == C_IN && rr_type == T_A\n          && rr_len == sizeof(struct in_addr)\n          && strcasecmp(rr_name, hostname) == 0)\n        {\n          got_a = 1;\n          if (aptr + sizeof(struct in_addr) > abuf + alen)\n          {  /* LCOV_EXCL_START: already checked above */\n            status = ARES_EBADRESP;\n            goto failed_stat;\n          }  /* LCOV_EXCL_STOP */\n\n          status = ares_append_ai_node(AF_INET, port, rr_ttl, aptr, &nodes);\n          if (status != ARES_SUCCESS)\n            goto failed_stat;\n        }\n      else if (rr_class == C_IN && rr_type == T_AAAA\n          && rr_len == sizeof(struct ares_in6_addr)\n          && strcasecmp(rr_name, hostname) == 0)\n        {\n          got_aaaa = 1;\n          if (aptr + sizeof(struct ares_in6_addr) > abuf + alen)\n          {  /* LCOV_EXCL_START: already checked above */\n            status = ARES_EBADRESP;\n            goto failed_stat;\n          }  /* LCOV_EXCL_STOP */\n\n          status = ares_append_ai_node(AF_INET6, port, rr_ttl, aptr, &nodes);\n          if (status != ARES_SUCCESS)\n            goto failed_stat;\n        }\n\n      if (rr_class == C_IN && rr_type == T_CNAME)\n        {\n          got_cname = 1;\n          status = ares__expand_name_for_response(aptr, abuf, alen, &rr_data,\n                                                  &len, 1);\n          if (status != ARES_SUCCESS)\n            {\n              goto failed_stat;\n            }\n\n          /* Decode the RR data and replace the hostname with it. */\n          /* SA: Seems wrong as it introduses order dependency. */\n          hostname = rr_data;\n\n          cname = ares__append_addrinfo_cname(&cnames);\n          if (!cname)\n            {\n              status = ARES_ENOMEM;\n              ares_free(rr_data);\n              goto failed_stat;\n            }\n          cname->ttl = rr_ttl;\n          cname->alias = rr_name;\n          cname->name = rr_data;\n          rr_name = NULL;\n        }\n      else\n        {\n          /* rr_name is only saved for cname */\n          ares_free(rr_name);\n          rr_name = NULL;\n        }\n\n\n      aptr += rr_len;\n      if (aptr > abuf + alen)\n        {  /* LCOV_EXCL_START: already checked above */\n          status = ARES_EBADRESP;\n          goto failed_stat;\n        }  /* LCOV_EXCL_STOP */\n    }\n\n  if (status == ARES_SUCCESS)\n    {\n      if (!got_a && !got_aaaa)\n        {\n          if (!got_cname || (got_cname && cname_only_is_enodata))\n            {\n              status = ARES_ENODATA;\n              goto failed_stat;\n            }\n        }\n\n      /* save the question hostname as ai->name */\n      if (ai->name == NULL || strcasecmp(ai->name, question_hostname) != 0)\n        {\n          ares_free(ai->name);\n          ai->name = ares_strdup(question_hostname);\n          if (!ai->name)\n            {\n              status = ARES_ENOMEM;\n              goto failed_stat;\n            }\n        }\n\n      if (got_a || got_aaaa)\n        {\n          ares__addrinfo_cat_nodes(&ai->nodes, nodes);\n          nodes = NULL;\n        }\n\n      if (got_cname)\n        {\n          ares__addrinfo_cat_cnames(&ai->cnames, cnames);\n          cnames = NULL;\n        }\n    }\n\n  ares_free(question_hostname);\n  return status;\n\nfailed_stat:\n  ares_free(question_hostname);\n  ares_free(rr_name);\n  ares__freeaddrinfo_cnames(cnames);\n  ares__freeaddrinfo_nodes(nodes);\n  return status;\n}",
+      "fn_code_pos": [
+        [
+          41,
+          0
+        ],
+        [
+          228,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares__parse_into_addrinfo",
+        "parameters": {
+          "abuf": "unsigned char",
+          "alen": "int",
+          "cname_only_is_enodata": "int",
+          "port": "unsigned short",
+          "ai": "struct ares_addrinfo"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct ares_addrinfo",
+      {},
+      "",
+      [
+        44,
+        30
+      ],
+      [
+        44,
+        50
+      ]
+    ],
+    [
+      "struct ares_addrinfo_cname",
+      {},
+      "",
+      [
+        53,
+        2
+      ],
+      [
+        53,
+        28
+      ]
+    ],
+    [
+      "struct ares_addrinfo_node",
+      {},
+      "",
+      [
+        54,
+        2
+      ],
+      [
+        54,
+        27
+      ]
+    ],
+    [
+      "struct in_addr",
+      {},
+      "",
+      [
+        111,
+        30
+      ],
+      [
+        111,
+        44
+      ]
+    ],
+    [
+      "struct in_addr",
+      {},
+      "",
+      [
+        115,
+        28
+      ],
+      [
+        115,
+        42
+      ]
+    ],
+    [
+      "struct ares_in6_addr",
+      {},
+      "",
+      [
+        126,
+        30
+      ],
+      [
+        126,
+        50
+      ]
+    ],
+    [
+      "struct ares_in6_addr",
+      {},
+      "",
+      [
+        130,
+        28
+      ],
+      [
+        130,
+        48
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        15,
+        0
+      ],
+      [
+        16,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        18,
+        0
+      ],
+      [
+        19,
+        0
+      ]
+    ],
+    [
+      "#  include <netdb.h>\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#  include <strings.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#  include <limits.h>\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_dns.h\"\n",
+      [
+        38,
+        0
+      ],
+      [
+        39,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        39,
+        0
+      ],
+      [
+        40,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

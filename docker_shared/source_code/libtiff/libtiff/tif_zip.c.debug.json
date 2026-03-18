@@ -1,0 +1,485 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int ZIPFixupTags(TIFF *tif)\n{\n    (void)tif;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          94,
+          0
+        ],
+        [
+          98,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPFixupTags",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZIPSetupDecode(TIFF *tif)\n{\n    static const char module[] = \"ZIPSetupDecode\";\n    ZIPState *sp = ZIPDecoderState(tif);\n\n    assert(sp != NULL);\n\n    /* if we were last encoding, terminate this mode */\n    if (sp->state & ZSTATE_INIT_ENCODE)\n    {\n        deflateEnd(&sp->stream);\n        sp->state = 0;\n    }\n\n    /* This function can possibly be called several times by */\n    /* PredictorSetupDecode() if this function succeeds but */\n    /* PredictorSetup() fails */\n    if ((sp->state & ZSTATE_INIT_DECODE) == 0 &&\n        inflateInit(&sp->stream) != Z_OK)\n    {\n        TIFFErrorExtR(tif, module, \"%s\", SAFE_MSG(sp));\n        return (0);\n    }\n    else\n    {\n        sp->state |= ZSTATE_INIT_DECODE;\n        return (1);\n    }\n}",
+      "fn_code_pos": [
+        [
+          100,
+          0
+        ],
+        [
+          128,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPSetupDecode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZIPPreDecode(TIFF *tif, uint16_t s)\n{\n    ZIPState *sp = ZIPDecoderState(tif);\n\n    (void)s;\n    assert(sp != NULL);\n\n    if ((sp->state & ZSTATE_INIT_DECODE) == 0)\n        tif->tif_setupdecode(tif);\n\n#if LIBDEFLATE_SUPPORT\n    sp->libdeflate_state = -1;\n#endif\n    sp->stream.next_in = tif->tif_rawdata;\n    assert(sizeof(sp->stream.avail_in) == 4); /* if this assert gets raised,\n         we need to simplify this code to reflect a ZLib that is likely updated\n         to deal with 8byte memory sizes, though this code will respond\n         appropriately even before we simplify it */\n    sp->stream.avail_in = (uint64_t)tif->tif_rawcc < 0xFFFFFFFFU\n                              ? (uInt)tif->tif_rawcc\n                              : 0xFFFFFFFFU;\n    if (inflateReset(&sp->stream) == Z_OK)\n    {\n        sp->read_error = 0;\n        return 1;\n    }\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          133,
+          0
+        ],
+        [
+          160,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPPreDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZIPDecode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)\n{\n    static const char module[] = \"ZIPDecode\";\n    ZIPState *sp = ZIPDecoderState(tif);\n\n    (void)s;\n    assert(sp != NULL);\n    assert(sp->state == ZSTATE_INIT_DECODE);\n\n    if (sp->read_error)\n    {\n        memset(op, 0, (size_t)occ);\n        TIFFErrorExtR(tif, module,\n                      \"ZIPDecode: Scanline %\" PRIu32 \" cannot be read due to \"\n                      \"previous error\",\n                      tif->tif_row);\n        return 0;\n    }\n\n#if LIBDEFLATE_SUPPORT\n    if (sp->libdeflate_state == 1)\n        return 0;\n\n    /* If we have libdeflate support and we are asked to read a whole */\n    /* strip/tile, then go for using it */\n    do\n    {\n        TIFFDirectory *td = &tif->tif_dir;\n\n        if (sp->libdeflate_state == 0)\n            break;\n        if (sp->subcodec == DEFLATE_SUBCODEC_ZLIB)\n            break;\n\n        /* Check if we are in the situation where we can use libdeflate */\n        if (isTiled(tif))\n        {\n            if (TIFFTileSize64(tif) != (uint64_t)occ)\n                break;\n        }\n        else\n        {\n            uint32_t strip_height = td->td_imagelength - tif->tif_row;\n            if (strip_height > td->td_rowsperstrip)\n                strip_height = td->td_rowsperstrip;\n            if (TIFFVStripSize64(tif, strip_height) != (uint64_t)occ)\n                break;\n        }\n\n        /* Check for overflow */\n        if ((size_t)tif->tif_rawcc != (uint64_t)tif->tif_rawcc)\n            break;\n        if ((size_t)occ != (uint64_t)occ)\n            break;\n\n        /* Go for decompression using libdeflate */\n        {\n            enum libdeflate_result res;\n            if (sp->libdeflate_dec == NULL)\n            {\n                sp->libdeflate_dec = libdeflate_alloc_decompressor();\n                if (sp->libdeflate_dec == NULL)\n                {\n                    break;\n                }\n            }\n\n            sp->libdeflate_state = 1;\n\n            res = libdeflate_zlib_decompress(sp->libdeflate_dec, tif->tif_rawcp,\n                                             (size_t)tif->tif_rawcc, op,\n                                             (size_t)occ, NULL);\n\n            tif->tif_rawcp += tif->tif_rawcc;\n            tif->tif_rawcc = 0;\n\n            /* We accept LIBDEFLATE_INSUFFICIENT_SPACE has a return */\n            /* There are odd files in the wild where the last strip, when */\n            /* it is smaller in height than td_rowsperstrip, actually contains\n             */\n            /* data for td_rowsperstrip lines. Just ignore that silently. */\n            if (res != LIBDEFLATE_SUCCESS &&\n                res != LIBDEFLATE_INSUFFICIENT_SPACE)\n            {\n                memset(op, 0, (size_t)occ);\n                TIFFErrorExtR(tif, module, \"Decoding error at scanline %lu\",\n                              (unsigned long)tif->tif_row);\n                sp->read_error = 1;\n                return 0;\n            }\n\n            return 1;\n        }\n    } while (0);\n    sp->libdeflate_state = 0;\n#endif /* LIBDEFLATE_SUPPORT */\n\n    sp->stream.next_in = tif->tif_rawcp;\n\n    sp->stream.next_out = op;\n    assert(sizeof(sp->stream.avail_out) == 4); /* if this assert gets raised,\n         we need to simplify this code to reflect a ZLib that is likely updated\n         to deal with 8byte memory sizes, though this code will respond\n         appropriately even before we simplify it */\n    do\n    {\n        int state;\n        uInt avail_in_before = (uint64_t)tif->tif_rawcc <= 0xFFFFFFFFU\n                                   ? (uInt)tif->tif_rawcc\n                                   : 0xFFFFFFFFU;\n        uInt avail_out_before =\n            (uint64_t)occ < 0xFFFFFFFFU ? (uInt)occ : 0xFFFFFFFFU;\n        sp->stream.avail_in = avail_in_before;\n        sp->stream.avail_out = avail_out_before;\n        /* coverity[overrun-buffer-arg] */\n        state = inflate(&sp->stream, Z_PARTIAL_FLUSH);\n        tif->tif_rawcc -= (avail_in_before - sp->stream.avail_in);\n        occ -= (avail_out_before - sp->stream.avail_out);\n        if (state == Z_STREAM_END)\n            break;\n        if (state == Z_DATA_ERROR)\n        {\n            memset(sp->stream.next_out, 0, sp->stream.avail_out);\n            TIFFErrorExtR(tif, module, \"Decoding error at scanline %lu, %s\",\n                          (unsigned long)tif->tif_row, SAFE_MSG(sp));\n            sp->read_error = 1;\n            return (0);\n        }\n        if (state != Z_OK)\n        {\n            memset(sp->stream.next_out, 0, sp->stream.avail_out);\n            TIFFErrorExtR(tif, module, \"ZLib error: %s\", SAFE_MSG(sp));\n            sp->read_error = 1;\n            return (0);\n        }\n    } while (occ > 0);\n    if (occ != 0)\n    {\n        TIFFErrorExtR(tif, module,\n                      \"Not enough data at scanline %lu (short %\" PRIu64\n                      \" bytes)\",\n                      (unsigned long)tif->tif_row, (uint64_t)occ);\n        memset(sp->stream.next_out, 0, sp->stream.avail_out);\n        sp->read_error = 1;\n        return (0);\n    }\n\n    tif->tif_rawcp = sp->stream.next_in;\n\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          162,
+          0
+        ],
+        [
+          312,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "op": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZIPSetupEncode(TIFF *tif)\n{\n    static const char module[] = \"ZIPSetupEncode\";\n    ZIPState *sp = ZIPEncoderState(tif);\n    int cappedQuality;\n\n    assert(sp != NULL);\n    if (sp->state & ZSTATE_INIT_DECODE)\n    {\n        inflateEnd(&sp->stream);\n        sp->state = 0;\n    }\n\n    cappedQuality = sp->zipquality;\n    if (cappedQuality > Z_BEST_COMPRESSION)\n        cappedQuality = Z_BEST_COMPRESSION;\n\n    if (deflateInit(&sp->stream, cappedQuality) != Z_OK)\n    {\n        TIFFErrorExtR(tif, module, \"%s\", SAFE_MSG(sp));\n        return (0);\n    }\n    else\n    {\n        sp->state |= ZSTATE_INIT_ENCODE;\n        return (1);\n    }\n}",
+      "fn_code_pos": [
+        [
+          314,
+          0
+        ],
+        [
+          341,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPSetupEncode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZIPPreEncode(TIFF *tif, uint16_t s)\n{\n    ZIPState *sp = ZIPEncoderState(tif);\n\n    (void)s;\n    assert(sp != NULL);\n    if (sp->state != ZSTATE_INIT_ENCODE)\n        tif->tif_setupencode(tif);\n\n#if LIBDEFLATE_SUPPORT\n    sp->libdeflate_state = -1;\n#endif\n    sp->stream.next_out = tif->tif_rawdata;\n    assert(sizeof(sp->stream.avail_out) == 4); /* if this assert gets raised,\n         we need to simplify this code to reflect a ZLib that is likely updated\n         to deal with 8byte memory sizes, though this code will respond\n         appropriately even before we simplify it */\n    sp->stream.avail_out = (uint64_t)tif->tif_rawdatasize <= 0xFFFFFFFFU\n                               ? (uInt)tif->tif_rawdatasize\n                               : 0xFFFFFFFFU;\n    return (deflateReset(&sp->stream) == Z_OK);\n}",
+      "fn_code_pos": [
+        [
+          346,
+          0
+        ],
+        [
+          367,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPPreEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZIPEncode(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)\n{\n    static const char module[] = \"ZIPEncode\";\n    ZIPState *sp = ZIPEncoderState(tif);\n\n    assert(sp != NULL);\n    assert(sp->state == ZSTATE_INIT_ENCODE);\n\n    (void)s;\n\n#if LIBDEFLATE_SUPPORT\n    if (sp->libdeflate_state == 1)\n        return 0;\n\n    /* If we have libdeflate support and we are asked to write a whole */\n    /* strip/tile, then go for using it */\n    do\n    {\n        TIFFDirectory *td = &tif->tif_dir;\n\n        if (sp->libdeflate_state == 0)\n            break;\n        if (sp->subcodec == DEFLATE_SUBCODEC_ZLIB)\n            break;\n\n        /* Libdeflate does not support the 0-compression level */\n        if (sp->zipquality == Z_NO_COMPRESSION)\n            break;\n\n        /* Check if we are in the situation where we can use libdeflate */\n        if (isTiled(tif))\n        {\n            if (TIFFTileSize64(tif) != (uint64_t)cc)\n                break;\n        }\n        else\n        {\n            uint32_t strip_height = td->td_imagelength - tif->tif_row;\n            if (strip_height > td->td_rowsperstrip)\n                strip_height = td->td_rowsperstrip;\n            if (TIFFVStripSize64(tif, strip_height) != (uint64_t)cc)\n                break;\n        }\n\n        /* Check for overflow */\n        if ((size_t)tif->tif_rawdatasize != (uint64_t)tif->tif_rawdatasize)\n            break;\n        if ((size_t)cc != (uint64_t)cc)\n            break;\n\n        /* Go for compression using libdeflate */\n        {\n            size_t nCompressedBytes;\n            if (sp->libdeflate_enc == NULL)\n            {\n                /* To get results as good as zlib, we asked for an extra */\n                /* level of compression */\n                sp->libdeflate_enc = libdeflate_alloc_compressor(\n                    sp->zipquality == Z_DEFAULT_COMPRESSION ? 7\n                    : sp->zipquality >= 6 && sp->zipquality <= 9\n                        ? sp->zipquality + 1\n                        : sp->zipquality);\n                if (sp->libdeflate_enc == NULL)\n                {\n                    TIFFErrorExtR(tif, module, \"Cannot allocate compressor\");\n                    break;\n                }\n            }\n\n            /* Make sure the output buffer is large enough for the worse case.\n             */\n            /* In TIFFWriteBufferSetup(), when libtiff allocates the buffer */\n            /* we've taken a 10% margin over the uncompressed size, which should\n             */\n            /* be large enough even for the the worse case scenario. */\n            if (libdeflate_zlib_compress_bound(sp->libdeflate_enc, (size_t)cc) >\n                (size_t)tif->tif_rawdatasize)\n            {\n                break;\n            }\n\n            sp->libdeflate_state = 1;\n            nCompressedBytes = libdeflate_zlib_compress(\n                sp->libdeflate_enc, bp, (size_t)cc, tif->tif_rawdata,\n                (size_t)tif->tif_rawdatasize);\n\n            if (nCompressedBytes == 0)\n            {\n                TIFFErrorExtR(tif, module, \"Encoder error at scanline %lu\",\n                              (unsigned long)tif->tif_row);\n                return 0;\n            }\n\n            tif->tif_rawcc = nCompressedBytes;\n\n            if (!TIFFFlushData1(tif))\n                return 0;\n\n            return 1;\n        }\n    } while (0);\n    sp->libdeflate_state = 0;\n#endif /* LIBDEFLATE_SUPPORT */\n\n    sp->stream.next_in = bp;\n    assert(sizeof(sp->stream.avail_in) == 4); /* if this assert gets raised,\n         we need to simplify this code to reflect a ZLib that is likely updated\n         to deal with 8byte memory sizes, though this code will respond\n         appropriately even before we simplify it */\n    do\n    {\n        uInt avail_in_before =\n            (uint64_t)cc <= 0xFFFFFFFFU ? (uInt)cc : 0xFFFFFFFFU;\n        sp->stream.avail_in = avail_in_before;\n        /* coverity[overrun-buffer-arg] */\n        if (deflate(&sp->stream, Z_NO_FLUSH) != Z_OK)\n        {\n            TIFFErrorExtR(tif, module, \"Encoder error: %s\", SAFE_MSG(sp));\n            return (0);\n        }\n        if (sp->stream.avail_out == 0)\n        {\n            tif->tif_rawcc = tif->tif_rawdatasize;\n            if (!TIFFFlushData1(tif))\n                return 0;\n            sp->stream.next_out = tif->tif_rawdata;\n            sp->stream.avail_out = (uint64_t)tif->tif_rawdatasize <= 0xFFFFFFFFU\n                                       ? (uInt)tif->tif_rawdatasize\n                                       : 0xFFFFFFFFU;\n        }\n        cc -= (avail_in_before - sp->stream.avail_in);\n    } while (cc > 0);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          372,
+          0
+        ],
+        [
+          505,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZIPPostEncode(TIFF *tif)\n{\n    static const char module[] = \"ZIPPostEncode\";\n    ZIPState *sp = ZIPEncoderState(tif);\n    int state;\n\n#if LIBDEFLATE_SUPPORT\n    if (sp->libdeflate_state == 1)\n        return 1;\n#endif\n\n    sp->stream.avail_in = 0;\n    do\n    {\n        state = deflate(&sp->stream, Z_FINISH);\n        switch (state)\n        {\n            case Z_STREAM_END:\n            case Z_OK:\n                if ((tmsize_t)sp->stream.avail_out != tif->tif_rawdatasize)\n                {\n                    tif->tif_rawcc =\n                        tif->tif_rawdatasize - sp->stream.avail_out;\n                    if (!TIFFFlushData1(tif))\n                        return 0;\n                    sp->stream.next_out = tif->tif_rawdata;\n                    sp->stream.avail_out =\n                        (uint64_t)tif->tif_rawdatasize <= 0xFFFFFFFFU\n                            ? (uInt)tif->tif_rawdatasize\n                            : 0xFFFFFFFFU;\n                }\n                break;\n            default:\n                TIFFErrorExtR(tif, module, \"ZLib error: %s\", SAFE_MSG(sp));\n                return (0);\n        }\n    } while (state != Z_STREAM_END);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          511,
+          0
+        ],
+        [
+          549,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPPostEncode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void ZIPCleanup(TIFF *tif)\n{\n    ZIPState *sp = GetZIPState(tif);\n\n    assert(sp != 0);\n\n    (void)TIFFPredictorCleanup(tif);\n\n    tif->tif_tagmethods.vgetfield = sp->vgetparent;\n    tif->tif_tagmethods.vsetfield = sp->vsetparent;\n\n    if (sp->state & ZSTATE_INIT_ENCODE)\n    {\n        deflateEnd(&sp->stream);\n        sp->state = 0;\n    }\n    else if (sp->state & ZSTATE_INIT_DECODE)\n    {\n        inflateEnd(&sp->stream);\n        sp->state = 0;\n    }\n\n#if LIBDEFLATE_SUPPORT\n    if (sp->libdeflate_dec)\n        libdeflate_free_decompressor(sp->libdeflate_dec);\n    if (sp->libdeflate_enc)\n        libdeflate_free_compressor(sp->libdeflate_enc);\n#endif\n\n    _TIFFfreeExt(tif, sp);\n    tif->tif_data = NULL;\n\n    _TIFFSetDefaultCompressionState(tif);\n}",
+      "fn_code_pos": [
+        [
+          551,
+          0
+        ],
+        [
+          584,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPCleanup",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int ZIPVSetField(TIFF *tif, uint32_t tag, va_list ap)\n{\n    static const char module[] = \"ZIPVSetField\";\n    ZIPState *sp = GetZIPState(tif);\n\n    switch (tag)\n    {\n        case TIFFTAG_ZIPQUALITY:\n            sp->zipquality = (int)va_arg(ap, int);\n            if (sp->zipquality < Z_DEFAULT_COMPRESSION ||\n                sp->zipquality > LIBDEFLATE_MAX_COMPRESSION_LEVEL)\n            {\n                TIFFErrorExtR(\n                    tif, module,\n                    \"Invalid ZipQuality value. Should be in [-1,%d] range\",\n                    LIBDEFLATE_MAX_COMPRESSION_LEVEL);\n                return 0;\n            }\n\n            if (sp->state & ZSTATE_INIT_ENCODE)\n            {\n                int cappedQuality = sp->zipquality;\n                if (cappedQuality > Z_BEST_COMPRESSION)\n                    cappedQuality = Z_BEST_COMPRESSION;\n                if (deflateParams(&sp->stream, cappedQuality,\n                                  Z_DEFAULT_STRATEGY) != Z_OK)\n                {\n                    TIFFErrorExtR(tif, module, \"ZLib error: %s\", SAFE_MSG(sp));\n                    return (0);\n                }\n            }\n\n#if LIBDEFLATE_SUPPORT\n            if (sp->libdeflate_enc)\n            {\n                libdeflate_free_compressor(sp->libdeflate_enc);\n                sp->libdeflate_enc = NULL;\n            }\n#endif\n\n            return (1);\n\n        case TIFFTAG_DEFLATE_SUBCODEC:\n            sp->subcodec = (int)va_arg(ap, int);\n            if (sp->subcodec != DEFLATE_SUBCODEC_ZLIB &&\n                sp->subcodec != DEFLATE_SUBCODEC_LIBDEFLATE)\n            {\n                TIFFErrorExtR(tif, module, \"Invalid DeflateCodec value.\");\n                return 0;\n            }\n#if !LIBDEFLATE_SUPPORT\n            if (sp->subcodec == DEFLATE_SUBCODEC_LIBDEFLATE)\n            {\n                TIFFErrorExtR(tif, module,\n                              \"DeflateCodec = DEFLATE_SUBCODEC_LIBDEFLATE \"\n                              \"unsupported in this build\");\n                return 0;\n            }\n#endif\n            return 1;\n\n        default:\n            return (*sp->vsetparent)(tif, tag, ap);\n    }\n    /*NOTREACHED*/\n}",
+      "fn_code_pos": [
+        [
+          586,
+          0
+        ],
+        [
+          651,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPVSetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZIPVGetField(TIFF *tif, uint32_t tag, va_list ap)\n{\n    ZIPState *sp = GetZIPState(tif);\n\n    switch (tag)\n    {\n        case TIFFTAG_ZIPQUALITY:\n            *va_arg(ap, int *) = sp->zipquality;\n            break;\n\n        case TIFFTAG_DEFLATE_SUBCODEC:\n            *va_arg(ap, int *) = sp->subcodec;\n            break;\n\n        default:\n            return (*sp->vgetparent)(tif, tag, ap);\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          653,
+          0
+        ],
+        [
+          671,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPVGetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFInitZIP(TIFF *tif, int scheme)\n{\n    static const char module[] = \"TIFFInitZIP\";\n    ZIPState *sp;\n\n    assert((scheme == COMPRESSION_DEFLATE) ||\n           (scheme == COMPRESSION_ADOBE_DEFLATE));\n#ifdef NDEBUG\n    (void)scheme;\n#endif\n\n    /*\n     * Merge codec-specific tag information.\n     */\n    if (!_TIFFMergeFields(tif, zipFields, TIFFArrayCount(zipFields)))\n    {\n        TIFFErrorExtR(tif, module,\n                      \"Merging Deflate codec-specific tags failed\");\n        return 0;\n    }\n\n    /*\n     * Allocate state block so tag methods have storage to record values.\n     */\n    tif->tif_data = (uint8_t *)_TIFFcallocExt(tif, sizeof(ZIPState), 1);\n    if (tif->tif_data == NULL)\n        goto bad;\n    sp = GetZIPState(tif);\n    sp->stream.zalloc = NULL;\n    sp->stream.zfree = NULL;\n    sp->stream.opaque = NULL;\n    sp->stream.data_type = Z_BINARY;\n\n    /*\n     * Override parent get/set field methods.\n     */\n    sp->vgetparent = tif->tif_tagmethods.vgetfield;\n    tif->tif_tagmethods.vgetfield = ZIPVGetField; /* hook for codec tags */\n    sp->vsetparent = tif->tif_tagmethods.vsetfield;\n    tif->tif_tagmethods.vsetfield = ZIPVSetField; /* hook for codec tags */\n\n    /* Default values for codec-specific fields */\n    sp->zipquality = Z_DEFAULT_COMPRESSION; /* default comp. level */\n    sp->state = 0;\n#if LIBDEFLATE_SUPPORT\n    sp->subcodec = DEFLATE_SUBCODEC_LIBDEFLATE;\n#else\n    sp->subcodec = DEFLATE_SUBCODEC_ZLIB;\n#endif\n\n    /*\n     * Install codec methods.\n     */\n    tif->tif_fixuptags = ZIPFixupTags;\n    tif->tif_setupdecode = ZIPSetupDecode;\n    tif->tif_predecode = ZIPPreDecode;\n    tif->tif_decoderow = ZIPDecode;\n    tif->tif_decodestrip = ZIPDecode;\n    tif->tif_decodetile = ZIPDecode;\n    tif->tif_setupencode = ZIPSetupEncode;\n    tif->tif_preencode = ZIPPreEncode;\n    tif->tif_postencode = ZIPPostEncode;\n    tif->tif_encoderow = ZIPEncode;\n    tif->tif_encodestrip = ZIPEncode;\n    tif->tif_encodetile = ZIPEncode;\n    tif->tif_cleanup = ZIPCleanup;\n    /*\n     * Setup predictor setup.\n     */\n    (void)TIFFPredictorInit(tif);\n    return (1);\nbad:\n    TIFFErrorExtR(tif, module, \"No space for ZIP state block\");\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          680,
+          0
+        ],
+        [
+          754,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFInitZIP",
+        "parameters": {
+          "tif": "TIFF",
+          "scheme": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "ZIPEncode(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)",
+      "fn_dec_pos": [
+        [
+          91,
+          11
+        ],
+        [
+          91,
+          69
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "ZIPDecode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)",
+      "fn_dec_pos": [
+        [
+          92,
+          11
+        ],
+        [
+          92,
+          70
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZIPDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "op": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct\n{\n    TIFFPredictorState predict;\n    z_stream stream;\n    int read_error; /* whether a read error has occurred, and which should cause\n                       further reads in the same strip/tile to be aborted */\n    int zipquality; /* compression level */\n    int state;      /* state flags */\n    int subcodec;   /* DEFLATE_SUBCODEC_ZLIB or DEFLATE_SUBCODEC_LIBDEFLATE */\n#if LIBDEFLATE_SUPPORT\n    int libdeflate_state; /* -1 = until first time ZIPEncode() / ZIPDecode() is\n                             called, 0 = use zlib, 1 = use libdeflate */\n    struct libdeflate_decompressor *libdeflate_dec;\n    struct libdeflate_compressor *libdeflate_enc;\n#endif\n#define ZSTATE_INIT_DECODE 0x01\n#define ZSTATE_INIT_ENCODE 0x02\n\n    TIFFVGetMethod vgetparent; /* super-class method */\n    TIFFVSetMethod vsetparent; /* super-class method */\n} ZIPState;",
+      {
+        "predict": "TIFFPredictorState",
+        "stream": "z_stream",
+        "read_error": "int",
+        "zipquality": "int",
+        "state": "int",
+        "subcodec": "int",
+        "libdeflate_state": "int",
+        "*libdeflate_dec": "struct libdeflate_decompressor",
+        "*libdeflate_enc": "struct libdeflate_compressor",
+        "vgetparent": "TIFFVGetMethod",
+        "vsetparent": "TIFFVSetMethod"
+      },
+      "ZIPState",
+      [
+        65,
+        0
+      ],
+      [
+        85,
+        11
+      ]
+    ],
+    [
+      "typedef struct\n{\n    TIFFPredictorState predict;\n    z_stream stream;\n    int read_error; /* whether a read error has occurred, and which should cause\n                       further reads in the same strip/tile to be aborted */\n    int zipquality; /* compression level */\n    int state;      /* state flags */\n    int subcodec;   /* DEFLATE_SUBCODEC_ZLIB or DEFLATE_SUBCODEC_LIBDEFLATE */\n#if LIBDEFLATE_SUPPORT\n    int libdeflate_state; /* -1 = until first time ZIPEncode() / ZIPDecode() is\n                             called, 0 = use zlib, 1 = use libdeflate */\n    struct libdeflate_decompressor *libdeflate_dec;\n    struct libdeflate_compressor *libdeflate_enc;\n#endif\n#define ZSTATE_INIT_DECODE 0x01\n#define ZSTATE_INIT_ENCODE 0x02\n\n    TIFFVGetMethod vgetparent; /* super-class method */\n    TIFFVSetMethod vsetparent; /* super-class method */\n} ZIPState;",
+      {
+        "predict": "TIFFPredictorState",
+        "stream": "z_stream",
+        "read_error": "int",
+        "zipquality": "int",
+        "state": "int",
+        "subcodec": "int",
+        "libdeflate_state": "int",
+        "*libdeflate_dec": "struct libdeflate_decompressor",
+        "*libdeflate_enc": "struct libdeflate_compressor",
+        "vgetparent": "TIFFVGetMethod",
+        "vsetparent": "TIFFVSetMethod"
+      },
+      "ZIPState",
+      [
+        65,
+        0
+      ],
+      [
+        85,
+        11
+      ]
+    ],
+    [
+      "struct libdeflate_decompressor",
+      {},
+      "",
+      [
+        77,
+        4
+      ],
+      [
+        77,
+        34
+      ]
+    ],
+    [
+      "struct libdeflate_compressor",
+      {},
+      "",
+      [
+        78,
+        4
+      ],
+      [
+        78,
+        32
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_predict.h\"\n",
+      [
+        39,
+        0
+      ],
+      [
+        40,
+        0
+      ]
+    ],
+    [
+      "#include \"zlib.h\"\n",
+      [
+        40,
+        0
+      ],
+      [
+        41,
+        0
+      ]
+    ],
+    [
+      "#include \"libdeflate.h\"\n",
+      [
+        43,
+        0
+      ],
+      [
+        44,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        47,
+        0
+      ],
+      [
+        48,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": [
+    [
+      "enum libdeflate_result",
+      {},
+      "",
+      [
+        219,
+        12
+      ],
+      [
+        219,
+        34
+      ]
+    ]
+  ]
+}

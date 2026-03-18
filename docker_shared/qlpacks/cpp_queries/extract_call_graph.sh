@@ -23,14 +23,37 @@ echo "Process ID: $pid"
 
 [ -d "$outputfolder/call_graph" ] || mkdir -p "$outputfolder/call_graph"
 outputfile="$outputfolder/call_graph/${fn_file}@${fn_name}_call_graph.bqrs"
-QUERY_TEMPLATE="./extract_call_graph_template.ql"
+
+
+
+# QUERY_TEMPLATE="./extract_call_graph_template.ql"
+# QUERY="call_graph_${pid}.ql"
+
+# 大型项目列表（使用轻量模板）
+LARGE_PROJECTS="lcms libtiff libvpx"
+# 从数据库路径提取项目名
+PROJECT_NAME=$(basename "$dbbase" | sed 's/_[0-9]*$//')
+# 根据项目选择模板
+if echo "$LARGE_PROJECTS" | grep -qw "$PROJECT_NAME"; then
+    QUERY_TEMPLATE="./extract_call_graph_template_lite.ql"
+    echo "Using LITE template for large project: $PROJECT_NAME"
+else
+    QUERY_TEMPLATE="./extract_call_graph_template.ql"
+    echo "Using FULL template for project: $PROJECT_NAME"
+fi
 QUERY="call_graph_${pid}.ql"
+
+
+
 
 
 echo "Copying template and generating query file..."
 cp "$QUERY_TEMPLATE" "$QUERY"
 sed -i "s/ENTRY_FNC/$fn_name/g" "$QUERY"
 
+
+# Limit CodeQL JVM memory to prevent OOM
+export CODEQL_JAVA_ARGS="-Xmx4g"
 
 echo "Running query: codeql query run $QUERY --database=$dbbase --output=$outputfile"
 if codeql query run "$QUERY" --database="$dbbase" --output="$outputfile"; then

@@ -1,0 +1,104 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "TEST(DNSProto, EncodeQuestions) {\n  DNSPacket pkt;\n  pkt.set_qid(0x1234).set_response().set_aa()\n    .add_question(new DNSQuestion(\"example.com.\", T_A))\n    .add_question(new DNSQuestion(\"www.example.com\", T_AAAA, C_CHAOS));\n\n  std::vector<byte> data = {\n    0x12, 0x34,  // qid\n    0x84, // response + query + AA + not-TC + not-RD\n    0x00, // not-RA + not-Z + not-AD + not-CD + rc=NoError\n    0x00, 0x02,  // num questions\n    0x00, 0x00,  // num answer RRs\n    0x00, 0x00,  // num authority RRs\n    0x00, 0x00,  // num additional RRs\n    // Question 1\n    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x00, 0x01,  // type A\n    0x00, 0x01,  // class IN\n    // Question 2\n    0x03, 'w', 'w', 'w',\n    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x00, 0x1C,  // type AAAA = 28\n    0x00, 0x03,  // class CHAOS = 3\n  };\n  EXPECT_EQ(data, pkt.data());\n}",
+      "fn_code_pos": [
+        [
+          8,
+          0
+        ],
+        [
+          37,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(DNSProto, EncodeSingleNameAnswers) {\n  DNSPacket pkt;\n  pkt.qid_ = 0x1234;\n  pkt.response_ = true;\n  pkt.aa_ = true;\n  pkt.opcode_ = O_QUERY;\n  pkt.add_answer(new DNSCnameRR(\"example.com\", 0x01020304, \"other.com.\"));\n  pkt.add_auth(new DNSPtrRR(\"www.example.com\", 0x01020304, \"www.other.com\"));\n\n  std::vector<byte> data = {\n    0x12, 0x34,  // qid\n    0x84, // response + query + AA + not-TC + not-RD\n    0x00, // not-RA + not-Z + not-AD + not-CD + rc=NoError\n    0x00, 0x00,  // num questions\n    0x00, 0x01,  // num answer RRs\n    0x00, 0x01,  // num authority RRs\n    0x00, 0x00,  // num additional RRs\n    // Answer 1\n    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x00, 0x05,  // RR type\n    0x00, 0x01,  // class IN\n    0x01, 0x02, 0x03, 0x04, // TTL\n    0x00, 0x0B,  // rdata length\n    0x05, 'o', 't', 'h', 'e', 'r',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    // Authority 1\n    0x03, 'w', 'w', 'w',\n    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x00, 0x0c,  // RR type\n    0x00, 0x01,  // class IN\n    0x01, 0x02, 0x03, 0x04, // TTL\n    0x00, 0x0F,  // rdata length\n    0x03, 'w', 'w', 'w',\n    0x05, 'o', 't', 'h', 'e', 'r',\n    0x03, 'c', 'o', 'm',\n    0x00,\n  };\n  EXPECT_EQ(data, pkt.data());\n}",
+      "fn_code_pos": [
+        [
+          39,
+          0
+        ],
+        [
+          82,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(DNSProto, EncodeAddressAnswers) {\n  DNSPacket pkt;\n  pkt.qid_ = 0x1234;\n  pkt.response_ = true;\n  pkt.aa_ = true;\n  pkt.opcode_ = O_QUERY;\n  std::vector<byte> addrv4 = {0x02, 0x03, 0x04, 0x05};\n  pkt.add_answer(new DNSARR(\"example.com\", 0x01020304, addrv4));\n  byte addrv6[16] = {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,\n                     0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04};\n  pkt.add_additional(new DNSAaaaRR(\"www.example.com\", 0x01020304, addrv6, 16));\n\n  std::vector<byte> data = {\n    0x12, 0x34,  // qid\n    0x84, // response + query + AA + not-TC + not-RD\n    0x00, // not-RA + not-Z + not-AD + not-CD + rc=NoError\n    0x00, 0x00,  // num questions\n    0x00, 0x01,  // num answer RRs\n    0x00, 0x00,  // num authority RRs\n    0x00, 0x01,  // num additional RRs\n    // Answer 1\n    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x00, 0x01,  // RR type\n    0x00, 0x01,  // class IN\n    0x01, 0x02, 0x03, 0x04, // TTL\n    0x00, 0x04,  // rdata length\n    0x02, 0x03, 0x04, 0x05,\n    // Additional 1\n    0x03, 'w', 'w', 'w',\n    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',\n    0x03, 'c', 'o', 'm',\n    0x00,\n    0x00, 0x1c,  // RR type\n    0x00, 0x01,  // class IN\n    0x01, 0x02, 0x03, 0x04, // TTL\n    0x00, 0x10,  // rdata length\n    0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,\n    0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04\n  };\n  EXPECT_EQ(data, pkt.data());\n}",
+      "fn_code_pos": [
+        [
+          84,
+          0
+        ],
+        [
+          126,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"ares-test.h\"\n",
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    [
+      "#include \"dns-proto.h\"\n",
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    [
+      "#include <vector>\n",
+      [
+        3,
+        0
+      ],
+      [
+        4,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

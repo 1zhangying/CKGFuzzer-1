@@ -1,0 +1,181 @@
+Line	Count	Source	
+1		/* Copyright (C) 2018 by John Schember <john@nachtimwald.com>	
+2		*	
+3		* Permission to use, copy, modify, and distribute this	
+4		* software and its documentation for any purpose and without	
+5		* fee is hereby granted, provided that the above copyright	
+6		* notice appear in all copies and that both that copyright	
+7		* notice and this permission notice appear in supporting	
+8		* documentation, and that the name of M.I.T. not be used in	
+9		* advertising or publicity pertaining to distribution of the	
+10		* software without specific, written prior permission.	
+11		* M.I.T. makes no representations about the suitability of	
+12		* this software for any purpose.  It is provided "as is"	
+13		* without express or implied warranty.	
+14		*/	
+15			
+16		#if defined(__MVS__)	
+17		#include <strings.h>	
+18		#endif	
+19			
+20		#include "ares_setup.h"	
+21		#include "ares_strsplit.h"	
+22		#include "ares.h"	
+23		#include "ares_private.h"	
+24			
+25		static int list_contains(char * const *list, size_t num_elem, const char *str, int insensitive)	
+26	10	{	
+27	10	size_t len;	
+28	10	size_t i;	
+29			
+30	10	len = strlen(str);	
+31	10	for (i=0; i<num_elem;i++)	
+32	0	{	
+33	0	if (insensitive)	
+34	0	{	
+35		#ifdef WIN32	
+36		if (strnicmp(list[i], str, len) == 0)	
+37		#else	
+38	0	if (strncasecmp(list[i], str, len) == 0)	
+39	0	#endif	
+40	0	return 1;	
+41	0	}	
+42	0	else	
+43	0	{	
+44	0	if (strncmp(list[i], str, len) == 0)	
+45	0	return 1;	
+46	0	}	
+47	0	}	
+48			
+49	10	return 0;	
+50	10	}	
+51			
+52		static int is_delim(char c, const char *delims, size_t num_delims)	
+53	10	{	
+54	10	size_t i;	
+55			
+56	30	for (i=0; i<num_delims; i++)	
+57	20	{	
+58	20	if (c == delims[i])	
+59	0	return 1;	
+60	20	}	
+61	10	return 0;	
+62	10	}	
+63			
+64			
+65		void ares_strsplit_free(char **elms, size_t num_elm)	
+66	0	{	
+67	0	size_t i;	
+68			
+69	0	if (elms ==NULL)	
+70	0	return;	
+71			
+72	0	for (i=0;i<num_elm;i++)	
+73	0	ares_free(elms[i]);	
+74	0	ares_free(elms);	
+75	0	}	
+76			
+77			
+78		char **ares_strsplit(const char *in, const char *delms, int make_set, size_t *num_elm)	
+79	10	{	
+80	10	char *parsestr;	
+81	10	char **temp;	
+82	10	char **out;	
+83	10	size_t cnt;	
+84	10	size_t nelms;	
+85	10	size_t in_len;	
+86	10	size_t num_delims;	
+87	10	size_t i;	
+88			
+89	10	if (in == NULL || delms == NULL || num_elm == NULL)	
+90	0	returnNULL;	
+91			
+92	10	*num_elm = 0;	
+93			
+94	10	in_len = strlen(in);	
+95	10	num_delims = strlen(delms);	
+96			
+97		/* Figure out how many elements. */	
+98	10	nelms = 1;	
+99	20	for (i=0; i<in_len; i++)	
+100	10	{	
+101	10	if (is_delim(in[i], delms, num_delims))	
+102	0	{	
+103	0	nelms++;	
+104	0	}	
+105	10	}	
+106			
+107		/* Copy of input so we can cut it up. */	
+108	10	parsestr = ares_strdup(in);	
+109	10	if (parsestr == NULL)	
+110	0	returnNULL;	
+111			
+112		/* Temporary array to store locations of start of each element	
+113		* within parsestr. */	
+114	10	temp = ares_malloc(nelms * sizeof(*temp));	
+115	10	if (temp == NULL)	
+116	0	{	
+117	0	ares_free(parsestr);	
+118	0	returnNULL;	
+119	0	}	
+120	10	temp[0] = parsestr;	
+121	10	cnt = 1;	
+122	10	for (i=0; i<in_len && cnt<nelms;i++)	
+123	0	{	
+124	0	if (!is_delim(parsestr[i], delms, num_delims))	
+125	0	continue;	
+126			
+127		/* Replace sep with NULL. */	
+128	0	parsestr[i] = '\0';	
+129		/* Add the pointer to the array of elements */	
+130	0	temp[cnt] = parsestr+i+1;	
+131	0	cnt++;	
+132	0	}	
+133			
+134		/* Copy each element to our output array. */	
+135	10	out = ares_malloc(nelms * sizeof(*out));	
+136	10	if (out == NULL)	
+137	0	{	
+138	0	ares_free(parsestr);	
+139	0	ares_free(temp);	
+140	0	returnNULL;	
+141	0	}	
+142			
+143	10	nelms = 0;	
+144	20	for (i=0; i<cnt; i++)	
+145	10	{	
+146	10	if (temp[i][0] == '\0')	
+147	0	continue;	
+148			
+149	10	if (make_set && list_contains(out, nelms, temp[i], 1))	
+150	0	continue;	
+151			
+152	10	out[nelms] = ares_strdup(temp[i]);	
+153	10	if (out[nelms] == NULL)	
+154	0	{	
+155	0	ares_strsplit_free(out, nelms);	
+156	0	ares_free(parsestr);	
+157	0	ares_free(temp);	
+158	0	returnNULL;	
+159	0	}	
+160	10	nelms++;	
+161	10	}	
+162			
+163			
+164		/* If there are no elements don't return an empty allocated	
+165		* array. */	
+166	10	if (nelms == 0)	
+167	0	{	
+168	0	ares_strsplit_free(out, nelms);	
+169	0	out =NULL;	
+170	0	}	
+171			
+172		/* Get the true number of elements (recalculated because of make_set) */	
+173	10	*num_elm = nelms;	
+174			
+175	10	ares_free(parsestr);	
+176	10	ares_free(temp);	
+177	10	return out;	
+178	10	}	
+
+

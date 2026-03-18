@@ -1,0 +1,130 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void ares_cancel(ares_channel channel)\n{\n  struct query *query;\n  struct list_node list_head_copy;\n  struct list_node* list_head;\n  struct list_node* list_node;\n  int i;\n\n  if (!ares__is_list_empty(&(channel->all_queries)))\n  {\n    /* Swap list heads, so that only those queries which were present on entry\n     * into this function are cancelled. New queries added by callbacks of\n     * queries being cancelled will not be cancelled themselves.\n     */\n    list_head = &(channel->all_queries);\n    list_head_copy.prev = list_head->prev;\n    list_head_copy.next = list_head->next;\n    list_head_copy.prev->next = &list_head_copy;\n    list_head_copy.next->prev = &list_head_copy;\n    list_head->prev = list_head;\n    list_head->next = list_head;\n    for (list_node = list_head_copy.next; list_node != &list_head_copy; )\n    {\n      query = list_node->data;\n      list_node = list_node->next;  /* since we're deleting the query */\n      query->callback(query->arg, ARES_ECANCELLED, 0, NULL, 0);\n      ares__free_query(query);\n    }\n  }\n  if (!(channel->flags & ARES_FLAG_STAYOPEN) && ares__is_list_empty(&(channel->all_queries)))\n  {\n    if (channel->servers)\n    {\n      for (i = 0; i < channel->nservers; i++)\n        ares__close_sockets(channel, &channel->servers[i]);\n    }\n  }\n}",
+      "fn_code_pos": [
+        [
+          25,
+          0
+        ],
+        [
+          62,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_cancel",
+        "parameters": {
+          "channel": "ares_channel"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct query",
+      {},
+      "",
+      [
+        27,
+        2
+      ],
+      [
+        27,
+        14
+      ]
+    ],
+    [
+      "struct list_node",
+      {},
+      "",
+      [
+        28,
+        2
+      ],
+      [
+        28,
+        18
+      ]
+    ],
+    [
+      "struct list_node",
+      {},
+      "",
+      [
+        29,
+        2
+      ],
+      [
+        29,
+        18
+      ]
+    ],
+    [
+      "struct list_node",
+      {},
+      "",
+      [
+        30,
+        2
+      ],
+      [
+        30,
+        18
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        14,
+        0
+      ],
+      [
+        15,
+        0
+      ]
+    ],
+    [
+      "#include <assert.h>\n",
+      [
+        15,
+        0
+      ],
+      [
+        16,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        18,
+        0
+      ],
+      [
+        19,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

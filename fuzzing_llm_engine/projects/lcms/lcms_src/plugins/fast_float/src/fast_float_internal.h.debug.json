@@ -1,0 +1,591 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "cmsINLINE cmsS15Fixed16Number _cmsToFixedDomain(int a)                   { return a + ((a + 0x7fff) / 0xffff); }",
+      "fn_code_pos": [
+        [
+          76,
+          0
+        ],
+        [
+          76,
+          112
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsS15Fixed16Number _cmsToFixedDomain",
+        "parameters": {
+          "a": "int"
+        },
+        "return_type": "cmsINLINE"
+      }
+    },
+    {
+      "fn_code": "cmsINLINE int                 _cmsFromFixedDomain(cmsS15Fixed16Number a) { return a - ((a + 0x7fff) >> 16); }",
+      "fn_code_pos": [
+        [
+          77,
+          0
+        ],
+        [
+          77,
+          109
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsFromFixedDomain",
+        "parameters": {
+          "a": "cmsS15Fixed16Number"
+        },
+        "return_type": "cmsINLINE"
+      }
+    },
+    {
+      "fn_code": "cmsINLINE cmsFloat32Number fclamp(cmsFloat32Number v)\n{\n    return ((v < 1.0e-9f) || isnan(v)) ? 0.0f : (v > 1.0f ? 1.0f : v);\n}",
+      "fn_code_pos": [
+        [
+          90,
+          0
+        ],
+        [
+          93,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsFloat32Number fclamp",
+        "parameters": {
+          "v": "cmsFloat32Number"
+        },
+        "return_type": "cmsINLINE"
+      }
+    },
+    {
+      "fn_code": "cmsINLINE int _cmsQuickFloor(cmsFloat64Number val)\n{\n#ifdef CMS_DONT_USE_FAST_FLOOR\n       return (int)floor(val);\n#else\n#define _lcms_double2fixmagic  (68719476736.0 * 1.5)  \n\n       union {\n              cmsFloat64Number val;\n              int halves[2];\n       } temp;\n\n       temp.val = val + _lcms_double2fixmagic;\n\n#ifdef CMS_USE_BIG_ENDIAN\n       return temp.halves[1] >> 16;\n#else\n       return temp.halves[0] >> 16;\n#endif\n#endif\n}",
+      "fn_code_pos": [
+        [
+          96,
+          0
+        ],
+        [
+          116,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsQuickFloor",
+        "parameters": {
+          "val": "cmsFloat64Number"
+        },
+        "return_type": "cmsINLINE"
+      }
+    },
+    {
+      "fn_code": "cmsINLINE cmsUInt16Number _cmsSaturateWord(cmsFloat64Number d)\n{\n       d += 0.5;\n\n       if (d <= 0) return 0;\n       if (d >= 65535.0) return 0xffff;\n\n       return (cmsUInt16Number)floor(d);\n}",
+      "fn_code_pos": [
+        [
+          119,
+          0
+        ],
+        [
+          127,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsUInt16Number _cmsSaturateWord",
+        "parameters": {
+          "d": "cmsFloat64Number"
+        },
+        "return_type": "cmsINLINE"
+      }
+    },
+    {
+      "fn_code": "cmsINLINE cmsFloat32Number flerp(const cmsFloat32Number LutTable[], cmsFloat32Number v)\n{\n       cmsFloat32Number y1, y0;\n       cmsFloat32Number rest;\n       int cell0, cell1;\n      \n       if ((v < 1.0e-9f) || isnan(v)) {\n              return LutTable[0];\n       }\n       else\n              if (v >= 1.0) {\n              return LutTable[MAX_NODES_IN_CURVE - 1];\n              }\n\n       v *= (MAX_NODES_IN_CURVE - 1);\n\n       cell0 = _cmsQuickFloor(v);\n       cell1 = (int)ceilf(v);\n\n       // Rest is 16 LSB bits\n       rest = v - cell0;\n\n       y0 = LutTable[cell0];\n       y1 = LutTable[cell1];\n\n       return y0 + (y1 - y0) * rest;\n}",
+      "fn_code_pos": [
+        [
+          130,
+          0
+        ],
+        [
+          156,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsFloat32Number flerp",
+        "parameters": {
+          "LutTable": "cmsFloat32Number",
+          "v": "cmsFloat32Number"
+        },
+        "return_type": "cmsINLINE"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "_cmsReasonableGridpointsByColorspace(cmsColorSpaceSignature Colorspace, cmsUInt32Number dwFlags)",
+      "fn_dec_pos": [
+        [
+          161,
+          34
+        ],
+        [
+          161,
+          130
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReasonableGridpointsByColorspace",
+        "parameters": {
+          "Colorspace": "cmsColorSpaceSignature",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "CMSAPI"
+      }
+    },
+    {
+      "fn_code": "_cmsComputeComponentIncrements(cmsUInt32Number Format,\n                                                            cmsUInt32Number BytesPerPlane,\n                                                            cmsUInt32Number* nChannels,\n                                                            cmsUInt32Number* nAlpha,\n                                                            cmsUInt32Number ComponentStartingOrder[],\n                                                            cmsUInt32Number ComponentPointerIncrements[])",
+      "fn_dec_pos": [
+        [
+          166,
+          29
+        ],
+        [
+          171,
+          105
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsComputeComponentIncrements",
+        "parameters": {
+          "Format": "cmsUInt32Number",
+          "BytesPerPlane": "cmsUInt32Number",
+          "nChannels": "cmsUInt32Number",
+          "nAlpha": "cmsUInt32Number",
+          "ComponentStartingOrder": "cmsUInt32Number",
+          "ComponentPointerIncrements": "cmsUInt32Number"
+        },
+        "return_type": "CMSCHECKPOINT"
+      }
+    },
+    {
+      "fn_code": "Formatter_15Bit_Factory(cmsUInt32Number Type,\n                                                             cmsFormatterDirection Dir,\n                                                             cmsUInt32Number dwFlags)",
+      "fn_dec_pos": [
+        [
+          174,
+          37
+        ],
+        [
+          176,
+          85
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Formatter_15Bit_Factory",
+        "parameters": {
+          "Type": "cmsUInt32Number",
+          "Dir": "cmsFormatterDirection",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "CMSCHECKPOINT"
+      }
+    },
+    {
+      "fn_code": "Optimize8MatrixShaper(_cmsTransform2Fn* TransformFn,\n                              void** UserData,\n                              _cmsFreeUserDataFn* FreeUserData,\n                              cmsPipeline** Lut,\n                              cmsUInt32Number* InputFormat,\n                              cmsUInt32Number* OutputFormat,\n                              cmsUInt32Number* dwFlags)",
+      "fn_dec_pos": [
+        [
+          181,
+          8
+        ],
+        [
+          187,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Optimize8MatrixShaper",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeUserData": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "Optimize8MatrixShaperSSE(_cmsTransform2Fn* TransformFn,\n                              void** UserData,\n                              _cmsFreeUserDataFn* FreeUserData,\n                              cmsPipeline** Lut,\n                              cmsUInt32Number* InputFormat,\n                              cmsUInt32Number* OutputFormat,\n                              cmsUInt32Number* dwFlags)",
+      "fn_dec_pos": [
+        [
+          190,
+          8
+        ],
+        [
+          196,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Optimize8MatrixShaperSSE",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeUserData": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "OptimizeMatrixShaper15(_cmsTransform2Fn* TransformFn,\n                               void** UserData,\n                               _cmsFreeUserDataFn* FreeUserData,\n                               cmsPipeline** Lut,\n                               cmsUInt32Number* InputFormat,\n                               cmsUInt32Number* OutputFormat,\n                               cmsUInt32Number* dwFlags)",
+      "fn_dec_pos": [
+        [
+          198,
+          8
+        ],
+        [
+          204,
+          56
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OptimizeMatrixShaper15",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeUserData": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "Optimize8ByJoiningCurves(_cmsTransform2Fn* TransformFn,\n                                 void** UserData,\n                                 _cmsFreeUserDataFn* FreeUserData,\n                                 cmsPipeline** Lut,\n                                 cmsUInt32Number* InputFormat,\n                                 cmsUInt32Number* OutputFormat,\n                                 cmsUInt32Number* dwFlags)",
+      "fn_dec_pos": [
+        [
+          207,
+          8
+        ],
+        [
+          213,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Optimize8ByJoiningCurves",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeUserData": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "OptimizeFloatByJoiningCurves(_cmsTransform2Fn* TransformFn,                                  \n                                   void** UserData,\n                                   _cmsFreeUserDataFn* FreeUserData,\n                                   cmsPipeline** Lut, \n                                   cmsUInt32Number* InputFormat, \n                                   cmsUInt32Number* OutputFormat, \n                                   cmsUInt32Number* dwFlags)",
+      "fn_dec_pos": [
+        [
+          215,
+          8
+        ],
+        [
+          221,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OptimizeFloatByJoiningCurves",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeUserData": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "OptimizeFloatMatrixShaper(_cmsTransform2Fn* TransformFn,                                  \n                                   void** UserData,\n                                   _cmsFreeUserDataFn* FreeUserData,\n                                   cmsPipeline** Lut, \n                                   cmsUInt32Number* InputFormat, \n                                   cmsUInt32Number* OutputFormat, \n                                   cmsUInt32Number* dwFlags)",
+      "fn_dec_pos": [
+        [
+          223,
+          8
+        ],
+        [
+          229,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OptimizeFloatMatrixShaper",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeUserData": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "Optimize8BitRGBTransform(_cmsTransform2Fn* TransformFn,\n                                   void** UserData,\n                                   _cmsFreeUserDataFn* FreeDataFn,\n                                   cmsPipeline** Lut,\n                                   cmsUInt32Number* InputFormat,\n                                   cmsUInt32Number* OutputFormat,\n                                   cmsUInt32Number* dwFlags)",
+      "fn_dec_pos": [
+        [
+          231,
+          8
+        ],
+        [
+          237,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Optimize8BitRGBTransform",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeDataFn": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "Optimize16BitRGBTransform(_cmsTransform2Fn* TransformFn,\n                                   void** UserData,\n                                   _cmsFreeUserDataFn* FreeDataFn,\n                                   cmsPipeline** Lut,\n                                   cmsUInt32Number* InputFormat,\n                                   cmsUInt32Number* OutputFormat,\n                                   cmsUInt32Number* dwFlags)",
+      "fn_dec_pos": [
+        [
+          239,
+          8
+        ],
+        [
+          245,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Optimize16BitRGBTransform",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeDataFn": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "OptimizeCLUTRGBTransform(_cmsTransform2Fn* TransformFn,\n                                  void** UserData,\n                                  _cmsFreeUserDataFn* FreeDataFn,\n                                  cmsPipeline** Lut, \n                                  cmsUInt32Number* InputFormat, \n                                  cmsUInt32Number* OutputFormat, \n                                  cmsUInt32Number* dwFlags)",
+      "fn_dec_pos": [
+        [
+          247,
+          8
+        ],
+        [
+          253,
+          59
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OptimizeCLUTRGBTransform",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeDataFn": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "OptimizeCLUTCMYKTransform(_cmsTransform2Fn* TransformFn,\n\t\t\t\t\t              void** UserData,\n\t\t\t\t\t              _cmsFreeUserDataFn* FreeDataFn,\n\t\t\t\t\t              cmsPipeline** Lut,\n\t\t\t\t\t              cmsUInt32Number* InputFormat,\n\t\t\t\t\t              cmsUInt32Number* OutputFormat,\n\t\t\t\t\t              cmsUInt32Number* dwFlags)",
+      "fn_dec_pos": [
+        [
+          255,
+          8
+        ],
+        [
+          261,
+          44
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OptimizeCLUTCMYKTransform",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeDataFn": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "OptimizeCLUTLabTransform(_cmsTransform2Fn* TransformFn,\n                                 void** UserData,\n                                 _cmsFreeUserDataFn* FreeDataFn,\n                                 cmsPipeline** Lut, \n                                 cmsUInt32Number* InputFormat, \n                                 cmsUInt32Number* OutputFormat, \n                                 cmsUInt32Number* dwFlags)",
+      "fn_dec_pos": [
+        [
+          264,
+          8
+        ],
+        [
+          270,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OptimizeCLUTLabTransform",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeDataFn": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct {\n\n       cmsUInt32Number InputFormat, OutputFormat; // Keep formats for further reference\n\n} _xform_head;",
+      {
+        "InputFormat": "cmsUInt32Number"
+      },
+      "_xform_head",
+      [
+        80,
+        0
+      ],
+      [
+        84,
+        14
+      ]
+    ],
+    [
+      "typedef struct {\n\n       cmsUInt32Number InputFormat, OutputFormat; // Keep formats for further reference\n\n} _xform_head;",
+      {
+        "InputFormat": "cmsUInt32Number"
+      },
+      "_xform_head",
+      [
+        80,
+        0
+      ],
+      [
+        84,
+        14
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"lcms2_fast_float.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include <stdint.h>\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <float.h>\n",
+      [
+        46,
+        0
+      ],
+      [
+        47,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -1,0 +1,1184 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int PredictorSetup(TIFF *tif)\n{\n    static const char module[] = \"PredictorSetup\";\n\n    TIFFPredictorState *sp = PredictorState(tif);\n    TIFFDirectory *td = &tif->tif_dir;\n\n    switch (sp->predictor) /* no differencing */\n    {\n        case PREDICTOR_NONE:\n            return 1;\n        case PREDICTOR_HORIZONTAL:\n            if (td->td_bitspersample != 8 && td->td_bitspersample != 16 &&\n                td->td_bitspersample != 32 && td->td_bitspersample != 64)\n            {\n                TIFFErrorExtR(tif, module,\n                              \"Horizontal differencing \\\"Predictor\\\" not \"\n                              \"supported with %\" PRIu16 \"-bit samples\",\n                              td->td_bitspersample);\n                return 0;\n            }\n            break;\n        case PREDICTOR_FLOATINGPOINT:\n            if (td->td_sampleformat != SAMPLEFORMAT_IEEEFP)\n            {\n                TIFFErrorExtR(\n                    tif, module,\n                    \"Floating point \\\"Predictor\\\" not supported with %\" PRIu16\n                    \" data format\",\n                    td->td_sampleformat);\n                return 0;\n            }\n            if (td->td_bitspersample != 16 && td->td_bitspersample != 24 &&\n                td->td_bitspersample != 32 && td->td_bitspersample != 64)\n            { /* Should 64 be allowed? */\n                TIFFErrorExtR(\n                    tif, module,\n                    \"Floating point \\\"Predictor\\\" not supported with %\" PRIu16\n                    \"-bit samples\",\n                    td->td_bitspersample);\n                return 0;\n            }\n            break;\n        default:\n            TIFFErrorExtR(tif, module, \"\\\"Predictor\\\" value %d not supported\",\n                          sp->predictor);\n            return 0;\n    }\n    sp->stride =\n        (td->td_planarconfig == PLANARCONFIG_CONTIG ? td->td_samplesperpixel\n                                                    : 1);\n    /*\n     * Calculate the scanline/tile-width size in bytes.\n     */\n    if (isTiled(tif))\n        sp->rowsize = TIFFTileRowSize(tif);\n    else\n        sp->rowsize = TIFFScanlineSize(tif);\n    if (sp->rowsize == 0)\n        return 0;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          58,
+          0
+        ],
+        [
+          120,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorSetup",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int PredictorSetupDecode(TIFF *tif)\n{\n    TIFFPredictorState *sp = PredictorState(tif);\n    TIFFDirectory *td = &tif->tif_dir;\n\n    /* Note: when PredictorSetup() fails, the effets of setupdecode() */\n    /* will not be \"canceled\" so setupdecode() might be robust to */\n    /* be called several times. */\n    if (!(*sp->setupdecode)(tif) || !PredictorSetup(tif))\n        return 0;\n\n    if (sp->predictor == 2)\n    {\n        switch (td->td_bitspersample)\n        {\n            case 8:\n                sp->decodepfunc = horAcc8;\n                break;\n            case 16:\n                sp->decodepfunc = horAcc16;\n                break;\n            case 32:\n                sp->decodepfunc = horAcc32;\n                break;\n            case 64:\n                sp->decodepfunc = horAcc64;\n                break;\n        }\n        /*\n         * Override default decoding method with one that does the\n         * predictor stuff.\n         */\n        if (tif->tif_decoderow != PredictorDecodeRow)\n        {\n            sp->decoderow = tif->tif_decoderow;\n            tif->tif_decoderow = PredictorDecodeRow;\n            sp->decodestrip = tif->tif_decodestrip;\n            tif->tif_decodestrip = PredictorDecodeTile;\n            sp->decodetile = tif->tif_decodetile;\n            tif->tif_decodetile = PredictorDecodeTile;\n        }\n\n        /*\n         * If the data is horizontally differenced 16-bit data that\n         * requires byte-swapping, then it must be byte swapped before\n         * the accumulation step.  We do this with a special-purpose\n         * routine and override the normal post decoding logic that\n         * the library setup when the directory was read.\n         */\n        if (tif->tif_flags & TIFF_SWAB)\n        {\n            if (sp->decodepfunc == horAcc16)\n            {\n                sp->decodepfunc = swabHorAcc16;\n                tif->tif_postdecode = _TIFFNoPostDecode;\n            }\n            else if (sp->decodepfunc == horAcc32)\n            {\n                sp->decodepfunc = swabHorAcc32;\n                tif->tif_postdecode = _TIFFNoPostDecode;\n            }\n            else if (sp->decodepfunc == horAcc64)\n            {\n                sp->decodepfunc = swabHorAcc64;\n                tif->tif_postdecode = _TIFFNoPostDecode;\n            }\n        }\n    }\n\n    else if (sp->predictor == 3)\n    {\n        sp->decodepfunc = fpAcc;\n        /*\n         * Override default decoding method with one that does the\n         * predictor stuff.\n         */\n        if (tif->tif_decoderow != PredictorDecodeRow)\n        {\n            sp->decoderow = tif->tif_decoderow;\n            tif->tif_decoderow = PredictorDecodeRow;\n            sp->decodestrip = tif->tif_decodestrip;\n            tif->tif_decodestrip = PredictorDecodeTile;\n            sp->decodetile = tif->tif_decodetile;\n            tif->tif_decodetile = PredictorDecodeTile;\n        }\n        /*\n         * The data should not be swapped outside of the floating\n         * point predictor, the accumulation routine should return\n         * byres in the native order.\n         */\n        if (tif->tif_flags & TIFF_SWAB)\n        {\n            tif->tif_postdecode = _TIFFNoPostDecode;\n        }\n        /*\n         * Allocate buffer to keep the decoded bytes before\n         * rearranging in the right order\n         */\n    }\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          122,
+          0
+        ],
+        [
+          223,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorSetupDecode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int PredictorSetupEncode(TIFF *tif)\n{\n    TIFFPredictorState *sp = PredictorState(tif);\n    TIFFDirectory *td = &tif->tif_dir;\n\n    if (!(*sp->setupencode)(tif) || !PredictorSetup(tif))\n        return 0;\n\n    if (sp->predictor == 2)\n    {\n        switch (td->td_bitspersample)\n        {\n            case 8:\n                sp->encodepfunc = horDiff8;\n                break;\n            case 16:\n                sp->encodepfunc = horDiff16;\n                break;\n            case 32:\n                sp->encodepfunc = horDiff32;\n                break;\n            case 64:\n                sp->encodepfunc = horDiff64;\n                break;\n        }\n        /*\n         * Override default encoding method with one that does the\n         * predictor stuff.\n         */\n        if (tif->tif_encoderow != PredictorEncodeRow)\n        {\n            sp->encoderow = tif->tif_encoderow;\n            tif->tif_encoderow = PredictorEncodeRow;\n            sp->encodestrip = tif->tif_encodestrip;\n            tif->tif_encodestrip = PredictorEncodeTile;\n            sp->encodetile = tif->tif_encodetile;\n            tif->tif_encodetile = PredictorEncodeTile;\n        }\n\n        /*\n         * If the data is horizontally differenced 16-bit data that\n         * requires byte-swapping, then it must be byte swapped after\n         * the differentiation step.  We do this with a special-purpose\n         * routine and override the normal post decoding logic that\n         * the library setup when the directory was read.\n         */\n        if (tif->tif_flags & TIFF_SWAB)\n        {\n            if (sp->encodepfunc == horDiff16)\n            {\n                sp->encodepfunc = swabHorDiff16;\n                tif->tif_postdecode = _TIFFNoPostDecode;\n            }\n            else if (sp->encodepfunc == horDiff32)\n            {\n                sp->encodepfunc = swabHorDiff32;\n                tif->tif_postdecode = _TIFFNoPostDecode;\n            }\n            else if (sp->encodepfunc == horDiff64)\n            {\n                sp->encodepfunc = swabHorDiff64;\n                tif->tif_postdecode = _TIFFNoPostDecode;\n            }\n        }\n    }\n\n    else if (sp->predictor == 3)\n    {\n        sp->encodepfunc = fpDiff;\n        /*\n         * Override default encoding method with one that does the\n         * predictor stuff.\n         */\n        if (tif->tif_encoderow != PredictorEncodeRow)\n        {\n            sp->encoderow = tif->tif_encoderow;\n            tif->tif_encoderow = PredictorEncodeRow;\n            sp->encodestrip = tif->tif_encodestrip;\n            tif->tif_encodestrip = PredictorEncodeTile;\n            sp->encodetile = tif->tif_encodetile;\n            tif->tif_encodetile = PredictorEncodeTile;\n        }\n    }\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          225,
+          0
+        ],
+        [
+          310,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorSetupEncode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int PredictorVSetField(TIFF *tif, uint32_t tag, va_list ap)\n{\n    TIFFPredictorState *sp = PredictorState(tif);\n\n    assert(sp != NULL);\n    assert(sp->vsetparent != NULL);\n\n    switch (tag)\n    {\n        case TIFFTAG_PREDICTOR:\n            sp->predictor = (uint16_t)va_arg(ap, uint16_vap);\n            TIFFSetFieldBit(tif, FIELD_PREDICTOR);\n            break;\n        default:\n            return (*sp->vsetparent)(tif, tag, ap);\n    }\n    tif->tif_flags |= TIFF_DIRTYDIRECT;\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          928,
+          0
+        ],
+        [
+          946,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorVSetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int PredictorVGetField(TIFF *tif, uint32_t tag, va_list ap)\n{\n    TIFFPredictorState *sp = PredictorState(tif);\n\n    assert(sp != NULL);\n    assert(sp->vgetparent != NULL);\n\n    switch (tag)\n    {\n        case TIFFTAG_PREDICTOR:\n            *va_arg(ap, uint16_t *) = (uint16_t)sp->predictor;\n            break;\n        default:\n            return (*sp->vgetparent)(tif, tag, ap);\n    }\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          948,
+          0
+        ],
+        [
+          964,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorVGetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void PredictorPrintDir(TIFF *tif, FILE *fd, long flags)\n{\n    TIFFPredictorState *sp = PredictorState(tif);\n\n    (void)flags;\n    if (TIFFFieldSet(tif, FIELD_PREDICTOR))\n    {\n        fprintf(fd, \"  Predictor: \");\n        switch (sp->predictor)\n        {\n            case 1:\n                fprintf(fd, \"none \");\n                break;\n            case 2:\n                fprintf(fd, \"horizontal differencing \");\n                break;\n            case 3:\n                fprintf(fd, \"floating point predictor \");\n                break;\n        }\n        fprintf(fd, \"%d (0x%x)\\n\", sp->predictor, sp->predictor);\n    }\n    if (sp->printdir)\n        (*sp->printdir)(tif, fd, flags);\n}",
+      "fn_code_pos": [
+        [
+          966,
+          0
+        ],
+        [
+          990,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorPrintDir",
+        "parameters": {
+          "tif": "TIFF",
+          "fd": "FILE",
+          "flags": "long"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int TIFFPredictorInit(TIFF *tif)\n{\n    TIFFPredictorState *sp = PredictorState(tif);\n\n    assert(sp != 0);\n\n    /*\n     * Merge codec-specific tag information.\n     */\n    if (!_TIFFMergeFields(tif, predictFields, TIFFArrayCount(predictFields)))\n    {\n        TIFFErrorExtR(tif, \"TIFFPredictorInit\",\n                      \"Merging Predictor codec-specific tags failed\");\n        return 0;\n    }\n\n    /*\n     * Override parent get/set field methods.\n     */\n    sp->vgetparent = tif->tif_tagmethods.vgetfield;\n    tif->tif_tagmethods.vgetfield =\n        PredictorVGetField; /* hook for predictor tag */\n    sp->vsetparent = tif->tif_tagmethods.vsetfield;\n    tif->tif_tagmethods.vsetfield =\n        PredictorVSetField; /* hook for predictor tag */\n    sp->printdir = tif->tif_tagmethods.printdir;\n    tif->tif_tagmethods.printdir =\n        PredictorPrintDir; /* hook for predictor tag */\n\n    sp->setupdecode = tif->tif_setupdecode;\n    tif->tif_setupdecode = PredictorSetupDecode;\n    sp->setupencode = tif->tif_setupencode;\n    tif->tif_setupencode = PredictorSetupEncode;\n\n    sp->predictor = 1;      /* default value */\n    sp->encodepfunc = NULL; /* no predictor routine */\n    sp->decodepfunc = NULL; /* no predictor routine */\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          992,
+          0
+        ],
+        [
+          1030,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFPredictorInit",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFPredictorCleanup(TIFF *tif)\n{\n    TIFFPredictorState *sp = PredictorState(tif);\n\n    assert(sp != 0);\n\n    tif->tif_tagmethods.vgetfield = sp->vgetparent;\n    tif->tif_tagmethods.vsetfield = sp->vsetparent;\n    tif->tif_tagmethods.printdir = sp->printdir;\n    tif->tif_setupdecode = sp->setupdecode;\n    tif->tif_setupencode = sp->setupencode;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          1032,
+          0
+        ],
+        [
+          1045,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFPredictorCleanup",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "horAcc8(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          34,
+          11
+        ],
+        [
+          34,
+          56
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horAcc8",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "horAcc16(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          35,
+          11
+        ],
+        [
+          35,
+          57
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horAcc16",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "horAcc32(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          36,
+          11
+        ],
+        [
+          36,
+          57
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horAcc32",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "horAcc64(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          37,
+          11
+        ],
+        [
+          37,
+          57
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horAcc64",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "swabHorAcc16(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          38,
+          11
+        ],
+        [
+          38,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "swabHorAcc16",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "swabHorAcc32(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          39,
+          11
+        ],
+        [
+          39,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "swabHorAcc32",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "swabHorAcc64(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          40,
+          11
+        ],
+        [
+          40,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "swabHorAcc64",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "horDiff8(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          41,
+          11
+        ],
+        [
+          41,
+          57
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horDiff8",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "horDiff16(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          42,
+          11
+        ],
+        [
+          42,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horDiff16",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "horDiff32(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          43,
+          11
+        ],
+        [
+          43,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horDiff32",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "horDiff64(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          44,
+          11
+        ],
+        [
+          44,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horDiff64",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "swabHorDiff16(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          45,
+          11
+        ],
+        [
+          45,
+          62
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "swabHorDiff16",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "swabHorDiff32(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          46,
+          11
+        ],
+        [
+          46,
+          62
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "swabHorDiff32",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "swabHorDiff64(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          47,
+          11
+        ],
+        [
+          47,
+          62
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "swabHorDiff64",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "fpAcc(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          48,
+          11
+        ],
+        [
+          48,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "fpAcc",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "fpDiff(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          49,
+          11
+        ],
+        [
+          49,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "fpDiff",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "PredictorDecodeRow(TIFF *tif, uint8_t *op0, tmsize_t occ0,\n                              uint16_t s)",
+      "fn_dec_pos": [
+        [
+          50,
+          11
+        ],
+        [
+          51,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorDecodeRow",
+        "parameters": {
+          "tif": "TIFF",
+          "op0": "uint8_t",
+          "occ0": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "PredictorDecodeTile(TIFF *tif, uint8_t *op0, tmsize_t occ0,\n                               uint16_t s)",
+      "fn_dec_pos": [
+        [
+          52,
+          11
+        ],
+        [
+          53,
+          42
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorDecodeTile",
+        "parameters": {
+          "tif": "TIFF",
+          "op0": "uint8_t",
+          "occ0": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "PredictorEncodeRow(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)",
+      "fn_dec_pos": [
+        [
+          54,
+          11
+        ],
+        [
+          54,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorEncodeRow",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "PredictorEncodeTile(TIFF *tif, uint8_t *bp0, tmsize_t cc0,\n                               uint16_t s)",
+      "fn_dec_pos": [
+        [
+          55,
+          11
+        ],
+        [
+          56,
+          42
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorEncodeTile",
+        "parameters": {
+          "tif": "TIFF",
+          "bp0": "uint8_t",
+          "cc0": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "horAcc8(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          341,
+          11
+        ],
+        [
+          341,
+          56
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horAcc8",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "swabHorAcc16(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          400,
+          11
+        ],
+        [
+          400,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "swabHorAcc16",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "horAcc16(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          410,
+          11
+        ],
+        [
+          410,
+          57
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horAcc16",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "swabHorAcc32(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          437,
+          11
+        ],
+        [
+          437,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "swabHorAcc32",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "horAcc32(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          447,
+          11
+        ],
+        [
+          447,
+          57
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horAcc32",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "swabHorAcc64(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          471,
+          11
+        ],
+        [
+          471,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "swabHorAcc64",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "horAcc64(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          481,
+          11
+        ],
+        [
+          481,
+          57
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horAcc64",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "fpAcc(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          508,
+          11
+        ],
+        [
+          508,
+          54
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "fpAcc",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "PredictorDecodeRow(TIFF *tif, uint8_t *op0, tmsize_t occ0,\n                              uint16_t s)",
+      "fn_dec_pos": [
+        [
+          556,
+          11
+        ],
+        [
+          557,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorDecodeRow",
+        "parameters": {
+          "tif": "TIFF",
+          "op0": "uint8_t",
+          "occ0": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "PredictorDecodeTile(TIFF *tif, uint8_t *op0, tmsize_t occ0,\n                               uint16_t s)",
+      "fn_dec_pos": [
+        [
+          580,
+          11
+        ],
+        [
+          581,
+          42
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorDecodeTile",
+        "parameters": {
+          "tif": "TIFF",
+          "op0": "uint8_t",
+          "occ0": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "horDiff8(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          613,
+          11
+        ],
+        [
+          613,
+          57
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horDiff8",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "horDiff16(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          691,
+          11
+        ],
+        [
+          691,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horDiff16",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "swabHorDiff16(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          720,
+          11
+        ],
+        [
+          720,
+          62
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "swabHorDiff16",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "horDiff32(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          733,
+          11
+        ],
+        [
+          733,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horDiff32",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "swabHorDiff32(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          759,
+          11
+        ],
+        [
+          759,
+          62
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "swabHorDiff32",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "horDiff64(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          772,
+          11
+        ],
+        [
+          772,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "horDiff64",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "swabHorDiff64(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          798,
+          11
+        ],
+        [
+          798,
+          62
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "swabHorDiff64",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "fpDiff(TIFF *tif, uint8_t *cp0, tmsize_t cc)",
+      "fn_dec_pos": [
+        [
+          814,
+          11
+        ],
+        [
+          814,
+          55
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "fpDiff",
+        "parameters": {
+          "tif": "TIFF",
+          "cp0": "uint8_t",
+          "cc": "tmsize_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "PredictorEncodeRow(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)",
+      "fn_dec_pos": [
+        [
+          857,
+          11
+        ],
+        [
+          857,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorEncodeRow",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "PredictorEncodeTile(TIFF *tif, uint8_t *bp0, tmsize_t cc0,\n                               uint16_t s)",
+      "fn_dec_pos": [
+        [
+          871,
+          11
+        ],
+        [
+          872,
+          42
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PredictorEncodeTile",
+        "parameters": {
+          "tif": "TIFF",
+          "bp0": "uint8_t",
+          "cc0": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tif_predict.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

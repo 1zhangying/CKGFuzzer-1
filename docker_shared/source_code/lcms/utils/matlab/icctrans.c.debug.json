@@ -1,0 +1,435 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\ncmsBool FatalError(const char *frm, ...)\n{\n\tva_list args;\n\tchar Buffer[1024];\n\n\tva_start(args, frm);\n\tvsprintf(Buffer, frm, args);\n\tmexErrMsgTxt(Buffer);   \n\tva_end(args);\n\n\treturn FALSE;               \n}",
+      "fn_code_pos": [
+        [
+          66,
+          0
+        ],
+        [
+          78,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "FatalError",
+        "parameters": {
+          "frm": "char"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\nvoid MatLabErrorHandler(cmsContext ContextID, cmsUInt32Number ErrorCode, \n\t\t\t\t\t\tconst char *Text)\n{      \n\tmexErrMsgTxt(Text);    \n}",
+      "fn_code_pos": [
+        [
+          82,
+          0
+        ],
+        [
+          87,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MatLabErrorHandler",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "ErrorCode": "cmsUInt32Number",
+          "Text": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid xoptinit()\n{   \n\txoptind = 1;\n\txopterr = 0;\n\tletP = NULL;\n}",
+      "fn_code_pos": [
+        [
+          92,
+          0
+        ],
+        [
+          98,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "xoptinit",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nint xgetopt(int argc, char *argv[], char *optionS)\n{\n\tunsigned char ch;\n\tchar *optP;\n\n\tif (SW == 0) {\n\t\tSW = '/';\n\t}\n\n\tif (argc > xoptind) {\n\t\tif (letP == NULL) {\n\t\t\tif ((letP = argv[xoptind]) == NULL ||\n\t\t\t\t*(letP++) != SW)  goto gopEOF;\n\t\t\tif (*letP == SW) {\n\t\t\t\txoptind++;  goto gopEOF;\n\t\t\t}\n\t\t}\n\t\tif (0 == (ch = *(letP++))) {\n\t\t\txoptind++;  goto gopEOF;\n\t\t}\n\t\tif (':' == ch  ||  (optP = strchr(optionS, ch)) == NULL)\n\t\t\tgoto gopError;\n\t\tif (':' == *(++optP)) {\n\t\t\txoptind++;\n\t\t\tif (0 == *letP) {\n\t\t\t\tif (argc <= xoptind)  goto  gopError;\n\t\t\t\tletP = argv[xoptind++];\n\t\t\t}\n\t\t\txoptarg = letP;\n\t\t\tletP = NULL;\n\t\t} else {\n\t\t\tif (0 == *letP) {\n\t\t\t\txoptind++;\n\t\t\t\tletP = NULL;\n\t\t\t}\n\t\t\txoptarg = NULL;\n\t\t}\n\t\treturn ch;\n\t}\ngopEOF:\n\txoptarg = letP = NULL;\n\treturn EOF;\n\ngopError:\n\txoptarg = NULL;    \n\tif (xopterr)\n\t\tFatalError (\"get command line option\");\n\treturn ('?');\n}",
+      "fn_code_pos": [
+        [
+          101,
+          0
+        ],
+        [
+          150,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "xgetopt",
+        "parameters": {
+          "argc": "int",
+          "argv": "char",
+          "optionS": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static\nsize_t SizeOfArrayType(const mxArray *Array)\n{\n\n\tswitch (mxGetClassID(Array))  {\n\n\t case mxINT8_CLASS:   return 1;\n\t case mxUINT8_CLASS:  return 1;\n\t case mxINT16_CLASS:  return 2;\n\t case mxUINT16_CLASS: return 2;  \n\t case mxSINGLE_CLASS: return 4;\n\t case mxDOUBLE_CLASS: return 0; // Special case -- lcms handles double as size=0\n\n\n\t default:\n\t\t FatalError(\"Unsupported data type\");\n\t\t return 0;\n\t}\n}",
+      "fn_code_pos": [
+        [
+          155,
+          0
+        ],
+        [
+          173,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SizeOfArrayType",
+        "parameters": {
+          "Array": "mxArray"
+        },
+        "return_type": "size_t"
+      }
+    },
+    {
+      "fn_code": "static\nsize_t GetNumberOfPixels(const mxArray* In)\n{\n\tint nDimensions  = mxGetNumberOfDimensions(In); \n\tconst int  *Dimensions   = mxGetDimensions(In);\n\n\tswitch (nDimensions) {\n\n\t\tcase 1: return 1;                            // It is just a spot color\n\t\tcase 2: return Dimensions[0];                // A scanline\n\t\tcase 3: return Dimensions[0]*Dimensions[1];  // A image\n\n\t\tdefault:\n\t\t\tFatalError(\"Unsupported array of %d dimensions\", nDimensions);\n\t\t\treturn 0;\n\t}\n}",
+      "fn_code_pos": [
+        [
+          180,
+          0
+        ],
+        [
+          196,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetNumberOfPixels",
+        "parameters": {
+          "In": "mxArray"
+        },
+        "return_type": "size_t"
+      }
+    },
+    {
+      "fn_code": "static\nmxArray* AllocateOutputArray(const mxArray* In, int OutputChannels)\n{       \n\n\tmxArray*\tOut\t\t\t  = mxDuplicateArray(In);   // Make a \"deep copy\" of Input array \n\tint         nDimensions   = mxGetNumberOfDimensions(In);    \n\tconst int*\tDimensions    = mxGetDimensions(In);\n\tint         InputChannels = Dimensions[nDimensions-1];\n\n\n\t// Modify pixel size only if needed\n\n\tif (InputChannels != OutputChannels) {\n\n\n\t\tint i, NewSize;\n\t\tint *ModifiedDimensions = (int*) mxMalloc(nDimensions * sizeof(int));\n\n\n\t\tmemmove(ModifiedDimensions, Dimensions, nDimensions * sizeof(int));\n\t\tModifiedDimensions[nDimensions - 1] = OutputChannels;\n\n\t\tswitch (mxGetClassID(In))  {\n\n\t\tcase mxINT8_CLASS:   NewSize = sizeof(char); break;\n\t\tcase mxUINT8_CLASS:  NewSize = sizeof(unsigned char); break;\n\t\tcase mxINT16_CLASS:  NewSize = sizeof(short); break;\n\t\tcase mxUINT16_CLASS: NewSize = sizeof(unsigned short); break;\n\n\t\tdefault:\n\t\tcase mxDOUBLE_CLASS: NewSize = sizeof(double); break;\n\t\t}\n\n\n\t\t// NewSize = 1;\n\t\tfor (i=0; i < nDimensions; i++)\n\t\t\tNewSize *= ModifiedDimensions[i];\n\n\n\t\tmxSetDimensions(Out, ModifiedDimensions, nDimensions);\n\t\tmxFree(ModifiedDimensions);\n\n\t\tmxSetPr(Out, mxRealloc(mxGetPr(Out), NewSize));             \n\n\t}\n\n\n\treturn Out;\n}",
+      "fn_code_pos": [
+        [
+          202,
+          0
+        ],
+        [
+          250,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllocateOutputArray",
+        "parameters": {
+          "In": "mxArray",
+          "OutputChannels": "int"
+        },
+        "return_type": "mxArray"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number MakeFormatDescriptor(cmsColorSpaceSignature ColorSpace, int Bytes)\n{\n\tint IsFloat = (Bytes == 0 || Bytes == 4) ? 1 : 0;\n\tint Channels = cmsChannelsOf(ColorSpace);\n\treturn FLOAT_SH(IsFloat)|COLORSPACE_SH(_cmsLCMScolorSpace(ColorSpace))|BYTES_SH(Bytes)|CHANNELS_SH(Channels)|PLANAR_SH(1);\n}",
+      "fn_code_pos": [
+        [
+          262,
+          0
+        ],
+        [
+          268,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "MakeFormatDescriptor",
+        "parameters": {
+          "ColorSpace": "cmsColorSpaceSignature",
+          "Bytes": "int"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\ncmsHPROFILE OpenProfile(const char* File)\n{   \n\n\tcmsContext ContextID = 0;\n\n\t   if (!File) \n            return cmsCreate_sRGBProfileTHR(ContextID);    \n\n       if (cmsstrcasecmp(File, \"*Lab2\") == 0)\n                return cmsCreateLab2ProfileTHR(ContextID, NULL);\n\n       if (cmsstrcasecmp(File, \"*Lab4\") == 0)\n                return cmsCreateLab4ProfileTHR(ContextID, NULL);\n\n       if (cmsstrcasecmp(File, \"*Lab\") == 0)\n                return cmsCreateLab4ProfileTHR(ContextID, NULL);\n       \n       if (cmsstrcasecmp(File, \"*LabD65\") == 0) {\n\n           cmsCIExyY D65xyY;\n           \n           cmsWhitePointFromTemp( &D65xyY, 6504);           \n           return cmsCreateLab4ProfileTHR(ContextID, &D65xyY);\n       }\n\n       if (cmsstrcasecmp(File, \"*XYZ\") == 0)\n                return cmsCreateXYZProfileTHR(ContextID);\n\n       if (cmsstrcasecmp(File, \"*Gray22\") == 0) {\n\n           cmsToneCurve* Curve = cmsBuildGamma(ContextID, 2.2);\n           cmsHPROFILE hProfile = cmsCreateGrayProfileTHR(ContextID, cmsD50_xyY(), Curve);\n           cmsFreeToneCurve(Curve);\n           return hProfile;\n       }\n\n        if (cmsstrcasecmp(File, \"*Gray30\") == 0) {\n\n           cmsToneCurve* Curve = cmsBuildGamma(ContextID, 3.0);\n           cmsHPROFILE hProfile = cmsCreateGrayProfileTHR(ContextID, cmsD50_xyY(), Curve);\n           cmsFreeToneCurve(Curve);\n           return hProfile;\n       }\n\n       if (cmsstrcasecmp(File, \"*srgb\") == 0)\n                return cmsCreate_sRGBProfileTHR(ContextID);\n\n       if (cmsstrcasecmp(File, \"*null\") == 0)\n                return cmsCreateNULLProfileTHR(ContextID);\n\n       \n       if (cmsstrcasecmp(File, \"*Lin2222\") == 0) {\n\n            cmsToneCurve*  Gamma = cmsBuildGamma(0, 2.2);\n            cmsToneCurve*  Gamma4[4];\n            cmsHPROFILE hProfile; \n\n            Gamma4[0] = Gamma4[1] = Gamma4[2] = Gamma4[3] = Gamma;\n            hProfile = cmsCreateLinearizationDeviceLink(cmsSigCmykData, Gamma4);\n            cmsFreeToneCurve(Gamma);\n            return hProfile;\n       }\n\n           \n        return cmsOpenProfileFromFileTHR(ContextID, File, \"r\");\n}",
+      "fn_code_pos": [
+        [
+          273,
+          0
+        ],
+        [
+          339,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OpenProfile",
+        "parameters": {
+          "File": "char"
+        },
+        "return_type": "cmsHPROFILE"
+      }
+    },
+    {
+      "fn_code": "static\ncmsUInt32Number GetFlags()\n{\n\tcmsUInt32Number dwFlags = 0; \n\n\tswitch (PrecalcMode) {\n\n\tcase 0: dwFlags = cmsFLAGS_NOOPTIMIZE; break;\n\tcase 2: dwFlags = cmsFLAGS_HIGHRESPRECALC; break;\n\tcase 3: dwFlags = cmsFLAGS_LOWRESPRECALC; break;\n\tcase 1: break;\n\n\tdefault: FatalError(\"Unknown precalculation mode '%d'\", PrecalcMode);\n\t}\n\n\tif (BlackPointCompensation) \n\t\tdwFlags |= cmsFLAGS_BLACKPOINTCOMPENSATION;\n\n\treturn dwFlags;\n}",
+      "fn_code_pos": [
+        [
+          342,
+          0
+        ],
+        [
+          361,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetFlags",
+        "parameters": {},
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "static\nvoid OpenTransforms(int argc, char *argv[])\n{\n\n\tcmsUInt32Number dwIn, dwOut, dwFlags;\n\n\n\tif (lMultiProfileChain) {\n\n\t\tint i;\n\t\tcmsHTRANSFORM hTmp;\n\n\n\t\tnProfiles = argc - xoptind;\n\t\tfor (i=0; i < nProfiles; i++) {\n\n\t\t\thProfiles[i] = OpenProfile(argv[i+xoptind]);\n\t\t}\n\n\n\t\t// Create a temporary devicelink \n\n\t\thTmp = cmsCreateMultiprofileTransform(hProfiles, nProfiles, \n\t\t\t0, 0, Intent, GetFlags());\n\n\t\thInput = cmsTransform2DeviceLink(hTmp, 4.2, 0);\n\t\thOutput = NULL;\n\t\tcmsDeleteTransform(hTmp);\n\n\t\tInputColorSpace  = cmsGetColorSpace(hInput);\n\t\tOutputColorSpace = cmsGetPCS(hInput);        \n\t\tlIsDeviceLink = TRUE;\n\n\t}\n\telse\n\t\tif (lIsDeviceLink) {\n\n\t\t\thInput  = cmsOpenProfileFromFile(cInProf, \"r\");\n\t\t\thOutput = NULL;\n\t\t\tInputColorSpace  = cmsGetColorSpace(hInput);\n\t\t\tOutputColorSpace = cmsGetPCS(hInput);\n\n\n\t\t}\n\t\telse {\n\n\t\t\thInput  = OpenProfile(cInProf);\n\t\t\thOutput = OpenProfile(cOutProf);    \n\n\t\t\tInputColorSpace   = cmsGetColorSpace(hInput);\n\t\t\tOutputColorSpace  = cmsGetColorSpace(hOutput);\n\n\t\t\tif (cmsGetDeviceClass(hInput) == cmsSigLinkClass ||\n\t\t\t\tcmsGetDeviceClass(hOutput) == cmsSigLinkClass)   \n\t\t\t\tFatalError(\"Use %cl flag for devicelink profiles!\\n\", SW);\n\n\t\t}\n\n\n\t\t/*\n\n\t\tif (Verbose) {\n\n\t\tmexPrintf(\"From: %s\\n\", cmsTakeProductName(hInput));\n\t\tif (hOutput) mexPrintf(\"To  : %s\\n\\n\", cmsTakeProductName(hOutput));\n\n\t\t}\n\t\t*/\n\n\n\t\tOutputChannels = cmsChannelsOf(OutputColorSpace);\n\t\tInputChannels  = cmsChannelsOf(InputColorSpace);\n\n\n\t\tdwIn  = MakeFormatDescriptor(InputColorSpace, nBytesDepth);\n\t\tdwOut = MakeFormatDescriptor(OutputColorSpace, nBytesDepth);\n\n\n\t\tdwFlags = GetFlags();\n\n\t\tif (cProofing != NULL) {\n\n\t\t\thProof = OpenProfile(cProofing);\n\t\t\tdwFlags |= cmsFLAGS_SOFTPROOFING;\n\t\t}\n\n\n\n\n\t\thColorTransform = cmsCreateProofingTransform(hInput, dwIn, \n\t\t\thOutput, dwOut, \n\t\t\thProof, Intent, \n\t\t\tProofingIntent, \n\t\t\tdwFlags);\n\n}",
+      "fn_code_pos": [
+        [
+          365,
+          0
+        ],
+        [
+          460,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OpenTransforms",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ApplyTransforms(const mxArray *In, mxArray *Out)\n{   \n\tdouble *Input  = mxGetPr(In); \n\tdouble *Output = mxGetPr(Out);    \n\tsize_t nPixels = GetNumberOfPixels(In);;\n\n\tcmsDoTransform(hColorTransform, Input, Output, nPixels );\n\n}",
+      "fn_code_pos": [
+        [
+          464,
+          0
+        ],
+        [
+          473,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ApplyTransforms",
+        "parameters": {
+          "In": "mxArray",
+          "Out": "mxArray"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid CloseTransforms(void)\n{\n\tint i;\n\n\tif (hColorTransform) cmsDeleteTransform(hColorTransform);\n\tif (hInput) cmsCloseProfile(hInput);\n\tif (hOutput) cmsCloseProfile(hOutput);             \n\tif (hProof) cmsCloseProfile(hProof);\n\n\tfor (i=0; i < nProfiles; i++)\n\t\tcmsCloseProfile(hProfiles[i]);\n\n\thColorTransform = NULL; hInput = NULL; hOutput = NULL; hProof = NULL;\n}",
+      "fn_code_pos": [
+        [
+          476,
+          0
+        ],
+        [
+          490,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CloseTransforms",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid HandleSwitches(int argc, char *argv[])\n{\n\tint  s;\n\n\txoptinit();\n\n\twhile ((s = xgetopt(argc, argv,\"C:c:VvbBI:i:O:o:T:t:L:l:r:r:P:p:Mm\")) != EOF) {\n\n\n\t\tswitch (s){\n\n\t\tcase 'b':\n\t\tcase 'B': \n\t\t\tBlackPointCompensation = TRUE;\n\t\t\tbreak;\n\n\t\tcase 'c':\n\t\tcase 'C':\n\t\t\tPrecalcMode = atoi(xoptarg);\n\t\t\tif (PrecalcMode < 0 || PrecalcMode > 3)\n\t\t\t\tFatalError(\"Unknown precalc mode '%d'\", PrecalcMode);\n\t\t\tbreak;\n\n\t\tcase 'v':\n\t\tcase 'V':\n\t\t\tVerbose = TRUE;\n\t\t\tbreak;\n\n\t\tcase 'i':\n\t\tcase 'I':\n\t\t\tif (lIsDeviceLink)\n\t\t\t\tFatalError(\"Device-link already specified\");\n\t\t\tcInProf = xoptarg;\n\t\t\tbreak;\n\n\t\tcase 'o':\n\t\tcase 'O':\n\t\t\tif (lIsDeviceLink)\n\t\t\t\tFatalError(\"Device-link already specified\"); \n\t\t\tcOutProf = xoptarg;\n\t\t\tbreak;\n\n\t\tcase 't':\n\t\tcase 'T':\n\t\t\tIntent = atoi(xoptarg);\n\t\t\t// if (Intent > 3) Intent = 3;\n\t\t\tif (Intent < 0) Intent = 0;\n\t\t\tbreak;\n\n\n\t\tcase 'l':\n\t\tcase 'L': \n\t\t\tcInProf = xoptarg;\n\t\t\tlIsDeviceLink = TRUE;\n\t\t\tbreak;\n\n\t\tcase 'p':\n\t\tcase 'P':\n\t\t\tcProofing = xoptarg;\n\t\t\tbreak;\n\n\n\n\t\tcase 'r':\n\t\tcase 'R':\n\t\t\tProofingIntent = atoi(xoptarg);\n\t\t\t// if (ProofingIntent > 3) ProofingIntent = 3;\n\t\t\tif (ProofingIntent < 0) ProofingIntent = 0;\n\t\t\tbreak;\n\n\n\t\tcase 'm':\n\t\tcase 'M':\n\t\t\tlMultiProfileChain = TRUE;\n\t\t\tbreak;\n\n\t\tdefault:\n\t\t\tFatalError(\"Unknown option.\");\n\t\t}\n\t}\n\n\t// For multiprofile, need to specify -m\n\n\tif (xoptind < argc) {\n\n\t\tif (!lMultiProfileChain)\n\t\t\tFatalError(\"Use %cm for multiprofile transforms\", SW);\n\t}\n\n}",
+      "fn_code_pos": [
+        [
+          493,
+          0
+        ],
+        [
+          583,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "HandleSwitches",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid PrintHelp(void)\n{\n\tmexPrintf(\"(MX) little cms ColorSpace conversion tool - v2.0\\n\\n\");\n\n\tmexPrintf(\"usage: icctrans (mVar, flags)\\n\\n\");\n\n\tmexPrintf(\"mVar : Matlab array.\\n\");\n\tmexPrintf(\"flags: a string containing one or more of following options.\\n\\n\");\n\tmexPrintf(\"\\t%cv - Verbose\\n\", SW);\n\tmexPrintf(\"\\t%ci<profile> - Input profile (defaults to sRGB)\\n\", SW);\n\tmexPrintf(\"\\t%co<profile> - Output profile (defaults to sRGB)\\n\", SW);   \n\tmexPrintf(\"\\t%cl<profile> - Transform by device-link profile\\n\", SW);      \n\tmexPrintf(\"\\t%cm<profiles> - Apply multiprofile chain\\n\", SW);      \n\n\tmexPrintf(\"\\t%ct<n> - Rendering intent\\n\", SW);    \n\n\tmexPrintf(\"\\t%cb - Black point compensation\\n\", SW);\n\tmexPrintf(\"\\t%cc<0,1,2,3> - Optimize transform (0=Off, 1=Normal, 2=Hi-res, 3=Lo-Res) [defaults to 1]\\n\", SW);     \n\n\tmexPrintf(\"\\t%cp<profile> - Soft proof profile\\n\", SW);\n\tmexPrintf(\"\\t%cr<0,1,2,3> - Soft proof intent\\n\", SW);\n\n\tmexPrintf(\"\\nYou can use following built-ins as profiles:\\n\\n\");\n\n\tmexPrintf(\"\\t*Lab2  -- D50-based v2 CIEL*a*b\\n\"\n\t\"\\t*Lab4  -- D50-based v4 CIEL*a*b\\n\"\n\t\"\\t*Lab   -- D50-based v4 CIEL*a*b\\n\"\n\t\"\\t*XYZ   -- CIE XYZ (PCS)\\n\"\n\t\"\\t*sRGB  -- IEC6 1996-2.1 sRGB color space\\n\" \n\t\"\\t*Gray22 - Monochrome of Gamma 2.2\\n\"\n\t\"\\t*Gray30 - Monochrome of Gamma 3.0\\n\"\n\t\"\\t*null   - Monochrome black for all input\\n\"\n\t\"\\t*Lin2222- CMYK linearization of gamma 2.2 on each channel\\n\\n\");\n\n\tmexPrintf(\"For suggestions, comments, bug reports etc. send mail to info@littlecms.com\\n\\n\");\n\n}",
+      "fn_code_pos": [
+        [
+          588,
+          0
+        ],
+        [
+          625,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PrintHelp",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void mexFunction(\n\t\t\t\t int nlhs,              // Number of left hand side (output) arguments\n\t\t\t\t mxArray *plhs[],       // Array of left hand side arguments\n\t\t\t\t int nrhs,              // Number of right hand side (input) arguments\n\t\t\t\t const mxArray *prhs[]  // Array of right hand side arguments\n)\n{\n\n\tchar CommandLine[4096+1];\n\tchar *pt, *argv[128];\n\tint argc = 1;\n\n\n\tif (nrhs != 2) {    \n\n\t\tPrintHelp();              \n\t\treturn;\n\t}\n\n\n\tif(nlhs > 1) {        \n\t\tFatalError(\"Too many output arguments.\");\n\t}\n\n\n\t// Setup error handler\n\n\tcmsSetLogErrorHandler(MatLabErrorHandler);\n\n\t// Defaults\n\n\tVerbose     = 0;\n\tcInProf     = NULL;\n\tcOutProf    = NULL;\n\tcProofing   = NULL;\n\n\tlMultiProfileChain = FALSE;\n\tnProfiles   = 0;\n\n\tIntent                  = INTENT_PERCEPTUAL;\n\tProofingIntent          = INTENT_ABSOLUTE_COLORIMETRIC;\n\tPrecalcMode = 1;\n\tBlackPointCompensation  = FALSE;\n\tlIsDeviceLink           = FALSE;\n\n\t// Check types. Fist parameter is array of values, second parameter is command line\n\n\tif (!mxIsNumeric(prhs[0]))\n\t\tFatalError(\"Type mismatch on argument 1 -- Must be numeric\");\n\n\tif (!mxIsChar(prhs[1]))\n\t\tFatalError(\"Type mismatch on argument 2 -- Must be string\");\n\n\n\n\n\t// Unpack string to command line buffer\n\n\tif (mxGetString(prhs[1], CommandLine, 4096))\n\t\tFatalError(\"Cannot unpack command string\");\n\n\t// Separate to argv[] convention\n\n\targv[0] = NULL;\n\tfor (pt = strtok(CommandLine, \" \");\n\t\tpt;\n\t\tpt = strtok(NULL, \" \")) {\n\n\t\t\targv[argc++] = pt;\n\t}\n\n\n\n\t// Parse arguments\n\tHandleSwitches(argc, argv);\n\n\n\tnBytesDepth = SizeOfArrayType(prhs[0]);\n\n\tOpenTransforms(argc, argv);\n\n\n\tplhs[0] = AllocateOutputArray(prhs[0], OutputChannels);\n\n\n\tApplyTransforms(prhs[0], plhs[0]);\n\n\tCloseTransforms();\n\n\t// Done!\n}",
+      "fn_code_pos": [
+        [
+          631,
+          0
+        ],
+        [
+          721,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mexFunction",
+        "parameters": {
+          "nlhs": "int",
+          "plhs": "mxArray",
+          "nrhs": "int",
+          "prhs": "mxArray"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "AllocateOutputArray(const mxArray* In, int OutputChannels)",
+      "fn_dec_pos": [
+        [
+          203,
+          9
+        ],
+        [
+          203,
+          67
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "AllocateOutputArray",
+        "parameters": {
+          "In": "mxArray",
+          "OutputChannels": "int"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"mex.h\"\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include \"lcms2.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include \"string.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"stdarg.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

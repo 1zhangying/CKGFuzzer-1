@@ -1,0 +1,562 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char **argv)\n{\n    XSetWindowAttributes window_attributes;\n    Widget widget_list[3];\n    Arg args[5];\n\n    setbuf(stdout, NULL);\n    setbuf(stderr, NULL);\n\n    shellWidget = XtInitialize(argv[0], \"XTiff\", shellOptions,\n                               XtNumber(shellOptions), &argc, argv);\n\n    XSetErrorHandler(XTiffErrorHandler);\n\n    XtGetApplicationResources(\n        shellWidget, &appData, (XtResourceList)clientResources,\n        (Cardinal)XtNumber(clientResources), (ArgList)NULL, (Cardinal)0);\n\n    if ((argc <= 1) || (argc > 2) || appData.help)\n        Usage();\n\n    if (appData.verbose == False)\n    {\n        TIFFSetErrorHandler(0);\n        TIFFSetWarningHandler(0);\n    }\n\n    fileName = argv[1];\n\n    xDisplay = XtDisplay(shellWidget);\n    xScreen = DefaultScreen(xDisplay);\n\n    OpenTIFFFile();\n    GetTIFFHeader();\n    SimpleGammaCorrection();\n    GetVisual();\n    GetTIFFImage();\n\n    /*\n     * Send visual, colormap, depth and iconPixmap to shellWidget.\n     * Sending the visual to the shell is only possible with the advent of R4.\n     */\n    XtSetArg(args[0], XtNvisual, xVisual);\n    XtSetArg(args[1], XtNcolormap, xColormap);\n    XtSetArg(args[2], XtNdepth,\n             xImageDepth == 1 ? DefaultDepth(xDisplay, xScreen) : xImageDepth);\n    XtSetArg(args[3], XtNiconPixmap,\n             XCreateBitmapFromData(xDisplay, RootWindow(xDisplay, xScreen),\n                                   xtifficon_bits, xtifficon_width,\n                                   xtifficon_height));\n    XtSetArg(args[4], XtNallowShellResize, True);\n    XtSetValues(shellWidget, args, 5);\n\n    /*\n     * widget instance hierarchy\n     */\n    formWidget = XtCreateManagedWidget(\"form\", formWidgetClass, shellWidget,\n                                       formArgs, XtNumber(formArgs));\n\n    widget_list[0] = listWidget = XtCreateWidget(\n        \"list\", listWidgetClass, formWidget, listArgs, XtNumber(listArgs));\n\n    widget_list[1] = labelWidget = XtCreateWidget(\n        \"label\", labelWidgetClass, formWidget, labelArgs, XtNumber(labelArgs));\n\n    widget_list[2] = imageWidget = XtCreateWidget(\n        \"image\", widgetClass, formWidget, imageArgs, XtNumber(imageArgs));\n\n    XtManageChildren(widget_list, XtNumber(widget_list));\n\n    /*\n     * initial widget sizes - for small images let xtiff size itself\n     */\n    if (tfImageWidth >= appData.viewportWidth)\n    {\n        XtSetArg(args[0], XtNwidth, appData.viewportWidth);\n        XtSetValues(shellWidget, args, 1);\n    }\n    if (tfImageHeight >= appData.viewportHeight)\n    {\n        XtSetArg(args[0], XtNheight, appData.viewportHeight);\n        XtSetValues(shellWidget, args, 1);\n    }\n\n    XtSetArg(args[0], XtNwidth, tfImageWidth);\n    XtSetArg(args[1], XtNheight, tfImageHeight);\n    XtSetValues(imageWidget, args, 2);\n\n    /*\n     * formWidget uses these constraints but they are stored in the children.\n     */\n    XtSetArg(args[0], XtNfromVert, listWidget);\n    XtSetValues(imageWidget, args, 1);\n    XtSetArg(args[0], XtNfromHoriz, listWidget);\n    XtSetValues(labelWidget, args, 1);\n\n    SetNameLabel();\n\n    XtAddCallback(listWidget, XtNcallback, (XtCallbackProc)SelectProc,\n                  (XtPointer)NULL);\n\n    XtAddActions(actionsTable, XtNumber(actionsTable));\n    XtSetArg(args[0], XtNtranslations,\n             XtParseTranslationTable(translationsTable));\n    XtSetValues(formWidget, &args[0], 1);\n    XtSetValues(imageWidget, &args[0], 1);\n\n    /*\n     * This is intended to be a little faster than going through\n     * the translation manager.\n     */\n    XtAddEventHandler(imageWidget,\n                      ExposureMask | ButtonPressMask | ButtonReleaseMask |\n                          Button1MotionMask | KeyPressMask,\n                      False, EventProc, NULL);\n\n    XtRealizeWidget(shellWidget);\n\n    window_attributes.cursor = XCreateFontCursor(xDisplay, XC_fleur);\n    XChangeWindowAttributes(xDisplay, XtWindow(imageWidget), CWCursor,\n                            &window_attributes);\n\n    CreateXImage();\n\n    XtMainLoop();\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          239,
+          0
+        ],
+        [
+          366,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void OpenTIFFFile()\n{\n    if (tfFile != NULL)\n        TIFFClose(tfFile);\n\n    if ((tfFile = TIFFOpen(fileName, \"r\")) == NULL)\n    {\n        fprintf(appData.verbose ? stderr : stdout,\n                \"xtiff: can't open %s as a TIFF file\\n\", fileName);\n        exit(0);\n    }\n\n    tfMultiPage = (TIFFLastDirectory(tfFile) ? False : True);\n}",
+      "fn_code_pos": [
+        [
+          368,
+          0
+        ],
+        [
+          381,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "OpenTIFFFile",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void GetTIFFHeader()\n{\n    register int i;\n\n    if (!TIFFSetDirectory(tfFile, tfDirectory))\n    {\n        fprintf(stderr, \"xtiff: can't seek to directory %d in %s\\n\",\n                tfDirectory, fileName);\n        exit(0);\n    }\n\n    TIFFGetField(tfFile, TIFFTAG_IMAGEWIDTH, &tfImageWidth);\n    TIFFGetField(tfFile, TIFFTAG_IMAGELENGTH, &tfImageHeight);\n\n    /*\n     * If the following tags aren't present then use the TIFF defaults.\n     */\n    TIFFGetFieldDefaulted(tfFile, TIFFTAG_BITSPERSAMPLE, &tfBitsPerSample);\n    TIFFGetFieldDefaulted(tfFile, TIFFTAG_SAMPLESPERPIXEL, &tfSamplesPerPixel);\n    TIFFGetFieldDefaulted(tfFile, TIFFTAG_PLANARCONFIG, &tfPlanarConfiguration);\n    TIFFGetFieldDefaulted(tfFile, TIFFTAG_GRAYRESPONSEUNIT,\n                          &tfGrayResponseUnit);\n\n    tfUnitMap = tfGrayResponseUnitMap[tfGrayResponseUnit];\n    colormapSize = 1 << tfBitsPerSample;\n    tfImageDepth = tfBitsPerSample * tfSamplesPerPixel;\n\n    dRed = (double *)malloc(colormapSize * sizeof(double));\n    dGreen = (double *)malloc(colormapSize * sizeof(double));\n    dBlue = (double *)malloc(colormapSize * sizeof(double));\n    MCHECK(dRed);\n    MCHECK(dGreen);\n    MCHECK(dBlue);\n\n    /*\n     * If TIFFTAG_PHOTOMETRIC is not present then assign a reasonable default.\n     * The TIFF 5.0 specification doesn't give a default.\n     */\n    if (!TIFFGetField(tfFile, TIFFTAG_PHOTOMETRIC,\n                      &tfPhotometricInterpretation))\n    {\n        if (tfSamplesPerPixel != 1)\n            tfPhotometricInterpretation = PHOTOMETRIC_RGB;\n        else if (tfBitsPerSample == 1)\n            tfPhotometricInterpretation = PHOTOMETRIC_MINISBLACK;\n        else if (TIFFGetField(tfFile, TIFFTAG_COLORMAP, &redMap, &greenMap,\n                              &blueMap))\n        {\n            tfPhotometricInterpretation = PHOTOMETRIC_PALETTE;\n            redMap = greenMap = blueMap = NULL;\n        }\n        else\n            tfPhotometricInterpretation = PHOTOMETRIC_MINISBLACK;\n    }\n\n    /*\n     * Given TIFFTAG_PHOTOMETRIC extract or create the response curves.\n     */\n    switch (tfPhotometricInterpretation)\n    {\n        case PHOTOMETRIC_RGB:\n            redMap = (uint16_t *)malloc(colormapSize * sizeof(uint16_t));\n            greenMap = (uint16_t *)malloc(colormapSize * sizeof(uint16_t));\n            blueMap = (uint16_t *)malloc(colormapSize * sizeof(uint16_t));\n            MCHECK(redMap);\n            MCHECK(greenMap);\n            MCHECK(blueMap);\n            for (i = 0; i < colormapSize; i++)\n                dRed[i] = dGreen[i] = dBlue[i] =\n                    (double)SCALE(i, colormapSize - 1);\n            break;\n        case PHOTOMETRIC_PALETTE:\n            if (!TIFFGetField(tfFile, TIFFTAG_COLORMAP, &redMap, &greenMap,\n                              &blueMap))\n            {\n                redMap = (uint16_t *)malloc(colormapSize * sizeof(uint16_t));\n                greenMap = (uint16_t *)malloc(colormapSize * sizeof(uint16_t));\n                blueMap = (uint16_t *)malloc(colormapSize * sizeof(uint16_t));\n                MCHECK(redMap);\n                MCHECK(greenMap);\n                MCHECK(blueMap);\n                for (i = 0; i < colormapSize; i++)\n                    dRed[i] = dGreen[i] = dBlue[i] =\n                        (double)SCALE(i, colormapSize - 1);\n            }\n            else\n            {\n                CheckAndCorrectColormap();\n                for (i = 0; i < colormapSize; i++)\n                {\n                    dRed[i] = (double)redMap[i];\n                    dGreen[i] = (double)greenMap[i];\n                    dBlue[i] = (double)blueMap[i];\n                }\n            }\n            break;\n        case PHOTOMETRIC_MINISWHITE:\n            redMap = (uint16_t *)malloc(colormapSize * sizeof(uint16_t));\n            greenMap = (uint16_t *)malloc(colormapSize * sizeof(uint16_t));\n            blueMap = (uint16_t *)malloc(colormapSize * sizeof(uint16_t));\n            MCHECK(redMap);\n            MCHECK(greenMap);\n            MCHECK(blueMap);\n            for (i = 0; i < colormapSize; i++)\n                dRed[i] = dGreen[i] = dBlue[i] =\n                    (double)SCALE(colormapSize - 1 - i, colormapSize - 1);\n            break;\n        case PHOTOMETRIC_MINISBLACK:\n            redMap = (uint16_t *)malloc(colormapSize * sizeof(uint16_t));\n            greenMap = (uint16_t *)malloc(colormapSize * sizeof(uint16_t));\n            blueMap = (uint16_t *)malloc(colormapSize * sizeof(uint16_t));\n            MCHECK(redMap);\n            MCHECK(greenMap);\n            MCHECK(blueMap);\n            for (i = 0; i < colormapSize; i++)\n                dRed[i] = dGreen[i] = dBlue[i] =\n                    (double)SCALE(i, colormapSize - 1);\n            break;\n        default:\n            fprintf(stderr,\n                    \"xtiff: can't display photometric interpretation type %d\\n\",\n                    tfPhotometricInterpretation);\n            exit(0);\n    }\n}",
+      "fn_code_pos": [
+        [
+          383,
+          0
+        ],
+        [
+          507,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetTIFFHeader",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void SetNameLabel()\n{\n    char buffer[BUFSIZ];\n    Arg args[1];\n\n    if (tfMultiPage)\n        snprintf(buffer, sizeof(buffer), \"%s - page %d\", fileName, tfDirectory);\n    else\n        snprintf(buffer, sizeof(buffer), \"%s\", fileName);\n    XtSetArg(args[0], XtNlabel, buffer);\n    XtSetValues(labelWidget, args, 1);\n}",
+      "fn_code_pos": [
+        [
+          509,
+          0
+        ],
+        [
+          520,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SetNameLabel",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CheckAndCorrectColormap()\n{\n    register int i;\n\n    for (i = 0; i < colormapSize; i++)\n        if ((redMap[i] > 255) || (greenMap[i] > 255) || (blueMap[i] > 255))\n            return;\n\n    for (i = 0; i < colormapSize; i++)\n    {\n        redMap[i] = SCALE(redMap[i], 255);\n        greenMap[i] = SCALE(greenMap[i], 255);\n        blueMap[i] = SCALE(blueMap[i], 255);\n    }\n    TIFFWarning(fileName, \"Assuming 8-bit colormap\");\n}",
+      "fn_code_pos": [
+        [
+          526,
+          0
+        ],
+        [
+          541,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CheckAndCorrectColormap",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void SimpleGammaCorrection()\n{\n    register int i;\n    register double i_gamma = 1.0 / appData.gamma;\n\n    for (i = 0; i < colormapSize; i++)\n    {\n        if (((tfPhotometricInterpretation == PHOTOMETRIC_MINISWHITE) &&\n             (i == colormapSize - 1)) ||\n            ((tfPhotometricInterpretation == PHOTOMETRIC_MINISBLACK) &&\n             (i == 0)))\n            redMap[i] = greenMap[i] = blueMap[i] = 0;\n        else\n        {\n            redMap[i] = ROUND((pow(dRed[i] / 65535.0, i_gamma) * 65535.0));\n            greenMap[i] = ROUND((pow(dGreen[i] / 65535.0, i_gamma) * 65535.0));\n            blueMap[i] = ROUND((pow(dBlue[i] / 65535.0, i_gamma) * 65535.0));\n        }\n    }\n\n    free(dRed);\n    free(dGreen);\n    free(dBlue);\n}",
+      "fn_code_pos": [
+        [
+          543,
+          0
+        ],
+        [
+          566,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "SimpleGammaCorrection",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void GetVisual()\n{\n    XColor *colors = NULL;\n    unsigned long *pixels = NULL;\n    unsigned long i;\n\n    switch (tfImageDepth)\n    {\n        /*\n         * X really wants a 32-bit image with the fourth channel unused,\n         * but the visual structure thinks it's 24-bit.  bitmap_unit is 32.\n         */\n        case 32:\n        case 24:\n            if (SearchVisualList(24, DirectColor, &xVisual) == False)\n            {\n                fprintf(stderr,\n                        \"xtiff: 24-bit DirectColor visual not available\\n\");\n                exit(0);\n            }\n\n            colors = (XColor *)malloc(3 * colormapSize * sizeof(XColor));\n            MCHECK(colors);\n\n            for (i = 0; i < colormapSize; i++)\n            {\n                colors[i].pixel = (i << 16) + (i << 8) + i;\n                colors[i].red = redMap[i];\n                colors[i].green = greenMap[i];\n                colors[i].blue = blueMap[i];\n                colors[i].flags = DoRed | DoGreen | DoBlue;\n            }\n\n            xColormap = XCreateColormap(xDisplay, RootWindow(xDisplay, xScreen),\n                                        xVisual, AllocAll);\n            XStoreColors(xDisplay, xColormap, colors, colormapSize);\n            break;\n        case 8:\n        case 4:\n        case 2:\n            /*\n             * We assume that systems with 24-bit visuals also have 8-bit\n             * visuals. We don't promote from 8-bit PseudoColor to 24/32 bit\n             * DirectColor.\n             */\n            switch (tfPhotometricInterpretation)\n            {\n                case PHOTOMETRIC_MINISWHITE:\n                case PHOTOMETRIC_MINISBLACK:\n                    if (SearchVisualList((int)tfImageDepth, GrayScale,\n                                         &xVisual) == True)\n                        break;\n                case PHOTOMETRIC_PALETTE:\n                    if (SearchVisualList((int)tfImageDepth, PseudoColor,\n                                         &xVisual) == True)\n                        break;\n                default:\n                    fprintf(stderr,\n                            \"xtiff: Unsupported TIFF/X configuration\\n\");\n                    exit(0);\n            }\n\n            colors = (XColor *)malloc(colormapSize * sizeof(XColor));\n            MCHECK(colors);\n\n            for (i = 0; i < colormapSize; i++)\n            {\n                colors[i].pixel = i;\n                colors[i].red = redMap[i];\n                colors[i].green = greenMap[i];\n                colors[i].blue = blueMap[i];\n                colors[i].flags = DoRed | DoGreen | DoBlue;\n            }\n\n            /*\n             * xtiff's colormap allocation is private.  It does not attempt\n             * to detect whether any existing colormap entries are suitable\n             * for its use.  This will cause colormap flashing.  Furthermore,\n             * background and foreground are taken from the environment.\n             * For example, the foreground color may be red when the visual\n             * is GrayScale.  If the colormap is completely populated,\n             * Xt will not be able to allocate fg and bg.\n             */\n            if (tfImageDepth == 8)\n                xColormap = XCreateColormap(\n                    xDisplay, RootWindow(xDisplay, xScreen), xVisual, AllocAll);\n            else\n            {\n                xColormap =\n                    XCreateColormap(xDisplay, RootWindow(xDisplay, xScreen),\n                                    xVisual, AllocNone);\n                pixels = (unsigned long *)malloc(colormapSize *\n                                                 sizeof(unsigned long));\n                MCHECK(pixels);\n                (void)XAllocColorCells(xDisplay, xColormap, True, NULL, 0,\n                                       pixels, colormapSize);\n                basePixel = (unsigned char)pixels[0];\n                free(pixels);\n            }\n            XStoreColors(xDisplay, xColormap, colors, colormapSize);\n            break;\n        case 1:\n            xImageDepth = 1;\n            xVisual = DefaultVisual(xDisplay, xScreen);\n            xColormap = DefaultColormap(xDisplay, xScreen);\n            break;\n        default:\n            fprintf(stderr, \"xtiff: unsupported image depth %d\\n\",\n                    tfImageDepth);\n            exit(0);\n    }\n\n    if (appData.verbose == True)\n        fprintf(stderr, \"%s: Using %d-bit %s visual.\\n\", fileName, xImageDepth,\n                classNames[xVisual->class]);\n\n    if (colors != NULL)\n        free(colors);\n    if (grayMap != NULL)\n        free(grayMap);\n    if (redMap != NULL)\n        free(redMap);\n    if (greenMap != NULL)\n        free(greenMap);\n    if (blueMap != NULL)\n        free(blueMap);\n\n    colors = NULL;\n    grayMap = redMap = greenMap = blueMap = NULL;\n}",
+      "fn_code_pos": [
+        [
+          575,
+          0
+        ],
+        [
+          704,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetVisual",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void GetTIFFImage()\n{\n    int pixel_map[3], red_shift, green_shift, blue_shift;\n    char *scan_line, *output_p, *input_p;\n    uint32_t i, j;\n    uint16_t s;\n\n    scan_line = (char *)malloc(tfBytesPerRow = TIFFScanlineSize(tfFile));\n    MCHECK(scan_line);\n\n    if ((tfImageDepth == 32) || (tfImageDepth == 24))\n    {\n        output_p = imageMemory =\n            (char *)malloc(tfImageWidth * tfImageHeight * 4);\n        MCHECK(imageMemory);\n\n        /*\n         * Handle different color masks for different frame buffers.\n         */\n        if (ImageByteOrder(xDisplay) == LSBFirst)\n        { /* DECstation 5000 */\n            red_shift = pixel_map[0] =\n                xRedMask == 0xFF000000\n                    ? 3\n                    : (xRedMask == 0xFF0000 ? 2 : (xRedMask == 0xFF00 ? 1 : 0));\n            green_shift = pixel_map[1] =\n                xGreenMask == 0xFF000000\n                    ? 3\n                    : (xGreenMask == 0xFF0000 ? 2\n                                              : (xGreenMask == 0xFF00 ? 1 : 0));\n            blue_shift = pixel_map[2] =\n                xBlueMask == 0xFF000000\n                    ? 3\n                    : (xBlueMask == 0xFF0000 ? 2\n                                             : (xBlueMask == 0xFF00 ? 1 : 0));\n        }\n        else\n        { /* Ardent */\n            red_shift = pixel_map[0] =\n                xRedMask == 0xFF000000\n                    ? 0\n                    : (xRedMask == 0xFF0000 ? 1 : (xRedMask == 0xFF00 ? 2 : 3));\n            green_shift = pixel_map[0] =\n                xGreenMask == 0xFF000000\n                    ? 0\n                    : (xGreenMask == 0xFF0000 ? 1\n                                              : (xGreenMask == 0xFF00 ? 2 : 3));\n            blue_shift = pixel_map[0] =\n                xBlueMask == 0xFF000000\n                    ? 0\n                    : (xBlueMask == 0xFF0000 ? 1\n                                             : (xBlueMask == 0xFF00 ? 2 : 3));\n        }\n\n        if (tfPlanarConfiguration == PLANARCONFIG_CONTIG)\n        {\n            for (i = 0; i < tfImageHeight; i++)\n            {\n                if (TIFFReadScanline(tfFile, scan_line, i, 0) < 0)\n                    break;\n                for (input_p = scan_line, j = 0; j < tfImageWidth; j++)\n                {\n                    *(output_p + red_shift) = *input_p++;\n                    *(output_p + green_shift) = *input_p++;\n                    *(output_p + blue_shift) = *input_p++;\n                    output_p += 4;\n                    if (tfSamplesPerPixel == 4) /* skip the fourth channel */\n                        input_p++;\n                }\n            }\n        }\n        else\n        {\n            for (s = 0; s < tfSamplesPerPixel; s++)\n            {\n                if (s == 3) /* skip the fourth channel */\n                    continue;\n                for (i = 0; i < tfImageHeight; i++)\n                {\n                    if (TIFFReadScanline(tfFile, scan_line, i, s) < 0)\n                        break;\n                    input_p = scan_line;\n                    output_p =\n                        imageMemory + (i * tfImageWidth * 4) + pixel_map[s];\n                    for (j = 0; j < tfImageWidth; j++, output_p += 4)\n                        *output_p = *input_p++;\n                }\n            }\n        }\n    }\n    else\n    {\n        if (xImageDepth == tfImageDepth)\n        {\n            output_p = imageMemory =\n                (char *)malloc(tfBytesPerRow * tfImageHeight);\n            MCHECK(imageMemory);\n\n            for (i = 0; i < tfImageHeight; i++, output_p += tfBytesPerRow)\n                if (TIFFReadScanline(tfFile, output_p, i, 0) < 0)\n                    break;\n        }\n        else if ((xImageDepth == 8) && (tfImageDepth == 4))\n        {\n            output_p = imageMemory =\n                (char *)malloc(tfBytesPerRow * 2 * tfImageHeight + 2);\n            MCHECK(imageMemory);\n\n            /*\n             * If a scanline is of odd size the inner loop below will overshoot.\n             * This is handled very simply by recalculating the start point at\n             * each scanline and padding imageMemory a little at the end.\n             */\n            for (i = 0; i < tfImageHeight; i++)\n            {\n                if (TIFFReadScanline(tfFile, scan_line, i, 0) < 0)\n                    break;\n                output_p = &imageMemory[i * tfImageWidth];\n                input_p = scan_line;\n                for (j = 0; j < tfImageWidth; j += 2, input_p++)\n                {\n                    *output_p++ = (*input_p >> 4) + basePixel;\n                    *output_p++ = (*input_p & 0xf) + basePixel;\n                }\n            }\n        }\n        else if ((xImageDepth == 8) && (tfImageDepth == 2))\n        {\n            output_p = imageMemory =\n                (char *)malloc(tfBytesPerRow * 4 * tfImageHeight + 4);\n            MCHECK(imageMemory);\n\n            for (i = 0; i < tfImageHeight; i++)\n            {\n                if (TIFFReadScanline(tfFile, scan_line, i, 0) < 0)\n                    break;\n                output_p = &imageMemory[i * tfImageWidth];\n                input_p = scan_line;\n                for (j = 0; j < tfImageWidth; j += 4, input_p++)\n                {\n                    *output_p++ = (*input_p >> 6) + basePixel;\n                    *output_p++ = ((*input_p >> 4) & 3) + basePixel;\n                    *output_p++ = ((*input_p >> 2) & 3) + basePixel;\n                    *output_p++ = (*input_p & 3) + basePixel;\n                }\n            }\n        }\n        else if ((xImageDepth == 4) && (tfImageDepth == 2))\n        {\n            output_p = imageMemory =\n                (char *)malloc(tfBytesPerRow * 2 * tfImageHeight + 2);\n            MCHECK(imageMemory);\n\n            for (i = 0; i < tfImageHeight; i++)\n            {\n                if (TIFFReadScanline(tfFile, scan_line, i, 0) < 0)\n                    break;\n                output_p = &imageMemory[i * tfBytesPerRow * 2];\n                input_p = scan_line;\n                for (j = 0; j < tfImageWidth; j += 4, input_p++)\n                {\n                    *output_p++ =\n                        (((*input_p >> 6) << 4) | ((*input_p >> 4) & 3)) +\n                        basePixel;\n                    *output_p++ =\n                        ((((*input_p >> 2) & 3) << 4) | (*input_p & 3)) +\n                        basePixel;\n                }\n            }\n        }\n        else\n        {\n            fprintf(\n                stderr,\n                \"xtiff: can't handle %d-bit TIFF file on an %d-bit display\\n\",\n                tfImageDepth, xImageDepth);\n            exit(0);\n        }\n    }\n\n    free(scan_line);\n}",
+      "fn_code_pos": [
+        [
+          748,
+          0
+        ],
+        [
+          929,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetTIFFImage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void CreateXImage()\n{\n    XGCValues gc_values;\n    GC bitmap_gc;\n\n    xOffset = yOffset = 0;\n    grabX = grabY = -1;\n\n    xImage = XCreateImage(xDisplay, xVisual, xImageDepth,\n                          xImageDepth == 1 ? XYBitmap : ZPixmap, /* offset */ 0,\n                          (char *)imageMemory, tfImageWidth, tfImageHeight,\n                          /* bitmap_pad */ 8, /* bytes_per_line */ 0);\n\n    /*\n     * libtiff converts LSB data into MSB but doesn't change the FillOrder tag.\n     */\n    if (xImageDepth == 1)\n        xImage->bitmap_bit_order = MSBFirst;\n    if (xImageDepth <= 8)\n        xImage->byte_order = MSBFirst;\n\n    /*\n     * create an appropriate GC\n     */\n    gc_values.function = GXcopy;\n    gc_values.plane_mask = AllPlanes;\n    if (tfPhotometricInterpretation == PHOTOMETRIC_MINISBLACK)\n    {\n        gc_values.foreground = XWhitePixel(xDisplay, xScreen);\n        gc_values.background = XBlackPixel(xDisplay, xScreen);\n    }\n    else\n    {\n        gc_values.foreground = XBlackPixel(xDisplay, xScreen);\n        gc_values.background = XWhitePixel(xDisplay, xScreen);\n    }\n    xWinGc = XCreateGC(xDisplay, XtWindow(shellWidget),\n                       GCFunction | GCPlaneMask | GCForeground | GCBackground,\n                       &gc_values);\n\n    /*\n     * create the pixmap and load the image\n     */\n    if (appData.usePixmap == True)\n    {\n        xImagePixmap =\n            XCreatePixmap(xDisplay, RootWindow(xDisplay, xScreen),\n                          xImage->width, xImage->height, xImageDepth);\n\n        /*\n         * According to the O'Reilly X Protocol Reference Manual, page 53,\n         * \"A pixmap depth of one is always supported and listed, but windows\n         * of depth one might not be supported.\"  Therefore we create a pixmap\n         * of depth one and use XCopyPlane().  This is idiomatic.\n         */\n        if (xImageDepth == 1)\n        {                             /* just pass the bits through */\n            gc_values.foreground = 1; /* foreground describes set bits */\n            gc_values.background = 0; /* background describes clear bits */\n            bitmap_gc = XCreateGC(xDisplay, xImagePixmap,\n                                  GCForeground | GCBackground, &gc_values);\n            XPutImage(xDisplay, xImagePixmap, bitmap_gc, xImage, 0, 0, 0, 0,\n                      xImage->width, xImage->height);\n        }\n        else\n            XPutImage(xDisplay, xImagePixmap, xWinGc, xImage, 0, 0, 0, 0,\n                      xImage->width, xImage->height);\n        XDestroyImage(xImage);\n        free(imageMemory);\n    }\n}",
+      "fn_code_pos": [
+        [
+          931,
+          0
+        ],
+        [
+          1001,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CreateXImage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void QuitProc(void) { exit(0); }",
+      "fn_code_pos": [
+        [
+          1030,
+          0
+        ],
+        [
+          1030,
+          32
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "QuitProc",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void NextProc() { PageProc(ButtonNextPage); }",
+      "fn_code_pos": [
+        [
+          1032,
+          0
+        ],
+        [
+          1032,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "NextProc",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void PreviousProc() { PageProc(ButtonPreviousPage); }",
+      "fn_code_pos": [
+        [
+          1034,
+          0
+        ],
+        [
+          1034,
+          53
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PreviousProc",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void ResizeProc()\n{\n    Dimension w_width, w_height;\n    int xo, yo, ww, wh;\n    XEvent fake_event;\n    Arg args[2];\n\n    if ((xOffset == 0) && (yOffset == 0))\n        return;\n\n    XtSetArg(args[0], XtNwidth, &w_width);\n    XtSetArg(args[1], XtNheight, &w_height);\n    XtGetValues(shellWidget, args, 2);\n    ww = w_width;\n    wh = w_height;\n    XtGetValues(listWidget, args, 2);\n    wh -= w_height;\n\n    xo = xOffset;\n    yo = yOffset;\n\n    if ((xOffset + ww) >= tfImageWidth)\n        xOffset = MAX((int)tfImageWidth - ww, 0);\n    if ((yOffset + wh) >= tfImageHeight)\n        yOffset = MAX((int)tfImageHeight - wh, 0);\n\n    /*\n     * Send an ExposeEvent if the origin changed.\n     * We have to do this because of the use and semantics of bit gravity.\n     */\n    if ((xo != xOffset) || (yo != yOffset))\n    {\n        fake_event.type = Expose;\n        fake_event.xexpose.x = fake_event.xexpose.y = 0;\n        fake_event.xexpose.width = tfImageWidth;\n        fake_event.xexpose.height = tfImageHeight;\n        EventProc(imageWidget, NULL, &fake_event);\n    }\n}",
+      "fn_code_pos": [
+        [
+          1271,
+          0
+        ],
+        [
+          1309,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ResizeProc",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void Usage()\n{\n    fprintf(stderr, \"Usage xtiff: [options] tiff-file\\n\");\n    fprintf(stderr, \"\\tstandard Xt options\\n\");\n    fprintf(stderr, \"\\t[-help]\\n\");\n    fprintf(stderr, \"\\t[-gamma gamma]\\n\");\n    fprintf(stderr, \"\\t[-usePixmap (True | False)]\\n\");\n    fprintf(stderr, \"\\t[-viewportWidth pixels]\\n\");\n    fprintf(stderr, \"\\t[-viewportHeight pixels]\\n\");\n    fprintf(stderr, \"\\t[-translate pixels]\\n\");\n    fprintf(stderr, \"\\t[-verbose (True | False)]\\n\");\n    exit(0);\n}",
+      "fn_code_pos": [
+        [
+          1332,
+          0
+        ],
+        [
+          1344,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct\n{\n    Boolean help;\n    float gamma;\n    Boolean usePixmap;\n    uint32_t viewportWidth;\n    uint32_t viewportHeight;\n    int translate;\n    Boolean verbose;\n} AppData, *AppDataPtr;",
+      {
+        "help": "Boolean",
+        "gamma": "float",
+        "usePixmap": "Boolean",
+        "viewportWidth": "uint32_t",
+        "viewportHeight": "uint32_t",
+        "translate": "int",
+        "verbose": "Boolean"
+      },
+      "AppData",
+      [
+        138,
+        0
+      ],
+      [
+        147,
+        23
+      ]
+    ],
+    [
+      "typedef struct\n{\n    Boolean help;\n    float gamma;\n    Boolean usePixmap;\n    uint32_t viewportWidth;\n    uint32_t viewportHeight;\n    int translate;\n    Boolean verbose;\n} AppData, *AppDataPtr;",
+      {
+        "help": "Boolean",
+        "gamma": "float",
+        "usePixmap": "Boolean",
+        "viewportWidth": "uint32_t",
+        "viewportHeight": "uint32_t",
+        "translate": "int",
+        "verbose": "Boolean"
+      },
+      "AppDataPtr",
+      [
+        138,
+        0
+      ],
+      [
+        147,
+        23
+      ]
+    ],
+    [
+      "typedef struct\n{\n    Boolean help;\n    float gamma;\n    Boolean usePixmap;\n    uint32_t viewportWidth;\n    uint32_t viewportHeight;\n    int translate;\n    Boolean verbose;\n} AppData, *AppDataPtr;",
+      {
+        "help": "Boolean",
+        "gamma": "float",
+        "usePixmap": "Boolean",
+        "viewportWidth": "uint32_t",
+        "viewportHeight": "uint32_t",
+        "translate": "int",
+        "verbose": "Boolean"
+      },
+      "AppData",
+      [
+        138,
+        0
+      ],
+      [
+        147,
+        23
+      ]
+    ],
+    [
+      "typedef struct\n{\n    Boolean help;\n    float gamma;\n    Boolean usePixmap;\n    uint32_t viewportWidth;\n    uint32_t viewportHeight;\n    int translate;\n    Boolean verbose;\n} AppData, *AppDataPtr;",
+      {
+        "help": "Boolean",
+        "gamma": "float",
+        "usePixmap": "Boolean",
+        "viewportWidth": "uint32_t",
+        "viewportHeight": "uint32_t",
+        "translate": "int",
+        "verbose": "Boolean"
+      },
+      "AppDataPtr",
+      [
+        138,
+        0
+      ],
+      [
+        147,
+        23
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include <X11/Intrinsic.h>\n",
+      [
+        54,
+        0
+      ],
+      [
+        55,
+        0
+      ]
+    ],
+    [
+      "#include <X11/Shell.h>\n",
+      [
+        55,
+        0
+      ],
+      [
+        56,
+        0
+      ]
+    ],
+    [
+      "#include <X11/StringDefs.h>\n",
+      [
+        56,
+        0
+      ],
+      [
+        57,
+        0
+      ]
+    ],
+    [
+      "#include <X11/Xatom.h>\n",
+      [
+        57,
+        0
+      ],
+      [
+        58,
+        0
+      ]
+    ],
+    [
+      "#include <X11/Xaw/Form.h>\n",
+      [
+        58,
+        0
+      ],
+      [
+        59,
+        0
+      ]
+    ],
+    [
+      "#include <X11/Xaw/Label.h>\n",
+      [
+        59,
+        0
+      ],
+      [
+        60,
+        0
+      ]
+    ],
+    [
+      "#include <X11/Xaw/List.h>\n",
+      [
+        60,
+        0
+      ],
+      [
+        61,
+        0
+      ]
+    ],
+    [
+      "#include <X11/Xproto.h>\n",
+      [
+        61,
+        0
+      ],
+      [
+        62,
+        0
+      ]
+    ],
+    [
+      "#include <X11/cursorfont.h>\n",
+      [
+        62,
+        0
+      ],
+      [
+        63,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        63,
+        0
+      ],
+      [
+        64,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        64,
+        0
+      ],
+      [
+        65,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        65,
+        0
+      ],
+      [
+        66,
+        0
+      ]
+    ],
+    [
+      "#include <tiffio.h>\n",
+      [
+        66,
+        0
+      ],
+      [
+        67,
+        0
+      ]
+    ],
+    [
+      "#include \"xtifficon.h\"\n",
+      [
+        68,
+        0
+      ],
+      [
+        69,
+        0
+      ]
+    ],
+    [
+      "#include <X11/keysymdef.h>\n",
+      [
+        69,
+        0
+      ],
+      [
+        70,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": [
+    [
+      "enum\n{\n    ButtonQuit = 0,\n    ButtonPreviousPage = 1,\n    ButtonNextPage = 2\n}",
+      {
+        "ButtonQuit": "",
+        "ButtonPreviousPage": "",
+        "ButtonNextPage": ""
+      },
+      "",
+      [
+        120,
+        0
+      ],
+      [
+        125,
+        1
+      ]
+    ]
+  ]
+}

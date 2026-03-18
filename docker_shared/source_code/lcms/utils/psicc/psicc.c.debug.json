@@ -1,0 +1,128 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\nvoid Help(void)\n{\n    fprintf(stderr, \"usage: psicc [flags] [<Output file>]\\n\\n\");\n\n    fprintf(stderr, \"flags:\\n\\n\");\n\n    fprintf(stderr, \"-i<profile> - Input profile: Generates Color Space Array (CSA)\\n\");\n    fprintf(stderr, \"-o<profile> - Output profile: Generates Color Rendering Dictionary(CRD)\\n\");\n\n    fprintf(stderr, \"-t<0,1,2,3> - Intent (0=Perceptual, 1=Colorimetric, 2=Saturation, 3=Absolute)\\n\");\n\n    fprintf(stderr, \"-b - Black point compensation (CRD only)\\n\");\n    fprintf(stderr, \"-u - Do NOT generate resource name on CRD\\n\");\n    fprintf(stderr, \"-c<0,1,2> - Precision (0=LowRes, 1=Normal (default), 2=Hi-res) (CRD only)\\n\");\n    fprintf(stderr, \"-n<gridpoints> - Alternate way to set precision, number of CLUT points (CRD only)\\n\");\n\n    fprintf(stderr, \"\\n\");\n    fprintf(stderr, \"If no output file is specified, output goes to stdout.\\n\\n\");\n    fprintf(stderr, \"This program is intended to be a demo of the little cms\\n\"\n        \"engine. Both lcms and this program are freeware. You can\\n\"\n        \"obtain both in source code at https://www.littlecms.com\\n\"\n        \"For suggestions, comments, bug reports etc. send mail to\\n\"\n        \"info@littlecms.com\\n\\n\");\n\n    exit(0);\n}",
+      "fn_code_pos": [
+        [
+          40,
+          0
+        ],
+        [
+          66,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Help",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid HandleSwitches(int argc, char *argv[])\n{\n       int s;\n      \n       while ((s = xgetopt(argc,argv,\"uUbBI:i:O:o:T:t:c:C:n:N:-:\")) != EOF) {\n\n       switch (s) \n       {\n\n       case '-':\n           if (strcmp(xoptarg, \"help\") == 0)\n           {\n               Help();\n           }\n           else\n           {\n               FatalError(\"Unknown option - run without args to see valid ones.\\n\");\n           }\n           break;\n\t \n       case 'i':\n       case 'I':\n            cInProf = xoptarg;\n            break;\n\n       case 'o':\n       case 'O':\n           cOutProf = xoptarg;\n            break;\n\n       case 'b':\n       case 'B': BlackPointCompensation =TRUE;\n            break;\n\n\n       case 't':\n       case 'T':\n            Intent = atoi(xoptarg);\n            if (Intent > 3) Intent = 3;\n            if (Intent < 0) Intent = 0;\n            break;\n     \n       case 'U':\n       case 'u':\n            Undecorated = TRUE;\n            break;\n\n       case 'c':\n       case 'C':\n            PrecalcMode = atoi(xoptarg);\n            if (PrecalcMode < 0 || PrecalcMode > 2)\n                    FatalError(\"ERROR: Unknown precalc mode '%d'\", PrecalcMode);\n            break;\n\n\n       case 'n':\n       case 'N':\n                if (PrecalcMode != 1)\n                    FatalError(\"Precalc mode already specified\");\n                NumOfGridPoints = atoi(xoptarg);\n                break;\n\n\n  default:\n\n       FatalError(\"Unknown option - run without args to see valid ones.\\n\");\n    }       \n    }\n}",
+      "fn_code_pos": [
+        [
+          70,
+          0
+        ],
+        [
+          139,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "HandleSwitches",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid GenerateCSA(void)\n{\n\tcmsHPROFILE hProfile = OpenStockProfile(0, cInProf);\n\tsize_t n;\n\tchar* Buffer;\n\n\tif (hProfile == NULL) return;\n\n\tn = cmsGetPostScriptCSA(0, hProfile, Intent, 0, NULL, 0);\n\tif (n == 0) return;\n\n    Buffer = (char*) malloc(n + 1);\n    if (Buffer != NULL) {\n\n        cmsGetPostScriptCSA(0, hProfile, Intent, 0, Buffer, (cmsUInt32Number) n);\n        Buffer[n] = 0;\n\n        fprintf(OutFile, \"%s\", Buffer);\t\n\n        free(Buffer);\n    }\n\n\tcmsCloseProfile(hProfile);\n}",
+      "fn_code_pos": [
+        [
+          144,
+          0
+        ],
+        [
+          168,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GenerateCSA",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\nvoid GenerateCRD(void)\n{\n\tcmsHPROFILE hProfile = OpenStockProfile(0, cOutProf);\n\tsize_t n;\n\tchar* Buffer;\n    cmsUInt32Number dwFlags = 0;\n    \n\tif (hProfile == NULL) return;\n\n    if (BlackPointCompensation) dwFlags |= cmsFLAGS_BLACKPOINTCOMPENSATION;\n    if (Undecorated)            dwFlags |= cmsFLAGS_NODEFAULTRESOURCEDEF;\n\n    switch (PrecalcMode) {\n           \t\n\t    case 0: dwFlags |= cmsFLAGS_LOWRESPRECALC; break;\n\t\tcase 2: dwFlags |= cmsFLAGS_HIGHRESPRECALC; break;\n\t\tcase 1: \n            if (NumOfGridPoints > 0)\n                dwFlags |= cmsFLAGS_GRIDPOINTS(NumOfGridPoints);\n            break;\n\n\t\tdefault: FatalError(\"ERROR: Unknown precalculation mode '%d'\", PrecalcMode);\n\t }\n\n\tn = cmsGetPostScriptCRD(0, hProfile, Intent, dwFlags, NULL, 0);\n\tif (n == 0) return;\n\n\tBuffer = (char*) malloc(n + 1);\n\tif (Buffer == NULL) return;\n        cmsGetPostScriptCRD(0, hProfile, Intent, dwFlags, Buffer, (cmsUInt32Number) n);\n\tBuffer[n] = 0;\n\n\tfprintf(OutFile, \"%s\", Buffer);\t\t\t\n\tfree(Buffer);\n\tcmsCloseProfile(hProfile);\n}",
+      "fn_code_pos": [
+        [
+          171,
+          0
+        ],
+        [
+          207,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GenerateCRD",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n\tint nargs;\n\n    fprintf(stderr, \"Little CMS ICC PostScript generator - v2.1 [LittleCMS %2.2f]\\n\", cmsGetEncodedCMMversion() / 1000.0);\n    fprintf(stderr, \"Copyright (c) 1998-2023 Marti Maria Saguer. See COPYING file for details.\\n\");\n    fflush(stderr);\n\n\t// Initialize\n\tInitUtils(\"psicc\");\n\n\t HandleSwitches(argc, argv);\n\n     nargs = (argc - xoptind);\n\t if (nargs != 0 && nargs != 1)\n\t\t\t\tHelp();            \n\t\n    if (cInProf == NULL && cOutProf == NULL)\n        Help();\n\n\t if (nargs == 0) \n\t\t\tOutFile = stdout;\n\t else\n\t\t\tOutFile = fopen(argv[xoptind], \"wt\");\n\t   \t\t\n\t  if (cInProf != NULL)\n\t\t\tGenerateCSA();\n\t\t  \n\t  if (cOutProf != NULL)\n\t\t\tGenerateCRD();\n\t\t\n\t  if (nargs == 1) {\n\t\t  fclose(OutFile);\n\t  }\n\n      return 0;     \n}",
+      "fn_code_pos": [
+        [
+          210,
+          0
+        ],
+        [
+          246,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"utils.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

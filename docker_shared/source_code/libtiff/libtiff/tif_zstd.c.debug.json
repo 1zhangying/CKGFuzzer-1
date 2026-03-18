@@ -1,0 +1,428 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int ZSTDFixupTags(TIFF *tif)\n{\n    (void)tif;\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          63,
+          0
+        ],
+        [
+          67,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDFixupTags",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZSTDSetupDecode(TIFF *tif)\n{\n    ZSTDState *sp = ZSTDDecoderState(tif);\n\n    assert(sp != NULL);\n\n    /* if we were last encoding, terminate this mode */\n    if (sp->state & LSTATE_INIT_ENCODE)\n    {\n        ZSTD_freeCStream(sp->cstream);\n        sp->cstream = NULL;\n        sp->state = 0;\n    }\n\n    sp->state |= LSTATE_INIT_DECODE;\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          69,
+          0
+        ],
+        [
+          85,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDSetupDecode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZSTDPreDecode(TIFF *tif, uint16_t s)\n{\n    static const char module[] = \"ZSTDPreDecode\";\n    ZSTDState *sp = ZSTDDecoderState(tif);\n    size_t zstd_ret;\n\n    (void)s;\n    assert(sp != NULL);\n\n    if ((sp->state & LSTATE_INIT_DECODE) == 0)\n        tif->tif_setupdecode(tif);\n\n    if (sp->dstream == NULL)\n    {\n        sp->dstream = ZSTD_createDStream();\n        if (sp->dstream == NULL)\n        {\n            TIFFErrorExtR(tif, module, \"Cannot allocate decompression stream\");\n            return 0;\n        }\n    }\n\n    zstd_ret = ZSTD_initDStream(sp->dstream);\n    if (ZSTD_isError(zstd_ret))\n    {\n        TIFFErrorExtR(tif, module, \"Error in ZSTD_initDStream(): %s\",\n                      ZSTD_getErrorName(zstd_ret));\n        return 0;\n    }\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          90,
+          0
+        ],
+        [
+          121,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDPreDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZSTDDecode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)\n{\n    static const char module[] = \"ZSTDDecode\";\n    ZSTDState *sp = ZSTDDecoderState(tif);\n    ZSTD_inBuffer in_buffer;\n    ZSTD_outBuffer out_buffer;\n    size_t zstd_ret;\n\n    (void)s;\n    assert(sp != NULL);\n    assert(sp->state == LSTATE_INIT_DECODE);\n\n    in_buffer.src = tif->tif_rawcp;\n    in_buffer.size = (size_t)tif->tif_rawcc;\n    in_buffer.pos = 0;\n\n    out_buffer.dst = op;\n    out_buffer.size = (size_t)occ;\n    out_buffer.pos = 0;\n\n    do\n    {\n        zstd_ret = ZSTD_decompressStream(sp->dstream, &out_buffer, &in_buffer);\n        if (ZSTD_isError(zstd_ret))\n        {\n            memset(op + out_buffer.pos, 0, out_buffer.size - out_buffer.pos);\n            TIFFErrorExtR(tif, module, \"Error in ZSTD_decompressStream(): %s\",\n                          ZSTD_getErrorName(zstd_ret));\n            return 0;\n        }\n    } while (zstd_ret != 0 && in_buffer.pos < in_buffer.size &&\n             out_buffer.pos < out_buffer.size);\n\n    if (out_buffer.pos < (size_t)occ)\n    {\n        memset(op + out_buffer.pos, 0, out_buffer.size - out_buffer.pos);\n        TIFFErrorExtR(tif, module,\n                      \"Not enough data at scanline %lu (short %lu bytes)\",\n                      (unsigned long)tif->tif_row,\n                      (unsigned long)((size_t)occ - out_buffer.pos));\n        return 0;\n    }\n\n    tif->tif_rawcp += in_buffer.pos;\n    tif->tif_rawcc -= in_buffer.pos;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          123,
+          0
+        ],
+        [
+          170,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "op": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZSTDSetupEncode(TIFF *tif)\n{\n    ZSTDState *sp = ZSTDEncoderState(tif);\n\n    assert(sp != NULL);\n    if (sp->state & LSTATE_INIT_DECODE)\n    {\n        ZSTD_freeDStream(sp->dstream);\n        sp->dstream = NULL;\n        sp->state = 0;\n    }\n\n    sp->state |= LSTATE_INIT_ENCODE;\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          172,
+          0
+        ],
+        [
+          186,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDSetupEncode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZSTDPreEncode(TIFF *tif, uint16_t s)\n{\n    static const char module[] = \"ZSTDPreEncode\";\n    ZSTDState *sp = ZSTDEncoderState(tif);\n    size_t zstd_ret;\n\n    (void)s;\n    assert(sp != NULL);\n    if (sp->state != LSTATE_INIT_ENCODE)\n        tif->tif_setupencode(tif);\n\n    if (sp->cstream == NULL)\n    {\n        sp->cstream = ZSTD_createCStream();\n        if (sp->cstream == NULL)\n        {\n            TIFFErrorExtR(tif, module, \"Cannot allocate compression stream\");\n            return 0;\n        }\n    }\n\n    zstd_ret = ZSTD_initCStream(sp->cstream, sp->compression_level);\n    if (ZSTD_isError(zstd_ret))\n    {\n        TIFFErrorExtR(tif, module, \"Error in ZSTD_initCStream(): %s\",\n                      ZSTD_getErrorName(zstd_ret));\n        return 0;\n    }\n\n    sp->out_buffer.dst = tif->tif_rawdata;\n    sp->out_buffer.size = (size_t)tif->tif_rawdatasize;\n    sp->out_buffer.pos = 0;\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          191,
+          0
+        ],
+        [
+          225,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDPreEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZSTDEncode(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)\n{\n    static const char module[] = \"ZSTDEncode\";\n    ZSTDState *sp = ZSTDEncoderState(tif);\n    ZSTD_inBuffer in_buffer;\n    size_t zstd_ret;\n\n    assert(sp != NULL);\n    assert(sp->state == LSTATE_INIT_ENCODE);\n\n    (void)s;\n\n    in_buffer.src = bp;\n    in_buffer.size = (size_t)cc;\n    in_buffer.pos = 0;\n\n    do\n    {\n        zstd_ret =\n            ZSTD_compressStream(sp->cstream, &sp->out_buffer, &in_buffer);\n        if (ZSTD_isError(zstd_ret))\n        {\n            TIFFErrorExtR(tif, module, \"Error in ZSTD_compressStream(): %s\",\n                          ZSTD_getErrorName(zstd_ret));\n            return 0;\n        }\n        if (sp->out_buffer.pos == sp->out_buffer.size)\n        {\n            tif->tif_rawcc = tif->tif_rawdatasize;\n            if (!TIFFFlushData1(tif))\n                return 0;\n            sp->out_buffer.dst = tif->tif_rawcp;\n            sp->out_buffer.pos = 0;\n        }\n    } while (in_buffer.pos < in_buffer.size);\n\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          230,
+          0
+        ],
+        [
+          267,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZSTDPostEncode(TIFF *tif)\n{\n    static const char module[] = \"ZSTDPostEncode\";\n    ZSTDState *sp = ZSTDEncoderState(tif);\n    size_t zstd_ret;\n\n    do\n    {\n        zstd_ret = ZSTD_endStream(sp->cstream, &sp->out_buffer);\n        if (ZSTD_isError(zstd_ret))\n        {\n            TIFFErrorExtR(tif, module, \"Error in ZSTD_endStream(): %s\",\n                          ZSTD_getErrorName(zstd_ret));\n            return 0;\n        }\n        if (sp->out_buffer.pos > 0)\n        {\n            tif->tif_rawcc = sp->out_buffer.pos;\n            if (!TIFFFlushData1(tif))\n                return 0;\n            sp->out_buffer.dst = tif->tif_rawcp;\n            sp->out_buffer.pos = 0;\n        }\n    } while (zstd_ret != 0);\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          272,
+          0
+        ],
+        [
+          297,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDPostEncode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void ZSTDCleanup(TIFF *tif)\n{\n    ZSTDState *sp = GetZSTDState(tif);\n\n    assert(sp != 0);\n\n    (void)TIFFPredictorCleanup(tif);\n\n    tif->tif_tagmethods.vgetfield = sp->vgetparent;\n    tif->tif_tagmethods.vsetfield = sp->vsetparent;\n\n    if (sp->dstream)\n    {\n        ZSTD_freeDStream(sp->dstream);\n        sp->dstream = NULL;\n    }\n    if (sp->cstream)\n    {\n        ZSTD_freeCStream(sp->cstream);\n        sp->cstream = NULL;\n    }\n    _TIFFfreeExt(tif, sp);\n    tif->tif_data = NULL;\n\n    _TIFFSetDefaultCompressionState(tif);\n}",
+      "fn_code_pos": [
+        [
+          299,
+          0
+        ],
+        [
+          324,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDCleanup",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int ZSTDVSetField(TIFF *tif, uint32_t tag, va_list ap)\n{\n    static const char module[] = \"ZSTDVSetField\";\n    ZSTDState *sp = GetZSTDState(tif);\n\n    switch (tag)\n    {\n        case TIFFTAG_ZSTD_LEVEL:\n            sp->compression_level = (int)va_arg(ap, int);\n            if (sp->compression_level <= 0 ||\n                sp->compression_level > ZSTD_maxCLevel())\n            {\n                TIFFWarningExtR(tif, module,\n                                \"ZSTD_LEVEL should be between 1 and %d\",\n                                ZSTD_maxCLevel());\n            }\n            return 1;\n        default:\n            return (*sp->vsetparent)(tif, tag, ap);\n    }\n    /*NOTREACHED*/\n}",
+      "fn_code_pos": [
+        [
+          326,
+          0
+        ],
+        [
+          347,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDVSetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int ZSTDVGetField(TIFF *tif, uint32_t tag, va_list ap)\n{\n    ZSTDState *sp = GetZSTDState(tif);\n\n    switch (tag)\n    {\n        case TIFFTAG_ZSTD_LEVEL:\n            *va_arg(ap, int *) = sp->compression_level;\n            break;\n        default:\n            return (*sp->vgetparent)(tif, tag, ap);\n    }\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          349,
+          0
+        ],
+        [
+          362,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDVGetField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "ap": "va_list"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFInitZSTD(TIFF *tif, int scheme)\n{\n    static const char module[] = \"TIFFInitZSTD\";\n    ZSTDState *sp;\n\n    (void)scheme;\n    assert(scheme == COMPRESSION_ZSTD);\n\n    /*\n     * Merge codec-specific tag information.\n     */\n    if (!_TIFFMergeFields(tif, ZSTDFields, TIFFArrayCount(ZSTDFields)))\n    {\n        TIFFErrorExtR(tif, module, \"Merging ZSTD codec-specific tags failed\");\n        return 0;\n    }\n\n    /*\n     * Allocate state block so tag methods have storage to record values.\n     */\n    tif->tif_data = (uint8_t *)_TIFFmallocExt(tif, sizeof(ZSTDState));\n    if (tif->tif_data == NULL)\n        goto bad;\n    sp = GetZSTDState(tif);\n\n    /*\n     * Override parent get/set field methods.\n     */\n    sp->vgetparent = tif->tif_tagmethods.vgetfield;\n    tif->tif_tagmethods.vgetfield = ZSTDVGetField; /* hook for codec tags */\n    sp->vsetparent = tif->tif_tagmethods.vsetfield;\n    tif->tif_tagmethods.vsetfield = ZSTDVSetField; /* hook for codec tags */\n\n    /* Default values for codec-specific fields */\n    sp->compression_level = 9; /* default comp. level */\n    sp->state = 0;\n    sp->dstream = 0;\n    sp->cstream = 0;\n    sp->out_buffer.dst = NULL;\n    sp->out_buffer.size = 0;\n    sp->out_buffer.pos = 0;\n\n    /*\n     * Install codec methods.\n     */\n    tif->tif_fixuptags = ZSTDFixupTags;\n    tif->tif_setupdecode = ZSTDSetupDecode;\n    tif->tif_predecode = ZSTDPreDecode;\n    tif->tif_decoderow = ZSTDDecode;\n    tif->tif_decodestrip = ZSTDDecode;\n    tif->tif_decodetile = ZSTDDecode;\n    tif->tif_setupencode = ZSTDSetupEncode;\n    tif->tif_preencode = ZSTDPreEncode;\n    tif->tif_postencode = ZSTDPostEncode;\n    tif->tif_encoderow = ZSTDEncode;\n    tif->tif_encodestrip = ZSTDEncode;\n    tif->tif_encodetile = ZSTDEncode;\n    tif->tif_cleanup = ZSTDCleanup;\n    /*\n     * Setup predictor setup.\n     */\n    (void)TIFFPredictorInit(tif);\n    return 1;\nbad:\n    TIFFErrorExtR(tif, module, \"No space for ZSTD state block\");\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          370,
+          0
+        ],
+        [
+          436,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFInitZSTD",
+        "parameters": {
+          "tif": "TIFF",
+          "scheme": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "ZSTDEncode(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)",
+      "fn_dec_pos": [
+        [
+          60,
+          11
+        ],
+        [
+          60,
+          70
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "ZSTDDecode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)",
+      "fn_dec_pos": [
+        [
+          61,
+          11
+        ],
+        [
+          61,
+          71
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ZSTDDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "op": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "typedef struct\n{\n    TIFFPredictorState predict;\n    ZSTD_DStream *dstream;\n    ZSTD_CStream *cstream;\n    int compression_level; /* compression level */\n    ZSTD_outBuffer out_buffer;\n    int state; /* state flags */\n#define LSTATE_INIT_DECODE 0x01\n#define LSTATE_INIT_ENCODE 0x02\n\n    TIFFVGetMethod vgetparent; /* super-class method */\n    TIFFVSetMethod vsetparent; /* super-class method */\n} ZSTDState;",
+      {
+        "predict": "TIFFPredictorState",
+        "*dstream": "ZSTD_DStream",
+        "*cstream": "ZSTD_CStream",
+        "compression_level": "int",
+        "out_buffer": "ZSTD_outBuffer",
+        "state": "int",
+        "vgetparent": "TIFFVGetMethod",
+        "vsetparent": "TIFFVSetMethod"
+      },
+      "ZSTDState",
+      [
+        41,
+        0
+      ],
+      [
+        54,
+        12
+      ]
+    ],
+    [
+      "typedef struct\n{\n    TIFFPredictorState predict;\n    ZSTD_DStream *dstream;\n    ZSTD_CStream *cstream;\n    int compression_level; /* compression level */\n    ZSTD_outBuffer out_buffer;\n    int state; /* state flags */\n#define LSTATE_INIT_DECODE 0x01\n#define LSTATE_INIT_ENCODE 0x02\n\n    TIFFVGetMethod vgetparent; /* super-class method */\n    TIFFVSetMethod vsetparent; /* super-class method */\n} ZSTDState;",
+      {
+        "predict": "TIFFPredictorState",
+        "*dstream": "ZSTD_DStream",
+        "*cstream": "ZSTD_CStream",
+        "compression_level": "int",
+        "out_buffer": "ZSTD_outBuffer",
+        "state": "int",
+        "vgetparent": "TIFFVGetMethod",
+        "vsetparent": "TIFFVSetMethod"
+      },
+      "ZSTDState",
+      [
+        41,
+        0
+      ],
+      [
+        54,
+        12
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_predict.h\"\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include \"zstd.h\"\n",
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

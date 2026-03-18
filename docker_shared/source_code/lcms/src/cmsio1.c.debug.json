@@ -1,0 +1,759 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "cmsBool  _cmsReadMediaWhitePoint(cmsCIEXYZ* Dest, cmsHPROFILE hProfile)\n{\n    cmsCIEXYZ* Tag;\n\n    _cmsAssert(Dest != NULL);\n\n    Tag = (cmsCIEXYZ*) cmsReadTag(hProfile, cmsSigMediaWhitePointTag);\n\n    // If no wp, take D50\n    if (Tag == NULL) {\n        *Dest = *cmsD50_XYZ();\n        return TRUE;\n    }\n\n    // V2 display profiles should give D50\n    if (cmsGetEncodedICCversion(hProfile) < 0x4000000) {\n\n        if (cmsGetDeviceClass(hProfile) == cmsSigDisplayClass) {\n            *Dest = *cmsD50_XYZ();\n            return TRUE;\n        }\n    }\n\n    // All seems ok\n    *Dest = *Tag;\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          63,
+          0
+        ],
+        [
+          89,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadMediaWhitePoint",
+        "parameters": {
+          "Dest": "cmsCIEXYZ",
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool  _cmsReadCHAD(cmsMAT3* Dest, cmsHPROFILE hProfile)\n{\n    cmsMAT3* Tag;\n\n    _cmsAssert(Dest != NULL);\n\n    Tag = (cmsMAT3*) cmsReadTag(hProfile, cmsSigChromaticAdaptationTag);\n\n    if (Tag != NULL) {\n        *Dest = *Tag;\n        return TRUE;\n    }\n\n    // No CHAD available, default it to identity\n    _cmsMAT3identity(Dest);\n\n    // V2 display profiles should give D50\n    if (cmsGetEncodedICCversion(hProfile) < 0x4000000) {\n\n        if (cmsGetDeviceClass(hProfile) == cmsSigDisplayClass) {\n\n            cmsCIEXYZ* White = (cmsCIEXYZ*) cmsReadTag(hProfile, cmsSigMediaWhitePointTag);\n\n            if (White == NULL) {\n\n                _cmsMAT3identity(Dest);\n                return TRUE;\n            }\n\n            return _cmsAdaptationMatrix(Dest, NULL, White, cmsD50_XYZ());\n        }\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          93,
+          0
+        ],
+        [
+          127,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadCHAD",
+        "parameters": {
+          "Dest": "cmsMAT3",
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsBool ReadICCMatrixRGB2XYZ(cmsMAT3* r, cmsHPROFILE hProfile)\n{\n    cmsCIEXYZ *PtrRed, *PtrGreen, *PtrBlue;\n\n    _cmsAssert(r != NULL);\n\n    PtrRed   = (cmsCIEXYZ *) cmsReadTag(hProfile, cmsSigRedColorantTag);\n    PtrGreen = (cmsCIEXYZ *) cmsReadTag(hProfile, cmsSigGreenColorantTag);\n    PtrBlue  = (cmsCIEXYZ *) cmsReadTag(hProfile, cmsSigBlueColorantTag);\n\n    if (PtrRed == NULL || PtrGreen == NULL || PtrBlue == NULL)\n        return FALSE;\n\n    _cmsVEC3init(&r -> v[0], PtrRed -> X, PtrGreen -> X,  PtrBlue -> X);\n    _cmsVEC3init(&r -> v[1], PtrRed -> Y, PtrGreen -> Y,  PtrBlue -> Y);\n    _cmsVEC3init(&r -> v[2], PtrRed -> Z, PtrGreen -> Z,  PtrBlue -> Z);\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          131,
+          0
+        ],
+        [
+          150,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ReadICCMatrixRGB2XYZ",
+        "parameters": {
+          "r": "cmsMAT3",
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsPipeline* BuildGrayInputMatrixPipeline(cmsHPROFILE hProfile)\n{\n    cmsToneCurve *GrayTRC;\n    cmsPipeline* Lut;\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n\n    GrayTRC = (cmsToneCurve *) cmsReadTag(hProfile, cmsSigGrayTRCTag);\n    if (GrayTRC == NULL) return NULL;\n\n    Lut = cmsPipelineAlloc(ContextID, 1, 3);\n    if (Lut == NULL)\n        goto Error;\n\n    if (cmsGetPCS(hProfile) == cmsSigLabData) {\n\n        // In this case we implement the profile as an  identity matrix plus 3 tone curves\n        cmsUInt16Number Zero[2] = { 0x8080, 0x8080 };\n        cmsToneCurve* EmptyTab;\n        cmsToneCurve* LabCurves[3];\n\n        EmptyTab = cmsBuildTabulatedToneCurve16(ContextID, 2, Zero);\n\n        if (EmptyTab == NULL)\n            goto Error;\n\n        LabCurves[0] = GrayTRC;\n        LabCurves[1] = EmptyTab;\n        LabCurves[2] = EmptyTab;\n\n        if (!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3,  1, OneToThreeInputMatrix, NULL)) ||\n            !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, LabCurves))) {\n                cmsFreeToneCurve(EmptyTab);\n                goto Error;\n        }\n\n        cmsFreeToneCurve(EmptyTab);\n\n    }\n    else  {\n\n        if (!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 1, &GrayTRC)) ||\n            !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3,  1, GrayInputMatrix, NULL)))\n            goto Error;\n    }\n\n    return Lut;\n\nError:    \n    cmsPipelineFree(Lut);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          154,
+          0
+        ],
+        [
+          205,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BuildGrayInputMatrixPipeline",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "static\ncmsPipeline* BuildRGBInputMatrixShaper(cmsHPROFILE hProfile)\n{\n    cmsPipeline* Lut;\n    cmsMAT3 Mat;\n    cmsToneCurve *Shapes[3];\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n    int i, j;\n\n    if (!ReadICCMatrixRGB2XYZ(&Mat, hProfile)) return NULL;\n\n    // XYZ PCS in encoded in 1.15 format, and the matrix output comes in 0..0xffff range, so\n    // we need to adjust the output by a factor of (0x10000/0xffff) to put data in\n    // a 1.16 range, and then a >> 1 to obtain 1.15. The total factor is (65536.0)/(65535.0*2)\n\n    for (i=0; i < 3; i++)\n        for (j=0; j < 3; j++)\n            Mat.v[i].n[j] *= InpAdj;\n\n\n    Shapes[0] = (cmsToneCurve *) cmsReadTag(hProfile, cmsSigRedTRCTag);\n    Shapes[1] = (cmsToneCurve *) cmsReadTag(hProfile, cmsSigGreenTRCTag);\n    Shapes[2] = (cmsToneCurve *) cmsReadTag(hProfile, cmsSigBlueTRCTag);\n\n    if (!Shapes[0] || !Shapes[1] || !Shapes[2])\n        return NULL;\n\n    Lut = cmsPipelineAlloc(ContextID, 3, 3);\n    if (Lut != NULL) {\n\n        if (!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, Shapes)) ||\n            !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 3, (cmsFloat64Number*) &Mat, NULL)))\n            goto Error;\n\n        // Note that it is certainly possible a single profile would have a LUT based\n        // tag for output working in lab and a matrix-shaper for the fallback cases. \n        // This is not allowed by the spec, but this code is tolerant to those cases    \n        if (cmsGetPCS(hProfile) == cmsSigLabData) {\n\n            if (!cmsPipelineInsertStage(Lut, cmsAT_END, _cmsStageAllocXYZ2Lab(ContextID)))\n                goto Error;\n        }\n\n    }\n\n    return Lut;\n\nError:\n    cmsPipelineFree(Lut);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          208,
+          0
+        ],
+        [
+          258,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BuildRGBInputMatrixShaper",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "static\ncmsPipeline* _cmsReadFloatInputTag(cmsHPROFILE hProfile, cmsTagSignature tagFloat)\n{\n    cmsContext ContextID       = cmsGetProfileContextID(hProfile);\n    cmsPipeline* Lut           = cmsPipelineDup((cmsPipeline*) cmsReadTag(hProfile, tagFloat));\n    cmsColorSpaceSignature spc = cmsGetColorSpace(hProfile);\n    cmsColorSpaceSignature PCS = cmsGetPCS(hProfile);\n    \n    if (Lut == NULL) return NULL;\n    \n    // input and output of transform are in lcms 0..1 encoding.  If XYZ or Lab spaces are used, \n    //  these need to be normalized into the appropriate ranges (Lab = 100,0,0, XYZ=1.0,1.0,1.0)\n    if ( spc == cmsSigLabData)\n    {\n        if (!cmsPipelineInsertStage(Lut, cmsAT_BEGIN, _cmsStageNormalizeToLabFloat(ContextID)))\n            goto Error;\n    }\n    else if (spc == cmsSigXYZData)\n    {\n        if (!cmsPipelineInsertStage(Lut, cmsAT_BEGIN, _cmsStageNormalizeToXyzFloat(ContextID)))\n            goto Error;\n    }\n    \n    if ( PCS == cmsSigLabData)\n    {\n        if (!cmsPipelineInsertStage(Lut, cmsAT_END, _cmsStageNormalizeFromLabFloat(ContextID)))\n            goto Error;\n    }\n    else if( PCS == cmsSigXYZData)\n    {\n        if (!cmsPipelineInsertStage(Lut, cmsAT_END, _cmsStageNormalizeFromXyzFloat(ContextID)))\n            goto Error;\n    }\n    \n    return Lut;\n\nError:\n    cmsPipelineFree(Lut);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          263,
+          0
+        ],
+        [
+          302,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadFloatInputTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "tagFloat": "cmsTagSignature"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "static\ncmsPipeline* BuildGrayOutputPipeline(cmsHPROFILE hProfile)\n{\n    cmsToneCurve *GrayTRC, *RevGrayTRC;\n    cmsPipeline* Lut;\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n\n    GrayTRC = (cmsToneCurve *) cmsReadTag(hProfile, cmsSigGrayTRCTag);\n    if (GrayTRC == NULL) return NULL;\n\n    RevGrayTRC = cmsReverseToneCurve(GrayTRC);\n    if (RevGrayTRC == NULL) return NULL;\n\n    Lut = cmsPipelineAlloc(ContextID, 3, 1);\n    if (Lut == NULL) {\n        cmsFreeToneCurve(RevGrayTRC);\n        return NULL;\n    }\n\n    if (cmsGetPCS(hProfile) == cmsSigLabData) {\n\n        if (!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 1,  3, PickLstarMatrix, NULL)))\n            goto Error;\n    }\n    else  {\n        if (!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 1,  3, PickYMatrix, NULL)))\n            goto Error;\n    }\n\n    if (!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 1, &RevGrayTRC)))\n        goto Error;\n\n    cmsFreeToneCurve(RevGrayTRC);\n    return Lut;\n\nError:\n    cmsFreeToneCurve(RevGrayTRC);\n    cmsPipelineFree(Lut);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          409,
+          0
+        ],
+        [
+          448,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BuildGrayOutputPipeline",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "static\ncmsPipeline* BuildRGBOutputMatrixShaper(cmsHPROFILE hProfile)\n{\n    cmsPipeline* Lut;\n    cmsToneCurve *Shapes[3], *InvShapes[3];\n    cmsMAT3 Mat, Inv;\n    int i, j;\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n\n    if (!ReadICCMatrixRGB2XYZ(&Mat, hProfile))\n        return NULL;\n\n    if (!_cmsMAT3inverse(&Mat, &Inv))\n        return NULL;\n\n    // XYZ PCS in encoded in 1.15 format, and the matrix input should come in 0..0xffff range, so\n    // we need to adjust the input by a << 1 to obtain a 1.16 fixed and then by a factor of\n    // (0xffff/0x10000) to put data in 0..0xffff range. Total factor is (2.0*65535.0)/65536.0;\n\n    for (i=0; i < 3; i++)\n        for (j=0; j < 3; j++)\n            Inv.v[i].n[j] *= OutpAdj;\n\n    Shapes[0] = (cmsToneCurve *) cmsReadTag(hProfile, cmsSigRedTRCTag);\n    Shapes[1] = (cmsToneCurve *) cmsReadTag(hProfile, cmsSigGreenTRCTag);\n    Shapes[2] = (cmsToneCurve *) cmsReadTag(hProfile, cmsSigBlueTRCTag);\n\n    if (!Shapes[0] || !Shapes[1] || !Shapes[2])\n        return NULL;\n\n    InvShapes[0] = cmsReverseToneCurve(Shapes[0]);\n    InvShapes[1] = cmsReverseToneCurve(Shapes[1]);\n    InvShapes[2] = cmsReverseToneCurve(Shapes[2]);\n\n    if (!InvShapes[0] || !InvShapes[1] || !InvShapes[2]) {\n        return NULL;\n    }\n\n    Lut = cmsPipelineAlloc(ContextID, 3, 3);\n    if (Lut != NULL) {\n\n        // Note that it is certainly possible a single profile would have a LUT based\n        // tag for output working in lab and a matrix-shaper for the fallback cases. \n        // This is not allowed by the spec, but this code is tolerant to those cases    \n        if (cmsGetPCS(hProfile) == cmsSigLabData) {\n\n            if (!cmsPipelineInsertStage(Lut, cmsAT_END, _cmsStageAllocLab2XYZ(ContextID)))\n                goto Error;\n        }\n\n        if (!cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocMatrix(ContextID, 3, 3, (cmsFloat64Number*) &Inv, NULL)) ||\n            !cmsPipelineInsertStage(Lut, cmsAT_END, cmsStageAllocToneCurves(ContextID, 3, InvShapes)))\n            goto Error;\n    }\n\n    cmsFreeToneCurveTriple(InvShapes);\n    return Lut;\nError:\n    cmsFreeToneCurveTriple(InvShapes);\n    cmsPipelineFree(Lut);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          451,
+          0
+        ],
+        [
+          512,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BuildRGBOutputMatrixShaper",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "static\nvoid ChangeInterpolationToTrilinear(cmsPipeline* Lut)\n{\n    cmsStage* Stage;\n\n    for (Stage = cmsPipelineGetPtrToFirstStage(Lut);\n        Stage != NULL;\n        Stage = cmsStageNext(Stage)) {\n\n            if (cmsStageType(Stage) == cmsSigCLutElemType) {\n\n                _cmsStageCLutData* CLUT = (_cmsStageCLutData*) Stage ->Data;\n\n                CLUT ->Params->dwFlags |= CMS_LERP_FLAGS_TRILINEAR;\n                _cmsSetInterpolationRoutine(Lut->ContextID, CLUT ->Params);\n            }\n    }\n}",
+      "fn_code_pos": [
+        [
+          516,
+          0
+        ],
+        [
+          533,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ChangeInterpolationToTrilinear",
+        "parameters": {
+          "Lut": "cmsPipeline"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static\ncmsPipeline* _cmsReadFloatOutputTag(cmsHPROFILE hProfile, cmsTagSignature tagFloat)\n{\n    cmsContext ContextID       = cmsGetProfileContextID(hProfile);\n    cmsPipeline* Lut           = cmsPipelineDup((cmsPipeline*) cmsReadTag(hProfile, tagFloat));\n    cmsColorSpaceSignature PCS = cmsGetPCS(hProfile);\n    cmsColorSpaceSignature dataSpace = cmsGetColorSpace(hProfile);\n    \n    if (Lut == NULL) return NULL;\n    \n    // If PCS is Lab or XYZ, the floating point tag is accepting data in the space encoding,\n    // and since the formatter has already accommodated to 0..1.0, we should undo this change\n    if ( PCS == cmsSigLabData)\n    {\n        if (!cmsPipelineInsertStage(Lut, cmsAT_BEGIN, _cmsStageNormalizeToLabFloat(ContextID)))\n            goto Error;\n    }\n    else\n        if (PCS == cmsSigXYZData)\n        {\n            if (!cmsPipelineInsertStage(Lut, cmsAT_BEGIN, _cmsStageNormalizeToXyzFloat(ContextID)))\n                goto Error;\n        }\n    \n    // the output can be Lab or XYZ, in which case normalisation is needed on the end of the pipeline\n    if ( dataSpace == cmsSigLabData)\n    {\n        if (!cmsPipelineInsertStage(Lut, cmsAT_END, _cmsStageNormalizeFromLabFloat(ContextID)))\n            goto Error;\n    }\n    else if (dataSpace == cmsSigXYZData)\n    {\n        if (!cmsPipelineInsertStage(Lut, cmsAT_END, _cmsStageNormalizeFromXyzFloat(ContextID)))\n            goto Error;\n    }\n    \n    return Lut;\n\nError:\n    cmsPipelineFree(Lut);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          537,
+          0
+        ],
+        [
+          578,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadFloatOutputTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "tagFloat": "cmsTagSignature"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "static\ncmsPipeline* _cmsReadFloatDevicelinkTag(cmsHPROFILE hProfile, cmsTagSignature tagFloat)\n{\n    cmsContext ContextID = cmsGetProfileContextID(hProfile);\n    cmsPipeline* Lut = cmsPipelineDup((cmsPipeline*)cmsReadTag(hProfile, tagFloat));\n    cmsColorSpaceSignature PCS = cmsGetPCS(hProfile);\n    cmsColorSpaceSignature spc = cmsGetColorSpace(hProfile);\n\n    if (Lut == NULL) return NULL;\n\n    if (spc == cmsSigLabData)\n    {\n        if (!cmsPipelineInsertStage(Lut, cmsAT_BEGIN, _cmsStageNormalizeToLabFloat(ContextID)))\n            goto Error;\n    }\n    else\n        if (spc == cmsSigXYZData)\n        {\n            if (!cmsPipelineInsertStage(Lut, cmsAT_BEGIN, _cmsStageNormalizeToXyzFloat(ContextID)))\n                goto Error;\n        }\n\n    if (PCS == cmsSigLabData)\n    {\n        if (!cmsPipelineInsertStage(Lut, cmsAT_END, _cmsStageNormalizeFromLabFloat(ContextID)))\n            goto Error;\n    }\n    else\n        if (PCS == cmsSigXYZData)\n        {\n            if (!cmsPipelineInsertStage(Lut, cmsAT_END, _cmsStageNormalizeFromXyzFloat(ContextID)))\n                goto Error;\n        }\n\n    return Lut;\nError:\n    cmsPipelineFree(Lut);\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          662,
+          0
+        ],
+        [
+          700,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadFloatDevicelinkTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "tagFloat": "cmsTagSignature"
+        },
+        "return_type": "cmsPipeline"
+      }
+    },
+    {
+      "fn_code": "cmsBool  CMSEXPORT cmsIsMatrixShaper(cmsHPROFILE hProfile)\n{\n    switch (cmsGetColorSpace(hProfile)) {\n\n    case cmsSigGrayData:\n\n        return cmsIsTag(hProfile, cmsSigGrayTRCTag);\n\n    case cmsSigRgbData:\n\n        return (cmsIsTag(hProfile, cmsSigRedColorantTag) &&\n                cmsIsTag(hProfile, cmsSigGreenColorantTag) &&\n                cmsIsTag(hProfile, cmsSigBlueColorantTag) &&\n                cmsIsTag(hProfile, cmsSigRedTRCTag) &&\n                cmsIsTag(hProfile, cmsSigGreenTRCTag) &&\n                cmsIsTag(hProfile, cmsSigBlueTRCTag));\n\n    default:\n\n        return FALSE;\n    }\n}",
+      "fn_code_pos": [
+        [
+          805,
+          0
+        ],
+        [
+          826,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIsMatrixShaper",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool  CMSEXPORT cmsIsCLUT(cmsHPROFILE hProfile, cmsUInt32Number Intent, cmsUInt32Number UsedDirection)\n{\n    const cmsTagSignature* TagTable;\n\n    // For devicelinks, the supported intent is that one stated in the header\n    if (cmsGetDeviceClass(hProfile) == cmsSigLinkClass) {\n            return (cmsGetHeaderRenderingIntent(hProfile) == Intent);\n    }\n\n    switch (UsedDirection) {\n\n       case LCMS_USED_AS_INPUT: TagTable = Device2PCS16; break;\n       case LCMS_USED_AS_OUTPUT:TagTable = PCS2Device16; break;\n\n       // For proofing, we need rel. colorimetric in output. Let's do some recursion\n       case LCMS_USED_AS_PROOF:\n           return cmsIsIntentSupported(hProfile, Intent, LCMS_USED_AS_INPUT) &&\n                  cmsIsIntentSupported(hProfile, INTENT_RELATIVE_COLORIMETRIC, LCMS_USED_AS_OUTPUT);\n\n       default:\n           cmsSignalError(cmsGetProfileContextID(hProfile), cmsERROR_RANGE, \"Unexpected direction (%d)\", UsedDirection);\n           return FALSE;\n    }\n\n    // Extended intents are not strictly CLUT-based\n    if (Intent > INTENT_ABSOLUTE_COLORIMETRIC)\n        return FALSE;\n\n    return cmsIsTag(hProfile, TagTable[Intent]);\n\n}",
+      "fn_code_pos": [
+        [
+          829,
+          0
+        ],
+        [
+          859,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIsCLUT",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Intent": "cmsUInt32Number",
+          "UsedDirection": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsBool  CMSEXPORT cmsIsIntentSupported(cmsHPROFILE hProfile,\n                                        cmsUInt32Number Intent, cmsUInt32Number UsedDirection)\n{\n\n    if (cmsIsCLUT(hProfile, Intent, UsedDirection)) return TRUE;\n\n    // Is there any matrix-shaper? If so, the intent is supported. This is a bit odd, since V2 matrix shaper\n    // does not fully support relative colorimetric because they cannot deal with non-zero black points, but\n    // many profiles claims that, and this is certainly not true for V4 profiles. Lets answer \"yes\" no matter\n    // the accuracy would be less than optimal in rel.col and v2 case.\n\n    return cmsIsMatrixShaper(hProfile);\n}",
+      "fn_code_pos": [
+        [
+          863,
+          0
+        ],
+        [
+          875,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsIsIntentSupported",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Intent": "cmsUInt32Number",
+          "UsedDirection": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "cmsSEQ* _cmsReadProfileSequence(cmsHPROFILE hProfile)\n{\n    cmsSEQ* ProfileSeq;\n    cmsSEQ* ProfileId;\n    cmsSEQ* NewSeq;\n    cmsUInt32Number i;\n\n    // Take profile sequence description first\n    ProfileSeq = (cmsSEQ*) cmsReadTag(hProfile, cmsSigProfileSequenceDescTag);\n\n    // Take profile sequence ID\n    ProfileId  = (cmsSEQ*) cmsReadTag(hProfile, cmsSigProfileSequenceIdTag);\n\n    if (ProfileSeq == NULL && ProfileId == NULL) return NULL;\n\n    if (ProfileSeq == NULL) return cmsDupProfileSequenceDescription(ProfileId);\n    if (ProfileId  == NULL) return cmsDupProfileSequenceDescription(ProfileSeq);\n\n    // We have to mix both together. For that they must agree\n    if (ProfileSeq ->n != ProfileId ->n) return cmsDupProfileSequenceDescription(ProfileSeq);\n\n    NewSeq = cmsDupProfileSequenceDescription(ProfileSeq);\n\n    // Ok, proceed to the mixing\n    if (NewSeq != NULL) {\n        for (i=0; i < ProfileSeq ->n; i++) {\n\n            memmove(&NewSeq ->seq[i].ProfileID, &ProfileId ->seq[i].ProfileID, sizeof(cmsProfileID));\n            NewSeq ->seq[i].Description = cmsMLUdup(ProfileId ->seq[i].Description);\n        }\n    }\n    return NewSeq;\n}",
+      "fn_code_pos": [
+        [
+          882,
+          0
+        ],
+        [
+          914,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadProfileSequence",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": "cmsSEQ"
+      }
+    },
+    {
+      "fn_code": "cmsBool _cmsWriteProfileSequence(cmsHPROFILE hProfile, const cmsSEQ* seq)\n{\n    if (!cmsWriteTag(hProfile, cmsSigProfileSequenceDescTag, seq)) return FALSE;\n\n    if (cmsGetEncodedICCversion(hProfile) >= 0x4000000) {\n\n            if (!cmsWriteTag(hProfile, cmsSigProfileSequenceIdTag, seq)) return FALSE;\n    }\n\n    return TRUE;\n}",
+      "fn_code_pos": [
+        [
+          917,
+          0
+        ],
+        [
+          927,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsWriteProfileSequence",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "seq": "cmsSEQ"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "static\ncmsMLU* GetMLUFromProfile(cmsHPROFILE h, cmsTagSignature sig)\n{\n    cmsMLU* mlu = (cmsMLU*) cmsReadTag(h, sig);\n    if (mlu == NULL) return NULL;\n\n    return cmsMLUdup(mlu);\n}",
+      "fn_code_pos": [
+        [
+          931,
+          0
+        ],
+        [
+          938,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetMLUFromProfile",
+        "parameters": {
+          "h": "cmsHPROFILE",
+          "sig": "cmsTagSignature"
+        },
+        "return_type": "cmsMLU"
+      }
+    },
+    {
+      "fn_code": "cmsSEQ* _cmsCompileProfileSequence(cmsContext ContextID, cmsUInt32Number nProfiles, cmsHPROFILE hProfiles[])\n{\n    cmsUInt32Number i;\n    cmsSEQ* seq = cmsAllocProfileSequenceDescription(ContextID, nProfiles);\n\n    if (seq == NULL) return NULL;\n\n    for (i=0; i < nProfiles; i++) {\n\n        cmsPSEQDESC* ps = &seq ->seq[i];\n        cmsHPROFILE h = hProfiles[i];\n        cmsTechnologySignature* techpt;\n\n        cmsGetHeaderAttributes(h, &ps ->attributes);\n        cmsGetHeaderProfileID(h, ps ->ProfileID.ID8);\n        ps ->deviceMfg   = cmsGetHeaderManufacturer(h);\n        ps ->deviceModel = cmsGetHeaderModel(h);\n\n        techpt = (cmsTechnologySignature*) cmsReadTag(h, cmsSigTechnologyTag);\n        if (techpt == NULL)\n            ps ->technology   =  (cmsTechnologySignature) 0;\n        else\n            ps ->technology   = *techpt;\n\n        ps ->Manufacturer = GetMLUFromProfile(h,  cmsSigDeviceMfgDescTag);\n        ps ->Model        = GetMLUFromProfile(h,  cmsSigDeviceModelDescTag);\n        ps ->Description  = GetMLUFromProfile(h, cmsSigProfileDescriptionTag);\n\n    }\n\n    return seq;\n}",
+      "fn_code_pos": [
+        [
+          941,
+          0
+        ],
+        [
+          972,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCompileProfileSequence",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE"
+        },
+        "return_type": "cmsSEQ"
+      }
+    },
+    {
+      "fn_code": "static\nconst cmsMLU* GetInfo(cmsHPROFILE hProfile, cmsInfoType Info)\n{\n    cmsTagSignature sig;\n\n    switch (Info) {\n\n    case cmsInfoDescription:\n        sig = cmsSigProfileDescriptionTag;\n        break;\n\n    case cmsInfoManufacturer:\n        sig = cmsSigDeviceMfgDescTag;\n        break;\n\n    case cmsInfoModel:\n        sig = cmsSigDeviceModelDescTag;\n         break;\n\n    case cmsInfoCopyright:\n        sig = cmsSigCopyrightTag;\n        break;\n\n    default: return NULL;\n    }\n\n\n    return (cmsMLU*) cmsReadTag(hProfile, sig);\n}",
+      "fn_code_pos": [
+        [
+          977,
+          0
+        ],
+        [
+          1005,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetInfo",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Info": "cmsInfoType"
+        },
+        "return_type": "cmsMLU"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number CMSEXPORT cmsGetProfileInfo(cmsHPROFILE hProfile, cmsInfoType Info,\n                                            const char LanguageCode[3], const char CountryCode[3],\n                                            wchar_t* Buffer, cmsUInt32Number BufferSize)\n{\n    const cmsMLU* mlu = GetInfo(hProfile, Info);\n    if (mlu == NULL) return 0;\n\n    return cmsMLUgetWide(mlu, LanguageCode, CountryCode, Buffer, BufferSize);\n}",
+      "fn_code_pos": [
+        [
+          1009,
+          0
+        ],
+        [
+          1017,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetProfileInfo",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Info": "cmsInfoType",
+          "LanguageCode": "char",
+          "CountryCode": "char",
+          "Buffer": "wchar_t",
+          "BufferSize": "cmsUInt32Number"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    },
+    {
+      "fn_code": "cmsUInt32Number  CMSEXPORT cmsGetProfileInfoASCII(cmsHPROFILE hProfile, cmsInfoType Info,\n                                                          const char LanguageCode[3], const char CountryCode[3],\n                                                          char* Buffer, cmsUInt32Number BufferSize)\n{\n    const cmsMLU* mlu = GetInfo(hProfile, Info);\n    if (mlu == NULL) return 0;\n\n    return cmsMLUgetASCII(mlu, LanguageCode, CountryCode, Buffer, BufferSize);\n}",
+      "fn_code_pos": [
+        [
+          1020,
+          0
+        ],
+        [
+          1028,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsGetProfileInfoASCII",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Info": "cmsInfoType",
+          "LanguageCode": "char",
+          "CountryCode": "char",
+          "Buffer": "char",
+          "BufferSize": "cmsUInt32Number"
+        },
+        "return_type": "cmsUInt32Number"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "BuildGrayInputMatrixPipeline(cmsHPROFILE hProfile)",
+      "fn_dec_pos": [
+        [
+          155,
+          13
+        ],
+        [
+          155,
+          63
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BuildGrayInputMatrixPipeline",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "BuildRGBInputMatrixShaper(cmsHPROFILE hProfile)",
+      "fn_dec_pos": [
+        [
+          209,
+          13
+        ],
+        [
+          209,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BuildRGBInputMatrixShaper",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsReadFloatInputTag(cmsHPROFILE hProfile, cmsTagSignature tagFloat)",
+      "fn_dec_pos": [
+        [
+          264,
+          13
+        ],
+        [
+          264,
+          82
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadFloatInputTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "tagFloat": "cmsTagSignature"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "BuildGrayOutputPipeline(cmsHPROFILE hProfile)",
+      "fn_dec_pos": [
+        [
+          410,
+          13
+        ],
+        [
+          410,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BuildGrayOutputPipeline",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "BuildRGBOutputMatrixShaper(cmsHPROFILE hProfile)",
+      "fn_dec_pos": [
+        [
+          452,
+          13
+        ],
+        [
+          452,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "BuildRGBOutputMatrixShaper",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsReadFloatOutputTag(cmsHPROFILE hProfile, cmsTagSignature tagFloat)",
+      "fn_dec_pos": [
+        [
+          538,
+          13
+        ],
+        [
+          538,
+          83
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadFloatOutputTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "tagFloat": "cmsTagSignature"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsReadFloatDevicelinkTag(cmsHPROFILE hProfile, cmsTagSignature tagFloat)",
+      "fn_dec_pos": [
+        [
+          663,
+          13
+        ],
+        [
+          663,
+          87
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadFloatDevicelinkTag",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "tagFloat": "cmsTagSignature"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsReadProfileSequence(cmsHPROFILE hProfile)",
+      "fn_dec_pos": [
+        [
+          882,
+          8
+        ],
+        [
+          882,
+          53
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsReadProfileSequence",
+        "parameters": {
+          "hProfile": "cmsHPROFILE"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "GetMLUFromProfile(cmsHPROFILE h, cmsTagSignature sig)",
+      "fn_dec_pos": [
+        [
+          932,
+          8
+        ],
+        [
+          932,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetMLUFromProfile",
+        "parameters": {
+          "h": "cmsHPROFILE",
+          "sig": "cmsTagSignature"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_cmsCompileProfileSequence(cmsContext ContextID, cmsUInt32Number nProfiles, cmsHPROFILE hProfiles[])",
+      "fn_dec_pos": [
+        [
+          941,
+          8
+        ],
+        [
+          941,
+          108
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_cmsCompileProfileSequence",
+        "parameters": {
+          "ContextID": "cmsContext",
+          "nProfiles": "cmsUInt32Number",
+          "hProfiles": "cmsHPROFILE"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "GetInfo(cmsHPROFILE hProfile, cmsInfoType Info)",
+      "fn_dec_pos": [
+        [
+          978,
+          14
+        ],
+        [
+          978,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "GetInfo",
+        "parameters": {
+          "hProfile": "cmsHPROFILE",
+          "Info": "cmsInfoType"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"lcms2_internal.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

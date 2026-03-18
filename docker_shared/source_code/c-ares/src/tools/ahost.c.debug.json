@@ -1,0 +1,387 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char **argv)\n{\n  struct ares_options options;\n  int optmask = 0;\n  ares_channel channel;\n  int status, nfds, c, addr_family = AF_INET;\n  fd_set read_fds, write_fds;\n  struct timeval *tvp, tv;\n  struct in_addr addr4;\n  struct ares_in6_addr addr6;\n\n#ifdef USE_WINSOCK\n  WORD wVersionRequested = MAKEWORD(USE_WINSOCK,USE_WINSOCK);\n  WSADATA wsaData;\n  WSAStartup(wVersionRequested, &wsaData);\n#endif\n\n  memset(&options, 0, sizeof(options));\n\n  status = ares_library_init(ARES_LIB_INIT_ALL);\n  if (status != ARES_SUCCESS)\n    {\n      fprintf(stderr, \"ares_library_init: %s\\n\", ares_strerror(status));\n      return 1;\n    }\n\n  while ((c = ares_getopt(argc,argv,\"dt:h?s:\")) != -1)\n    {\n      switch (c)\n        {\n        case 'd':\n#ifdef WATT32\n          dbug_init();\n#endif\n          break;\n        case 's':\n          optmask |= ARES_OPT_DOMAINS;\n          options.ndomains++;\n          options.domains = (char **)realloc(options.domains,\n                                             options.ndomains * sizeof(char *));\n          options.domains[options.ndomains - 1] = strdup(optarg);\n          break;\n        case 't':\n          if (!strcasecmp(optarg,\"a\"))\n            addr_family = AF_INET;\n          else if (!strcasecmp(optarg,\"aaaa\"))\n            addr_family = AF_INET6;\n          else if (!strcasecmp(optarg,\"u\"))\n            addr_family = AF_UNSPEC;\n          else\n            usage();\n          break;\n        case 'h':\n          print_help_info_ahost();\n          break;\n        case '?':\n          print_help_info_ahost();\n          break;\n        default:\n          usage();\n          break;\n        }\n    }\n\n  argc -= optind;\n  argv += optind;\n  if (argc < 1)\n    usage();\n\n  status = ares_init_options(&channel, &options, optmask);\n  if (status != ARES_SUCCESS)\n    {\n      fprintf(stderr, \"ares_init: %s\\n\", ares_strerror(status));\n      return 1;\n    }\n\n  /* Initiate the queries, one per command-line argument. */\n  for ( ; *argv; argv++)\n    {\n      if (ares_inet_pton(AF_INET, *argv, &addr4) == 1)\n        {\n          ares_gethostbyaddr(channel, &addr4, sizeof(addr4), AF_INET, callback,\n                             *argv);\n        }\n      else if (ares_inet_pton(AF_INET6, *argv, &addr6) == 1)\n        {\n          ares_gethostbyaddr(channel, &addr6, sizeof(addr6), AF_INET6, callback,\n                             *argv);\n        }\n      else\n        {\n          ares_gethostbyname(channel, *argv, addr_family, callback, *argv);\n        }\n    }\n\n  /* Wait for all queries to complete. */\n  for (;;)\n    {\n      int res;\n      FD_ZERO(&read_fds);\n      FD_ZERO(&write_fds);\n      nfds = ares_fds(channel, &read_fds, &write_fds);\n      if (nfds == 0)\n        break;\n      tvp = ares_timeout(channel, NULL, &tv);\n      res = select(nfds, &read_fds, &write_fds, NULL, tvp);\n      if (-1 == res)\n        break;\n      ares_process(channel, &read_fds, &write_fds);\n    }\n\n  ares_destroy(channel);\n\n  ares_library_cleanup();\n\n#ifdef USE_WINSOCK\n  WSACleanup();\n#endif\n\n  return 0;\n}",
+      "fn_code_pos": [
+        [
+          53,
+          0
+        ],
+        [
+          173,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void callback(void *arg, int status, int timeouts, struct hostent *host)\n{\n  char **p;\n\n  (void)timeouts;\n\n  if (status != ARES_SUCCESS)\n    {\n      fprintf(stderr, \"%s: %s\\n\", (char *) arg, ares_strerror(status));\n      return;\n    }\n\n  for (p = host->h_addr_list; *p; p++)\n    {\n      char addr_buf[46] = \"??\";\n\n      ares_inet_ntop(host->h_addrtype, *p, addr_buf, sizeof(addr_buf));\n      printf(\"%-32s\\t%s\", host->h_name, addr_buf);\n#if 0\n      if (host->h_aliases[0])\n        {\n           int i;\n\n           printf (\", Aliases: \");\n           for (i = 0; host->h_aliases[i]; i++)\n               printf(\"%s \", host->h_aliases[i]);\n        }\n#endif\n      puts(\"\");\n    }\n}",
+      "fn_code_pos": [
+        [
+          175,
+          0
+        ],
+        [
+          205,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "callback",
+        "parameters": {
+          "arg": "void",
+          "status": "int",
+          "timeouts": "int",
+          "host": "struct hostent"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void usage(void)\n{\n  fprintf(stderr, \"usage: ahost [-h] [-d] [-s {domain}] [-t {a|aaaa|u}] {host|addr} ...\\n\");\n  exit(1);\n}",
+      "fn_code_pos": [
+        [
+          207,
+          0
+        ],
+        [
+          211,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void print_help_info_ahost(void) {\n    printf(\"ahost, version %s \\n\\n\", ARES_VERSION_STR);\n    printf(\"usage: ahost [-h] [-d] [-s {domain}] [-t {a|aaaa|u}] {host|addr} ...\\n\\n\"\n    \"  d : Print some extra debugging output.\\n\"\n    \"  h : Display this help and exit.\\n\\n\"\n    \"  s domain : Specify the domain to search instead of \\n\"\n    \"               using the default values from \\n\"\n    \"               /etc/resolv.conf. This option only has an \\n\"\n    \"               effect on platforms that use /etc/resolv.conf\\n\"\n    \"               for DNS configuration; it has no effect on other\\n\"\n    \"               platforms (such as Win32 or Android).\\n\"\n    \"  t type   : If type is \\\"a\\\", print the A record (default).\\n\"\n    \"               If type is \\\"aaaa\\\", print the AAAA record.  If\\n\"\n    \"               type is \\\"u\\\", look for either AAAA or A record\\n\"\n    \"               (in that order).\\n\\n\");\n    exit(0);\n}",
+      "fn_code_pos": [
+        [
+          214,
+          0
+        ],
+        [
+          230,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_help_info_ahost",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "callback(void *arg, int status, int timeouts, struct hostent *host)",
+      "fn_dec_pos": [
+        [
+          49,
+          12
+        ],
+        [
+          49,
+          79
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "callback",
+        "parameters": {
+          "arg": "void",
+          "status": "int",
+          "timeouts": "int",
+          "host": "struct hostent"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "usage(void)",
+      "fn_dec_pos": [
+        [
+          50,
+          12
+        ],
+        [
+          50,
+          23
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "print_help_info_ahost(void)",
+      "fn_dec_pos": [
+        [
+          51,
+          12
+        ],
+        [
+          51,
+          39
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_help_info_ahost",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        49,
+        58
+      ],
+      [
+        49,
+        72
+      ]
+    ],
+    [
+      "struct ares_options",
+      {},
+      "",
+      [
+        55,
+        2
+      ],
+      [
+        55,
+        21
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        60,
+        2
+      ],
+      [
+        60,
+        16
+      ]
+    ],
+    [
+      "struct in_addr",
+      {},
+      "",
+      [
+        61,
+        2
+      ],
+      [
+        61,
+        16
+      ]
+    ],
+    [
+      "struct ares_in6_addr",
+      {},
+      "",
+      [
+        62,
+        2
+      ],
+      [
+        62,
+        22
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        175,
+        58
+      ],
+      [
+        175,
+        72
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#include <netinet/in.h>\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include <arpa/inet.h>\n",
+      [
+        20,
+        0
+      ],
+      [
+        21,
+        0
+      ]
+    ],
+    [
+      "#include <netdb.h>\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#include <strings.h>\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_dns.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_getopt.h\"\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_ipv6.h\"\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nowarn.h\"\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#  include \"ares_strdup.h\"\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#  include \"ares_strcasecmp.h\"\n",
+      [
+        40,
+        0
+      ],
+      [
+        41,
+        0
+      ]
+    ],
+    [
+      "#  include \"ares_strcasecmp.h\"\n",
+      [
+        45,
+        0
+      ],
+      [
+        46,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

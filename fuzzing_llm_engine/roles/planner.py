@@ -137,6 +137,9 @@ class FuzzingPlanner:
 
     def find_call_graph_with_api(self, cg_file_path, api_name):
         data = pd.read_csv(cg_file_path)
+        # 去除重复
+        data = data.drop_duplicates(subset=['caller', 'callee'])
+
         column1_name = 'caller'
         column2_name = 'callee'
         value_to_find = api_name

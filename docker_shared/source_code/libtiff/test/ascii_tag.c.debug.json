@@ -1,0 +1,119 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main()\n{\n    TIFF *tif;\n    size_t i;\n    unsigned char buf[] = {0, 127, 255};\n    char *value;\n\n    /* Test whether we can write tags. */\n    tif = TIFFOpen(filename, \"w\");\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't create test TIFF file %s.\\n\", filename);\n        return 1;\n    }\n\n    if (!TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, 1))\n    {\n        fprintf(stderr, \"Can't set ImageWidth tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_IMAGELENGTH, 1))\n    {\n        fprintf(stderr, \"Can't set ImageLength tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8))\n    {\n        fprintf(stderr, \"Can't set BitsPerSample tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, sizeof(buf)))\n    {\n        fprintf(stderr, \"Can't set SamplesPerPixel tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG))\n    {\n        fprintf(stderr, \"Can't set PlanarConfiguration tag.\\n\");\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB))\n    {\n        fprintf(stderr, \"Can't set PhotometricInterpretation tag.\\n\");\n        goto failure;\n    }\n\n    for (i = 0; i < NTAGS; i++)\n    {\n        if (!TIFFSetField(tif, ascii_tags[i].tag, ascii_tags[i].value))\n        {\n            fprintf(stderr, \"Can't set tag %\" PRIu32 \".\\n\", ascii_tags[i].tag);\n            goto failure;\n        }\n    }\n\n    /* InkNames tag has special form, so we handle it separately. */\n    if (!TIFFSetField(tif, TIFFTAG_NUMBEROFINKS, 3))\n    {\n        fprintf(stderr, \"Can't set tag %d (NUMBEROFINKS).\\n\",\n                TIFFTAG_NUMBEROFINKS);\n        goto failure;\n    }\n    if (!TIFFSetField(tif, TIFFTAG_INKNAMES, ink_names_size, ink_names))\n    {\n        fprintf(stderr, \"Can't set tag %d (INKNAMES).\\n\", TIFFTAG_INKNAMES);\n        goto failure;\n    }\n\n    /* Write dummy pixel data. */\n    if (TIFFWriteScanline(tif, buf, 0, 0) == -1)\n    {\n        fprintf(stderr, \"Can't write image data.\\n\");\n        goto failure;\n    }\n\n    TIFFClose(tif);\n\n    /* Ok, now test whether we can read written values. */\n    tif = TIFFOpen(filename, \"r\");\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't open test TIFF file %s.\\n\", filename);\n        return 1;\n    }\n\n    for (i = 0; i < NTAGS; i++)\n    {\n        if (!TIFFGetField(tif, ascii_tags[i].tag, &value) ||\n            strcmp(value, ascii_tags[i].value))\n        {\n            fprintf(stderr, \"Can't get tag %\" PRIu32 \".\\n\", ascii_tags[i].tag);\n            goto failure;\n        }\n    }\n\n    if (!TIFFGetField(tif, TIFFTAG_INKNAMES, &value) ||\n        memcmp(value, ink_names, ink_names_size))\n    {\n        fprintf(stderr, \"Can't get tag %d (INKNAMES).\\n\", TIFFTAG_INKNAMES);\n        goto failure;\n    }\n\n    TIFFClose(tif);\n\n    /* All tests passed; delete file and exit with success status. */\n    unlink(filename);\n    return 0;\n\nfailure:\n    /*\n     * Something goes wrong; close file and return unsuccessful status.\n     * Do not remove the file for further manual investigation.\n     */\n    TIFFClose(tif);\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          66,
+          0
+        ],
+        [
+          181,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct\n{\n    ttag_t tag;\n    const char *value;\n}",
+      {
+        "tag": "ttag_t",
+        "char": "const"
+      },
+      "",
+      [
+        42,
+        13
+      ],
+      [
+        46,
+        1
+      ]
+    ],
+    [
+      "struct\n{\n    ttag_t tag;\n    const char *value;\n}",
+      {
+        "tag": "ttag_t",
+        "char": "const"
+      },
+      "",
+      [
+        42,
+        13
+      ],
+      [
+        46,
+        1
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        38,
+        0
+      ],
+      [
+        39,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

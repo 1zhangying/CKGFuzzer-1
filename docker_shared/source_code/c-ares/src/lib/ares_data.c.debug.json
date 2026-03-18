@@ -1,0 +1,186 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void ares_free_data(void *dataptr)\n{\n  while (dataptr != NULL) {\n    struct ares_data *ptr;\n    void *next_data = NULL;\n\n#ifdef __INTEL_COMPILER\n#  pragma warning(push)\n#  pragma warning(disable:1684)\n   /* 1684: conversion from pointer to same-sized integral type */\n#endif\n\n    ptr = (void *)((char *)dataptr - offsetof(struct ares_data, data));\n\n#ifdef __INTEL_COMPILER\n#  pragma warning(pop)\n#endif\n\n    if (ptr->mark != ARES_DATATYPE_MARK)\n      return;\n\n    switch (ptr->type)\n      {\n        case ARES_DATATYPE_MX_REPLY:\n\n          if (ptr->data.mx_reply.next)\n            next_data = ptr->data.mx_reply.next;\n          if (ptr->data.mx_reply.host)\n            ares_free(ptr->data.mx_reply.host);\n          break;\n\n        case ARES_DATATYPE_SRV_REPLY:\n\n          if (ptr->data.srv_reply.next)\n            next_data = ptr->data.srv_reply.next;\n          if (ptr->data.srv_reply.host)\n            ares_free(ptr->data.srv_reply.host);\n          break;\n\n        case ARES_DATATYPE_URI_REPLY:\n\n          if (ptr->data.uri_reply.next)\n            next_data = ptr->data.uri_reply.next;\n          if (ptr->data.uri_reply.uri)\n            ares_free(ptr->data.uri_reply.uri);\n          break;\n\n        case ARES_DATATYPE_TXT_REPLY:\n        case ARES_DATATYPE_TXT_EXT:\n\n          if (ptr->data.txt_reply.next)\n            next_data = ptr->data.txt_reply.next;\n          if (ptr->data.txt_reply.txt)\n            ares_free(ptr->data.txt_reply.txt);\n          break;\n\n        case ARES_DATATYPE_ADDR_NODE:\n\n          if (ptr->data.addr_node.next)\n            next_data = ptr->data.addr_node.next;\n          break;\n\n        case ARES_DATATYPE_ADDR_PORT_NODE:\n\n          if (ptr->data.addr_port_node.next)\n            next_data = ptr->data.addr_port_node.next;\n          break;\n\n        case ARES_DATATYPE_NAPTR_REPLY:\n\n          if (ptr->data.naptr_reply.next)\n            next_data = ptr->data.naptr_reply.next;\n          if (ptr->data.naptr_reply.flags)\n            ares_free(ptr->data.naptr_reply.flags);\n          if (ptr->data.naptr_reply.service)\n            ares_free(ptr->data.naptr_reply.service);\n          if (ptr->data.naptr_reply.regexp)\n            ares_free(ptr->data.naptr_reply.regexp);\n          if (ptr->data.naptr_reply.replacement)\n            ares_free(ptr->data.naptr_reply.replacement);\n          break;\n\n        case ARES_DATATYPE_SOA_REPLY:\n          if (ptr->data.soa_reply.nsname)\n            ares_free(ptr->data.soa_reply.nsname);\n          if (ptr->data.soa_reply.hostmaster)\n            ares_free(ptr->data.soa_reply.hostmaster);\n          break;\n\n        case ARES_DATATYPE_CAA_REPLY:\n \n          if (ptr->data.caa_reply.next)\n            next_data = ptr->data.caa_reply.next;\n          if (ptr->data.caa_reply.property)\n            ares_free(ptr->data.caa_reply.property);\n          if (ptr->data.caa_reply.value)\n            ares_free(ptr->data.caa_reply.value);\n          break;\n\n        default:\n          return;\n      }\n\n    ares_free(ptr);\n    dataptr = next_data;\n  }\n}",
+      "fn_code_pos": [
+        [
+          40,
+          0
+        ],
+        [
+          146,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_free_data",
+        "parameters": {
+          "dataptr": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void *ares_malloc_data(ares_datatype type)\n{\n  struct ares_data *ptr;\n\n  ptr = ares_malloc(sizeof(struct ares_data));\n  if (!ptr)\n    return NULL;\n\n  switch (type)\n    {\n      case ARES_DATATYPE_MX_REPLY:\n        ptr->data.mx_reply.next = NULL;\n        ptr->data.mx_reply.host = NULL;\n        ptr->data.mx_reply.priority = 0;\n        break;\n\n      case ARES_DATATYPE_SRV_REPLY:\n        ptr->data.srv_reply.next = NULL;\n        ptr->data.srv_reply.host = NULL;\n        ptr->data.srv_reply.priority = 0;\n        ptr->data.srv_reply.weight = 0;\n        ptr->data.srv_reply.port = 0;\n        break;\n\n      case ARES_DATATYPE_URI_REPLY:\n        ptr->data.uri_reply.next = NULL;\n        ptr->data.uri_reply.priority = 0;\n        ptr->data.uri_reply.weight = 0;\n        ptr->data.uri_reply.uri = NULL;\n        ptr->data.uri_reply.ttl = 0;\n        break;\n\n      case ARES_DATATYPE_TXT_EXT:\n        ptr->data.txt_ext.record_start = 0;\n        /* FALLTHROUGH */\n\n      case ARES_DATATYPE_TXT_REPLY:\n        ptr->data.txt_reply.next = NULL;\n        ptr->data.txt_reply.txt = NULL;\n        ptr->data.txt_reply.length = 0;\n        break;\n\n      case ARES_DATATYPE_CAA_REPLY:\n        ptr->data.caa_reply.next = NULL;\n        ptr->data.caa_reply.plength = 0;\n        ptr->data.caa_reply.property = NULL;\n        ptr->data.caa_reply.length = 0;\n        ptr->data.caa_reply.value = NULL;\n        break;\n\n      case ARES_DATATYPE_ADDR_NODE:\n        ptr->data.addr_node.next = NULL;\n        ptr->data.addr_node.family = 0;\n        memset(&ptr->data.addr_node.addrV6, 0,\n               sizeof(ptr->data.addr_node.addrV6));\n        break;\n\n      case ARES_DATATYPE_ADDR_PORT_NODE:\n        ptr->data.addr_port_node.next = NULL;\n        ptr->data.addr_port_node.family = 0;\n        ptr->data.addr_port_node.udp_port = 0;\n        ptr->data.addr_port_node.tcp_port = 0;\n        memset(&ptr->data.addr_port_node.addrV6, 0,\n               sizeof(ptr->data.addr_port_node.addrV6));\n        break;\n\n      case ARES_DATATYPE_NAPTR_REPLY:\n        ptr->data.naptr_reply.next = NULL;\n        ptr->data.naptr_reply.flags = NULL;\n        ptr->data.naptr_reply.service = NULL;\n        ptr->data.naptr_reply.regexp = NULL;\n        ptr->data.naptr_reply.replacement = NULL;\n        ptr->data.naptr_reply.order = 0;\n        ptr->data.naptr_reply.preference = 0;\n        break;\n\n      case ARES_DATATYPE_SOA_REPLY:\n        ptr->data.soa_reply.nsname = NULL;\n        ptr->data.soa_reply.hostmaster = NULL;\n        ptr->data.soa_reply.serial = 0;\n        ptr->data.soa_reply.refresh = 0;\n        ptr->data.soa_reply.retry = 0;\n        ptr->data.soa_reply.expire = 0;\n        ptr->data.soa_reply.minttl = 0;\n\tbreak;\n\n      default:\n        ares_free(ptr);\n        return NULL;\n    }\n\n  ptr->mark = ARES_DATATYPE_MARK;\n  ptr->type = type;\n\n  return &ptr->data;\n}",
+      "fn_code_pos": [
+        [
+          160,
+          0
+        ],
+        [
+          255,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_malloc_data",
+        "parameters": {
+          "type": "ares_datatype"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "ares_malloc_data(ares_datatype type)",
+      "fn_dec_pos": [
+        [
+          160,
+          6
+        ],
+        [
+          160,
+          42
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_malloc_data",
+        "parameters": {
+          "type": "ares_datatype"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct ares_data",
+      {},
+      "",
+      [
+        43,
+        4
+      ],
+      [
+        43,
+        20
+      ]
+    ],
+    [
+      "struct ares_data",
+      {},
+      "",
+      [
+        52,
+        46
+      ],
+      [
+        52,
+        62
+      ]
+    ],
+    [
+      "struct ares_data",
+      {},
+      "",
+      [
+        162,
+        2
+      ],
+      [
+        162,
+        18
+      ]
+    ],
+    [
+      "struct ares_data",
+      {},
+      "",
+      [
+        164,
+        27
+      ],
+      [
+        164,
+        43
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        0
+      ]
+    ],
+    [
+      "#include <stddef.h>\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_data.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

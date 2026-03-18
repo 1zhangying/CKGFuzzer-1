@@ -1,0 +1,591 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void makegamtab(float gam)\n{\n    int i;\n\n    for (i = 0; i < 256; i++)\n        gamtab[i] = (unsigned short)(IMAX * pow(i / 255.0, gam) + 0.5);\n}",
+      "fn_code_pos": [
+        [
+          60,
+          0
+        ],
+        [
+          66,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "makegamtab",
+        "parameters": {
+          "gam": "float"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void usage(void)\n{\n    char buf[BUFSIZ];\n    int i;\n\n    setbuf(stderr, buf);\n    fprintf(stderr, \"%s\\n\\n\", TIFFGetVersion());\n    for (i = 0; stuff[i] != NULL; i++)\n        fprintf(stderr, \"%s\\n\", stuff[i]);\n    exit(-1);\n}",
+      "fn_code_pos": [
+        [
+          84,
+          0
+        ],
+        [
+          94,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n\n    int c, status;\n\n    while ((c = getopt(argc, argv, \"c:r:\")) != -1)\n        switch (c)\n        {\n            case 'c': /* compression scheme */\n                if (!processCompressOptions(optarg))\n                    usage();\n                break;\n            case 'r': /* rows/strip */\n                rowsperstrip = atoi(optarg);\n                break;\n            case '?':\n                usage();\n                /*NOTREACHED*/\n        }\n    if (argc - optind != 2)\n        usage();\n\n    makegamtab(GIFGAMMA);\n    filename = argv[optind];\n    imagename = argv[optind + 1];\n    if ((infile = fopen(imagename, \"rb\")) != NULL)\n    {\n        int c;\n        fclose(infile);\n        printf(\"overwrite %s? \", imagename);\n        fflush(stdout);\n        c = getc(stdin);\n        if (c != 'y' && c != 'Y')\n            return (1);\n    }\n    if ((infile = fopen(filename, \"rb\")) == NULL)\n    {\n        perror(filename);\n        return (1);\n    }\n    status = convert();\n    fclose(infile);\n    return (status);\n}",
+      "fn_code_pos": [
+        [
+          132,
+          0
+        ],
+        [
+          179,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int processCompressOptions(char *opt)\n{\n    if (streq(opt, \"none\"))\n        compression = COMPRESSION_NONE;\n    else if (streq(opt, \"packbits\"))\n        compression = COMPRESSION_PACKBITS;\n    else if (strneq(opt, \"lzw\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_LZW;\n    }\n    else if (strneq(opt, \"zip\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_ADOBE_DEFLATE;\n    }\n    else\n        return (0);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          181,
+          0
+        ],
+        [
+          204,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {
+          "opt": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int convert(void)\n{\n    int ch;\n    char *mode = \"w\";\n\n    if (!checksignature())\n        return (-1);\n    if (!readscreen())\n        return (-1);\n    while ((ch = getc(infile)) != ';' && ch != EOF)\n    {\n        switch (ch)\n        {\n            case '\\0':\n                break; /* this kludge for non-standard files */\n            case ',':\n                if (!readgifimage(mode))\n                    return (-1);\n                mode = \"a\"; /* subsequent images append */\n                break;\n            case '!':\n                if (!readextension())\n                    return (-1);\n                break;\n            default:\n                fprintf(stderr, \"illegal GIF block type\\n\");\n                return (-1);\n        }\n    }\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          206,
+          0
+        ],
+        [
+          236,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "convert",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int checksignature(void)\n{\n    char buf[6];\n\n    if (fread(buf, 1, 6, infile) != 6)\n    {\n        fprintf(stderr, \"short read from file %s (%s)\\n\", filename,\n                strerror(errno));\n        return 0;\n    }\n    if (strncmp(buf, \"GIF\", 3))\n    {\n        fprintf(stderr, \"file is not a GIF file\\n\");\n        return 0;\n    }\n    if (strncmp(&buf[3], \"87a\", 3))\n    {\n        fprintf(stderr, \"unknown GIF version number\\n\");\n        return 0;\n    }\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          238,
+          0
+        ],
+        [
+          259,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "checksignature",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int readscreen(void)\n{\n    unsigned char buf[7];\n\n    if (fread(buf, 1, 7, infile) != 7)\n    {\n        fprintf(stderr, \"short read from file %s (%s)\\n\", filename,\n                strerror(errno));\n        return 0;\n    }\n    global = buf[4] & 0x80;\n    if (global)\n    {\n        globalbits = (buf[4] & 0x07) + 1;\n        if (fread(globalmap, 3, ((size_t)1) << globalbits, infile) !=\n            ((size_t)1) << globalbits)\n        {\n            fprintf(stderr, \"short read from file %s (%s)\\n\", filename,\n                    strerror(errno));\n            return 0;\n        }\n    }\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          266,
+          0
+        ],
+        [
+          289,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "readscreen",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int readgifimage(char *mode)\n{\n    unsigned char buf[9];\n    int local, interleaved;\n    unsigned char localmap[256][3];\n    int localbits;\n    int status;\n    size_t raster_size;\n\n    if (fread(buf, 1, 9, infile) != 9)\n    {\n        fprintf(stderr, \"short read from file %s (%s)\\n\", filename,\n                strerror(errno));\n        return (0);\n    }\n    width = (buf[4] + (buf[5] << 8)) & 0xffff;  /* 16 bit */\n    height = (buf[6] + (buf[7] << 8)) & 0xffff; /* 16 bit */\n    local = buf[8] & 0x80;\n    interleaved = buf[8] & 0x40;\n    if (width == 0UL || height == 0UL || (width > 2000000000UL / height))\n    {\n        fprintf(stderr, \"Invalid value of width or height\\n\");\n        return (0);\n    }\n    if (local == 0 && global == 0)\n    {\n        fprintf(stderr, \"no colormap present for image\\n\");\n        return (0);\n    }\n    raster_size = width * height;\n    if ((raster_size / width) == height)\n    {\n        raster_size += EXTRAFUDGE; /* Add elbow room */\n    }\n    else\n    {\n        raster_size = 0;\n    }\n    if ((raster = (unsigned char *)_TIFFmalloc(raster_size)) == NULL)\n    {\n        fprintf(stderr, \"not enough memory for image\\n\");\n        return (0);\n    }\n    if (local)\n    {\n        localbits = (buf[8] & 0x7) + 1;\n\n        fprintf(stderr, \"   local colors: %d\\n\", 1 << localbits);\n\n        if (fread(localmap, 3, ((size_t)1) << localbits, infile) !=\n            ((size_t)1) << localbits)\n        {\n            fprintf(stderr, \"short read from file %s (%s)\\n\", filename,\n                    strerror(errno));\n            return (0);\n        }\n        initcolors(localmap, 1 << localbits);\n    }\n    else if (global)\n    {\n        initcolors(globalmap, 1 << globalbits);\n    }\n    if ((status = readraster()))\n        rasterize(interleaved, mode);\n    _TIFFfree(raster);\n    return status;\n}",
+      "fn_code_pos": [
+        [
+          291,
+          0
+        ],
+        [
+          357,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "readgifimage",
+        "parameters": {
+          "mode": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int readextension(void)\n{\n    int count;\n    char buf[255];\n    int status = 1;\n\n    (void)getc(infile);\n    while ((count = getc(infile)) && count <= 255)\n        if (fread(buf, 1, count, infile) != (size_t)count)\n        {\n            fprintf(stderr, \"short read from file %s (%s)\\n\", filename,\n                    strerror(errno));\n            status = 0;\n            break;\n        }\n    return status;\n}",
+      "fn_code_pos": [
+        [
+          364,
+          0
+        ],
+        [
+          380,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "readextension",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int readraster(void)\n{\n    unsigned char *fill = raster;\n    unsigned char buf[255];\n    register int bits = 0;\n    register unsigned long datum = 0;\n    register unsigned char *ch;\n    register int count, code;\n    int status = 1;\n\n    datasize = getc(infile);\n    if (datasize > 12)\n        return 0;\n    clear = 1 << datasize;\n    eoi = clear + 1;\n    avail = clear + 2;\n    oldcode = -1;\n    codesize = datasize + 1;\n    codemask = (1 << codesize) - 1;\n    for (code = 0; code < clear; code++)\n    {\n        prefix[code] = 0;\n        suffix[code] = code;\n    }\n    stackp = stack;\n    for (count = getc(infile); count > 0 && count <= 255; count = getc(infile))\n    {\n        if (fread(buf, 1, count, infile) != (size_t)count)\n        {\n            fprintf(stderr, \"short read from file %s (%s)\\n\", filename,\n                    strerror(errno));\n            return 0;\n        }\n        for (ch = buf; count-- > 0; ch++)\n        {\n            datum += (unsigned long)*ch << bits;\n            bits += 8;\n            while (bits >= codesize)\n            {\n                code = datum & codemask;\n                datum >>= codesize;\n                bits -= codesize;\n                if (code == eoi)\n                {                  /* This kludge put in */\n                    goto exitloop; /* because some GIF files*/\n                }                  /* aren't standard */\n                if (!process(code, &fill))\n                {\n                    status = 0;\n                    goto exitloop;\n                }\n            }\n        }\n        if (fill >= raster + width * height)\n        {\n            fprintf(stderr, \"raster full before eoi code\\n\");\n            break;\n        }\n    }\nexitloop:\n    if (fill != raster + width * height)\n    {\n        fprintf(stderr, \"warning: wrong rastersize: %ld bytes\\n\",\n                (long)(fill - raster));\n        fprintf(stderr, \"         instead of %ld bytes\\n\",\n                (long)width * height);\n    }\n    return status;\n}",
+      "fn_code_pos": [
+        [
+          387,
+          0
+        ],
+        [
+          455,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "readraster",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int process(register int code, unsigned char **fill)\n{\n    int incode;\n    static unsigned char firstchar;\n\n    if (code == clear)\n    {\n        codesize = datasize + 1;\n        codemask = (1 << codesize) - 1;\n        avail = clear + 2;\n        oldcode = -1;\n        return 1;\n    }\n\n    if (oldcode == -1)\n    {\n        if (code >= clear)\n        {\n            fprintf(stderr, \"bad input: code=%d is larger than clear=%d\\n\",\n                    code, clear);\n            return 0;\n        }\n        if (*fill >= raster + width * height)\n        {\n            fprintf(stderr, \"raster full before eoi code\\n\");\n            return 0;\n        }\n        *(*fill)++ = suffix[code];\n        firstchar = oldcode = code;\n        return 1;\n    }\n    if (code > avail)\n    {\n        fprintf(stderr, \"code %d too large for %d\\n\", code, avail);\n        return 0;\n    }\n\n    incode = code;\n    if (code == avail)\n    { /* the first code is always < avail */\n        *stackp++ = firstchar;\n        code = oldcode;\n    }\n    while (code > clear)\n    {\n        *stackp++ = suffix[code];\n        code = prefix[code];\n    }\n\n    *stackp++ = firstchar = suffix[code];\n    prefix[avail] = oldcode;\n    suffix[avail] = firstchar;\n    avail++;\n\n    if (((avail & codemask) == 0) && (avail < 4096))\n    {\n        codesize++;\n        codemask += avail;\n    }\n    oldcode = incode;\n    do\n    {\n        if (*fill >= raster + width * height)\n        {\n            fprintf(stderr, \"raster full before eoi code\\n\");\n            return 0;\n        }\n        *(*fill)++ = *--stackp;\n    } while (stackp > stack);\n    return 1;\n}",
+      "fn_code_pos": [
+        [
+          463,
+          0
+        ],
+        [
+          533,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "process",
+        "parameters": {
+          "code": "int",
+          "fill": "unsigned char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void initcolors(unsigned char colormap[COLSIZE][3], int ncolors)\n{\n    register int i;\n\n    for (i = 0; i < ncolors; i++)\n    {\n        red[i] = gamtab[colormap[i][0]];\n        green[i] = gamtab[colormap[i][1]];\n        blue[i] = gamtab[colormap[i][2]];\n    }\n}",
+      "fn_code_pos": [
+        [
+          541,
+          0
+        ],
+        [
+          551,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "initcolors",
+        "parameters": {
+          "colormap": "unsigned char",
+          "ncolors": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "void rasterize(int interleaved, char *mode)\n{\n    register unsigned long row;\n    unsigned char *newras;\n    unsigned char *ras;\n    TIFF *tif;\n    tstrip_t strip;\n    tsize_t stripsize;\n\n    if ((newras = (unsigned char *)_TIFFmalloc(width * height + EXTRAFUDGE)) ==\n        NULL)\n    {\n        fprintf(stderr, \"not enough memory for image\\n\");\n        return;\n    }\n#define DRAWSEGMENT(offset, step)                                              \\\n    {                                                                          \\\n        for (row = offset; row < height; row += step)                          \\\n        {                                                                      \\\n            _TIFFmemcpy(newras + row * width, ras, width);                     \\\n            ras += width;                                                      \\\n        }                                                                      \\\n    }\n    ras = raster;\n    if (interleaved)\n    {\n        DRAWSEGMENT(0, 8);\n        DRAWSEGMENT(4, 8);\n        DRAWSEGMENT(2, 4);\n        DRAWSEGMENT(1, 2);\n    }\n    else\n        DRAWSEGMENT(0, 1);\n#undef DRAWSEGMENT\n\n    tif = TIFFOpen(imagename, mode);\n    if (!tif)\n    {\n        TIFFError(imagename, \"Can not open output image\");\n        exit(-1);\n    }\n    TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, (uint32_t)width);\n    TIFFSetField(tif, TIFFTAG_IMAGELENGTH, (uint32_t)height);\n    TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_PALETTE);\n    TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);\n    TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);\n    TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8);\n    TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP,\n                 rowsperstrip = TIFFDefaultStripSize(tif, rowsperstrip));\n    TIFFSetField(tif, TIFFTAG_COMPRESSION, compression);\n    switch (compression)\n    {\n        case COMPRESSION_LZW:\n        case COMPRESSION_ADOBE_DEFLATE:\n        case COMPRESSION_DEFLATE:\n            if (predictor != 0)\n                TIFFSetField(tif, TIFFTAG_PREDICTOR, predictor);\n            break;\n    }\n    TIFFSetField(tif, TIFFTAG_COLORMAP, red, green, blue);\n    TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);\n    strip = 0;\n    stripsize = TIFFStripSize(tif);\n    for (row = 0; row < height; row += rowsperstrip)\n    {\n        if (rowsperstrip > height - row)\n        {\n            rowsperstrip = height - row;\n            stripsize = TIFFVStripSize(tif, rowsperstrip);\n        }\n        if (TIFFWriteEncodedStrip(tif, strip, newras + row * width, stripsize) <\n            0)\n            break;\n        strip++;\n    }\n    TIFFClose(tif);\n\n    _TIFFfree(newras);\n}",
+      "fn_code_pos": [
+        [
+          553,
+          0
+        ],
+        [
+          631,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "rasterize",
+        "parameters": {
+          "interleaved": "int",
+          "mode": "char"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "processCompressOptions(char *)",
+      "fn_dec_pos": [
+        [
+          120,
+          11
+        ],
+        [
+          120,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "convert(void)",
+      "fn_dec_pos": [
+        [
+          122,
+          4
+        ],
+        [
+          122,
+          17
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "convert",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "checksignature(void)",
+      "fn_dec_pos": [
+        [
+          123,
+          4
+        ],
+        [
+          123,
+          24
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "checksignature",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "readscreen(void)",
+      "fn_dec_pos": [
+        [
+          124,
+          4
+        ],
+        [
+          124,
+          20
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "readscreen",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "readgifimage(char *)",
+      "fn_dec_pos": [
+        [
+          125,
+          4
+        ],
+        [
+          125,
+          24
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "readgifimage",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "readextension(void)",
+      "fn_dec_pos": [
+        [
+          126,
+          4
+        ],
+        [
+          126,
+          23
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "readextension",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "readraster(void)",
+      "fn_dec_pos": [
+        [
+          127,
+          4
+        ],
+        [
+          127,
+          20
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "readraster",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "process(int, unsigned char **)",
+      "fn_dec_pos": [
+        [
+          128,
+          4
+        ],
+        [
+          128,
+          34
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "process",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "initcolors(unsigned char[COLSIZE][3], int)",
+      "fn_dec_pos": [
+        [
+          129,
+          5
+        ],
+        [
+          129,
+          47
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "initcolors",
+        "parameters": {
+          "COLSIZE": "unsigned char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "rasterize(int, char *)",
+      "fn_dec_pos": [
+        [
+          130,
+          5
+        ],
+        [
+          130,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "rasterize",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ]
+    ],
+    [
+      "#include <errno.h>\n",
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        38,
+        0
+      ],
+      [
+        39,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        39,
+        0
+      ],
+      [
+        40,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        42,
+        0
+      ],
+      [
+        43,
+        0
+      ]
+    ],
+    [
+      "#include \"libport.h\"\n",
+      [
+        46,
+        0
+      ],
+      [
+        47,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        49,
+        0
+      ],
+      [
+        50,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

@@ -1,0 +1,662 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "void ares_gethostbyaddr(ares_channel channel, const void *addr, int addrlen,\n                        int family, ares_host_callback callback, void *arg)\n{\n  struct addr_query *aquery;\n\n  if (family != AF_INET && family != AF_INET6)\n    {\n      callback(arg, ARES_ENOTIMP, 0, NULL);\n      return;\n    }\n\n  if ((family == AF_INET && addrlen != sizeof(aquery->addr.addrV4)) ||\n      (family == AF_INET6 && addrlen != sizeof(aquery->addr.addrV6)))\n    {\n      callback(arg, ARES_ENOTIMP, 0, NULL);\n      return;\n    }\n\n  aquery = ares_malloc(sizeof(struct addr_query));\n  if (!aquery)\n    {\n      callback(arg, ARES_ENOMEM, 0, NULL);\n      return;\n    }\n  aquery->channel = channel;\n  if (family == AF_INET)\n    memcpy(&aquery->addr.addrV4, addr, sizeof(aquery->addr.addrV4));\n  else\n    memcpy(&aquery->addr.addrV6, addr, sizeof(aquery->addr.addrV6));\n  aquery->addr.family = family;\n  aquery->callback = callback;\n  aquery->arg = arg;\n  aquery->remaining_lookups = channel->lookups;\n  aquery->timeouts = 0;\n\n  next_lookup(aquery);\n}",
+      "fn_code_pos": [
+        [
+          57,
+          0
+        ],
+        [
+          93,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_gethostbyaddr",
+        "parameters": {
+          "channel": "ares_channel",
+          "addr": "void",
+          "addrlen": "int",
+          "family": "int",
+          "callback": "ares_host_callback",
+          "arg": "void"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void next_lookup(struct addr_query *aquery)\n{\n  const char *p;\n  char name[128];\n  int status;\n  struct hostent *host;\n\n  for (p = aquery->remaining_lookups; *p; p++)\n    {\n      switch (*p)\n        {\n        case 'b':\n          ptr_rr_name(name, &aquery->addr);\n          aquery->remaining_lookups = p + 1;\n          ares_query(aquery->channel, name, C_IN, T_PTR, addr_callback,\n                     aquery);\n          return;\n        case 'f':\n          status = file_lookup(&aquery->addr, &host);\n\n          /* this status check below previously checked for !ARES_ENOTFOUND,\n             but we should not assume that this single error code is the one\n             that can occur, as that is in fact no longer the case */\n          if (status == ARES_SUCCESS)\n            {\n              end_aquery(aquery, status, host);\n              return;\n            }\n          break;\n        }\n    }\n  end_aquery(aquery, ARES_ENOTFOUND, NULL);\n}",
+      "fn_code_pos": [
+        [
+          95,
+          0
+        ],
+        [
+          127,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "next_lookup",
+        "parameters": {
+          "aquery": "struct addr_query"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void addr_callback(void *arg, int status, int timeouts,\n                          unsigned char *abuf, int alen)\n{\n  struct addr_query *aquery = (struct addr_query *) arg;\n  struct hostent *host;\n  size_t addrlen;\n\n  aquery->timeouts += timeouts;\n  if (status == ARES_SUCCESS)\n    {\n      if (aquery->addr.family == AF_INET)\n        {\n          addrlen = sizeof(aquery->addr.addrV4);\n          status = ares_parse_ptr_reply(abuf, alen, &aquery->addr.addrV4,\n                                        (int)addrlen, AF_INET, &host);\n        }\n      else\n        {\n          addrlen = sizeof(aquery->addr.addrV6);\n          status = ares_parse_ptr_reply(abuf, alen, &aquery->addr.addrV6,\n                                        (int)addrlen, AF_INET6, &host);\n        }\n      end_aquery(aquery, status, host);\n    }\n  else if (status == ARES_EDESTRUCTION || status == ARES_ECANCELLED)\n    end_aquery(aquery, status, NULL);\n  else\n    next_lookup(aquery);\n}",
+      "fn_code_pos": [
+        [
+          129,
+          0
+        ],
+        [
+          157,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "addr_callback",
+        "parameters": {
+          "arg": "void",
+          "status": "int",
+          "timeouts": "int",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void end_aquery(struct addr_query *aquery, int status,\n                       struct hostent *host)\n{\n  aquery->callback(aquery->arg, status, aquery->timeouts, host);\n  if (host)\n    ares_free_hostent(host);\n  ares_free(aquery);\n}",
+      "fn_code_pos": [
+        [
+          159,
+          0
+        ],
+        [
+          166,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "end_aquery",
+        "parameters": {
+          "aquery": "struct addr_query",
+          "status": "int",
+          "host": "struct hostent"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int file_lookup(struct ares_addr *addr, struct hostent **host)\n{\n  FILE *fp;\n  int status;\n  int error;\n\n#ifdef WIN32\n  char PATH_HOSTS[MAX_PATH];\n  win_platform platform;\n\n  PATH_HOSTS[0] = '\\0';\n\n  platform = ares__getplatform();\n\n  if (platform == WIN_NT) {\n    char tmp[MAX_PATH];\n    HKEY hkeyHosts;\n\n    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, WIN_NS_NT_KEY, 0, KEY_READ,\n                     &hkeyHosts) == ERROR_SUCCESS)\n    {\n      DWORD dwLength = MAX_PATH;\n      RegQueryValueExA(hkeyHosts, DATABASEPATH, NULL, NULL, (LPBYTE)tmp,\n                      &dwLength);\n      ExpandEnvironmentStringsA(tmp, PATH_HOSTS, MAX_PATH);\n      RegCloseKey(hkeyHosts);\n    }\n  }\n  else if (platform == WIN_9X)\n    GetWindowsDirectoryA(PATH_HOSTS, MAX_PATH);\n  else\n    return ARES_ENOTFOUND;\n\n  strcat(PATH_HOSTS, WIN_PATH_HOSTS);\n\n#elif defined(WATT32)\n  const char *PATH_HOSTS = _w32_GetHostsFile();\n\n  if (!PATH_HOSTS)\n    return ARES_ENOTFOUND;\n#endif\n\n  fp = fopen(PATH_HOSTS, \"r\");\n  if (!fp)\n    {\n      error = ERRNO;\n      switch(error)\n        {\n        case ENOENT:\n        case ESRCH:\n          return ARES_ENOTFOUND;\n        default:\n          DEBUGF(fprintf(stderr, \"fopen() failed with error: %d %s\\n\",\n                         error, strerror(error)));\n          DEBUGF(fprintf(stderr, \"Error opening file: %s\\n\",\n                         PATH_HOSTS));\n          *host = NULL;\n          return ARES_EFILE;\n        }\n    }\n  while ((status = ares__get_hostent(fp, addr->family, host)) == ARES_SUCCESS)\n    {\n      if (addr->family != (*host)->h_addrtype)\n        {\n          ares_free_hostent(*host);\n          continue;\n        }\n      if (addr->family == AF_INET)\n        {\n          if (memcmp((*host)->h_addr, &addr->addrV4,\n                     sizeof(addr->addrV4)) == 0)\n            break;\n        }\n      else if (addr->family == AF_INET6)\n        {\n          if (memcmp((*host)->h_addr, &addr->addrV6,\n                     sizeof(addr->addrV6)) == 0)\n            break;\n        }\n      ares_free_hostent(*host);\n    }\n  fclose(fp);\n  if (status == ARES_EOF)\n    status = ARES_ENOTFOUND;\n  if (status != ARES_SUCCESS)\n    *host = NULL;\n  return status;\n}",
+      "fn_code_pos": [
+        [
+          168,
+          0
+        ],
+        [
+          255,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_lookup",
+        "parameters": {
+          "addr": "struct ares_addr",
+          "host": "struct hostent"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void ptr_rr_name(char *name, const struct ares_addr *addr)\n{\n  if (addr->family == AF_INET)\n    {\n       unsigned long laddr = ntohl(addr->addrV4.s_addr);\n       unsigned long a1 = (laddr >> 24UL) & 0xFFUL;\n       unsigned long a2 = (laddr >> 16UL) & 0xFFUL;\n       unsigned long a3 = (laddr >>  8UL) & 0xFFUL;\n       unsigned long a4 = laddr & 0xFFUL;\n       sprintf(name, \"%lu.%lu.%lu.%lu.in-addr.arpa\", a4, a3, a2, a1);\n    }\n  else\n    {\n       unsigned char *bytes = (unsigned char *)&addr->addrV6;\n       /* There are too many arguments to do this in one line using\n        * minimally C89-compliant compilers */\n       sprintf(name,\n                \"%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.\",\n                bytes[15]&0xf, bytes[15] >> 4, bytes[14]&0xf, bytes[14] >> 4,\n                bytes[13]&0xf, bytes[13] >> 4, bytes[12]&0xf, bytes[12] >> 4,\n                bytes[11]&0xf, bytes[11] >> 4, bytes[10]&0xf, bytes[10] >> 4,\n                bytes[9]&0xf, bytes[9] >> 4, bytes[8]&0xf, bytes[8] >> 4);\n       sprintf(name+strlen(name),\n                \"%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.%x.ip6.arpa\",\n                bytes[7]&0xf, bytes[7] >> 4, bytes[6]&0xf, bytes[6] >> 4,\n                bytes[5]&0xf, bytes[5] >> 4, bytes[4]&0xf, bytes[4] >> 4,\n                bytes[3]&0xf, bytes[3] >> 4, bytes[2]&0xf, bytes[2] >> 4,\n                bytes[1]&0xf, bytes[1] >> 4, bytes[0]&0xf, bytes[0] >> 4);\n    }\n}",
+      "fn_code_pos": [
+        [
+          257,
+          0
+        ],
+        [
+          286,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ptr_rr_name",
+        "parameters": {
+          "name": "char",
+          "addr": "struct ares_addr"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "next_lookup(struct addr_query *aquery)",
+      "fn_dec_pos": [
+        [
+          49,
+          12
+        ],
+        [
+          49,
+          50
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "next_lookup",
+        "parameters": {
+          "aquery": "struct addr_query"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "addr_callback(void *arg, int status, int timeouts,\n                          unsigned char *abuf, int alen)",
+      "fn_dec_pos": [
+        [
+          50,
+          12
+        ],
+        [
+          51,
+          56
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "addr_callback",
+        "parameters": {
+          "arg": "void",
+          "status": "int",
+          "timeouts": "int",
+          "abuf": "unsigned char",
+          "alen": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "end_aquery(struct addr_query *aquery, int status,\n                       struct hostent *host)",
+      "fn_dec_pos": [
+        [
+          52,
+          12
+        ],
+        [
+          53,
+          44
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "end_aquery",
+        "parameters": {
+          "aquery": "struct addr_query",
+          "status": "int",
+          "host": "struct hostent"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "file_lookup(struct ares_addr *addr, struct hostent **host)",
+      "fn_dec_pos": [
+        [
+          54,
+          11
+        ],
+        [
+          54,
+          69
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_lookup",
+        "parameters": {
+          "addr": "struct ares_addr",
+          "host": "struct hostent"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "ptr_rr_name(char *name, const struct ares_addr *addr)",
+      "fn_dec_pos": [
+        [
+          55,
+          12
+        ],
+        [
+          55,
+          65
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ptr_rr_name",
+        "parameters": {
+          "name": "char",
+          "addr": "struct ares_addr"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct addr_query {\n  /* Arguments passed to ares_gethostbyaddr() */\n  ares_channel channel;\n  struct ares_addr addr;\n  ares_host_callback callback;\n  void *arg;\n\n  const char *remaining_lookups;\n  int timeouts;\n}",
+      {
+        "channel": "ares_channel",
+        "addr": "struct ares_addr",
+        "callback": "ares_host_callback",
+        "*arg": "void",
+        "char": "const",
+        "timeouts": "int"
+      },
+      "addr_query",
+      [
+        38,
+        0
+      ],
+      [
+        47,
+        1
+      ]
+    ],
+    [
+      "struct addr_query {\n  /* Arguments passed to ares_gethostbyaddr() */\n  ares_channel channel;\n  struct ares_addr addr;\n  ares_host_callback callback;\n  void *arg;\n\n  const char *remaining_lookups;\n  int timeouts;\n}",
+      {
+        "channel": "ares_channel",
+        "addr": "struct ares_addr",
+        "callback": "ares_host_callback",
+        "*arg": "void",
+        "char": "const",
+        "timeouts": "int"
+      },
+      "addr_query",
+      [
+        38,
+        0
+      ],
+      [
+        47,
+        1
+      ]
+    ],
+    [
+      "struct ares_addr",
+      {},
+      "",
+      [
+        41,
+        2
+      ],
+      [
+        41,
+        18
+      ]
+    ],
+    [
+      "struct addr_query",
+      {},
+      "",
+      [
+        49,
+        24
+      ],
+      [
+        49,
+        41
+      ]
+    ],
+    [
+      "struct addr_query",
+      {},
+      "",
+      [
+        52,
+        23
+      ],
+      [
+        52,
+        40
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        53,
+        23
+      ],
+      [
+        53,
+        37
+      ]
+    ],
+    [
+      "struct ares_addr",
+      {},
+      "",
+      [
+        54,
+        23
+      ],
+      [
+        54,
+        39
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        54,
+        47
+      ],
+      [
+        54,
+        61
+      ]
+    ],
+    [
+      "struct ares_addr",
+      {},
+      "",
+      [
+        55,
+        42
+      ],
+      [
+        55,
+        58
+      ]
+    ],
+    [
+      "struct addr_query",
+      {},
+      "",
+      [
+        60,
+        2
+      ],
+      [
+        60,
+        19
+      ]
+    ],
+    [
+      "struct addr_query",
+      {},
+      "",
+      [
+        75,
+        30
+      ],
+      [
+        75,
+        47
+      ]
+    ],
+    [
+      "struct addr_query",
+      {},
+      "",
+      [
+        95,
+        24
+      ],
+      [
+        95,
+        41
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        100,
+        2
+      ],
+      [
+        100,
+        16
+      ]
+    ],
+    [
+      "struct addr_query",
+      {},
+      "",
+      [
+        132,
+        2
+      ],
+      [
+        132,
+        19
+      ]
+    ],
+    [
+      "struct addr_query",
+      {},
+      "",
+      [
+        132,
+        31
+      ],
+      [
+        132,
+        48
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        133,
+        2
+      ],
+      [
+        133,
+        16
+      ]
+    ],
+    [
+      "struct addr_query",
+      {},
+      "",
+      [
+        159,
+        23
+      ],
+      [
+        159,
+        40
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        160,
+        23
+      ],
+      [
+        160,
+        37
+      ]
+    ],
+    [
+      "struct ares_addr",
+      {},
+      "",
+      [
+        168,
+        23
+      ],
+      [
+        168,
+        39
+      ]
+    ],
+    [
+      "struct hostent",
+      {},
+      "",
+      [
+        168,
+        47
+      ],
+      [
+        168,
+        61
+      ]
+    ],
+    [
+      "struct ares_addr",
+      {},
+      "",
+      [
+        257,
+        42
+      ],
+      [
+        257,
+        58
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        15,
+        0
+      ],
+      [
+        16,
+        0
+      ]
+    ],
+    [
+      "#  include <netinet/in.h>\n",
+      [
+        18,
+        0
+      ],
+      [
+        19,
+        0
+      ]
+    ],
+    [
+      "#  include <netdb.h>\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_nameser.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_inet_net_pton.h\"\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_platform.h\"\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

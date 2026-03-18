@@ -1,0 +1,939 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void *td_lfind(const void *key, const void *base, size_t *nmemb,\n                      size_t size, int (*compar)(const void *, const void *))\n{\n    char *element, *end;\n\n    end = (char *)base + *nmemb * size;\n    for (element = (char *)base; element < end; element += size)\n        if (!compar(key, element)) /* key found */\n            return element;\n\n    return NULL;\n}",
+      "fn_code_pos": [
+        [
+          493,
+          0
+        ],
+        [
+          504,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "td_lfind",
+        "parameters": {
+          "key": "void",
+          "base": "void",
+          "nmemb": "size_t",
+          "size": "size_t",
+          "compar": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "const TIFFFieldArray *_TIFFGetFields(void) { return (&tiffFieldArray); }",
+      "fn_code_pos": [
+        [
+          506,
+          0
+        ],
+        [
+          506,
+          72
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFGetFields",
+        "parameters": {},
+        "return_type": "TIFFFieldArray"
+      }
+    },
+    {
+      "fn_code": "const TIFFFieldArray *_TIFFGetExifFields(void) { return (&exifFieldArray); }",
+      "fn_code_pos": [
+        [
+          508,
+          0
+        ],
+        [
+          508,
+          76
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFGetExifFields",
+        "parameters": {},
+        "return_type": "TIFFFieldArray"
+      }
+    },
+    {
+      "fn_code": "const TIFFFieldArray *_TIFFGetGpsFields(void) { return (&gpsFieldArray); }",
+      "fn_code_pos": [
+        [
+          510,
+          0
+        ],
+        [
+          510,
+          74
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFGetGpsFields",
+        "parameters": {},
+        "return_type": "TIFFFieldArray"
+      }
+    },
+    {
+      "fn_code": "void _TIFFSetupFields(TIFF *tif, const TIFFFieldArray *fieldarray)\n{\n    if (tif->tif_fields && tif->tif_nfields > 0)\n    {\n        uint32_t i;\n\n        for (i = 0; i < tif->tif_nfields; i++)\n        {\n            TIFFField *fld = tif->tif_fields[i];\n            if (fld->field_name != NULL)\n            {\n                if (fld->field_bit == FIELD_CUSTOM && TIFFFieldIsAnonymous(fld))\n                {\n                    _TIFFfreeExt(tif, fld->field_name);\n                    /* caution: tif_fields[i] must not be the beginning of a\n                     * fields-array. Otherwise the following tags are also freed\n                     * with the first free().\n                     */\n                    _TIFFfreeExt(tif, fld);\n                }\n            }\n        }\n\n        _TIFFfreeExt(tif, tif->tif_fields);\n        tif->tif_fields = NULL;\n        tif->tif_nfields = 0;\n    }\n    if (!_TIFFMergeFields(tif, fieldarray->fields, fieldarray->count))\n    {\n        TIFFErrorExtR(tif, \"_TIFFSetupFields\", \"Setting up field info failed\");\n    }\n}",
+      "fn_code_pos": [
+        [
+          512,
+          0
+        ],
+        [
+          543,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFSetupFields",
+        "parameters": {
+          "tif": "TIFF",
+          "fieldarray": "TIFFFieldArray"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int tagCompare(const void *a, const void *b)\n{\n    const TIFFField *ta = *(const TIFFField **)a;\n    const TIFFField *tb = *(const TIFFField **)b;\n    /* NB: be careful of return values for 16-bit platforms */\n    if (ta->field_tag != tb->field_tag)\n        return (int)ta->field_tag - (int)tb->field_tag;\n    else\n        return (ta->field_type == TIFF_ANY)\n                   ? 0\n                   : ((int)tb->field_type - (int)ta->field_type);\n}",
+      "fn_code_pos": [
+        [
+          545,
+          0
+        ],
+        [
+          556,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tagCompare",
+        "parameters": {
+          "a": "void",
+          "b": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int tagNameCompare(const void *a, const void *b)\n{\n    const TIFFField *ta = *(const TIFFField **)a;\n    const TIFFField *tb = *(const TIFFField **)b;\n    int ret = strcmp(ta->field_name, tb->field_name);\n\n    if (ret)\n        return ret;\n    else\n        return (ta->field_type == TIFF_ANY)\n                   ? 0\n                   : ((int)tb->field_type - (int)ta->field_type);\n}",
+      "fn_code_pos": [
+        [
+          558,
+          0
+        ],
+        [
+          570,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tagNameCompare",
+        "parameters": {
+          "a": "void",
+          "b": "void"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int _TIFFMergeFields(TIFF *tif, const TIFFField info[], uint32_t n)\n{\n    static const char module[] = \"_TIFFMergeFields\";\n    static const char reason[] = \"for fields array\";\n    /* TIFFField** tp; */\n    uint32_t i;\n\n    tif->tif_foundfield = NULL;\n\n    if (tif->tif_fields && tif->tif_nfields > 0)\n    {\n        tif->tif_fields = (TIFFField **)_TIFFCheckRealloc(\n            tif, tif->tif_fields, (tif->tif_nfields + n), sizeof(TIFFField *),\n            reason);\n    }\n    else\n    {\n        tif->tif_fields =\n            (TIFFField **)_TIFFCheckMalloc(tif, n, sizeof(TIFFField *), reason);\n    }\n    if (!tif->tif_fields)\n    {\n        TIFFErrorExtR(tif, module, \"Failed to allocate fields array\");\n        return 0;\n    }\n\n    /* tp = tif->tif_fields + tif->tif_nfields; */\n    for (i = 0; i < n; i++)\n    {\n        const TIFFField *fip = TIFFFindField(tif, info[i].field_tag, TIFF_ANY);\n\n        /* only add definitions that aren't already present */\n        if (!fip)\n        {\n            tif->tif_fields[tif->tif_nfields] = (TIFFField *)(info + i);\n            tif->tif_nfields++;\n        }\n    }\n\n    /* Sort the field info by tag number */\n    qsort(tif->tif_fields, tif->tif_nfields, sizeof(TIFFField *), tagCompare);\n\n    return n;\n}",
+      "fn_code_pos": [
+        [
+          572,
+          0
+        ],
+        [
+          615,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFMergeFields",
+        "parameters": {
+          "tif": "TIFF",
+          "info": "TIFFField",
+          "n": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void _TIFFPrintFieldInfo(TIFF *tif, FILE *fd)\n{\n    uint32_t i;\n\n    fprintf(fd, \"%s: \\n\", tif->tif_name);\n    for (i = 0; i < tif->tif_nfields; i++)\n    {\n        const TIFFField *fip = tif->tif_fields[i];\n        fprintf(fd, \"field[%2d] %5lu, %2d, %2d, %d, %2d, %5s, %5s, %s\\n\",\n                (int)i, (unsigned long)fip->field_tag, fip->field_readcount,\n                fip->field_writecount, fip->field_type, fip->field_bit,\n                fip->field_oktochange ? \"TRUE\" : \"FALSE\",\n                fip->field_passcount ? \"TRUE\" : \"FALSE\", fip->field_name);\n    }\n}",
+      "fn_code_pos": [
+        [
+          617,
+          0
+        ],
+        [
+          631,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFPrintFieldInfo",
+        "parameters": {
+          "tif": "TIFF",
+          "fd": "FILE"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int TIFFDataWidth(TIFFDataType type)\n{\n    switch (type)\n    {\n        case 0: /* nothing */\n        case TIFF_BYTE:\n        case TIFF_ASCII:\n        case TIFF_SBYTE:\n        case TIFF_UNDEFINED:\n            return 1;\n        case TIFF_SHORT:\n        case TIFF_SSHORT:\n            return 2;\n        case TIFF_LONG:\n        case TIFF_SLONG:\n        case TIFF_FLOAT:\n        case TIFF_IFD:\n            return 4;\n        case TIFF_RATIONAL:\n        case TIFF_SRATIONAL:\n        case TIFF_DOUBLE:\n        case TIFF_LONG8:\n        case TIFF_SLONG8:\n        case TIFF_IFD8:\n            return 8;\n        default:\n            return 0; /* will return 0 for unknown types */\n    }\n}",
+      "fn_code_pos": [
+        [
+          636,
+          0
+        ],
+        [
+          664,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFDataWidth",
+        "parameters": {
+          "type": "TIFFDataType"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFFieldSetGetSize(const TIFFField *fip)\n{\n    /*\n     * TIFFSetField() and TIFFGetField() must provide the parameter accordingly\n     * to the definition of \"set_field_type\" of the tag definition in\n     * dir_info.c. This function returns the data size for that purpose.\n     *\n     * Furthermore, this data size is also used for the internal storage,\n     * even for TIFF_RATIONAL values for FIELD_CUSTOM, which are stored\n     * internally as 4-byte float, but some of them should be stored internally\n     * as 8-byte double, depending on the \"set_field_type\" _FLOAT_ or _DOUBLE_.\n     */\n    if (fip == NULL)\n        return 0;\n\n    switch (fip->set_field_type)\n    {\n        case TIFF_SETGET_UNDEFINED:\n        case TIFF_SETGET_ASCII:\n        case TIFF_SETGET_C0_ASCII:\n        case TIFF_SETGET_C16_ASCII:\n        case TIFF_SETGET_C32_ASCII:\n        case TIFF_SETGET_OTHER:\n            return 1;\n        case TIFF_SETGET_UINT8:\n        case TIFF_SETGET_SINT8:\n        case TIFF_SETGET_C0_UINT8:\n        case TIFF_SETGET_C0_SINT8:\n        case TIFF_SETGET_C16_UINT8:\n        case TIFF_SETGET_C16_SINT8:\n        case TIFF_SETGET_C32_UINT8:\n        case TIFF_SETGET_C32_SINT8:\n            return 1;\n        case TIFF_SETGET_UINT16:\n        case TIFF_SETGET_SINT16:\n        case TIFF_SETGET_C0_UINT16:\n        case TIFF_SETGET_C0_SINT16:\n        case TIFF_SETGET_C16_UINT16:\n        case TIFF_SETGET_C16_SINT16:\n        case TIFF_SETGET_C32_UINT16:\n        case TIFF_SETGET_C32_SINT16:\n            return 2;\n        case TIFF_SETGET_INT:\n        case TIFF_SETGET_UINT32:\n        case TIFF_SETGET_SINT32:\n        case TIFF_SETGET_FLOAT:\n        case TIFF_SETGET_UINT16_PAIR:\n        case TIFF_SETGET_C0_UINT32:\n        case TIFF_SETGET_C0_SINT32:\n        case TIFF_SETGET_C0_FLOAT:\n        case TIFF_SETGET_C16_UINT32:\n        case TIFF_SETGET_C16_SINT32:\n        case TIFF_SETGET_C16_FLOAT:\n        case TIFF_SETGET_C32_UINT32:\n        case TIFF_SETGET_C32_SINT32:\n        case TIFF_SETGET_C32_FLOAT:\n            return 4;\n        case TIFF_SETGET_UINT64:\n        case TIFF_SETGET_SINT64:\n        case TIFF_SETGET_DOUBLE:\n        case TIFF_SETGET_IFD8:\n        case TIFF_SETGET_C0_UINT64:\n        case TIFF_SETGET_C0_SINT64:\n        case TIFF_SETGET_C0_DOUBLE:\n        case TIFF_SETGET_C0_IFD8:\n        case TIFF_SETGET_C16_UINT64:\n        case TIFF_SETGET_C16_SINT64:\n        case TIFF_SETGET_C16_DOUBLE:\n        case TIFF_SETGET_C16_IFD8:\n        case TIFF_SETGET_C32_UINT64:\n        case TIFF_SETGET_C32_SINT64:\n        case TIFF_SETGET_C32_DOUBLE:\n        case TIFF_SETGET_C32_IFD8:\n            return 8;\n        default:\n            return 0;\n    }\n}",
+      "fn_code_pos": [
+        [
+          672,
+          0
+        ],
+        [
+          749,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldSetGetSize",
+        "parameters": {
+          "fip": "TIFFField"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFFieldSetGetCountSize(const TIFFField *fip)\n{\n    if (fip == NULL)\n        return 0;\n\n    switch (fip->set_field_type)\n    {\n        case TIFF_SETGET_C16_ASCII:\n        case TIFF_SETGET_C16_UINT8:\n        case TIFF_SETGET_C16_SINT8:\n        case TIFF_SETGET_C16_UINT16:\n        case TIFF_SETGET_C16_SINT16:\n        case TIFF_SETGET_C16_UINT32:\n        case TIFF_SETGET_C16_SINT32:\n        case TIFF_SETGET_C16_FLOAT:\n        case TIFF_SETGET_C16_UINT64:\n        case TIFF_SETGET_C16_SINT64:\n        case TIFF_SETGET_C16_DOUBLE:\n        case TIFF_SETGET_C16_IFD8:\n            return 2;\n        case TIFF_SETGET_C32_ASCII:\n        case TIFF_SETGET_C32_UINT8:\n        case TIFF_SETGET_C32_SINT8:\n        case TIFF_SETGET_C32_UINT16:\n        case TIFF_SETGET_C32_SINT16:\n        case TIFF_SETGET_C32_UINT32:\n        case TIFF_SETGET_C32_SINT32:\n        case TIFF_SETGET_C32_FLOAT:\n        case TIFF_SETGET_C32_UINT64:\n        case TIFF_SETGET_C32_SINT64:\n        case TIFF_SETGET_C32_DOUBLE:\n        case TIFF_SETGET_C32_IFD8:\n            return 4;\n        default:\n            return 0;\n    }\n}",
+      "fn_code_pos": [
+        [
+          755,
+          0
+        ],
+        [
+          791,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldSetGetCountSize",
+        "parameters": {
+          "fip": "TIFFField"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "const TIFFField *TIFFFindField(TIFF *tif, uint32_t tag, TIFFDataType dt)\n{\n    TIFFField key = {0, 0, 0, TIFF_NOTYPE, 0, 0, 0, 0, 0, 0, NULL, NULL};\n    TIFFField *pkey = &key;\n    const TIFFField **ret;\n    if (tif->tif_foundfield && tif->tif_foundfield->field_tag == tag &&\n        (dt == TIFF_ANY || dt == tif->tif_foundfield->field_type))\n        return tif->tif_foundfield;\n\n    /* If we are invoked with no field information, then just return. */\n    if (!tif->tif_fields)\n        return NULL;\n\n    /* NB: use sorted search (e.g. binary search) */\n\n    key.field_tag = tag;\n    key.field_type = dt;\n\n    ret = (const TIFFField **)bsearch(&pkey, tif->tif_fields, tif->tif_nfields,\n                                      sizeof(TIFFField *), tagCompare);\n    return tif->tif_foundfield = (ret ? *ret : NULL);\n}",
+      "fn_code_pos": [
+        [
+          793,
+          0
+        ],
+        [
+          814,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFindField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "dt": "TIFFDataType"
+        },
+        "return_type": "TIFFField"
+      }
+    },
+    {
+      "fn_code": "static const TIFFField *_TIFFFindFieldByName(TIFF *tif, const char *field_name,\n                                             TIFFDataType dt)\n{\n    TIFFField key = {0, 0, 0, TIFF_NOTYPE, 0, 0, 0, 0, 0, 0, NULL, NULL};\n    TIFFField *pkey = &key;\n    const TIFFField **ret;\n    if (tif->tif_foundfield &&\n        streq(tif->tif_foundfield->field_name, field_name) &&\n        (dt == TIFF_ANY || dt == tif->tif_foundfield->field_type))\n        return (tif->tif_foundfield);\n\n    /* If we are invoked with no field information, then just return. */\n    if (!tif->tif_fields)\n        return NULL;\n\n    /* NB: use linear search since list is sorted by key#, not name */\n\n    key.field_name = (char *)field_name;\n    key.field_type = dt;\n\n    ret =\n        (const TIFFField **)td_lfind(&pkey, tif->tif_fields, &tif->tif_nfields,\n                                     sizeof(TIFFField *), tagNameCompare);\n\n    return tif->tif_foundfield = (ret ? *ret : NULL);\n}",
+      "fn_code_pos": [
+        [
+          816,
+          0
+        ],
+        [
+          841,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFFindFieldByName",
+        "parameters": {
+          "tif": "TIFF",
+          "field_name": "char",
+          "dt": "TIFFDataType"
+        },
+        "return_type": "TIFFField"
+      }
+    },
+    {
+      "fn_code": "const TIFFField *TIFFFieldWithTag(TIFF *tif, uint32_t tag)\n{\n    const TIFFField *fip = TIFFFindField(tif, tag, TIFF_ANY);\n    if (!fip)\n    {\n        TIFFWarningExtR(tif, \"TIFFFieldWithTag\", \"Warning, unknown tag 0x%x\",\n                        (unsigned int)tag);\n    }\n    return (fip);\n}",
+      "fn_code_pos": [
+        [
+          843,
+          0
+        ],
+        [
+          852,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldWithTag",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t"
+        },
+        "return_type": "TIFFField"
+      }
+    },
+    {
+      "fn_code": "const TIFFField *TIFFFieldWithName(TIFF *tif, const char *field_name)\n{\n    const TIFFField *fip = _TIFFFindFieldByName(tif, field_name, TIFF_ANY);\n    if (!fip)\n    {\n        TIFFWarningExtR(tif, \"TIFFFieldWithName\", \"Warning, unknown tag %s\",\n                        field_name);\n    }\n    return (fip);\n}",
+      "fn_code_pos": [
+        [
+          854,
+          0
+        ],
+        [
+          863,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldWithName",
+        "parameters": {
+          "tif": "TIFF",
+          "field_name": "char"
+        },
+        "return_type": "TIFFField"
+      }
+    },
+    {
+      "fn_code": "uint32_t TIFFFieldTag(const TIFFField *fip) { return fip->field_tag; }",
+      "fn_code_pos": [
+        [
+          865,
+          0
+        ],
+        [
+          865,
+          70
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldTag",
+        "parameters": {
+          "fip": "TIFFField"
+        },
+        "return_type": "uint32_t"
+      }
+    },
+    {
+      "fn_code": "const char *TIFFFieldName(const TIFFField *fip) { return fip->field_name; }",
+      "fn_code_pos": [
+        [
+          867,
+          0
+        ],
+        [
+          867,
+          75
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldName",
+        "parameters": {
+          "fip": "TIFFField"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "TIFFDataType TIFFFieldDataType(const TIFFField *fip) { return fip->field_type; }",
+      "fn_code_pos": [
+        [
+          869,
+          0
+        ],
+        [
+          869,
+          80
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldDataType",
+        "parameters": {
+          "fip": "TIFFField"
+        },
+        "return_type": "TIFFDataType"
+      }
+    },
+    {
+      "fn_code": "int TIFFFieldPassCount(const TIFFField *fip) { return fip->field_passcount; }",
+      "fn_code_pos": [
+        [
+          871,
+          0
+        ],
+        [
+          871,
+          77
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldPassCount",
+        "parameters": {
+          "fip": "TIFFField"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFFieldReadCount(const TIFFField *fip) { return fip->field_readcount; }",
+      "fn_code_pos": [
+        [
+          873,
+          0
+        ],
+        [
+          873,
+          77
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldReadCount",
+        "parameters": {
+          "fip": "TIFFField"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFFieldWriteCount(const TIFFField *fip) { return fip->field_writecount; }",
+      "fn_code_pos": [
+        [
+          875,
+          0
+        ],
+        [
+          875,
+          79
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldWriteCount",
+        "parameters": {
+          "fip": "TIFFField"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFFieldIsAnonymous(const TIFFField *fip) { return fip->field_anonymous; }",
+      "fn_code_pos": [
+        [
+          877,
+          0
+        ],
+        [
+          877,
+          79
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldIsAnonymous",
+        "parameters": {
+          "fip": "TIFFField"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "const TIFFField *_TIFFFindOrRegisterField(TIFF *tif, uint32_t tag,\n                                          TIFFDataType dt)\n\n{\n    const TIFFField *fld;\n\n    fld = TIFFFindField(tif, tag, dt);\n    if (fld == NULL)\n    {\n        fld = _TIFFCreateAnonField(tif, tag, dt);\n        if (fld == NULL || !_TIFFMergeFields(tif, fld, 1))\n            return NULL;\n    }\n\n    return fld;\n}",
+      "fn_code_pos": [
+        [
+          879,
+          0
+        ],
+        [
+          894,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFFindOrRegisterField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "dt": "TIFFDataType"
+        },
+        "return_type": "TIFFField"
+      }
+    },
+    {
+      "fn_code": "TIFFField *_TIFFCreateAnonField(TIFF *tif, uint32_t tag,\n                                TIFFDataType field_type)\n{\n    TIFFField *fld;\n    (void)tif;\n\n    fld = (TIFFField *)_TIFFmallocExt(tif, sizeof(TIFFField));\n    if (fld == NULL)\n        return NULL;\n    _TIFFmemset(fld, 0, sizeof(TIFFField));\n\n    fld->field_tag = tag;\n    fld->field_readcount = TIFF_VARIABLE2;\n    fld->field_writecount = TIFF_VARIABLE2;\n    fld->field_type = field_type;\n    fld->field_anonymous =\n        1; /* indicate that this is an anonymous / unknown tag */\n    switch (field_type)\n    {\n        case TIFF_BYTE:\n        case TIFF_UNDEFINED:\n            fld->set_field_type = TIFF_SETGET_C32_UINT8;\n            fld->get_field_type = TIFF_SETGET_C32_UINT8;\n            break;\n        case TIFF_ASCII:\n            fld->set_field_type = TIFF_SETGET_C32_ASCII;\n            fld->get_field_type = TIFF_SETGET_C32_ASCII;\n            break;\n        case TIFF_SHORT:\n            fld->set_field_type = TIFF_SETGET_C32_UINT16;\n            fld->get_field_type = TIFF_SETGET_C32_UINT16;\n            break;\n        case TIFF_LONG:\n            fld->set_field_type = TIFF_SETGET_C32_UINT32;\n            fld->get_field_type = TIFF_SETGET_C32_UINT32;\n            break;\n        case TIFF_RATIONAL:\n        case TIFF_SRATIONAL:\n        case TIFF_FLOAT:\n            fld->set_field_type = TIFF_SETGET_C32_FLOAT;\n            fld->get_field_type = TIFF_SETGET_C32_FLOAT;\n            break;\n        case TIFF_SBYTE:\n            fld->set_field_type = TIFF_SETGET_C32_SINT8;\n            fld->get_field_type = TIFF_SETGET_C32_SINT8;\n            break;\n        case TIFF_SSHORT:\n            fld->set_field_type = TIFF_SETGET_C32_SINT16;\n            fld->get_field_type = TIFF_SETGET_C32_SINT16;\n            break;\n        case TIFF_SLONG:\n            fld->set_field_type = TIFF_SETGET_C32_SINT32;\n            fld->get_field_type = TIFF_SETGET_C32_SINT32;\n            break;\n        case TIFF_DOUBLE:\n            fld->set_field_type = TIFF_SETGET_C32_DOUBLE;\n            fld->get_field_type = TIFF_SETGET_C32_DOUBLE;\n            break;\n        case TIFF_IFD:\n        case TIFF_IFD8:\n            fld->set_field_type = TIFF_SETGET_C32_IFD8;\n            fld->get_field_type = TIFF_SETGET_C32_IFD8;\n            break;\n        case TIFF_LONG8:\n            fld->set_field_type = TIFF_SETGET_C32_UINT64;\n            fld->get_field_type = TIFF_SETGET_C32_UINT64;\n            break;\n        case TIFF_SLONG8:\n            fld->set_field_type = TIFF_SETGET_C32_SINT64;\n            fld->get_field_type = TIFF_SETGET_C32_SINT64;\n            break;\n        default:\n            fld->set_field_type = TIFF_SETGET_UNDEFINED;\n            fld->get_field_type = TIFF_SETGET_UNDEFINED;\n            break;\n    }\n    fld->field_bit = FIELD_CUSTOM;\n    fld->field_oktochange = TRUE;\n    fld->field_passcount = TRUE;\n    fld->field_name = (char *)_TIFFmallocExt(tif, 32);\n    if (fld->field_name == NULL)\n    {\n        _TIFFfreeExt(tif, fld);\n        return NULL;\n    }\n    fld->field_subfields = NULL;\n\n    /*\n     * note that this name is a special sign to TIFFClose() and\n     * _TIFFSetupFields() to free the field\n     * Update:\n     *   This special sign is replaced by fld->field_anonymous  flag.\n     */\n    (void)snprintf(fld->field_name, 32, \"Tag %d\", (int)tag);\n\n    return fld;\n}",
+      "fn_code_pos": [
+        [
+          896,
+          0
+        ],
+        [
+          992,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFCreateAnonField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "field_type": "TIFFDataType"
+        },
+        "return_type": "TIFFField"
+      }
+    },
+    {
+      "fn_code": "static TIFFSetGetFieldType _TIFFSetGetType(TIFFDataType type, short count,\n                                           unsigned char passcount)\n{\n    if (type == TIFF_ASCII && count == TIFF_VARIABLE && passcount == 0)\n        return TIFF_SETGET_ASCII;\n\n    else if (count == 1 && passcount == 0)\n    {\n        switch (type)\n        {\n            case TIFF_BYTE:\n            case TIFF_UNDEFINED:\n                return TIFF_SETGET_UINT8;\n            case TIFF_ASCII:\n                return TIFF_SETGET_ASCII;\n            case TIFF_SHORT:\n                return TIFF_SETGET_UINT16;\n            case TIFF_LONG:\n                return TIFF_SETGET_UINT32;\n            case TIFF_RATIONAL:\n            case TIFF_SRATIONAL:\n            case TIFF_FLOAT:\n                return TIFF_SETGET_FLOAT;\n            case TIFF_SBYTE:\n                return TIFF_SETGET_SINT8;\n            case TIFF_SSHORT:\n                return TIFF_SETGET_SINT16;\n            case TIFF_SLONG:\n                return TIFF_SETGET_SINT32;\n            case TIFF_DOUBLE:\n                return TIFF_SETGET_DOUBLE;\n            case TIFF_IFD:\n            case TIFF_IFD8:\n                return TIFF_SETGET_IFD8;\n            case TIFF_LONG8:\n                return TIFF_SETGET_UINT64;\n            case TIFF_SLONG8:\n                return TIFF_SETGET_SINT64;\n            default:\n                return TIFF_SETGET_UNDEFINED;\n        }\n    }\n\n    else if (count >= 1 && passcount == 0)\n    {\n        switch (type)\n        {\n            case TIFF_BYTE:\n            case TIFF_UNDEFINED:\n                return TIFF_SETGET_C0_UINT8;\n            case TIFF_ASCII:\n                return TIFF_SETGET_C0_ASCII;\n            case TIFF_SHORT:\n                return TIFF_SETGET_C0_UINT16;\n            case TIFF_LONG:\n                return TIFF_SETGET_C0_UINT32;\n            case TIFF_RATIONAL:\n            case TIFF_SRATIONAL:\n            case TIFF_FLOAT:\n                return TIFF_SETGET_C0_FLOAT;\n            case TIFF_SBYTE:\n                return TIFF_SETGET_C0_SINT8;\n            case TIFF_SSHORT:\n                return TIFF_SETGET_C0_SINT16;\n            case TIFF_SLONG:\n                return TIFF_SETGET_C0_SINT32;\n            case TIFF_DOUBLE:\n                return TIFF_SETGET_C0_DOUBLE;\n            case TIFF_IFD:\n            case TIFF_IFD8:\n                return TIFF_SETGET_C0_IFD8;\n            case TIFF_LONG8:\n                return TIFF_SETGET_C0_UINT64;\n            case TIFF_SLONG8:\n                return TIFF_SETGET_C0_SINT64;\n            default:\n                return TIFF_SETGET_UNDEFINED;\n        }\n    }\n\n    else if (count == TIFF_VARIABLE && passcount == 1)\n    {\n        switch (type)\n        {\n            case TIFF_BYTE:\n            case TIFF_UNDEFINED:\n                return TIFF_SETGET_C16_UINT8;\n            case TIFF_ASCII:\n                return TIFF_SETGET_C16_ASCII;\n            case TIFF_SHORT:\n                return TIFF_SETGET_C16_UINT16;\n            case TIFF_LONG:\n                return TIFF_SETGET_C16_UINT32;\n            case TIFF_RATIONAL:\n            case TIFF_SRATIONAL:\n            case TIFF_FLOAT:\n                return TIFF_SETGET_C16_FLOAT;\n            case TIFF_SBYTE:\n                return TIFF_SETGET_C16_SINT8;\n            case TIFF_SSHORT:\n                return TIFF_SETGET_C16_SINT16;\n            case TIFF_SLONG:\n                return TIFF_SETGET_C16_SINT32;\n            case TIFF_DOUBLE:\n                return TIFF_SETGET_C16_DOUBLE;\n            case TIFF_IFD:\n            case TIFF_IFD8:\n                return TIFF_SETGET_C16_IFD8;\n            case TIFF_LONG8:\n                return TIFF_SETGET_C16_UINT64;\n            case TIFF_SLONG8:\n                return TIFF_SETGET_C16_SINT64;\n            default:\n                return TIFF_SETGET_UNDEFINED;\n        }\n    }\n\n    else if (count == TIFF_VARIABLE2 && passcount == 1)\n    {\n        switch (type)\n        {\n            case TIFF_BYTE:\n            case TIFF_UNDEFINED:\n                return TIFF_SETGET_C32_UINT8;\n            case TIFF_ASCII:\n                return TIFF_SETGET_C32_ASCII;\n            case TIFF_SHORT:\n                return TIFF_SETGET_C32_UINT16;\n            case TIFF_LONG:\n                return TIFF_SETGET_C32_UINT32;\n            case TIFF_RATIONAL:\n            case TIFF_SRATIONAL:\n            case TIFF_FLOAT:\n                return TIFF_SETGET_C32_FLOAT;\n            case TIFF_SBYTE:\n                return TIFF_SETGET_C32_SINT8;\n            case TIFF_SSHORT:\n                return TIFF_SETGET_C32_SINT16;\n            case TIFF_SLONG:\n                return TIFF_SETGET_C32_SINT32;\n            case TIFF_DOUBLE:\n                return TIFF_SETGET_C32_DOUBLE;\n            case TIFF_IFD:\n            case TIFF_IFD8:\n                return TIFF_SETGET_C32_IFD8;\n            case TIFF_LONG8:\n                return TIFF_SETGET_C32_UINT64;\n            case TIFF_SLONG8:\n                return TIFF_SETGET_C32_SINT64;\n            default:\n                return TIFF_SETGET_UNDEFINED;\n        }\n    }\n\n    return TIFF_SETGET_UNDEFINED;\n}",
+      "fn_code_pos": [
+        [
+          1001,
+          0
+        ],
+        [
+          1156,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFSetGetType",
+        "parameters": {
+          "type": "TIFFDataType",
+          "count": "short",
+          "passcount": "unsigned char"
+        },
+        "return_type": "TIFFSetGetFieldType"
+      }
+    },
+    {
+      "fn_code": "int TIFFMergeFieldInfo(TIFF *tif, const TIFFFieldInfo info[], uint32_t n)\n{\n    static const char module[] = \"TIFFMergeFieldInfo\";\n    static const char reason[] = \"for fields array\";\n    TIFFField *tp;\n    size_t nfields;\n    uint32_t i;\n\n    if (tif->tif_nfieldscompat > 0)\n    {\n        tif->tif_fieldscompat = (TIFFFieldArray *)_TIFFCheckRealloc(\n            tif, tif->tif_fieldscompat, tif->tif_nfieldscompat + 1,\n            sizeof(TIFFFieldArray), reason);\n    }\n    else\n    {\n        tif->tif_fieldscompat = (TIFFFieldArray *)_TIFFCheckMalloc(\n            tif, 1, sizeof(TIFFFieldArray), reason);\n    }\n    if (!tif->tif_fieldscompat)\n    {\n        TIFFErrorExtR(tif, module, \"Failed to allocate fields array\");\n        return -1;\n    }\n    nfields = tif->tif_nfieldscompat++;\n\n    tif->tif_fieldscompat[nfields].type = tfiatOther;\n    tif->tif_fieldscompat[nfields].allocated_size = n;\n    tif->tif_fieldscompat[nfields].count = n;\n    tif->tif_fieldscompat[nfields].fields =\n        (TIFFField *)_TIFFCheckMalloc(tif, n, sizeof(TIFFField), reason);\n    if (!tif->tif_fieldscompat[nfields].fields)\n    {\n        TIFFErrorExtR(tif, module, \"Failed to allocate fields array\");\n        return -1;\n    }\n\n    tp = tif->tif_fieldscompat[nfields].fields;\n    for (i = 0; i < n; i++)\n    {\n        tp->field_tag = info[i].field_tag;\n        if (info[i].field_readcount < TIFF_VARIABLE2 ||\n            info[i].field_readcount == 0 ||\n            info[i].field_writecount < TIFF_VARIABLE2 ||\n            info[i].field_writecount == 0)\n        {\n            /* The fields (field_readcount) and (field_writecount) may use the\n             * values TIFF_VARIABLE (-1), TIFF_SPP (-2), TIFF_VARIABLE2 (-3). */\n            TIFFErrorExtR(tif, module,\n                          \"The value of field_readcount and field_writecount \"\n                          \"must be greater than or equal to -3 and not zero.\");\n            return -1;\n        }\n        tp->field_readcount = info[i].field_readcount;\n        tp->field_writecount = info[i].field_writecount;\n        tp->field_type = info[i].field_type;\n        tp->field_anonymous = 0;\n        tp->set_field_type =\n            _TIFFSetGetType(info[i].field_type, info[i].field_writecount,\n                            info[i].field_passcount);\n        tp->get_field_type =\n            _TIFFSetGetType(info[i].field_type, info[i].field_readcount,\n                            info[i].field_passcount);\n        tp->field_bit = info[i].field_bit;\n        tp->field_oktochange = info[i].field_oktochange;\n        tp->field_passcount = info[i].field_passcount;\n        if (info[i].field_name == NULL)\n        {\n            TIFFErrorExtR(tif, module,\n                          \"Field_name of %d.th allocation tag %d is NULL\", i,\n                          info[i].field_tag);\n            return -1;\n        }\n        tp->field_name = info[i].field_name;\n        tp->field_subfields = NULL;\n        tp++;\n    }\n\n    if (!_TIFFMergeFields(tif, tif->tif_fieldscompat[nfields].fields, n))\n    {\n        TIFFErrorExtR(tif, module, \"Setting up field info failed\");\n        return -1;\n    }\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          1158,
+          0
+        ],
+        [
+          1243,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFMergeFieldInfo",
+        "parameters": {
+          "tif": "TIFF",
+          "info": "TIFFFieldInfo",
+          "n": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int _TIFFCheckFieldIsValidForCodec(TIFF *tif, ttag_t tag)\n{\n    /* Filter out non-codec specific tags */\n    switch (tag)\n    {\n        /* Shared tags */\n        case TIFFTAG_PREDICTOR:\n        /* JPEG tags */\n        case TIFFTAG_JPEGTABLES:\n        /* OJPEG tags */\n        case TIFFTAG_JPEGIFOFFSET:\n        case TIFFTAG_JPEGIFBYTECOUNT:\n        case TIFFTAG_JPEGQTABLES:\n        case TIFFTAG_JPEGDCTABLES:\n        case TIFFTAG_JPEGACTABLES:\n        case TIFFTAG_JPEGPROC:\n        case TIFFTAG_JPEGRESTARTINTERVAL:\n        /* CCITT* */\n        case TIFFTAG_BADFAXLINES:\n        case TIFFTAG_CLEANFAXDATA:\n        case TIFFTAG_CONSECUTIVEBADFAXLINES:\n        case TIFFTAG_GROUP3OPTIONS:\n        case TIFFTAG_GROUP4OPTIONS:\n        /* LERC */\n        case TIFFTAG_LERC_PARAMETERS:\n            break;\n        default:\n            return 1;\n    }\n    if (!TIFFIsCODECConfigured(tif->tif_dir.td_compression))\n    {\n        return 0;\n    }\n    /* Check if codec specific tags are allowed for the current\n     * compression scheme (codec) */\n    switch (tif->tif_dir.td_compression)\n    {\n        case COMPRESSION_LZW:\n            if (tag == TIFFTAG_PREDICTOR)\n                return 1;\n            break;\n        case COMPRESSION_PACKBITS:\n            /* No codec-specific tags */\n            break;\n        case COMPRESSION_THUNDERSCAN:\n            /* No codec-specific tags */\n            break;\n        case COMPRESSION_NEXT:\n            /* No codec-specific tags */\n            break;\n        case COMPRESSION_JPEG:\n            if (tag == TIFFTAG_JPEGTABLES)\n                return 1;\n            break;\n        case COMPRESSION_OJPEG:\n            switch (tag)\n            {\n                case TIFFTAG_JPEGIFOFFSET:\n                case TIFFTAG_JPEGIFBYTECOUNT:\n                case TIFFTAG_JPEGQTABLES:\n                case TIFFTAG_JPEGDCTABLES:\n                case TIFFTAG_JPEGACTABLES:\n                case TIFFTAG_JPEGPROC:\n                case TIFFTAG_JPEGRESTARTINTERVAL:\n                    return 1;\n            }\n            break;\n        case COMPRESSION_CCITTRLE:\n        case COMPRESSION_CCITTRLEW:\n        case COMPRESSION_CCITTFAX3:\n        case COMPRESSION_CCITTFAX4:\n            switch (tag)\n            {\n                case TIFFTAG_BADFAXLINES:\n                case TIFFTAG_CLEANFAXDATA:\n                case TIFFTAG_CONSECUTIVEBADFAXLINES:\n                    return 1;\n                case TIFFTAG_GROUP3OPTIONS:\n                    if (tif->tif_dir.td_compression == COMPRESSION_CCITTFAX3)\n                        return 1;\n                    break;\n                case TIFFTAG_GROUP4OPTIONS:\n                    if (tif->tif_dir.td_compression == COMPRESSION_CCITTFAX4)\n                        return 1;\n                    break;\n            }\n            break;\n        case COMPRESSION_JBIG:\n            /* No codec-specific tags */\n            break;\n        case COMPRESSION_DEFLATE:\n        case COMPRESSION_ADOBE_DEFLATE:\n            if (tag == TIFFTAG_PREDICTOR)\n                return 1;\n            break;\n        case COMPRESSION_PIXARLOG:\n            if (tag == TIFFTAG_PREDICTOR)\n                return 1;\n            break;\n        case COMPRESSION_SGILOG:\n        case COMPRESSION_SGILOG24:\n            /* No codec-specific tags */\n            break;\n        case COMPRESSION_LZMA:\n            if (tag == TIFFTAG_PREDICTOR)\n                return 1;\n            break;\n        case COMPRESSION_ZSTD:\n            if (tag == TIFFTAG_PREDICTOR)\n                return 1;\n            break;\n        case COMPRESSION_LERC:\n            if (tag == TIFFTAG_LERC_PARAMETERS)\n                return 1;\n            break;\n    }\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          1245,
+          0
+        ],
+        [
+          1362,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFCheckFieldIsValidForCodec",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "ttag_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "td_lfind(const void *key, const void *base, size_t *nmemb,\n                      size_t size, int (*compar)(const void *, const void *))",
+      "fn_dec_pos": [
+        [
+          493,
+          13
+        ],
+        [
+          494,
+          77
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "td_lfind",
+        "parameters": {
+          "key": "void",
+          "base": "void",
+          "nmemb": "size_t",
+          "size": "size_t",
+          "compar": "int"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "(*compar)(const void *, const void *)",
+      "fn_dec_pos": [
+        [
+          494,
+          39
+        ],
+        [
+          494,
+          76
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "_TIFFGetFields(void)",
+      "fn_dec_pos": [
+        [
+          506,
+          22
+        ],
+        [
+          506,
+          42
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFGetFields",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_TIFFGetExifFields(void)",
+      "fn_dec_pos": [
+        [
+          508,
+          22
+        ],
+        [
+          508,
+          46
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFGetExifFields",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_TIFFGetGpsFields(void)",
+      "fn_dec_pos": [
+        [
+          510,
+          22
+        ],
+        [
+          510,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFGetGpsFields",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFFindField(TIFF *tif, uint32_t tag, TIFFDataType dt)",
+      "fn_dec_pos": [
+        [
+          793,
+          17
+        ],
+        [
+          793,
+          72
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFindField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "dt": "TIFFDataType"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_TIFFFindFieldByName(TIFF *tif, const char *field_name,\n                                             TIFFDataType dt)",
+      "fn_dec_pos": [
+        [
+          816,
+          24
+        ],
+        [
+          817,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFFindFieldByName",
+        "parameters": {
+          "tif": "TIFF",
+          "field_name": "char",
+          "dt": "TIFFDataType"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFFieldWithTag(TIFF *tif, uint32_t tag)",
+      "fn_dec_pos": [
+        [
+          843,
+          17
+        ],
+        [
+          843,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldWithTag",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFFieldWithName(TIFF *tif, const char *field_name)",
+      "fn_dec_pos": [
+        [
+          854,
+          17
+        ],
+        [
+          854,
+          69
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldWithName",
+        "parameters": {
+          "tif": "TIFF",
+          "field_name": "char"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TIFFFieldName(const TIFFField *fip)",
+      "fn_dec_pos": [
+        [
+          867,
+          12
+        ],
+        [
+          867,
+          47
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFFieldName",
+        "parameters": {
+          "fip": "TIFFField"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_TIFFFindOrRegisterField(TIFF *tif, uint32_t tag,\n                                          TIFFDataType dt)",
+      "fn_dec_pos": [
+        [
+          879,
+          17
+        ],
+        [
+          880,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFFindOrRegisterField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "dt": "TIFFDataType"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "_TIFFCreateAnonField(TIFF *tif, uint32_t tag,\n                                TIFFDataType field_type)",
+      "fn_dec_pos": [
+        [
+          896,
+          11
+        ],
+        [
+          897,
+          56
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_TIFFCreateAnonField",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "uint32_t",
+          "field_type": "TIFFDataType"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

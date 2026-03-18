@@ -1,0 +1,262 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    int c;\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n\n    while ((c = getopt(argc, argv, \"c:p:r:\")) != -1)\n        switch (c)\n        {\n            case 'b': /* save as b&w */\n                photometric = PHOTOMETRIC_MINISBLACK;\n                break;\n            case 'c': /* compression scheme */\n                if (streq(optarg, \"none\"))\n                    compression = COMPRESSION_NONE;\n                else if (streq(optarg, \"packbits\"))\n                    compression = COMPRESSION_PACKBITS;\n                else if (strneq(optarg, \"jpeg\", 4))\n                {\n                    char *cp = strchr(optarg, ':');\n                    if (cp && isdigit(cp[1]))\n                        quality = atoi(cp + 1);\n                    if (cp && strchr(cp, 'r'))\n                        jpegcolormode = JPEGCOLORMODE_RAW;\n                    compression = COMPRESSION_JPEG;\n                }\n                else if (strneq(optarg, \"lzw\", 3))\n                {\n                    char *cp = strchr(optarg, ':');\n                    if (cp)\n                        predictor = atoi(cp + 1);\n                    compression = COMPRESSION_LZW;\n                }\n                else\n                    usage();\n                break;\n            case 'p': /* planar configuration */\n                if (streq(optarg, \"separate\"))\n                    config = PLANARCONFIG_SEPARATE;\n                else if (streq(optarg, \"contig\"))\n                    config = PLANARCONFIG_CONTIG;\n                else\n                    usage();\n                break;\n            case 'r': /* rows/strip */\n                rowsperstrip = atoi(optarg);\n                break;\n            case '?':\n                usage();\n                /*NOTREACHED*/\n        }\n    if (argc - optind != 1 && argc - optind != 5)\n        usage();\n    xmaxscreen = getgdesc(GD_XPMAX) - 1;\n    ymaxscreen = getgdesc(GD_YPMAX) - 1;\n    foreground();\n    noport();\n    winopen(\"tiffsv\");\n    if (argc - optind == 5)\n        tiffsv(argv[optind], atoi(argv[optind + 1]), atoi(argv[optind + 2]),\n               atoi(argv[optind + 3]), atoi(argv[optind + 4]));\n    else\n        tiffsv(argv[optind], 0, xmaxscreen, 0, ymaxscreen);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          52,
+          0
+        ],
+        [
+          118,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void usage(void)\n{\n    char buf[BUFSIZ];\n    int i;\n\n    setbuf(stderr, buf);\n    for (i = 0; stuff[i] != NULL; i++)\n        fprintf(stderr, \"%s\\n\", stuff[i]);\n    exit(-1);\n}",
+      "fn_code_pos": [
+        [
+          143,
+          0
+        ],
+        [
+          152,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void svRGBSeparate(TIFF *tif, uint32_t *ss, int xsize, int ysize)\n{\n    tsize_t stripsize = TIFFStripSize(tif);\n    unsigned char *rbuf = (unsigned char *)_TIFFmalloc(3 * stripsize);\n    unsigned char *gbuf = rbuf + stripsize;\n    unsigned char *bbuf = gbuf + stripsize;\n    register int y;\n\n    for (y = 0; y <= ysize; y += rowsperstrip)\n    {\n        unsigned char *rp, *gp, *bp;\n        register int x;\n        register uint32_t n;\n\n        n = rowsperstrip;\n        if (n > ysize - y + 1)\n            n = ysize - y + 1;\n        rp = rbuf;\n        gp = gbuf;\n        bp = bbuf;\n        do\n        {\n            for (x = 0; x <= xsize; x++)\n            {\n                uint32_t v = ss[x];\n                rp[x] = v;\n                gp[x] = v >> 8;\n                bp[x] = v >> 16;\n            }\n            rp += xsize + 1, gp += xsize + 1, bp += xsize + 1;\n            ss += xsize + 1;\n        } while (--n);\n        if (TIFFWriteEncodedStrip(tif, TIFFComputeStrip(tif, y, 0), rbuf,\n                                  stripsize) < 0)\n            break;\n        if (TIFFWriteEncodedStrip(tif, TIFFComputeStrip(tif, y, 1), gbuf,\n                                  stripsize) < 0)\n            break;\n        if (TIFFWriteEncodedStrip(tif, TIFFComputeStrip(tif, y, 2), bbuf,\n                                  stripsize) < 0)\n            break;\n    }\n    _TIFFfree(rbuf);\n}",
+      "fn_code_pos": [
+        [
+          154,
+          0
+        ],
+        [
+          197,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "svRGBSeparate",
+        "parameters": {
+          "tif": "TIFF",
+          "ss": "uint32_t",
+          "xsize": "int",
+          "ysize": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void svRGBContig(TIFF *tif, uint32_t *ss, int xsize, int ysize)\n{\n    register int x, y;\n    tsize_t stripsize = TIFFStripSize(tif);\n    unsigned char *strip = (unsigned char *)_TIFFmalloc(stripsize);\n\n    for (y = 0; y <= ysize; y += rowsperstrip)\n    {\n        register unsigned char *pp = strip;\n        register uint32_t n;\n\n        n = rowsperstrip;\n        if (n > ysize - y + 1)\n            n = ysize - y + 1;\n        do\n        {\n            for (x = 0; x <= xsize; x++)\n            {\n                uint32_t v = ss[x];\n                pp[0] = v;\n                pp[1] = v >> 8;\n                pp[2] = v >> 16;\n                pp += 3;\n            }\n            ss += xsize + 1;\n        } while (--n);\n        if (TIFFWriteEncodedStrip(tif, TIFFComputeStrip(tif, y, 0), strip,\n                                  stripsize) < 0)\n            break;\n    }\n    _TIFFfree(strip);\n}",
+      "fn_code_pos": [
+        [
+          199,
+          0
+        ],
+        [
+          230,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "svRGBContig",
+        "parameters": {
+          "tif": "TIFF",
+          "ss": "uint32_t",
+          "xsize": "int",
+          "ysize": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void svGrey(TIFF *tif, uint32_t *ss, int xsize, int ysize)\n{\n    register int x, y;\n    unsigned char *buf = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(tif));\n\n    for (y = 0; y <= ysize; y++)\n    {\n        for (x = 0; x <= xsize; x++)\n        {\n            unsigned char *cp = (unsigned char *)&ss[x];\n            buf[x] = (RED * cp[3] + GREEN * cp[2] + BLUE * cp[1]) >> 8;\n        }\n        if (TIFFWriteScanline(tif, buf, (uint32_t)y, 0) < 0)\n            break;\n        ss += xsize + 1;\n    }\n    _TIFFfree(buf);\n}",
+      "fn_code_pos": [
+        [
+          240,
+          0
+        ],
+        [
+          257,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "svGrey",
+        "parameters": {
+          "tif": "TIFF",
+          "ss": "uint32_t",
+          "xsize": "int",
+          "ysize": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void tiffsv(char *name, int x1, int x2, int y1, int y2)\n{\n    TIFF *tif;\n    int xsize, ysize;\n    int xorg, yorg;\n    uint32_t *scrbuf;\n\n    xorg = MIN(x1, x2);\n    yorg = MIN(y1, y2);\n    if (xorg < 0)\n        xorg = 0;\n    if (yorg < 0)\n        yorg = 0;\n    xsize = ABS(x2 - x1);\n    ysize = ABS(y2 - y1);\n    if (xorg + xsize > xmaxscreen)\n        xsize = xmaxscreen - xorg;\n    if (yorg + ysize > ymaxscreen)\n        ysize = ymaxscreen - yorg;\n    tif = TIFFOpen(name, \"w\");\n    TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, (uint32_t)(xsize + 1));\n    TIFFSetField(tif, TIFFTAG_IMAGELENGTH, (uint32_t)(ysize + 1));\n    TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8);\n    TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL,\n                 photometric == PHOTOMETRIC_RGB ? 3 : 1);\n    TIFFSetField(tif, TIFFTAG_PLANARCONFIG, config);\n    TIFFSetField(tif, TIFFTAG_COMPRESSION, compression);\n    switch (compression)\n    {\n        case COMPRESSION_JPEG:\n            if (photometric == PHOTOMETRIC_RGB &&\n                jpegcolormode == JPEGCOLORMODE_RGB)\n                photometric = PHOTOMETRIC_YCBCR;\n            TIFFSetField(tif, TIFFTAG_JPEGQUALITY, quality);\n            TIFFSetField(tif, TIFFTAG_JPEGCOLORMODE, jpegcolormode);\n            break;\n        case COMPRESSION_LZW:\n            if (predictor != 0)\n                TIFFSetField(tif, TIFFTAG_PREDICTOR, predictor);\n            break;\n    }\n    TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, photometric);\n    TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_BOTLEFT);\n    rowsperstrip = TIFFDefaultStripSize(tif, rowsperstrip);\n    TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, rowsperstrip);\n    scrbuf =\n        (uint32_t *)_TIFFmalloc((xsize + 1) * (ysize + 1) * sizeof(uint32_t));\n    readdisplay(xorg, yorg, xorg + xsize, yorg + ysize, scrbuf, RD_FREEZE);\n    if (photometric == PHOTOMETRIC_RGB)\n    {\n        if (config == PLANARCONFIG_SEPARATE)\n            svRGBSeparate(tif, scrbuf, xsize, ysize);\n        else\n            svRGBContig(tif, scrbuf, xsize, ysize);\n    }\n    else\n        svGrey(tif, scrbuf, xsize, ysize);\n    (void)TIFFClose(tif);\n    _TIFFfree((char *)scrbuf);\n}",
+      "fn_code_pos": [
+        [
+          262,
+          0
+        ],
+        [
+          321,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tiffsv",
+        "parameters": {
+          "name": "char",
+          "x1": "int",
+          "x2": "int",
+          "y1": "int",
+          "y2": "int"
+        },
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "usage(void)",
+      "fn_dec_pos": [
+        [
+          49,
+          12
+        ],
+        [
+          49,
+          23
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "tiffsv(char *, int, int, int, int)",
+      "fn_dec_pos": [
+        [
+          50,
+          12
+        ],
+        [
+          50,
+          46
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "tiffsv",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include <ctype.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include <gl.h>\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

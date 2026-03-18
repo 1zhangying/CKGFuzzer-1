@@ -1,0 +1,76 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17		#include "ares_setup.h"	
+18			
+19		#include "ares.h"	
+20		#include "ares_nowarn.h"	
+21		#include "ares_private.h"	
+22			
+23		/* This is an internal function.  Its contract is to read a line from	
+24		* a file into a dynamically allocated buffer, zeroing the trailing	
+25		* newline if there is one.  The calling routine may call	
+26		* ares__read_line multiple times with the same buf and bufsize	
+27		* pointers; *buf will be reallocated and *bufsize adjusted as	
+28		* appropriate.  The initial value of *buf should be NULL.  After the	
+29		* calling routine is done reading lines, it should free *buf.	
+30		*/	
+31		int ares__read_line(FILE *fp, char **buf, size_t *bufsize)	
+32	10.0k	{	
+33	10.0k	char *newbuf;	
+34	10.0k	size_t offset = 0;	
+35	10.0k	size_t len;	
+36			
+37	10.0k	if (*buf == NULL)	
+38	250	{	
+39	250	*buf = ares_malloc(128);	
+40	250	if (!*buf)	
+41	0	returnARES_ENOMEM;	
+42	250	*bufsize = 128;	
+43	250	}	
+44			
+45	10.0k	for (;;)	
+46	10.0k	{	
+47	10.0k	int bytestoread = aresx_uztosi(*bufsize - offset);	
+48			
+49	10.0k	if (!fgets(*buf + offset, bytestoread, fp))	
+50	500	return (offset != 0) ?0: (ferror(fp)) ?ARES_EFILE: ARES_EOF;	
+51	9.50k	len = offset + strlen(*buf + offset);	
+52	9.50k	if ((*buf)[len - 1] == '\n')	
+53	9.50k	{	
+54	9.50k	(*buf)[len - 1] = 0;	
+55	9.50k	break;	
+56	9.50k	}	
+57	0	offset = len;	
+58	0	if(len < *bufsize - 1)	
+59	0	continue;	
+60			
+61		/* Allocate more space. */	
+62	0	newbuf = ares_realloc(*buf, *bufsize * 2);	
+63	0	if (!newbuf)	
+64	0	{	
+65	0	ares_free(*buf);	
+66	0	*buf =NULL;	
+67	0	returnARES_ENOMEM;	
+68	0	}	
+69	0	*buf = newbuf;	
+70	0	*bufsize *= 2;	
+71	0	}	
+72	9.50k	return ARES_SUCCESS;	
+73	10.0k	}	
+
+

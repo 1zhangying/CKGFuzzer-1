@@ -1,0 +1,130 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char **argv)\n{\n    int bits_per_pixel = 8, cmsize, i, j, k, gray_index, chunk_size = 32,\n        nchunks = 16;\n    unsigned char *scan_line;\n    uint16_t *gray;\n    float refblackwhite[2 * 1];\n    TIFF *tif;\n\n    programName = argv[0];\n\n    if (argc != 4)\n        Usage();\n\n    if (!strcmp(argv[1], \"-depth\"))\n        bits_per_pixel = atoi(argv[2]);\n    else\n        Usage();\n\n    switch (bits_per_pixel)\n    {\n        case 8:\n            nchunks = 16;\n            chunk_size = 32;\n            break;\n        case 4:\n            nchunks = 4;\n            chunk_size = 128;\n            break;\n        case 2:\n            nchunks = 2;\n            chunk_size = 256;\n            break;\n        default:\n            Usage();\n    }\n\n    cmsize = nchunks * nchunks;\n    gray = (uint16_t *)malloc(cmsize * sizeof(uint16_t));\n\n    gray[0] = 3000;\n    for (i = 1; i < cmsize; i++)\n        gray[i] = (uint16_t)(-log10((double)i / (cmsize - 1)) * 1000);\n\n    refblackwhite[0] = 0.0;\n    refblackwhite[1] = (float)((1L << bits_per_pixel) - 1);\n\n    if ((tif = TIFFOpen(argv[3], \"w\")) == NULL)\n    {\n        fprintf(stderr, \"can't open %s as a TIFF file\\n\", argv[3]);\n        free(gray);\n        return 0;\n    }\n\n    TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, WIDTH);\n    TIFFSetField(tif, TIFFTAG_IMAGELENGTH, HEIGHT);\n    TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, bits_per_pixel);\n    TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_NONE);\n    TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);\n    TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);\n    TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, 1);\n    TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);\n    TIFFSetField(tif, TIFFTAG_REFERENCEBLACKWHITE, refblackwhite);\n    TIFFSetField(tif, TIFFTAG_TRANSFERFUNCTION, gray);\n    TIFFSetField(tif, TIFFTAG_RESOLUTIONUNIT, RESUNIT_NONE);\n\n    scan_line = (unsigned char *)malloc(WIDTH / (8 / bits_per_pixel));\n\n    for (i = 0; i < HEIGHT; i++)\n    {\n        for (j = 0, k = 0; j < WIDTH;)\n        {\n            gray_index = (j / chunk_size) + ((i / chunk_size) * nchunks);\n\n            switch (bits_per_pixel)\n            {\n                case 8:\n                    scan_line[k++] = gray_index;\n                    j++;\n                    break;\n                case 4:\n                    scan_line[k++] = (gray_index << 4) + gray_index;\n                    j += 2;\n                    break;\n                case 2:\n                    scan_line[k++] = (gray_index << 6) + (gray_index << 4) +\n                                     (gray_index << 2) + gray_index;\n                    j += 4;\n                    break;\n            }\n        }\n        TIFFWriteScanline(tif, scan_line, i, 0);\n    }\n\n    free(scan_line);\n    TIFFClose(tif);\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          38,
+          0
+        ],
+        [
+          135,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "void Usage()\n{\n    fprintf(stderr, \"Usage: %s -depth (8 | 4 | 2) tiff-image\\n\", programName);\n    exit(0);\n}",
+      "fn_code_pos": [
+        [
+          137,
+          0
+        ],
+        [
+          141,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "Usage()",
+      "fn_dec_pos": [
+        [
+          36,
+          5
+        ],
+        [
+          36,
+          12
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <math.h>\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

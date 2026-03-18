@@ -1,0 +1,258 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static long timeoffset(struct timeval *now, struct timeval *check)\n{\n  return (check->tv_sec - now->tv_sec)*1000 +\n         (check->tv_usec - now->tv_usec)/1000;\n}",
+      "fn_code_pos": [
+        [
+          26,
+          0
+        ],
+        [
+          30,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "timeoffset",
+        "parameters": {
+          "now": "struct timeval",
+          "check": "struct timeval"
+        },
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "struct timeval *ares_timeout(ares_channel channel, struct timeval *maxtv,\n                             struct timeval *tvbuf)\n{\n  struct query *query;\n  struct list_node* list_head;\n  struct list_node* list_node;\n  struct timeval now;\n  struct timeval nextstop;\n  long offset, min_offset;\n\n  /* No queries, no timeout (and no fetch of the current time). */\n  if (ares__is_list_empty(&(channel->all_queries)))\n    return maxtv;\n\n  /* Find the minimum timeout for the current set of queries. */\n  now = ares__tvnow();\n  min_offset = -1;\n\n  list_head = &(channel->all_queries);\n  for (list_node = list_head->next; list_node != list_head;\n       list_node = list_node->next)\n    {\n      query = list_node->data;\n      if (query->timeout.tv_sec == 0)\n        continue;\n      offset = timeoffset(&now, &query->timeout);\n      if (offset < 0)\n        offset = 0;\n      if (min_offset == -1 || offset < min_offset)\n        min_offset = offset;\n    }\n\n  /* If we found a minimum timeout and it's sooner than the one specified in\n   * maxtv (if any), return it.  Otherwise go with maxtv.\n   */\n  if (min_offset != -1)\n    {\n      int ioffset = (min_offset > (long)INT_MAX) ? INT_MAX : (int)min_offset;\n\n      nextstop.tv_sec = ioffset/1000;\n      nextstop.tv_usec = (ioffset%1000)*1000;\n\n      if (!maxtv || ares__timedout(maxtv, &nextstop))\n        {\n          *tvbuf = nextstop;\n          return tvbuf;\n        }\n    }\n\n  return maxtv;\n}",
+      "fn_code_pos": [
+        [
+          37,
+          0
+        ],
+        [
+          87,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_timeout",
+        "parameters": {
+          "channel": "ares_channel",
+          "maxtv": "struct timeval",
+          "tvbuf": "struct timeval"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "ares_timeout(ares_channel channel, struct timeval *maxtv,\n                             struct timeval *tvbuf)",
+      "fn_dec_pos": [
+        [
+          37,
+          16
+        ],
+        [
+          38,
+          51
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_timeout",
+        "parameters": {
+          "channel": "ares_channel",
+          "maxtv": "struct timeval",
+          "tvbuf": "struct timeval"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        26,
+        23
+      ],
+      [
+        26,
+        37
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        26,
+        44
+      ],
+      [
+        26,
+        58
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        37,
+        0
+      ],
+      [
+        37,
+        14
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        37,
+        51
+      ],
+      [
+        37,
+        65
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        38,
+        29
+      ],
+      [
+        38,
+        43
+      ]
+    ],
+    [
+      "struct query",
+      {},
+      "",
+      [
+        40,
+        2
+      ],
+      [
+        40,
+        14
+      ]
+    ],
+    [
+      "struct list_node",
+      {},
+      "",
+      [
+        41,
+        2
+      ],
+      [
+        41,
+        18
+      ]
+    ],
+    [
+      "struct list_node",
+      {},
+      "",
+      [
+        42,
+        2
+      ],
+      [
+        42,
+        18
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        43,
+        2
+      ],
+      [
+        43,
+        16
+      ]
+    ],
+    [
+      "struct timeval",
+      {},
+      "",
+      [
+        44,
+        2
+      ],
+      [
+        44,
+        16
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ]
+    ],
+    [
+      "#include <limits.h>\n",
+      [
+        19,
+        0
+      ],
+      [
+        20,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

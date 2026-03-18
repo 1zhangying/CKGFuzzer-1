@@ -1,0 +1,232 @@
+Line	Count	Source	
+1		/* Copyright (C) 2019 by Andrew Selivanov	
+2		*	
+3		* Permission to use, copy, modify, and distribute this	
+4		* software and its documentation for any purpose and without	
+5		* fee is hereby granted, provided that the above copyright	
+6		* notice appear in all copies and that both that copyright	
+7		* notice and this permission notice appear in supporting	
+8		* documentation, and that the name of M.I.T. not be used in	
+9		* advertising or publicity pertaining to distribution of the	
+10		* software without specific, written prior permission.	
+11		* M.I.T. makes no representations about the suitability of	
+12		* this software for any purpose.  It is provided "as is"	
+13		* without express or implied warranty.	
+14		*/	
+15			
+16		#include "ares_setup.h"	
+17			
+18		#ifdef HAVE_NETINET_IN_H	
+19		#  include <netinet/in.h>	
+20		#endif	
+21		#ifdef HAVE_NETDB_H	
+22		#  include <netdb.h>	
+23		#endif	
+24		#ifdef HAVE_ARPA_INET_H	
+25		#  include <arpa/inet.h>	
+26		#endif	
+27			
+28		#include "ares_nameser.h"	
+29			
+30		#ifdef HAVE_STRINGS_H	
+31		#  include <strings.h>	
+32		#endif	
+33			
+34		#ifdef HAVE_LIMITS_H	
+35		#  include <limits.h>	
+36		#endif	
+37			
+38		#include "ares.h"	
+39		#include "ares_dns.h"	
+40		#include "ares_private.h"	
+41			
+42		int ares__parse_into_addrinfo(const unsigned char *abuf,	
+43		int alen, int cname_only_is_enodata,	
+44		unsigned short port,	
+45		struct ares_addrinfo *ai)	
+46	874	{	
+47	874	unsigned int qdcount, ancount;	
+48	874	int status, i, rr_type, rr_class, rr_len, rr_ttl;	
+49	874	int got_a = 0, got_aaaa = 0, got_cname = 0;	
+50	874	long len;	
+51	874	const unsigned char *aptr;	
+52	874	char *question_hostname = NULL;	
+53	874	char *hostname, *rr_name = NULL, *rr_data;	
+54	874	struct ares_addrinfo_cname *cname, *cnames = NULL;	
+55	874	struct ares_addrinfo_node *nodes = NULL;	
+56			
+57		/* Give up if abuf doesn't have room for a header. */	
+58	874	if (alen < HFIXEDSZ)	
+59	2	return ARES_EBADRESP;	
+60			
+61		/* Fetch the question and answer count from the header. */	
+62	872	qdcount = DNS_HEADER_QDCOUNT(abuf);	
+63	872	ancount = DNS_HEADER_ANCOUNT(abuf);	
+64	872	if (qdcount != 1)	
+65	18	return ARES_EBADRESP;	
+66			
+67			
+68		/* Expand the name from the question, and skip past the question. */	
+69	854	aptr = abuf + HFIXEDSZ;	
+70	854	status = ares__expand_name_for_response(aptr, abuf, alen, &question_hostname, &len, 0);	
+71	854	if (status != ARES_SUCCESS)	
+72	98	return status;	
+73	756	if (aptr + len + QFIXEDSZ > abuf + alen)	
+74	106	{	
+75	106	status = ARES_EBADRESP;	
+76	106	goto failed_stat;	
+77	106	}	
+78			
+79	650	hostname = question_hostname;	
+80			
+81	650	aptr += len + QFIXEDSZ;	
+82			
+83		/* Examine each answer resource record (RR) in turn. */	
+84	15.3k	for (i = 0; i < (int)ancount; i++)	
+85	15.2k	{	
+86		/* Decode the RR up to the data field. */	
+87	15.2k	status = ares__expand_name_for_response(aptr, abuf, alen, &rr_name, &len, 0);	
+88	15.2k	if (status != ARES_SUCCESS)	
+89	262	{	
+90	262	rr_name = NULL;	
+91	262	goto failed_stat;	
+92	262	}	
+93			
+94	14.9k	aptr += len;	
+95	14.9k	if (aptr + RRFIXEDSZ > abuf + alen)	
+96	138	{	
+97	138	status = ARES_EBADRESP;	
+98	138	goto failed_stat;	
+99	138	}	
+100	14.8k	rr_type = DNS_RR_TYPE(aptr);	
+101	14.8k	rr_class = DNS_RR_CLASS(aptr);	
+102	14.8k	rr_len = DNS_RR_LEN(aptr);	
+103	14.8k	rr_ttl = DNS_RR_TTL(aptr);	
+104	14.8k	aptr += RRFIXEDSZ;	
+105	14.8k	if (aptr + rr_len > abuf + alen)	
+106	50	{	
+107	50	status = ARES_EBADRESP;	
+108	50	goto failed_stat;	
+109	50	}	
+110			
+111	14.7k	if (rr_class == C_IN && rr_type == T_A	
+112	102	&& rr_len == sizeof(struct in_addr)	
+113	24	&& strcasecmp(rr_name, hostname) == 0)	
+114	18	{	
+115	18	got_a = 1;	
+116	18	if (aptr + sizeof(struct in_addr) > abuf + alen)	
+117	0	{  /* LCOV_EXCL_START: already checked above */	
+118	0	status =ARES_EBADRESP;	
+119	0	goto failed_stat;	
+120	0	}/* LCOV_EXCL_STOP */	
+121			
+122	18	status = ares_append_ai_node(AF_INET, port, rr_ttl, aptr, &nodes);	
+123	18	if (status != ARES_SUCCESS)	
+124	0	goto failed_stat;	
+125	18	}	
+126	14.7k	else if (rr_class == C_IN && rr_type == T_AAAA	
+127	912	&& rr_len == sizeof(struct ares_in6_addr)	
+128	808	&& strcasecmp(rr_name, hostname) == 0)	
+129	730	{	
+130	730	got_aaaa = 1;	
+131	730	if (aptr + sizeof(struct ares_in6_addr) > abuf + alen)	
+132	0	{  /* LCOV_EXCL_START: already checked above */	
+133	0	status =ARES_EBADRESP;	
+134	0	goto failed_stat;	
+135	0	}/* LCOV_EXCL_STOP */	
+136			
+137	730	status = ares_append_ai_node(AF_INET6, port, rr_ttl, aptr, &nodes);	
+138	730	if (status != ARES_SUCCESS)	
+139	0	goto failed_stat;	
+140	730	}	
+141			
+142	14.7k	if (rr_class == C_IN && rr_type == T_CNAME)	
+143	650	{	
+144	650	got_cname = 1;	
+145	650	status = ares__expand_name_for_response(aptr, abuf, alen, &rr_data,	
+146	650	&len, 1);	
+147	650	if (status != ARES_SUCCESS)	
+148	78	{	
+149	78	goto failed_stat;	
+150	78	}	
+151			
+152		/* Decode the RR data and replace the hostname with it. */	
+153		/* SA: Seems wrong as it introduses order dependency. */	
+154	572	hostname = rr_data;	
+155			
+156	572	cname = ares__append_addrinfo_cname(&cnames);	
+157	572	if (!cname)	
+158	0	{	
+159	0	status =ARES_ENOMEM;	
+160	0	ares_free(rr_data);	
+161	0	goto failed_stat;	
+162	0	}	
+163	572	cname->ttl = rr_ttl;	
+164	572	cname->alias = rr_name;	
+165	572	cname->name = rr_data;	
+166	572	rr_name = NULL;	
+167	572	}	
+168	14.1k	else	
+169	14.1k	{	
+170		/* rr_name is only saved for cname */	
+171	14.1k	ares_free(rr_name);	
+172	14.1k	rr_name = NULL;	
+173	14.1k	}	
+174			
+175			
+176	14.6k	aptr += rr_len;	
+177	14.6k	if (aptr > abuf + alen)	
+178	0	{  /* LCOV_EXCL_START: already checked above */	
+179	0	status =ARES_EBADRESP;	
+180	0	goto failed_stat;	
+181	0	}/* LCOV_EXCL_STOP */	
+182	14.6k	}	
+183			
+184	122	if (status == ARES_SUCCESS)	
+185	122	{	
+186	122	if (!got_a && !got_aaaa)	
+187	62	{	
+188	62	if (!got_cname || (got_cname && cname_only_is_enodata))	
+189	36	{	
+190	36	status = ARES_ENODATA;	
+191	36	goto failed_stat;	
+192	36	}	
+193	62	}	
+194			
+195		/* save the question hostname as ai->name */	
+196	86	if (ai->name == NULL ||strcasecmp(ai->name, question_hostname) != 0)	
+197	86	{	
+198	86	ares_free(ai->name);	
+199	86	ai->name = ares_strdup(question_hostname);	
+200	86	if (!ai->name)	
+201	0	{	
+202	0	status =ARES_ENOMEM;	
+203	0	goto failed_stat;	
+204	0	}	
+205	86	}	
+206			
+207	86	if (got_a || got_aaaa)	
+208	60	{	
+209	60	ares__addrinfo_cat_nodes(&ai->nodes, nodes);	
+210	60	nodes = NULL;	
+211	60	}	
+212			
+213	86	if (got_cname)	
+214	52	{	
+215	52	ares__addrinfo_cat_cnames(&ai->cnames, cnames);	
+216	52	cnames = NULL;	
+217	52	}	
+218	86	}	
+219			
+220	86	ares_free(question_hostname);	
+221	86	return status;	
+222			
+223	670	failed_stat:	
+224	670	ares_free(question_hostname);	
+225	670	ares_free(rr_name);	
+226	670	ares__freeaddrinfo_cnames(cnames);	
+227	670	ares__freeaddrinfo_nodes(nodes);	
+228	670	return status;	
+229	122	}	
+
+

@@ -1,0 +1,254 @@
+Line	Count	Source	
+1		/* Copyright (C) 2019 by Andrew Selivanov	
+2		*	
+3		* Permission to use, copy, modify, and distribute this	
+4		* software and its documentation for any purpose and without	
+5		* fee is hereby granted, provided that the above copyright	
+6		* notice appear in all copies and that both that copyright	
+7		* notice and this permission notice appear in supporting	
+8		* documentation, and that the name of M.I.T. not be used in	
+9		* advertising or publicity pertaining to distribution of the	
+10		* software without specific, written prior permission.	
+11		* M.I.T. makes no representations about the suitability of	
+12		* this software for any purpose.  It is provided "as is"	
+13		* without express or implied warranty.	
+14		*/	
+15			
+16		#include "ares_setup.h"	
+17			
+18		#ifdef HAVE_NETINET_IN_H	
+19		#  include <netinet/in.h>	
+20		#endif	
+21		#ifdef HAVE_NETDB_H	
+22		#  include <netdb.h>	
+23		#endif	
+24		#ifdef HAVE_ARPA_INET_H	
+25		#  include <arpa/inet.h>	
+26		#endif	
+27			
+28		#include "ares.h"	
+29		#include "ares_inet_net_pton.h"	
+30		#include "ares_nowarn.h"	
+31		#include "ares_private.h"	
+32			
+33	0	#define MAX_ALIASES40	
+34			
+35		int ares__readaddrinfo(FILE *fp,	
+36		const char *name,	
+37		unsigned short port,	
+38		const struct ares_addrinfo_hints *hints,	
+39		struct ares_addrinfo *ai)	
+40	0	{	
+41	0	char *line =NULL, *p, *q;	
+42	0	char *txtaddr, *txthost, *txtalias;	
+43	0	char *aliases[MAX_ALIASES];	
+44	0	unsigned int i, alias_count;	
+45	0	int status =ARES_SUCCESS;	
+46	0	size_t linesize;	
+47	0	struct ares_addrinfo_cname *cname =NULL, *cnames =NULL;	
+48	0	struct ares_addrinfo_node *nodes =NULL;	
+49	0	int match_with_alias, match_with_canonical;	
+50	0	int want_cname = hints->ai_flags &ARES_AI_CANONNAME;	
+51			
+52		/* Validate family */	
+53	0	switch (hints->ai_family) {	
+54	0	caseAF_INET:	
+55	0	caseAF_INET6:	
+56	0	caseAF_UNSPEC:	
+57	0	break;	
+58	0	default:	
+59	0	returnARES_EBADFAMILY;	
+60	0	}	
+61			
+62	0	ai->name = ares_strdup(name);	
+63	0	if(!ai->name)	
+64	0	{	
+65	0	status =ARES_ENOMEM;	
+66	0	goto fail;	
+67	0	}	
+68			
+69	0	while ((status = ares__read_line(fp, &line, &linesize)) ==ARES_SUCCESS)	
+70	0	{	
+71	0	match_with_alias = 0;	
+72	0	match_with_canonical = 0;	
+73	0	alias_count = 0;	
+74		/* Trim line comment. */	
+75	0	p = line;	
+76	0	while (*p&&(*p != '#'))	
+77	0	p++;	
+78	0	*p = '\0';	
+79			
+80		/* Trim trailing whitespace. */	
+81	0	q = p - 1;	
+82	0	while ((q >= line)&&ISSPACE(*q))	
+83	0	q--;	
+84	0	*++q = '\0';	
+85			
+86		/* Skip leading whitespace. */	
+87	0	p = line;	
+88	0	while (*p&&ISSPACE(*p))	
+89	0	p++;	
+90	0	if (!*p)	
+91		/* Ignore line if empty. */	
+92	0	continue;	
+93			
+94		/* Pointer to start of IPv4 or IPv6 address part. */	
+95	0	txtaddr = p;	
+96			
+97		/* Advance past address part. */	
+98	0	while (*p&&!ISSPACE(*p))	
+99	0	p++;	
+100	0	if (!*p)	
+101		/* Ignore line if reached end of line. */	
+102	0	continue;	
+103			
+104		/* Null terminate address part. */	
+105	0	*p = '\0';	
+106			
+107		/* Advance to host name */	
+108	0	p++;	
+109	0	while (*p&&ISSPACE(*p))	
+110	0	p++;	
+111	0	if (!*p)	
+112		/* Ignore line if reached end of line. */	
+113	0	continue;  /* LCOV_EXCL_LINE: trailing whitespace already stripped */	
+114			
+115		/* Pointer to start of host name. */	
+116	0	txthost = p;	
+117			
+118		/* Advance past host name. */	
+119	0	while (*p&&!ISSPACE(*p))	
+120	0	p++;	
+121			
+122		/* Pointer to start of first alias. */	
+123	0	txtalias =NULL;	
+124	0	if (*p)	
+125	0	{	
+126	0	q = p + 1;	
+127	0	while (*q&&ISSPACE(*q))	
+128	0	q++;	
+129	0	if (*q)	
+130	0	txtalias = q;	
+131	0	}	
+132			
+133		/* Null terminate host name. */	
+134	0	*p = '\0';	
+135			
+136		/* Find out if host name matches with canonical host name. */	
+137	0	if (strcasecmp(txthost, name) == 0)	
+138	0	{	
+139	0	match_with_canonical = 1;	
+140	0	}	
+141			
+142		/* Find out if host name matches with one of the aliases. */	
+143	0	while (txtalias)	
+144	0	{	
+145	0	p = txtalias;	
+146	0	while (*p&&!ISSPACE(*p))	
+147	0	p++;	
+148	0	q = p;	
+149	0	while (*q&&ISSPACE(*q))	
+150	0	q++;	
+151	0	*p = '\0';	
+152	0	if (strcasecmp(txtalias, name) == 0)	
+153	0	{	
+154	0	match_with_alias = 1;	
+155	0	if (!want_cname)	
+156	0	break;	
+157	0	}	
+158	0	if (alias_count <MAX_ALIASES)	
+159	0	{	
+160	0	aliases[alias_count++] = txtalias;	
+161	0	}	
+162	0	txtalias =*q?q:NULL;	
+163	0	}	
+164			
+165		/* Try next line if host does not match. */	
+166	0	if (!match_with_alias&&!match_with_canonical)	
+167	0	{	
+168	0	continue;	
+169	0	}	
+170			
+171		/*	
+172		* Convert address string to network address for the requested families.	
+173		* Actual address family possible values are AF_INET and AF_INET6 only.	
+174		*/	
+175	0	if ((hints->ai_family ==AF_INET)||(hints->ai_family ==AF_UNSPEC))	
+176	0	{	
+177	0	struct in_addr addr4;	
+178	0	if (ares_inet_pton(AF_INET, txtaddr, &addr4) == 1)	
+179	0	{	
+180	0	status = ares_append_ai_node(AF_INET, port, 0, &addr4, &nodes);	
+181	0	if (status !=ARES_SUCCESS)	
+182	0	{	
+183	0	goto fail;	
+184	0	}	
+185	0	}	
+186	0	}	
+187	0	if ((hints->ai_family ==AF_INET6)||(hints->ai_family ==AF_UNSPEC))	
+188	0	{	
+189	0	struct ares_in6_addr addr6;	
+190	0	if (ares_inet_pton(AF_INET6, txtaddr, &addr6) == 1)	
+191	0	{	
+192	0	status = ares_append_ai_node(AF_INET6, port, 0, &addr6, &nodes);	
+193	0	if (status !=ARES_SUCCESS)	
+194	0	{	
+195	0	goto fail;	
+196	0	}	
+197	0	}	
+198	0	}	
+199			
+200	0	if (status !=ARES_SUCCESS)	
+201		/* Ignore line if invalid address string for the requested family. */	
+202	0	continue;	
+203			
+204	0	if (want_cname)	
+205	0	{	
+206	0	for (i = 0;i < alias_count;++i)	
+207	0	{	
+208	0	cname = ares__append_addrinfo_cname(&cnames);	
+209	0	if (!cname)	
+210	0	{	
+211	0	status =ARES_ENOMEM;	
+212	0	goto fail;	
+213	0	}	
+214	0	cname->alias = ares_strdup(aliases[i]);	
+215	0	cname->name = ares_strdup(txthost);	
+216	0	}	
+217		/* No aliases, cname only. */	
+218	0	if(!alias_count)	
+219	0	{	
+220	0	cname = ares__append_addrinfo_cname(&cnames);	
+221	0	if (!cname)	
+222	0	{	
+223	0	status =ARES_ENOMEM;	
+224	0	goto fail;	
+225	0	}	
+226	0	cname->name = ares_strdup(txthost);	
+227	0	}	
+228	0	}	
+229	0	}	
+230			
+231		/* Last read failed. */	
+232	0	if (status ==ARES_ENOMEM)	
+233	0	{	
+234	0	goto fail;	
+235	0	}	
+236			
+237		/* Free line buffer. */	
+238	0	ares_free(line);	
+239	0	ares__addrinfo_cat_cnames(&ai->cnames, cnames);	
+240	0	ares__addrinfo_cat_nodes(&ai->nodes, nodes);	
+241			
+242	0	returnnodes?ARES_SUCCESS:ARES_ENOTFOUND;	
+243			
+244	0	fail:	
+245	0	ares_free(line);	
+246	0	ares__freeaddrinfo_cnames(cnames);	
+247	0	ares__freeaddrinfo_nodes(nodes);	
+248	0	ares_free(ai->name);	
+249		ai->name =NULL;	
+250	0	return status;	
+251	0	}	
+
+

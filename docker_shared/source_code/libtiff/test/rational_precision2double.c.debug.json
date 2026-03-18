@@ -1,0 +1,254 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void _XTIFFInitialize(void)\n{\n    static int first_time = 1;\n\n    if (!first_time)\n        return; /* Been there. Done that. */\n    first_time = 0;\n\n    /* Grab the inherited method and install */\n    _ParentExtender = TIFFSetTagExtender(_XTIFFDefaultDirectory);\n}",
+      "fn_code_pos": [
+        [
+          161,
+          0
+        ],
+        [
+          171,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_XTIFFInitialize",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void _XTIFFDefaultDirectory(TIFF *tif)\n{\n    uint32_t n, nadded;\n\n    /* Install the extended Tag field info */\n    n = N(tifFieldInfo);\n    //_TIFFMergeFields(tif, const TIFFField info[], uint32_t n);\n    nadded = _TIFFMergeFields(tif, tifFieldInfo, n);\n    (void)nadded;\n\n    /* Since an XTIFF client module may have overridden\n     * the default directory method, we call it now to\n     * allow it to set up the rest of its own methods.\n     */\n\n    if (_ParentExtender)\n        (*_ParentExtender)(tif);\n}",
+      "fn_code_pos": [
+        [
+          177,
+          0
+        ],
+        [
+          194,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_XTIFFDefaultDirectory",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main()\n{\n    static const char filenameClassicTiff[] = \"rationalPrecision2Double.tif\";\n    static const char filenameBigTiff[] = \"rationalPrecision2Double_Big.tif\";\n\n    TIFF *tif;\n    int ret;\n    int errorNo;\n\n    /*-- Initialize TIFF-Extender to add additional TIFF-Tags --*/\n    _XTIFFInitialize();\n\n    fprintf(stderr, \"==== Test if Set()/Get() interface for some custom \"\n                    \"rational tags behave as before change. ====\\n\");\n    /* --- Test with Classic-TIFF ---*/\n    /* delete file, if exists */\n    ret = unlink(filenameClassicTiff);\n    errorNo = errno;\n    if (ret != 0 && errorNo != ENOENT)\n    {\n        fprintf(stderr, \"Can't delete test TIFF file %s.\\n\",\n                filenameClassicTiff);\n    }\n\n    /* We write the main directory as a simple image. */\n    tif = TIFFOpen(filenameClassicTiff, \"w+\");\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't create test TIFF file %s.\\n\",\n                filenameClassicTiff);\n        return 1;\n    }\n    fprintf(stderr, \"-------- Test with ClassicTIFF started  ----------\\n\");\n    ret = write_test_tiff(tif, filenameClassicTiff, FALSE);\n    if (ret > 0)\n        return (ret);\n\n    /*--- Test with BIG-TIFF ---*/\n    /* delete file, if exists */\n    ret = unlink(filenameBigTiff);\n    if (ret != 0 && errorNo != ENOENT)\n    {\n        fprintf(stderr, \"Can't delete test TIFF file %s.\\n\", filenameBigTiff);\n    }\n\n    tif = TIFFOpen(filenameBigTiff, \"w8\");\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't create test TIFF file %s.\\n\", filenameBigTiff);\n        return 1;\n    }\n    fprintf(stderr, \"\\n-------- Test with BigTIFF started  ----------\\n\");\n    ret = write_test_tiff(tif, filenameBigTiff, FALSE);\n    if (ret > 0)\n        return (ret);\n\n    fprintf(stderr, \"\\n\\n==== Test automatically, if all custom rational tags \"\n                    \"are written/read correctly. ====\\n\");\n    /* --- Test with Classic-TIFF ---*/\n    /* delete file, if exists */\n    ret = unlink(filenameClassicTiff);\n    errorNo = errno;\n    if (ret != 0 && errorNo != ENOENT)\n    {\n        fprintf(stderr, \"Can't delete test TIFF file %s.\\n\",\n                filenameClassicTiff);\n    }\n\n    /* We write the main directory as a simple image. */\n    tif = TIFFOpen(filenameClassicTiff, \"w+\");\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't create test TIFF file %s.\\n\",\n                filenameClassicTiff);\n        return 1;\n    }\n    fprintf(stderr, \"-------- Test with ClassicTIFF started  ----------\\n\");\n    ret = write_test_tiff(tif, filenameClassicTiff, TRUE);\n    if (ret > 0)\n        return (ret);\n\n    /*--- Test with BIG-TIFF ---*/\n    /* delete file, if exists */\n    ret = unlink(filenameBigTiff);\n    if (ret != 0 && errno != ENOENT)\n    {\n        fprintf(stderr, \"Can't delete test TIFF file %s.\\n\", filenameBigTiff);\n    }\n\n    tif = TIFFOpen(filenameBigTiff, \"w8\");\n    if (!tif)\n    {\n        fprintf(stderr, \"Can't create test TIFF file %s.\\n\", filenameBigTiff);\n        return 1;\n    }\n    fprintf(stderr, \"\\n-------- Test with BigTIFF started  ----------\\n\");\n    ret = write_test_tiff(tif, filenameBigTiff, TRUE);\n    return (ret);\n}",
+      "fn_code_pos": [
+        [
+          196,
+          0
+        ],
+        [
+          294,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "write_test_tiff(TIFF *tif, const char *filenameRead, int blnAllCustomTags)",
+      "fn_dec_pos": [
+        [
+          69,
+          4
+        ],
+        [
+          69,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "write_test_tiff",
+        "parameters": {
+          "tif": "TIFF",
+          "filenameRead": "char",
+          "blnAllCustomTags": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "_XTIFFDefaultDirectory(TIFF *tif)",
+      "fn_dec_pos": [
+        [
+          159,
+          12
+        ],
+        [
+          159,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "_XTIFFDefaultDirectory",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "write_test_tiff(TIFF *tif, const char *filenameRead, int blnAllCustomTags)",
+      "fn_dec_pos": [
+        [
+          296,
+          4
+        ],
+        [
+          296,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "write_test_tiff",
+        "parameters": {
+          "tif": "TIFF",
+          "filenameRead": "char",
+          "blnAllCustomTags": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tif_config.h\"\n",
+      [
+        54,
+        0
+      ],
+      [
+        55,
+        0
+      ]
+    ],
+    [
+      "#include <errno.h>\n",
+      [
+        55,
+        0
+      ],
+      [
+        56,
+        0
+      ]
+    ],
+    [
+      "#include <math.h>\n",
+      [
+        56,
+        0
+      ],
+      [
+        57,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        57,
+        0
+      ],
+      [
+        58,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        58,
+        0
+      ],
+      [
+        59,
+        0
+      ]
+    ],
+    [
+      "#include <unistd.h>\n",
+      [
+        61,
+        0
+      ],
+      [
+        62,
+        0
+      ]
+    ],
+    [
+      "#include \"tif_dir.h\"\n",
+      [
+        64,
+        0
+      ],
+      [
+        65,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        65,
+        0
+      ],
+      [
+        66,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        66,
+        0
+      ],
+      [
+        67,
+        0
+      ]
+    ],
+    [
+      "#include \"tifftest.h\"\n",
+      [
+        67,
+        0
+      ],
+      [
+        68,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

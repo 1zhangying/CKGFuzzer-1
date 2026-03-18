@@ -1,0 +1,503 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int mfs_open(void *buffer, int size, char *mode)\n{\n    int ret, i;\n    void *tmp;\n\n    if (library_init_done == FALSE)\n    {\n        mem_init();\n        library_init_done = TRUE;\n    }\n\n    ret = -1;\n\n    /* Find a free fd */\n\n    for (i = 0; i < MAX_BUFFS; i++)\n    {\n        if (fds[i] == -1)\n        {\n            ret = i;\n            break;\n        }\n    }\n\n    if (i == MAX_BUFFS) /* No more free descriptors */\n    {\n        ret = -1;\n        errno = EMFILE;\n    }\n\n    if (ret >= 0 && *mode == 'r')\n    {\n        if (buffer == (void *)NULL)\n        {\n            ret = -1;\n            errno = EINVAL;\n        }\n        else\n        {\n            buf[ret] = (char *)buffer;\n            buf_size[ret] = size;\n            buf_off[ret] = 0;\n        }\n    }\n    else if (ret >= 0 && *mode == 'w')\n    {\n\n        if (buffer != (void *)NULL)\n        {\n            ret = -1;\n            errno = EINVAL;\n        }\n\n        else\n        {\n            tmp = malloc(0); /* Get a pointer */\n            if (tmp == (void *)NULL)\n            {\n                ret = -1;\n                errno = EDQUOT;\n            }\n            else\n            {\n                buf[ret] = (char *)tmp;\n                buf_size[ret] = 0;\n                buf_off[ret] = 0;\n            }\n        }\n    }\n    else if (ret >= 0 && *mode == 'a')\n    {\n        if (buffer == (void *)NULL) /* Create space for client */\n        {\n            tmp = malloc(0); /* Get a pointer */\n            if (tmp == (void *)NULL)\n            {\n                ret = -1;\n                errno = EDQUOT;\n            }\n            else\n            {\n                buf[ret] = (char *)tmp;\n                buf_size[ret] = 0;\n                buf_off[ret] = 0;\n            }\n        }\n        else /* Client has file read in already */\n        {\n            buf[ret] = (char *)buffer;\n            buf_size[ret] = size;\n            buf_off[ret] = 0;\n        }\n    }\n    else /* Some other invalid combination of parameters */\n    {\n        ret = -1;\n        errno = EINVAL;\n    }\n\n    if (ret != -1)\n    {\n        fds[ret] = 0;\n        buf_mode[ret] = *mode;\n    }\n\n    return (ret);\n}",
+      "fn_code_pos": [
+        [
+          116,
+          0
+        ],
+        [
+          222,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_open",
+        "parameters": {
+          "buffer": "void",
+          "size": "int",
+          "mode": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int mfs_lseek(int fd, int offset, int whence)\n{\n    int ret;\n    long test_off;\n\n    if (fds[fd] == -1) /* Not open */\n    {\n        ret = -1;\n        errno = EBADF;\n    }\n    else if (offset < 0 && whence == SEEK_SET)\n    {\n        ret = -1;\n        errno = EINVAL;\n    }\n    else\n    {\n        switch (whence)\n        {\n            case SEEK_SET:\n                if (offset > buf_size[fd])\n                    extend_mem_file(fd, offset);\n                buf_off[fd] = offset;\n                ret = offset;\n                break;\n\n            case SEEK_CUR:\n                test_off = buf_off[fd] + offset;\n\n                if (test_off < 0)\n                {\n                    ret = -1;\n                    errno = EINVAL;\n                }\n                else\n                {\n                    if (test_off > buf_size[fd])\n                        extend_mem_file(fd, test_off);\n                    buf_off[fd] = test_off;\n                    ret = test_off;\n                }\n                break;\n\n            case SEEK_END:\n                test_off = buf_size[fd] + offset;\n\n                if (test_off < 0)\n                {\n                    ret = -1;\n                    errno = EINVAL;\n                }\n                else\n                {\n                    if (test_off > buf_size[fd])\n                        extend_mem_file(fd, test_off);\n                    buf_off[fd] = test_off;\n                    ret = test_off;\n                }\n                break;\n\n            default:\n                errno = EINVAL;\n                ret = -1;\n                break;\n        }\n    }\n\n    return (ret);\n}",
+      "fn_code_pos": [
+        [
+          239,
+          0
+        ],
+        [
+          307,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_lseek",
+        "parameters": {
+          "fd": "int",
+          "offset": "int",
+          "whence": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int mfs_read(int fd, void *clnt_buf, int size)\n{\n    int ret;\n\n    if (fds[fd] == -1 || buf_mode[fd] != 'r')\n    {\n        /* File is either not open, or not opened for read */\n\n        ret = -1;\n        errno = EBADF;\n    }\n    else if (buf_off[fd] + size > buf_size[fd])\n    {\n        ret = 0; /* EOF */\n    }\n    else\n    {\n        memcpy(clnt_buf, (void *)(buf[fd] + buf_off[fd]), size);\n        buf_off[fd] = buf_off[fd] + size;\n        ret = size;\n    }\n\n    return (ret);\n}",
+      "fn_code_pos": [
+        [
+          324,
+          0
+        ],
+        [
+          347,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_read",
+        "parameters": {
+          "fd": "int",
+          "clnt_buf": "void",
+          "size": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int mfs_write(int fd, void *clnt_buf, int size)\n{\n    int ret;\n\n    if (fds[fd] == -1 || buf_mode[fd] == 'r')\n    {\n        /* Either the file is not open or it is opened for reading only */\n\n        ret = -1;\n        errno = EBADF;\n    }\n    else if (buf_mode[fd] == 'w')\n    {\n        /* Write */\n\n        if (buf_off[fd] + size > buf_size[fd])\n        {\n            extend_mem_file(fd, buf_off[fd] + size);\n            buf_size[fd] = (buf_off[fd] + size);\n        }\n\n        memcpy((buf[fd] + buf_off[fd]), clnt_buf, size);\n        buf_off[fd] = buf_off[fd] + size;\n\n        ret = size;\n    }\n    else\n    {\n        /* Append */\n\n        if (buf_off[fd] != buf_size[fd])\n            buf_off[fd] = buf_size[fd];\n\n        extend_mem_file(fd, buf_off[fd] + size);\n        buf_size[fd] += size;\n\n        memcpy((buf[fd] + buf_off[fd]), clnt_buf, size);\n        buf_off[fd] = buf_off[fd] + size;\n\n        ret = size;\n    }\n\n    return (ret);\n}",
+      "fn_code_pos": [
+        [
+          364,
+          0
+        ],
+        [
+          407,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_write",
+        "parameters": {
+          "fd": "int",
+          "clnt_buf": "void",
+          "size": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int mfs_size(int fd)\n{\n    int ret;\n\n    if (fds[fd] == -1) /* Not open */\n    {\n        ret = -1;\n        errno = EBADF;\n    }\n    else\n        ret = buf_size[fd];\n\n    return (ret);\n}",
+      "fn_code_pos": [
+        [
+          422,
+          0
+        ],
+        [
+          435,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_size",
+        "parameters": {
+          "fd": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int mfs_map(int fd, char **addr, size_t *len)\n{\n    int ret;\n\n    if (fds[fd] == -1) /* Not open */\n    {\n        ret = -1;\n        errno = EBADF;\n    }\n    else\n    {\n        *addr = buf[fd];\n        *len = buf_size[fd];\n        ret = 0;\n    }\n\n    return (ret);\n}",
+      "fn_code_pos": [
+        [
+          453,
+          0
+        ],
+        [
+          470,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_map",
+        "parameters": {
+          "fd": "int",
+          "addr": "char",
+          "len": "size_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int mfs_unmap(int fd) { return (0); }",
+      "fn_code_pos": [
+        [
+          486,
+          0
+        ],
+        [
+          486,
+          37
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_unmap",
+        "parameters": {
+          "fd": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int mfs_close(int fd)\n{\n    int ret;\n\n    if (fds[fd] == -1) /* Not open */\n    {\n        ret = -1;\n        errno = EBADF;\n    }\n    else\n    {\n        fds[fd] = -1;\n        ret = 0;\n    }\n\n    return (ret);\n}",
+      "fn_code_pos": [
+        [
+          501,
+          0
+        ],
+        [
+          517,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_close",
+        "parameters": {
+          "fd": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int extend_mem_file(int fd, int size)\n{\n    void *new_mem;\n    int ret;\n\n    if ((new_mem = realloc(buf[fd], size)) == (void *)NULL)\n        ret = -1;\n    else\n    {\n        buf[fd] = (char *)new_mem;\n        ret = 0;\n    }\n\n    return (ret);\n}",
+      "fn_code_pos": [
+        [
+          532,
+          0
+        ],
+        [
+          546,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "extend_mem_file",
+        "parameters": {
+          "fd": "int",
+          "size": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void mem_init()\n{\n    int i;\n\n    for (i = 0; i < MAX_BUFFS; i++)\n    {\n        fds[i] = -1;\n        buf[i] = (char *)NULL;\n        buf_size[i] = 0;\n        buf_off[i] = 0;\n    }\n}",
+      "fn_code_pos": [
+        [
+          561,
+          0
+        ],
+        [
+          572,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mem_init",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "mfs_open(void *ptr, int size, char *mode)",
+      "fn_dec_pos": [
+        [
+          76,
+          4
+        ],
+        [
+          76,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_open",
+        "parameters": {
+          "ptr": "void",
+          "size": "int",
+          "mode": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "mfs_lseek(int fd, int offset, int whence)",
+      "fn_dec_pos": [
+        [
+          77,
+          4
+        ],
+        [
+          77,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_lseek",
+        "parameters": {
+          "fd": "int",
+          "offset": "int",
+          "whence": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "mfs_read(int fd, void *buf, int size)",
+      "fn_dec_pos": [
+        [
+          78,
+          4
+        ],
+        [
+          78,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_read",
+        "parameters": {
+          "fd": "int",
+          "buf": "void",
+          "size": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "mfs_write(int fd, void *buf, int size)",
+      "fn_dec_pos": [
+        [
+          79,
+          4
+        ],
+        [
+          79,
+          42
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_write",
+        "parameters": {
+          "fd": "int",
+          "buf": "void",
+          "size": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "mfs_size(int fd)",
+      "fn_dec_pos": [
+        [
+          80,
+          4
+        ],
+        [
+          80,
+          20
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_size",
+        "parameters": {
+          "fd": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "mfs_map(int fd, char **addr, size_t *len)",
+      "fn_dec_pos": [
+        [
+          81,
+          4
+        ],
+        [
+          81,
+          45
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_map",
+        "parameters": {
+          "fd": "int",
+          "addr": "char",
+          "len": "size_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "mfs_unmap(int fd)",
+      "fn_dec_pos": [
+        [
+          82,
+          4
+        ],
+        [
+          82,
+          21
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_unmap",
+        "parameters": {
+          "fd": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "mfs_close(int fd)",
+      "fn_dec_pos": [
+        [
+          83,
+          4
+        ],
+        [
+          83,
+          21
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mfs_close",
+        "parameters": {
+          "fd": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "extend_mem_file(int fd, int size)",
+      "fn_dec_pos": [
+        [
+          84,
+          11
+        ],
+        [
+          84,
+          44
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "extend_mem_file",
+        "parameters": {
+          "fd": "int",
+          "size": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "mem_init()",
+      "fn_dec_pos": [
+        [
+          85,
+          12
+        ],
+        [
+          85,
+          22
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "mem_init",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        42,
+        0
+      ],
+      [
+        43,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        43,
+        0
+      ],
+      [
+        44,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        44,
+        0
+      ],
+      [
+        45,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

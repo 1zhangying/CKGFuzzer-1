@@ -1,0 +1,954 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "toff_t TIFFWritePrivateDataSubDirectory(\n    TIFF *tif, uint32_t pdir_fieldsset[], int pdir_fields_last,\n    TIFFFieldInfo *field_info, int (*getFieldFn)(TIFF *tif, ttag_t tag, ...))\n{\n    uint16_t dircount;\n    uint32_t diroff, nextdiroff;\n    ttag_t tag;\n    uint32_t nfields;\n    tsize_t dirsize;\n    char *data;\n    TIFFDirEntry *dir;\n    u_long b, *fields, fields_size;\n    toff_t directory_offset;\n    TIFFFieldInfo *fip;\n\n    /*\n     * Deleted out all of the encoder flushing and such code from here -\n     * not necessary for subdirectories.\n     */\n\n    /* Finish writing out any image data. */\n    TIFFFlushData(tif);\n\n    /*\n     * Size the directory so that we can calculate\n     * offsets for the data items that aren't kept\n     * in-place in each field.\n     */\n    nfields = 0;\n    for (b = 0; b <= pdir_fields_last; b++)\n        if (FieldSet(pdir_fieldsset, b))\n            /* Deleted code to make size of first 4 tags 2\n               instead of 1. */\n            nfields += 1;\n    dirsize = nfields * sizeof(TIFFDirEntry);\n    data = (char *)_TIFFmalloc(dirsize);\n    if (data == NULL)\n    {\n        TIFFErrorExtR(tif, tif->tif_name,\n                      \"Cannot write private subdirectory, out of space\");\n        return (0);\n    }\n    /*\n     * Place directory in data section of the file. If there isn't one\n     * yet, place it at the end of the file. The directory is treated as\n     * data, so we don't link it into the directory structure at all.\n     */\n    if (tif->tif_dataoff == 0)\n        tif->tif_dataoff = (TIFFSeekFile(tif, (toff_t)0, SEEK_END) + 1) & ~1;\n    diroff = tif->tif_dataoff;\n    tif->tif_dataoff =\n        (toff_t)(diroff + sizeof(uint16_t) + dirsize + sizeof(toff_t));\n    if (tif->tif_dataoff & 1)\n        tif->tif_dataoff++;\n    (void)TIFFSeekFile(tif, tif->tif_dataoff, SEEK_SET);\n    /*tif->tif_curdir++;*/\n    dir = (TIFFDirEntry *)data;\n    /*\n     * Setup external form of directory\n     * entries and write data items.\n     */\n    /*\n     * We make a local copy of the fieldsset here so that we don't mess\n     * up the original one when we call ResetFieldBit(). But I'm not sure\n     * why the original code calls ResetFieldBit(), since we're already\n     * going through the fields in order...\n     *\n     * fields_size is the number of uint32_t's we will need to hold the\n     * bit-mask for all of the fields. If our highest field number is\n     * 100, then we'll need 100 / (8*4)+1 == 4 uint32_t's to hold the\n     * fieldset.\n     *\n     * Unlike the original code, we allocate fields dynamically based\n     * on the requested pdir_fields_last value, allowing private\n     * data subdirectories to contain more than the built-in code's limit\n     * of 95 tags in a directory.\n     */\n    fields_size = pdir_fields_last / (8 * sizeof(uint32_t)) + 1;\n    fields = _TIFFmalloc(fields_size * sizeof(uint32_t));\n    _TIFFmemcpy(fields, pdir_fieldsset, fields_size * sizeof(uint32_t));\n\n    /* Deleted \"write out extra samples tag\" code here. */\n\n    /* Deleted code for checking a billion little special cases for the\n     * standard TIFF tags. Should add a general mechanism for overloading\n     * write function for each field, just like Brian kept telling me!!!\n     */\n    for (fip = field_info; fip->field_tag; fip++)\n    {\n        /* Deleted code to check for FIELD_IGNORE!! */\n        if (/* fip->field_bit == FIELD_IGNORE || */\n            !FieldSet(fields, fip->field_bit))\n            continue;\n        if (!TIFFWriteNormalSubTag(tif, dir, fip, getFieldFn))\n            goto bad;\n        dir++;\n        ResetFieldBit(fields, fip->field_bit);\n    }\n\n    /* Now we've written all of the referenced data, and are about to\n       write the main directory structure, so grab the tif_dataoff value\n       now so we can remember where we wrote the directory. */\n    directory_offset = tif->tif_dataoff;\n\n    /*\n     * Write directory.\n     */\n    dircount = (uint16_t)nfields;\n    /* Deleted code to link to the next directory - we set it to zero! */\n    nextdiroff = 0;\n    if (tif->tif_flags & TIFF_SWAB)\n    {\n        /*\n         * The file's byte order is opposite to the\n         * native machine architecture.  We overwrite\n         * the directory information with impunity\n         * because it'll be released below after we\n         * write it to the file.  Note that all the\n         * other tag construction routines assume that\n         * we do this byte-swapping; i.e. they only\n         * byte-swap indirect data.\n         */\n        for (dir = (TIFFDirEntry *)data; dircount; dir++, dircount--)\n        {\n            TIFFSwabArrayOfShort(&dir->tdir_tag, 2);\n            TIFFSwabArrayOfLong(&dir->tdir_count, 2);\n        }\n        dircount = (uint16_t)nfields;\n        TIFFSwabShort(&dircount);\n        TIFFSwabLong(&nextdiroff);\n    }\n\n    (void)TIFFSeekFile(tif, tif->tif_dataoff, SEEK_SET);\n    if (!WriteOK(tif, &dircount, sizeof(dircount)))\n    {\n        TIFFErrorExtR(tif, tif->tif_name,\n                      \"Error writing private subdirectory count\");\n        goto bad;\n    }\n    if (!WriteOK(tif, data, dirsize))\n    {\n        TIFFErrorExtR(tif, tif->tif_name,\n                      \"Error writing private subdirectory contents\");\n        goto bad;\n    }\n    if (!WriteOK(tif, &nextdiroff, sizeof(nextdiroff)))\n    {\n        TIFFErrorExtR(tif, tif->tif_name,\n                      \"Error writing private subdirectory link\");\n        goto bad;\n    }\n    tif->tif_dataoff += sizeof(dircount) + dirsize + sizeof(nextdiroff);\n\n    _TIFFfree(data);\n    _TIFFfree(fields);\n    tif->tif_flags &= ~TIFF_DIRTYDIRECT;\n\n#if (0)\n    /* This stuff commented out because I don't think we want it for\n       subdirectories, but I could be wrong. */\n    (*tif->tif_cleanup)(tif);\n\n    /*\n     * Reset directory-related state for subsequent\n     * directories.\n     */\n    TIFFDefaultDirectory(tif);\n    tif->tif_curoff = 0;\n    tif->tif_row = (uint32_t)-1;\n    tif->tif_curstrip = (tstrip_t)-1;\n#endif\n\n    return (directory_offset);\nbad:\n    _TIFFfree(data);\n    _TIFFfree(fields);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          140,
+          0
+        ],
+        [
+          317,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWritePrivateDataSubDirectory",
+        "parameters": {
+          "tif": "TIFF",
+          "pdir_fieldsset": "uint32_t",
+          "pdir_fields_last": "int",
+          "field_info": "TIFFFieldInfo",
+          "getFieldFn": "int",
+          "tag": "ttag_t"
+        },
+        "return_type": "toff_t"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWriteNormalSubTag(TIFF *tif, TIFFDirEntry *dir,\n                                 const TIFFFieldInfo *fip,\n                                 int (*getFieldFn)(TIFF *tif, ttag_t tag, ...))\n{\n    u_short wc = (u_short)fip->field_writecount;\n\n    dir->tdir_tag = fip->field_tag;\n    dir->tdir_type = (u_short)fip->field_type;\n    dir->tdir_count = wc;\n#define WRITEF(x, y) x(tif, fip->field_type, fip->field_tag, dir, wc, y)\n    switch (fip->field_type)\n    {\n        case TIFF_SHORT:\n        case TIFF_SSHORT:\n            if (wc > 1)\n            {\n                uint16_t *wp;\n                if (wc == (u_short)TIFF_VARIABLE)\n                {\n                    (*getFieldFn)(tif, fip->field_tag, &wc, &wp);\n                    dir->tdir_count = wc;\n                }\n                else\n                    (*getFieldFn)(tif, fip->field_tag, &wp);\n                if (!WRITEF(TIFFWriteShortArray, wp))\n                    return (0);\n            }\n            else\n            {\n                uint16_t sv;\n                (*getFieldFn)(tif, fip->field_tag, &sv);\n                dir->tdir_offset = TIFFInsertData(tif, dir->tdir_type, sv);\n            }\n            break;\n        case TIFF_LONG:\n        case TIFF_SLONG:\n            if (wc > 1)\n            {\n                uint32_t *lp;\n                if (wc == (u_short)TIFF_VARIABLE)\n                {\n                    (*getFieldFn)(tif, fip->field_tag, &wc, &lp);\n                    dir->tdir_count = wc;\n                }\n                else\n                    (*getFieldFn)(tif, fip->field_tag, &lp);\n                if (!WRITEF(TIFFWriteLongArray, lp))\n                    return (0);\n            }\n            else\n            {\n                /* XXX handle LONG->SHORT conversion */\n                (*getFieldFn)(tif, fip->field_tag, &dir->tdir_offset);\n            }\n            break;\n        case TIFF_RATIONAL:\n        case TIFF_SRATIONAL:\n            if (wc > 1)\n            {\n                float *fp;\n                if (wc == (u_short)TIFF_VARIABLE)\n                {\n                    (*getFieldFn)(tif, fip->field_tag, &wc, &fp);\n                    dir->tdir_count = wc;\n                }\n                else\n                    (*getFieldFn)(tif, fip->field_tag, &fp);\n                if (!WRITEF(TIFFWriteRationalArray, fp))\n                    return (0);\n            }\n            else\n            {\n                float fv;\n                (*getFieldFn)(tif, fip->field_tag, &fv);\n                if (!WRITEF(TIFFWriteRationalArray, &fv))\n                    return (0);\n            }\n            break;\n        case TIFF_FLOAT:\n            if (wc > 1)\n            {\n                float *fp;\n                if (wc == (u_short)TIFF_VARIABLE)\n                {\n                    (*getFieldFn)(tif, fip->field_tag, &wc, &fp);\n                    dir->tdir_count = wc;\n                }\n                else\n                    (*getFieldFn)(tif, fip->field_tag, &fp);\n                if (!WRITEF(TIFFWriteFloatArray, fp))\n                    return (0);\n            }\n            else\n            {\n                float fv;\n                (*getFieldFn)(tif, fip->field_tag, &fv);\n                if (!WRITEF(TIFFWriteFloatArray, &fv))\n                    return (0);\n            }\n            break;\n        case TIFF_DOUBLE:\n            /* Hey - I think this is a bug, or at least a \"gross\n               inconsistency\", in the TIFF library. Look at the original\n               TIFF library code below within the \"#if (0) ... #else\".\n               Just from the type of *dp, you can see that this code\n               expects TIFFGetField() to be handed a double ** for\n               any TIFF_DOUBLE tag, even for the constant wc==1 case.\n               This is totally inconsistent with other fields (like\n               TIFF_FLOAT, above) and is also inconsistent with the\n               TIFFSetField() function for TIFF_DOUBLEs, which expects\n               to be passed a single double by value for the wc==1 case.\n               (See the handling of TIFFFetchNormalTag() in tif_dirread.c\n               for an example.) Maybe this function was written before\n               TIFFWriteDoubleArray() was written, not that that's an\n               excuse. Anyway, the new code below is a trivial modification\n               of the TIFF_FLOAT code above. The fact that even single\n               doubles get written out in the data segment and get an\n               offset value stored is irrelevant here - that is all\n               handled by TIFFWriteDoubleArray(). */\n#if (0)\n        {\n            double *dp;\n            if (wc == (u_short)TIFF_VARIABLE)\n            {\n                (*getFieldFn)(tif, fip->field_tag, &wc, &dp);\n                dir->tdir_count = wc;\n            }\n            else\n                (*getFieldFn)(tif, fip->field_tag, &dp);\n            TIFFCvtNativeToIEEEDouble(tif, wc, dp);\n            if (!TIFFWriteData(tif, dir, (char *)dp))\n                return (0);\n        }\n#else\n            if (wc > 1)\n            {\n                double *dp;\n                if (wc == (u_short)TIFF_VARIABLE)\n                {\n                    (*getFieldFn)(tif, fip->field_tag, &wc, &dp);\n                    dir->tdir_count = wc;\n                }\n                else\n                    (*getFieldFn)(tif, fip->field_tag, &dp);\n                if (!WRITEF(TIFFWriteDoubleArray, dp))\n                    return (0);\n            }\n            else\n            {\n                double dv;\n                (*getFieldFn)(tif, fip->field_tag, &dv);\n                if (!WRITEF(TIFFWriteDoubleArray, &dv))\n                    return (0);\n            }\n#endif\n        break;\n        case TIFF_ASCII:\n        {\n            char *cp;\n            (*getFieldFn)(tif, fip->field_tag, &cp);\n            dir->tdir_count = (uint32_t)(strlen(cp) + 1);\n            if (!TIFFWriteByteArray(tif, dir, cp))\n                return (0);\n        }\n        break;\n        case TIFF_UNDEFINED:\n        {\n            char *cp;\n            if (wc == (u_short)TIFF_VARIABLE)\n            {\n                (*getFieldFn)(tif, fip->field_tag, &wc, &cp);\n                dir->tdir_count = wc;\n            }\n            else\n                (*getFieldFn)(tif, fip->field_tag, &cp);\n            if (!TIFFWriteByteArray(tif, dir, cp))\n                return (0);\n        }\n        break;\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          326,
+          0
+        ],
+        [
+          507,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteNormalSubTag",
+        "parameters": {
+          "tif": "TIFF",
+          "dir": "TIFFDirEntry",
+          "fip": "TIFFFieldInfo",
+          "getFieldFn": "int",
+          "tag": "ttag_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void TIFFSetupShortLong(TIFF *tif, ttag_t tag, TIFFDirEntry *dir,\n                               uint32_t v)\n{\n    dir->tdir_tag = tag;\n    dir->tdir_count = 1;\n    if (v > 0xffffL)\n    {\n        dir->tdir_type = (short)TIFF_LONG;\n        dir->tdir_offset = v;\n    }\n    else\n    {\n        dir->tdir_type = (short)TIFF_SHORT;\n        dir->tdir_offset = TIFFInsertData(tif, (int)TIFF_SHORT, v);\n    }\n}",
+      "fn_code_pos": [
+        [
+          518,
+          0
+        ],
+        [
+          533,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFSetupShortLong",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "ttag_t",
+          "dir": "TIFFDirEntry",
+          "v": "uint32_t"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWriteRational(TIFF *tif, TIFFDataType type, ttag_t tag,\n                             TIFFDirEntry *dir, float v)\n{\n    return (TIFFWriteRationalArray(tif, type, tag, dir, 1, &v));\n}",
+      "fn_code_pos": [
+        [
+          541,
+          0
+        ],
+        [
+          545,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteRational",
+        "parameters": {
+          "tif": "TIFF",
+          "type": "TIFFDataType",
+          "tag": "ttag_t",
+          "dir": "TIFFDirEntry",
+          "v": "float"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWritePerSampleShorts(TIFF *tif, ttag_t tag, TIFFDirEntry *dir)\n{\n    uint16_t buf[10], v;\n    uint16_t *w = buf;\n    int i, status, samples = tif->tif_dir.td_samplesperpixel;\n\n    if (samples > NITEMS(buf))\n        w = (uint16_t *)_TIFFmalloc(samples * sizeof(uint16_t));\n    TIFFGetField(tif, tag, &v);\n    for (i = 0; i < samples; i++)\n        w[i] = v;\n    status = TIFFWriteShortArray(tif, TIFF_SHORT, tag, dir, samples, w);\n    if (w != buf)\n        _TIFFfree((char *)w);\n    return (status);\n}",
+      "fn_code_pos": [
+        [
+          555,
+          0
+        ],
+        [
+          570,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWritePerSampleShorts",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "ttag_t",
+          "dir": "TIFFDirEntry"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWritePerSampleAnys(TIFF *tif, TIFFDataType type, ttag_t tag,\n                                  TIFFDirEntry *dir)\n{\n    double buf[10], v;\n    double *w = buf;\n    int i, status;\n    int samples = (int)tif->tif_dir.td_samplesperpixel;\n\n    if (samples > NITEMS(buf))\n        w = (double *)_TIFFmalloc(samples * sizeof(double));\n    TIFFGetField(tif, tag, &v);\n    for (i = 0; i < samples; i++)\n        w[i] = v;\n    status = TIFFWriteAnyArray(tif, type, tag, dir, samples, w);\n    if (w != buf)\n        _TIFFfree(w);\n    return (status);\n}",
+      "fn_code_pos": [
+        [
+          577,
+          0
+        ],
+        [
+          594,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWritePerSampleAnys",
+        "parameters": {
+          "tif": "TIFF",
+          "type": "TIFFDataType",
+          "tag": "ttag_t",
+          "dir": "TIFFDirEntry"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFSetupShortPair(TIFF *tif, ttag_t tag, TIFFDirEntry *dir)\n{\n    uint16_t v[2];\n\n    TIFFGetField(tif, tag, &v[0], &v[1]);\n    return (TIFFWriteShortArray(tif, TIFF_SHORT, tag, dir, 2, v));\n}",
+      "fn_code_pos": [
+        [
+          601,
+          0
+        ],
+        [
+          607,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFSetupShortPair",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "ttag_t",
+          "dir": "TIFFDirEntry"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWriteShortTable(TIFF *tif, ttag_t tag, TIFFDirEntry *dir,\n                               uint32_t n, uint16_t **table)\n{\n    uint32_t i, off;\n\n    dir->tdir_tag = tag;\n    dir->tdir_type = (short)TIFF_SHORT;\n    /* XXX -- yech, fool TIFFWriteData */\n    dir->tdir_count = (uint32_t)(1L << tif->tif_dir.td_bitspersample);\n    off = tif->tif_dataoff;\n    for (i = 0; i < n; i++)\n        if (!TIFFWriteData(tif, dir, (char *)table[i]))\n            return (0);\n    dir->tdir_count *= n;\n    dir->tdir_offset = off;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          614,
+          0
+        ],
+        [
+          630,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteShortTable",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "ttag_t",
+          "dir": "TIFFDirEntry",
+          "n": "uint32_t",
+          "table": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWriteByteArray(TIFF *tif, TIFFDirEntry *dir, char *cp)\n{\n    if (dir->tdir_count > 4)\n    {\n        if (!TIFFWriteData(tif, dir, cp))\n            return (0);\n    }\n    else\n        _TIFFmemcpy(&dir->tdir_offset, cp, dir->tdir_count);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          635,
+          0
+        ],
+        [
+          645,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteByteArray",
+        "parameters": {
+          "tif": "TIFF",
+          "dir": "TIFFDirEntry",
+          "cp": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWriteShortArray(TIFF *tif, TIFFDataType type, ttag_t tag,\n                               TIFFDirEntry *dir, uint32_t n, uint16_t *v)\n{\n    dir->tdir_tag = tag;\n    dir->tdir_type = (short)type;\n    dir->tdir_count = n;\n    if (n <= 2)\n    {\n        if (tif->tif_header.tiff_magic == TIFF_BIGENDIAN)\n        {\n            dir->tdir_offset = (uint32_t)((long)v[0] << 16);\n            if (n == 2)\n                dir->tdir_offset |= v[1] & 0xffff;\n        }\n        else\n        {\n            dir->tdir_offset = v[0] & 0xffff;\n            if (n == 2)\n                dir->tdir_offset |= (long)v[1] << 16;\n        }\n        return (1);\n    }\n    else\n        return (TIFFWriteData(tif, dir, (char *)v));\n}",
+      "fn_code_pos": [
+        [
+          651,
+          0
+        ],
+        [
+          675,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteShortArray",
+        "parameters": {
+          "tif": "TIFF",
+          "type": "TIFFDataType",
+          "tag": "ttag_t",
+          "dir": "TIFFDirEntry",
+          "n": "uint32_t",
+          "v": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWriteLongArray(TIFF *tif, TIFFDataType type, ttag_t tag,\n                              TIFFDirEntry *dir, uint32_t n, uint32_t *v)\n{\n    dir->tdir_tag = tag;\n    dir->tdir_type = (short)type;\n    dir->tdir_count = n;\n    if (n == 1)\n    {\n        dir->tdir_offset = v[0];\n        return (1);\n    }\n    else\n        return (TIFFWriteData(tif, dir, (char *)v));\n}",
+      "fn_code_pos": [
+        [
+          681,
+          0
+        ],
+        [
+          694,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteLongArray",
+        "parameters": {
+          "tif": "TIFF",
+          "type": "TIFFDataType",
+          "tag": "ttag_t",
+          "dir": "TIFFDirEntry",
+          "n": "uint32_t",
+          "v": "uint32_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWriteRationalArray(TIFF *tif, TIFFDataType type, ttag_t tag,\n                                  TIFFDirEntry *dir, uint32_t n, float *v)\n{\n    uint32_t i;\n    uint32_t *t;\n    int status;\n\n    dir->tdir_tag = tag;\n    dir->tdir_type = (short)type;\n    dir->tdir_count = n;\n    t = (uint32_t *)_TIFFmalloc(2 * n * sizeof(uint32_t));\n    for (i = 0; i < n; i++)\n    {\n        float fv = v[i];\n        int sign = 1;\n        uint32_t den;\n\n        if (fv < 0)\n        {\n            if (type == TIFF_RATIONAL)\n            {\n                TIFFWarning(tif->tif_name,\n                            \"\\\"%s\\\": Information lost writing value (%g) as \"\n                            \"(unsigned) RATIONAL\",\n                            _TIFFFieldWithTag(tif, tag)->field_name, v);\n                fv = 0;\n            }\n            else\n                fv = -fv, sign = -1;\n        }\n        den = 1L;\n        if (fv > 0)\n        {\n            while (fv < 1L << (31 - 3) && den < 1L << (31 - 3))\n                fv *= 1 << 3, den *= 1L << 3;\n        }\n        t[2 * i + 0] = sign * (fv + 0.5);\n        t[2 * i + 1] = den;\n    }\n    status = TIFFWriteData(tif, dir, (char *)t);\n    _TIFFfree((char *)t);\n    return (status);\n}",
+      "fn_code_pos": [
+        [
+          700,
+          0
+        ],
+        [
+          742,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteRationalArray",
+        "parameters": {
+          "tif": "TIFF",
+          "type": "TIFFDataType",
+          "tag": "ttag_t",
+          "dir": "TIFFDirEntry",
+          "n": "uint32_t",
+          "v": "float"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWriteFloatArray(TIFF *tif, TIFFDataType type, ttag_t tag,\n                               TIFFDirEntry *dir, uint32_t n, float *v)\n{\n    dir->tdir_tag = tag;\n    dir->tdir_type = (short)type;\n    dir->tdir_count = n;\n    TIFFCvtNativeToIEEEFloat(tif, n, v);\n    if (n == 1)\n    {\n        dir->tdir_offset = *(uint32_t *)&v[0];\n        return (1);\n    }\n    else\n        return (TIFFWriteData(tif, dir, (char *)v));\n}",
+      "fn_code_pos": [
+        [
+          744,
+          0
+        ],
+        [
+          758,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteFloatArray",
+        "parameters": {
+          "tif": "TIFF",
+          "type": "TIFFDataType",
+          "tag": "ttag_t",
+          "dir": "TIFFDirEntry",
+          "n": "uint32_t",
+          "v": "float"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWriteDoubleArray(TIFF *tif, TIFFDataType type, ttag_t tag,\n                                TIFFDirEntry *dir, uint32_t n, double *v)\n{\n    dir->tdir_tag = tag;\n    dir->tdir_type = (short)type;\n    dir->tdir_count = n;\n    TIFFCvtNativeToIEEEDouble(tif, n, v);\n    return (TIFFWriteData(tif, dir, (char *)v));\n}",
+      "fn_code_pos": [
+        [
+          760,
+          0
+        ],
+        [
+          768,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteDoubleArray",
+        "parameters": {
+          "tif": "TIFF",
+          "type": "TIFFDataType",
+          "tag": "ttag_t",
+          "dir": "TIFFDirEntry",
+          "n": "uint32_t",
+          "v": "double"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWriteAnyArray(TIFF *tif, TIFFDataType type, ttag_t tag,\n                             TIFFDirEntry *dir, uint32_t n, double *v)\n{\n    char buf[10 * sizeof(double)];\n    char *w = buf;\n    int i, status = 0;\n\n    if (n * TIFFDataWidth(type) > sizeof buf)\n        w = (char *)_TIFFmalloc(n * TIFFDataWidth(type));\n    switch (type)\n    {\n        case TIFF_BYTE:\n        {\n            unsigned char *bp = (unsigned char *)w;\n            for (i = 0; i < n; i++)\n                bp[i] = (unsigned char)v[i];\n            dir->tdir_tag = tag;\n            dir->tdir_type = (short)type;\n            dir->tdir_count = n;\n            if (!TIFFWriteByteArray(tif, dir, (char *)bp))\n                goto out;\n        }\n        break;\n        case TIFF_SBYTE:\n        {\n            signed char *bp = (signed char *)w;\n            for (i = 0; i < n; i++)\n                bp[i] = (signed char)v[i];\n            dir->tdir_tag = tag;\n            dir->tdir_type = (short)type;\n            dir->tdir_count = n;\n            if (!TIFFWriteByteArray(tif, dir, (char *)bp))\n                goto out;\n        }\n        break;\n        case TIFF_SHORT:\n        {\n            uint16_t *bp = (uint16_t *)w;\n            for (i = 0; i < n; i++)\n                bp[i] = (uint16_t)v[i];\n            if (!TIFFWriteShortArray(tif, type, tag, dir, n, (uint16_t *)bp))\n                goto out;\n        }\n        break;\n        case TIFF_SSHORT:\n        {\n            int16_t *bp = (int16_t *)w;\n            for (i = 0; i < n; i++)\n                bp[i] = (int16_t)v[i];\n            if (!TIFFWriteShortArray(tif, type, tag, dir, n, (uint16_t *)bp))\n                goto out;\n        }\n        break;\n        case TIFF_LONG:\n        {\n            uint32_t *bp = (uint32_t *)w;\n            for (i = 0; i < n; i++)\n                bp[i] = (uint32_t)v[i];\n            if (!TIFFWriteLongArray(tif, type, tag, dir, n, bp))\n                goto out;\n        }\n        break;\n        case TIFF_SLONG:\n        {\n            int32_t *bp = (int32_t *)w;\n            for (i = 0; i < n; i++)\n                bp[i] = (int32_t)v[i];\n            if (!TIFFWriteLongArray(tif, type, tag, dir, n, (uint32_t *)bp))\n                goto out;\n        }\n        break;\n        case TIFF_FLOAT:\n        {\n            float *bp = (float *)w;\n            for (i = 0; i < n; i++)\n                bp[i] = (float)v[i];\n            if (!TIFFWriteFloatArray(tif, type, tag, dir, n, bp))\n                goto out;\n        }\n        break;\n        case TIFF_DOUBLE:\n            return (TIFFWriteDoubleArray(tif, type, tag, dir, n, v));\n        default:\n            /* TIFF_NOTYPE */\n            /* TIFF_ASCII */\n            /* TIFF_UNDEFINED */\n            /* TIFF_RATIONAL */\n            /* TIFF_SRATIONAL */\n            goto out;\n    }\n    status = 1;\nout:\n    if (w != buf)\n        _TIFFfree(w);\n    return (status);\n}",
+      "fn_code_pos": [
+        [
+          779,
+          0
+        ],
+        [
+          874,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteAnyArray",
+        "parameters": {
+          "tif": "TIFF",
+          "type": "TIFFDataType",
+          "tag": "ttag_t",
+          "dir": "TIFFDirEntry",
+          "n": "uint32_t",
+          "v": "double"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWriteTransferFunction(TIFF *tif, TIFFDirEntry *dir)\n{\n    TIFFDirectory *td = &tif->tif_dir;\n    tsize_t n = (1L << td->td_bitspersample) * sizeof(uint16_t);\n    uint16_t **tf = td->td_transferfunction;\n    int ncols;\n\n    /*\n     * Check if the table can be written as a single column,\n     * or if it must be written as 3 columns.  Note that we\n     * write a 3-column tag if there are 2 samples/pixel and\n     * a single column of data won't suffice--hmm.\n     */\n    switch (td->td_samplesperpixel - td->td_extrasamples)\n    {\n        default:\n            if (_TIFFmemcmp(tf[0], tf[2], n))\n            {\n                ncols = 3;\n                break;\n            }\n        case 2:\n            if (_TIFFmemcmp(tf[0], tf[1], n))\n            {\n                ncols = 3;\n                break;\n            }\n        case 1:\n        case 0:\n            ncols = 1;\n    }\n    return (TIFFWriteShortTable(tif, TIFFTAG_TRANSFERFUNCTION, dir, ncols, tf));\n}",
+      "fn_code_pos": [
+        [
+          877,
+          0
+        ],
+        [
+          909,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteTransferFunction",
+        "parameters": {
+          "tif": "TIFF",
+          "dir": "TIFFDirEntry"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFWriteData(TIFF *tif, TIFFDirEntry *dir, char *cp)\n{\n    tsize_t cc;\n\n    if (tif->tif_flags & TIFF_SWAB)\n    {\n        switch (dir->tdir_type)\n        {\n            case TIFF_SHORT:\n            case TIFF_SSHORT:\n                TIFFSwabArrayOfShort((uint16_t *)cp, dir->tdir_count);\n                break;\n            case TIFF_LONG:\n            case TIFF_SLONG:\n            case TIFF_FLOAT:\n                TIFFSwabArrayOfLong((uint32_t *)cp, dir->tdir_count);\n                break;\n            case TIFF_RATIONAL:\n            case TIFF_SRATIONAL:\n                TIFFSwabArrayOfLong((uint32_t *)cp, 2 * dir->tdir_count);\n                break;\n            case TIFF_DOUBLE:\n                TIFFSwabArrayOfDouble((double *)cp, dir->tdir_count);\n                break;\n        }\n    }\n    dir->tdir_offset = tif->tif_dataoff;\n    cc = dir->tdir_count * TIFFDataWidth(dir->tdir_type);\n    if (SeekOK(tif, dir->tdir_offset) && WriteOK(tif, cp, cc))\n    {\n        tif->tif_dataoff += (cc + 1) & ~1;\n        return (1);\n    }\n    TIFFErrorExtR(tif, tif->tif_name, \"Error writing data for field \\\"%s\\\"\",\n                  _TIFFFieldWithTag(tif, dir->tdir_tag)->field_name);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          915,
+          0
+        ],
+        [
+          951,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteData",
+        "parameters": {
+          "tif": "TIFF",
+          "dir": "TIFFDirEntry",
+          "cp": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int TIFFLinkDirectory(TIFF *tif)\n{\n    static const char module[] = \"TIFFLinkDirectory\";\n    uint32_t nextdir;\n    uint32_t diroff;\n\n    tif->tif_diroff = (TIFFSeekFile(tif, (toff_t)0, SEEK_END) + 1) & ~1;\n    diroff = (uint32_t)tif->tif_diroff;\n    if (tif->tif_flags & TIFF_SWAB)\n        TIFFSwabLong(&diroff);\n#if SUBIFD_SUPPORT\n    if (tif->tif_flags & TIFF_INSUBIFD)\n    {\n        (void)TIFFSeekFile(tif, tif->tif_subifdoff, SEEK_SET);\n        if (!WriteOK(tif, &diroff, sizeof(diroff)))\n        {\n            TIFFErrorExtR(tif, module,\n                          \"%s: Error writing SubIFD directory link\",\n                          tif->tif_name);\n            return (0);\n        }\n        /*\n         * Advance to the next SubIFD or, if this is\n         * the last one configured, revert back to the\n         * normal directory linkage.\n         */\n        if (--tif->tif_nsubifd)\n            tif->tif_subifdoff += sizeof(diroff);\n        else\n            tif->tif_flags &= ~TIFF_INSUBIFD;\n        return (1);\n    }\n#endif\n    if (tif->tif_header.tiff_diroff == 0)\n    {\n        /*\n         * First directory, overwrite offset in header.\n         */\n        tif->tif_header.tiff_diroff = (uint32_t)tif->tif_diroff;\n#define HDROFF(f) ((toff_t) & (((TIFFHeader *)0)->f))\n        (void)TIFFSeekFile(tif, HDROFF(tiff_diroff), SEEK_SET);\n        if (!WriteOK(tif, &diroff, sizeof(diroff)))\n        {\n            TIFFErrorExtR(tif, tif->tif_name, \"Error writing TIFF header\");\n            return (0);\n        }\n        return (1);\n    }\n    /*\n     * Not the first directory, search to the last and append.\n     */\n    nextdir = tif->tif_header.tiff_diroff;\n    do\n    {\n        uint16_t dircount;\n\n        if (!SeekOK(tif, nextdir) || !ReadOK(tif, &dircount, sizeof(dircount)))\n        {\n            TIFFErrorExtR(tif, module, \"Error fetching directory count\");\n            return (0);\n        }\n        if (tif->tif_flags & TIFF_SWAB)\n            TIFFSwabShort(&dircount);\n        (void)TIFFSeekFile(tif, dircount * sizeof(TIFFDirEntry), SEEK_CUR);\n        if (!ReadOK(tif, &nextdir, sizeof(nextdir)))\n        {\n            TIFFErrorExtR(tif, module, \"Error fetching directory link\");\n            return (0);\n        }\n        if (tif->tif_flags & TIFF_SWAB)\n            TIFFSwabLong(&nextdir);\n    } while (nextdir != 0);\n    (void)TIFFSeekFile(tif, -(toff_t)sizeof(nextdir), SEEK_CUR);\n    if (!WriteOK(tif, &diroff, sizeof(diroff)))\n    {\n        TIFFErrorExtR(tif, module, \"Error writing directory link\");\n        return (0);\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          957,
+          0
+        ],
+        [
+          1036,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFLinkDirectory",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "TIFFCvtNativeToIEEEFloat(TIFF *, uint32_t, float *)",
+      "fn_dec_pos": [
+        [
+          65,
+          12
+        ],
+        [
+          65,
+          63
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFCvtNativeToIEEEFloat",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "TIFFCvtNativeToIEEEDouble(TIFF *, uint32_t, double *)",
+      "fn_dec_pos": [
+        [
+          66,
+          12
+        ],
+        [
+          66,
+          65
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFCvtNativeToIEEEDouble",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteNormalTag(TIFF *, TIFFDirEntry *, const TIFFFieldInfo *)",
+      "fn_dec_pos": [
+        [
+          69,
+          11
+        ],
+        [
+          69,
+          76
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteNormalTag",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteNormalSubTag(TIFF *, TIFFDirEntry *, const TIFFFieldInfo *,\n                                 int (*getFieldFn)(TIFF *tif, ttag_t tag, ...))",
+      "fn_dec_pos": [
+        [
+          70,
+          11
+        ],
+        [
+          71,
+          79
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteNormalSubTag",
+        "parameters": {
+          "getFieldFn": "int",
+          "tif": "TIFF",
+          "tag": "ttag_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "(*getFieldFn)(TIFF *tif, ttag_t tag, ...)",
+      "fn_dec_pos": [
+        [
+          71,
+          37
+        ],
+        [
+          71,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "ttag_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFSetupShortLong(TIFF *, ttag_t, TIFFDirEntry *, uint32_t)",
+      "fn_dec_pos": [
+        [
+          72,
+          12
+        ],
+        [
+          72,
+          72
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFSetupShortLong",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "TIFFSetupShortPair(TIFF *, ttag_t, TIFFDirEntry *)",
+      "fn_dec_pos": [
+        [
+          73,
+          11
+        ],
+        [
+          73,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFSetupShortPair",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWritePerSampleShorts(TIFF *, ttag_t, TIFFDirEntry *)",
+      "fn_dec_pos": [
+        [
+          74,
+          11
+        ],
+        [
+          74,
+          67
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWritePerSampleShorts",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWritePerSampleAnys(TIFF *, TIFFDataType, ttag_t, TIFFDirEntry *)",
+      "fn_dec_pos": [
+        [
+          75,
+          11
+        ],
+        [
+          75,
+          79
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWritePerSampleAnys",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteShortTable(TIFF *, ttag_t, TIFFDirEntry *, uint32_t,\n                               uint16_t **)",
+      "fn_dec_pos": [
+        [
+          76,
+          11
+        ],
+        [
+          77,
+          43
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteShortTable",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteShortArray(TIFF *, TIFFDataType, ttag_t, TIFFDirEntry *,\n                               uint32_t, uint16_t *)",
+      "fn_dec_pos": [
+        [
+          78,
+          11
+        ],
+        [
+          79,
+          52
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteShortArray",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteLongArray(TIFF *, TIFFDataType, ttag_t, TIFFDirEntry *,\n                              uint32_t, uint32_t *)",
+      "fn_dec_pos": [
+        [
+          80,
+          11
+        ],
+        [
+          81,
+          51
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteLongArray",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteRationalArray(TIFF *, TIFFDataType, ttag_t, TIFFDirEntry *,\n                                  uint32_t, float *)",
+      "fn_dec_pos": [
+        [
+          82,
+          11
+        ],
+        [
+          83,
+          52
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteRationalArray",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteFloatArray(TIFF *, TIFFDataType, ttag_t, TIFFDirEntry *,\n                               uint32_t, float *)",
+      "fn_dec_pos": [
+        [
+          84,
+          11
+        ],
+        [
+          85,
+          49
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteFloatArray",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteDoubleArray(TIFF *, TIFFDataType, ttag_t, TIFFDirEntry *,\n                                uint32_t, double *)",
+      "fn_dec_pos": [
+        [
+          86,
+          11
+        ],
+        [
+          87,
+          51
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteDoubleArray",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteByteArray(TIFF *, TIFFDirEntry *, char *)",
+      "fn_dec_pos": [
+        [
+          88,
+          11
+        ],
+        [
+          88,
+          61
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteByteArray",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteAnyArray(TIFF *, TIFFDataType, ttag_t, TIFFDirEntry *,\n                             uint32_t, double *)",
+      "fn_dec_pos": [
+        [
+          89,
+          11
+        ],
+        [
+          90,
+          48
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteAnyArray",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteTransferFunction(TIFF *, TIFFDirEntry *)",
+      "fn_dec_pos": [
+        [
+          92,
+          11
+        ],
+        [
+          92,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteTransferFunction",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteData(TIFF *, TIFFDirEntry *, char *)",
+      "fn_dec_pos": [
+        [
+          94,
+          11
+        ],
+        [
+          94,
+          56
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteData",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFLinkDirectory(TIFF *)",
+      "fn_dec_pos": [
+        [
+          95,
+          11
+        ],
+        [
+          95,
+          36
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFLinkDirectory",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "TIFFWriteRational(TIFF *, TIFFDataType, ttag_t, TIFFDirEntry *,\n                             float)",
+      "fn_dec_pos": [
+        [
+          108,
+          11
+        ],
+        [
+          109,
+          35
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFWriteRational",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "(*getFieldFn)(TIFF *tif, ttag_t tag, ...)",
+      "fn_dec_pos": [
+        [
+          142,
+          35
+        ],
+        [
+          142,
+          76
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "ttag_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "(*getFieldFn)(TIFF *tif, ttag_t tag, ...)",
+      "fn_dec_pos": [
+        [
+          328,
+          37
+        ],
+        [
+          328,
+          78
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "",
+        "parameters": {
+          "tif": "TIFF",
+          "tag": "ttag_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        59,
+        0
+      ],
+      [
+        60,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

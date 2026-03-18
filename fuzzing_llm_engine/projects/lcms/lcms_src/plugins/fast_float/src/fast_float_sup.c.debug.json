@@ -1,0 +1,91 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static\ncmsBool Floating_Point_Transforms_Dispatcher(_cmsTransform2Fn* TransformFn,\n                                  void** UserData,\n                                  _cmsFreeUserDataFn* FreeUserData,\n                                  cmsPipeline** Lut, \n                                  cmsUInt32Number* InputFormat, \n                                  cmsUInt32Number* OutputFormat, \n                                  cmsUInt32Number* dwFlags) \n{\n    // Softproofing & gamut check does not use plugin, both are activated via following flag.\n    if (*dwFlags & cmsFLAGS_SOFTPROOFING) return FALSE;\n\n    // Special flags for reversing are not supported\n    if (T_FLAVOR(*InputFormat) || T_FLAVOR(*OutputFormat)) return FALSE;\n\n    // Try to optimize as a set of curves plus a matrix plus a set of curves\n    if (OptimizeMatrixShaper15(TransformFn, UserData, FreeUserData, Lut, InputFormat, OutputFormat, dwFlags)) return TRUE;\n\n    // Try to optimize by joining curves\n    if (Optimize8ByJoiningCurves(TransformFn, UserData, FreeUserData, Lut, InputFormat, OutputFormat, dwFlags)) return TRUE;\n\n#ifndef CMS_DONT_USE_SSE2\n    // Try to use SSE2 to optimize as a set of curves plus a matrix plus a set of curves\n    if (Optimize8MatrixShaperSSE(TransformFn, UserData, FreeUserData, Lut, InputFormat, OutputFormat, dwFlags)) return TRUE;\n#endif\n    // Try to optimize as a set of curves plus a matrix plus a set of curves\n    if (Optimize8MatrixShaper(TransformFn, UserData, FreeUserData, Lut, InputFormat, OutputFormat, dwFlags)) return TRUE;\n\n    // Try to optimize by joining curves\n    if (OptimizeFloatByJoiningCurves(TransformFn, UserData, FreeUserData, Lut, InputFormat, OutputFormat, dwFlags)) return TRUE;\n\n    // Try to optimize as a set of curves plus a matrix plus a set of curves\n    if (OptimizeFloatMatrixShaper(TransformFn, UserData, FreeUserData, Lut, InputFormat, OutputFormat, dwFlags)) return TRUE;\n\n    // Try to optimize using prelinearization plus tetrahedral\n    if (Optimize8BitRGBTransform(TransformFn, UserData, FreeUserData, Lut, InputFormat, OutputFormat, dwFlags)) return TRUE;\n\n    // Try to optimize using prelinearization plus tetrahedral\n    if (Optimize16BitRGBTransform(TransformFn, UserData, FreeUserData, Lut, InputFormat, OutputFormat, dwFlags)) return TRUE;\n\n    // Try to optimize using prelinearization plus tetrahedral\n    if (OptimizeCLUTRGBTransform(TransformFn, UserData, FreeUserData, Lut, InputFormat, OutputFormat, dwFlags)) return TRUE;\n\n    // Try to optimize using prelinearization plus tetrahedral\n    if (OptimizeCLUTCMYKTransform(TransformFn, UserData, FreeUserData, Lut, InputFormat, OutputFormat, dwFlags)) return TRUE;\n\n    // Try to optimize for Lab float as input\n    if (OptimizeCLUTLabTransform(TransformFn, UserData, FreeUserData, Lut, InputFormat, OutputFormat, dwFlags)) return TRUE;\n\n    // Cannot optimize, use lcms normal process \n    return FALSE;\n}",
+      "fn_code_pos": [
+        [
+          26,
+          0
+        ],
+        [
+          77,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "Floating_Point_Transforms_Dispatcher",
+        "parameters": {
+          "TransformFn": "_cmsTransform2Fn",
+          "UserData": "void",
+          "FreeUserData": "_cmsFreeUserDataFn",
+          "Lut": "cmsPipeline",
+          "InputFormat": "cmsUInt32Number",
+          "OutputFormat": "cmsUInt32Number",
+          "dwFlags": "cmsUInt32Number"
+        },
+        "return_type": "cmsBool"
+      }
+    },
+    {
+      "fn_code": "void* CMSEXPORT cmsFastFloatExtensions(void)\n{\n       return (void*)&PluginList;\n}",
+      "fn_code_pos": [
+        [
+          98,
+          0
+        ],
+        [
+          101,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsFastFloatExtensions",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "cmsFastFloatExtensions(void)",
+      "fn_dec_pos": [
+        [
+          98,
+          16
+        ],
+        [
+          98,
+          44
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cmsFastFloatExtensions",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"fast_float_internal.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

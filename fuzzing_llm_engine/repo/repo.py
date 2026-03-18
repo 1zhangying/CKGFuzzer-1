@@ -152,7 +152,8 @@ class RepositoryAgent:
     
 
     # read the function name and its source code name from the returned dict of extract_api_from_head
-    def extract_src_test_api_call_graph(self, data: Dict, pool_num=4) -> Dict:
+    # pool_num=4修改为1
+    def extract_src_test_api_call_graph(self, data: Dict, pool_num=1) -> Dict:
         """
         ToDO: multple thread SUPPORT, need to keep the copy database for each thread
         Extracts the source and test API information from the repository.

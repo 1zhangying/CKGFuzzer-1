@@ -1,0 +1,329 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int main(int argc, char *argv[])\n{\n    IMAGE *in;\n    TIFF *out;\n    int c;\n#if !HAVE_DECL_OPTARG\n    extern int optind;\n    extern char *optarg;\n#endif\n\n    while ((c = getopt(argc, argv, \"c:p:r:\")) != -1)\n        switch (c)\n        {\n            case 'c': /* compression scheme */\n                if (!processCompressOptions(optarg))\n                    usage();\n                break;\n            case 'f': /* fill order */\n                if (streq(optarg, \"lsb2msb\"))\n                    fillorder = FILLORDER_LSB2MSB;\n                else if (streq(optarg, \"msb2lsb\"))\n                    fillorder = FILLORDER_MSB2LSB;\n                else\n                    usage();\n                break;\n            case 'p': /* planar configuration */\n                if (streq(optarg, \"separate\"))\n                    config = PLANARCONFIG_SEPARATE;\n                else if (streq(optarg, \"contig\"))\n                    config = PLANARCONFIG_CONTIG;\n                else\n                    usage();\n                break;\n            case 'r': /* rows/strip */\n                rowsperstrip = atoi(optarg);\n                break;\n            case '?':\n                usage();\n                /*NOTREACHED*/\n        }\n    if (argc - optind != 2)\n        usage();\n    in = iopen(argv[optind], \"r\");\n    if (in == NULL)\n        return (-1);\n    out = TIFFOpen(argv[optind + 1], \"w\");\n    if (out == NULL)\n        return (-2);\n    TIFFSetField(out, TIFFTAG_IMAGEWIDTH, (uint32_t)in->xsize);\n    TIFFSetField(out, TIFFTAG_IMAGELENGTH, (uint32_t)in->ysize);\n    TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, 8);\n    TIFFSetField(out, TIFFTAG_COMPRESSION, compression);\n    if (in->zsize == 1)\n        photometric = PHOTOMETRIC_MINISBLACK;\n    else\n        photometric = PHOTOMETRIC_RGB;\n    switch (compression)\n    {\n        case COMPRESSION_JPEG:\n            if (photometric == PHOTOMETRIC_RGB &&\n                jpegcolormode == JPEGCOLORMODE_RGB)\n                photometric = PHOTOMETRIC_YCBCR;\n            TIFFSetField(out, TIFFTAG_JPEGQUALITY, quality);\n            TIFFSetField(out, TIFFTAG_JPEGCOLORMODE, jpegcolormode);\n            break;\n        case COMPRESSION_LZW:\n        case COMPRESSION_ADOBE_DEFLATE:\n        case COMPRESSION_DEFLATE:\n            if (predictor != 0)\n                TIFFSetField(out, TIFFTAG_PREDICTOR, predictor);\n            break;\n    }\n    TIFFSetField(out, TIFFTAG_PHOTOMETRIC, photometric);\n    if (fillorder != 0)\n        TIFFSetField(out, TIFFTAG_FILLORDER, fillorder);\n    TIFFSetField(out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);\n    TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, in->zsize);\n    if (in->zsize > 3)\n    {\n        uint16_t v[1];\n        v[0] = EXTRASAMPLE_UNASSALPHA;\n        TIFFSetField(out, TIFFTAG_EXTRASAMPLES, 1, v);\n    }\n    TIFFSetField(out, TIFFTAG_MINSAMPLEVALUE, (uint16_t)in->min);\n    TIFFSetField(out, TIFFTAG_MAXSAMPLEVALUE, (uint16_t)in->max);\n    TIFFSetField(out, TIFFTAG_PLANARCONFIG, config);\n    if (config != PLANARCONFIG_SEPARATE)\n        TIFFSetField(out, TIFFTAG_ROWSPERSTRIP,\n                     TIFFDefaultStripSize(out, rowsperstrip));\n    else /* force 1 row/strip for library limitation */\n        TIFFSetField(out, TIFFTAG_ROWSPERSTRIP, 1L);\n    if (in->name[0] != '\\0')\n        TIFFSetField(out, TIFFTAG_IMAGEDESCRIPTION, in->name);\n    if (config == PLANARCONFIG_CONTIG)\n        cpContig(in, out);\n    else\n        cpSeparate(in, out);\n    (void)iclose(in);\n    (void)TIFFClose(out);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          54,
+          0
+        ],
+        [
+          154,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int processCompressOptions(char *opt)\n{\n    if (streq(opt, \"none\"))\n        compression = COMPRESSION_NONE;\n    else if (streq(opt, \"packbits\"))\n        compression = COMPRESSION_PACKBITS;\n    else if (strneq(opt, \"jpeg\", 4))\n    {\n        char *cp = strchr(opt, ':');\n\n        defcompression = COMPRESSION_JPEG;\n        while (cp)\n        {\n            if (isdigit((int)cp[1]))\n                quality = atoi(cp + 1);\n            else if (cp[1] == 'r')\n                jpegcolormode = JPEGCOLORMODE_RAW;\n            else\n                usage();\n\n            cp = strchr(cp + 1, ':');\n        }\n    }\n    else if (strneq(opt, \"lzw\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_LZW;\n    }\n    else if (strneq(opt, \"zip\", 3))\n    {\n        char *cp = strchr(opt, ':');\n        if (cp)\n            predictor = atoi(cp + 1);\n        compression = COMPRESSION_ADOBE_DEFLATE;\n    }\n    else\n        return (0);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          156,
+          0
+        ],
+        [
+          196,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {
+          "opt": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int cpContig(IMAGE *in, TIFF *out)\n{\n    tdata_t buf = _TIFFmalloc(TIFFScanlineSize(out));\n    short *r = NULL;\n    int x, y;\n\n    if (in->zsize == 3)\n    {\n        short *g, *b;\n\n        r = (short *)_TIFFmalloc(3 * in->xsize * sizeof(short));\n        g = r + in->xsize;\n        b = g + in->xsize;\n        for (y = in->ysize - 1; y >= 0; y--)\n        {\n            uint8_t *pp = (uint8_t *)buf;\n\n            getrow(in, r, y, 0);\n            getrow(in, g, y, 1);\n            getrow(in, b, y, 2);\n            for (x = 0; x < in->xsize; x++)\n            {\n                pp[0] = r[x];\n                pp[1] = g[x];\n                pp[2] = b[x];\n                pp += 3;\n            }\n            if (TIFFWriteScanline(out, buf, in->ysize - y - 1, 0) < 0)\n                goto bad;\n        }\n    }\n    else if (in->zsize == 4)\n    {\n        short *g, *b, *a;\n\n        r = (short *)_TIFFmalloc(4 * in->xsize * sizeof(short));\n        g = r + in->xsize;\n        b = g + in->xsize;\n        a = b + in->xsize;\n        for (y = in->ysize - 1; y >= 0; y--)\n        {\n            uint8_t *pp = (uint8_t *)buf;\n\n            getrow(in, r, y, 0);\n            getrow(in, g, y, 1);\n            getrow(in, b, y, 2);\n            getrow(in, a, y, 3);\n            for (x = 0; x < in->xsize; x++)\n            {\n                pp[0] = r[x];\n                pp[1] = g[x];\n                pp[2] = b[x];\n                pp[3] = a[x];\n                pp += 4;\n            }\n            if (TIFFWriteScanline(out, buf, in->ysize - y - 1, 0) < 0)\n                goto bad;\n        }\n    }\n    else\n    {\n        uint8_t *pp = (uint8_t *)buf;\n\n        r = (short *)_TIFFmalloc(in->xsize * sizeof(short));\n        for (y = in->ysize - 1; y >= 0; y--)\n        {\n            getrow(in, r, y, 0);\n            for (x = in->xsize - 1; x >= 0; x--)\n                pp[x] = r[x];\n            if (TIFFWriteScanline(out, buf, in->ysize - y - 1, 0) < 0)\n                goto bad;\n        }\n    }\n    if (r)\n        _TIFFfree(r);\n    _TIFFfree(buf);\n    return (1);\nbad:\n    if (r)\n        _TIFFfree(r);\n    _TIFFfree(buf);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          198,
+          0
+        ],
+        [
+          280,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpContig",
+        "parameters": {
+          "in": "IMAGE",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int cpSeparate(IMAGE *in, TIFF *out)\n{\n    tdata_t buf = _TIFFmalloc(TIFFScanlineSize(out));\n    short *r = (short *)_TIFFmalloc(in->xsize * sizeof(short));\n    uint8_t *pp = (uint8_t *)buf;\n    int x, y, z;\n\n    for (z = 0; z < in->zsize; z++)\n    {\n        for (y = in->ysize - 1; y >= 0; y--)\n        {\n            getrow(in, r, y, z);\n            for (x = 0; x < in->xsize; x++)\n                pp[x] = r[x];\n            if (TIFFWriteScanline(out, buf, in->ysize - y - 1, z) < 0)\n                goto bad;\n        }\n    }\n    _TIFFfree(r);\n    _TIFFfree(buf);\n    return (1);\nbad:\n    _TIFFfree(r);\n    _TIFFfree(buf);\n    return (0);\n}",
+      "fn_code_pos": [
+        [
+          282,
+          0
+        ],
+        [
+          307,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpSeparate",
+        "parameters": {
+          "in": "IMAGE",
+          "out": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void usage(void)\n{\n    char buf[BUFSIZ];\n    int i;\n\n    setbuf(stderr, buf);\n    for (i = 0; stuff[i] != NULL; i++)\n        fprintf(stderr, \"%s\\n\", stuff[i]);\n    exit(-1);\n}",
+      "fn_code_pos": [
+        [
+          336,
+          0
+        ],
+        [
+          345,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "usage(void)",
+      "fn_dec_pos": [
+        [
+          44,
+          12
+        ],
+        [
+          44,
+          23
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "usage",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cpContig(IMAGE *, TIFF *)",
+      "fn_dec_pos": [
+        [
+          45,
+          11
+        ],
+        [
+          45,
+          36
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpContig",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cpSeparate(IMAGE *, TIFF *)",
+      "fn_dec_pos": [
+        [
+          46,
+          11
+        ],
+        [
+          46,
+          38
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cpSeparate",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "processCompressOptions(char *)",
+      "fn_dec_pos": [
+        [
+          47,
+          11
+        ],
+        [
+          47,
+          41
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "processCompressOptions",
+        "parameters": {},
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "iopen(const char *, const char *)",
+      "fn_dec_pos": [
+        [
+          50,
+          14
+        ],
+        [
+          50,
+          47
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "iopen",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "iclose(IMAGE *)",
+      "fn_dec_pos": [
+        [
+          51,
+          12
+        ],
+        [
+          51,
+          27
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "iclose",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "getrow(IMAGE *, short *, int, int)",
+      "fn_dec_pos": [
+        [
+          52,
+          12
+        ],
+        [
+          52,
+          46
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "getrow",
+        "parameters": {},
+        "return_type": "void"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <ctype.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include <gl/image.h>\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include \"tiffio.h\"\n",
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

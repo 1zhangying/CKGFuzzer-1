@@ -1,0 +1,217 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		* Copyright (C) 2009 by Jakub Hrozek <jhrozek@redhat.com>	
+4		*	
+5		* Permission to use, copy, modify, and distribute this	
+6		* software and its documentation for any purpose and without	
+7		* fee is hereby granted, provided that the above copyright	
+8		* notice appear in all copies and that both that copyright	
+9		* notice and this permission notice appear in supporting	
+10		* documentation, and that the name of M.I.T. not be used in	
+11		* advertising or publicity pertaining to distribution of the	
+12		* software without specific, written prior permission.	
+13		* M.I.T. makes no representations about the suitability of	
+14		* this software for any purpose.  It is provided "as is"	
+15		* without express or implied warranty.	
+16		*/	
+17			
+18		#include "ares_setup.h"	
+19			
+20		#ifdef HAVE_NETINET_IN_H	
+21		#  include <netinet/in.h>	
+22		#endif	
+23		#ifdef HAVE_NETDB_H	
+24		#  include <netdb.h>	
+25		#endif	
+26		#ifdef HAVE_ARPA_INET_H	
+27		#  include <arpa/inet.h>	
+28		#endif	
+29			
+30		#include "ares_nameser.h"	
+31			
+32		#ifdef HAVE_STRINGS_H	
+33		#  include <strings.h>	
+34		#endif	
+35			
+36		#include "ares.h"	
+37		#include "ares_dns.h"	
+38		#include "ares_data.h"	
+39		#include "ares_private.h"	
+40			
+41		static int	
+42		ares__parse_txt_reply (const unsigned char *abuf, int alen,	
+43		int ex, void **txt_out)	
+44	243	{	
+45	243	size_t substr_len;	
+46	243	unsigned int qdcount, ancount, i;	
+47	243	const unsigned char *aptr;	
+48	243	const unsigned char *strptr;	
+49	243	int status, rr_type, rr_class, rr_len;	
+50	243	long len;	
+51	243	char *hostname = NULL, *rr_name = NULL;	
+52	243	struct ares_txt_ext *txt_head = NULL;	
+53	243	struct ares_txt_ext *txt_last = NULL;	
+54	243	struct ares_txt_ext *txt_curr;	
+55			
+56		/* Set *txt_out to NULL for all failure cases. */	
+57	243	*txt_out = NULL;	
+58			
+59		/* Give up if abuf doesn't have room for a header. */	
+60	243	if (alen < HFIXEDSZ)	
+61	0	returnARES_EBADRESP;	
+62			
+63		/* Fetch the question and answer count from the header. */	
+64	243	qdcount = DNS_HEADER_QDCOUNT (abuf);	
+65	243	ancount = DNS_HEADER_ANCOUNT (abuf);	
+66	243	if (qdcount != 1)	
+67	11	return ARES_EBADRESP;	
+68	232	if (ancount == 0)	
+69	25	return ARES_ENODATA;	
+70			
+71		/* Expand the name from the question, and skip past the question. */	
+72	207	aptr = abuf + HFIXEDSZ;	
+73	207	status = ares_expand_name (aptr, abuf, alen, &hostname, &len);	
+74	207	if (status != ARES_SUCCESS)	
+75	13	return status;	
+76			
+77	194	if (aptr + len + QFIXEDSZ > abuf + alen)	
+78	34	{	
+79	34	ares_free (hostname);	
+80	34	return ARES_EBADRESP;	
+81	34	}	
+82	160	aptr += len + QFIXEDSZ;	
+83			
+84		/* Examine each answer resource record (RR) in turn. */	
+85	621	for (i = 0; i < ancount; i++)	
+86	615	{	
+87		/* Decode the RR up to the data field. */	
+88	615	status = ares_expand_name (aptr, abuf, alen, &rr_name, &len);	
+89	615	if (status != ARES_SUCCESS)	
+90	72	{	
+91	72	break;	
+92	72	}	
+93	543	aptr += len;	
+94	543	if (aptr + RRFIXEDSZ > abuf + alen)	
+95	36	{	
+96	36	status = ARES_EBADRESP;	
+97	36	break;	
+98	36	}	
+99	507	rr_type = DNS_RR_TYPE (aptr);	
+100	507	rr_class = DNS_RR_CLASS (aptr);	
+101	507	rr_len = DNS_RR_LEN (aptr);	
+102	507	aptr += RRFIXEDSZ;	
+103	507	if (aptr + rr_len > abuf + alen)	
+104	26	{	
+105	26	status = ARES_EBADRESP;	
+106	26	break;	
+107	26	}	
+108			
+109		/* Check if we are really looking at a TXT record */	
+110	481	if ((rr_class == C_IN || rr_class == C_CHAOS) && rr_type == T_TXT)	
+111	52	{	
+112		/*	
+113		* There may be multiple substrings in a single TXT record. Each	
+114		* substring may be up to 255 characters in length, with a	
+115		* "length byte" indicating the size of the substring payload.	
+116		* RDATA contains both the length-bytes and payloads of all	
+117		* substrings contained therein.	
+118		*/	
+119			
+120	52	strptr = aptr;	
+121	257	while (strptr < (aptr + rr_len))	
+122	225	{	
+123	225	substr_len = (unsigned char)*strptr;	
+124	225	if (strptr + substr_len + 1 > aptr + rr_len)	
+125	20	{	
+126	20	status = ARES_EBADRESP;	
+127	20	break;	
+128	20	}	
+129			
+130		/* Allocate storage for this TXT answer appending it to the list */	
+131	205	txt_curr = ares_malloc_data(ex ?ARES_DATATYPE_TXT_EXT:	
+132	205	ARES_DATATYPE_TXT_REPLY);	
+133	205	if (!txt_curr)	
+134	0	{	
+135	0	status =ARES_ENOMEM;	
+136	0	break;	
+137	0	}	
+138	205	if (txt_last)	
+139	182	{	
+140	182	txt_last->next = txt_curr;	
+141	182	}	
+142	23	else	
+143	23	{	
+144	23	txt_head = txt_curr;	
+145	23	}	
+146	205	txt_last = txt_curr;	
+147			
+148	205	if (ex)	
+149	0	txt_curr->record_start = (strptr == aptr);	
+150	205	txt_curr->length = substr_len;	
+151	205	txt_curr->txt = ares_malloc (substr_len + 1/* Including null byte */);	
+152	205	if (txt_curr->txt == NULL)	
+153	0	{	
+154	0	status =ARES_ENOMEM;	
+155	0	break;	
+156	0	}	
+157			
+158	205	++strptr;	
+159	205	memcpy ((char *) txt_curr->txt, strptr, substr_len);	
+160			
+161		/* Make sure we NULL-terminate */	
+162	205	txt_curr->txt[substr_len] = 0;	
+163			
+164	205	strptr += substr_len;	
+165	205	}	
+166	52	}	
+167			
+168		/* Propagate any failures */	
+169	481	if (status != ARES_SUCCESS)	
+170	20	{	
+171	20	break;	
+172	20	}	
+173			
+174		/* Don't lose memory in the next iteration */	
+175	461	ares_free (rr_name);	
+176	461	rr_name = NULL;	
+177			
+178		/* Move on to the next record */	
+179	461	aptr += rr_len;	
+180	461	}	
+181			
+182	160	if (hostname)	
+183	160	ares_free (hostname);	
+184	160	if (rr_name)	
+185	82	ares_free (rr_name);	
+186			
+187		/* clean up on error */	
+188	160	if (status != ARES_SUCCESS)	
+189	154	{	
+190	154	if (txt_head)	
+191	22	ares_free_data (txt_head);	
+192	154	return status;	
+193	154	}	
+194			
+195		/* everything looks fine, return the data */	
+196	6	*txt_out = txt_head;	
+197			
+198	6	return ARES_SUCCESS;	
+199	160	}	
+200			
+201		int	
+202		ares_parse_txt_reply (const unsigned char *abuf, int alen,	
+203		struct ares_txt_reply **txt_out)	
+204	243	{	
+205	243	return ares__parse_txt_reply(abuf, alen, 0, (void **) txt_out);	
+206	243	}	
+207			
+208			
+209		int	
+210		ares_parse_txt_reply_ext (const unsigned char *abuf, int alen,	
+211		struct ares_txt_ext **txt_out)	
+212	0	{	
+213	0	return ares__parse_txt_reply(abuf, alen, 1, (void **) txt_out);	
+214	0	}	
+
+

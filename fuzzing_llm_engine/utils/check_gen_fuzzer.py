@@ -1152,7 +1152,7 @@ def build_fuzzer_file(args):
     logger.info(f"Removed unwanted files from {args.project.out}")
     fuzz_driver_file = args.fuzz_driver_file
     project_name = args.project.name
-    command = ["/bin/bash", "-c", f"bash {LLM_WORK_DIR}/fuzz_driver/{project_name}/scripts/entrancy.sh {fuzz_driver_file} {project_name} && compile"]  
+    command = ["/bin/bash", "-c", f"source {LLM_WORK_DIR}/fuzz_driver/{project_name}/scripts/entrancy.sh {fuzz_driver_file} {project_name} && compile && echo 'Compilation succeeded'"]  
     #logger.info(' '.join(command))
     result = docker_exec_command(command, project_name)
     if len(result) > 5000:
@@ -1245,7 +1245,7 @@ def build_fuzzers_impl(  args, # pylint: disable=too-many-arguments,too-many-loc
   if sys.stdin.isatty():
     command.insert(-1, '-t')
   
-  command += ["/bin/bash", "-c", f"bash {LLM_WORK_DIR}/fuzz_driver/{project.name}/scripts/entrancy.sh {args.fuzz_driver_file} {project.name} && compile"]    
+  command += ["/bin/bash", "-c", f"source {LLM_WORK_DIR}/fuzz_driver/{project.name}/scripts/entrancy.sh {args.fuzz_driver_file} {project.name} && compile"]    
   result = docker_run(command, architecture=architecture)
   if not result:
     logger.error('Building fuzzers failed.')

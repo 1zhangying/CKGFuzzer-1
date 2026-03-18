@@ -1,0 +1,324 @@
+Line	Count	Source	
+1			
+2		/* Copyright 1998 by the Massachusetts Institute of Technology.	
+3		*	
+4		* Permission to use, copy, modify, and distribute this	
+5		* software and its documentation for any purpose and without	
+6		* fee is hereby granted, provided that the above copyright	
+7		* notice appear in all copies and that both that copyright	
+8		* notice and this permission notice appear in supporting	
+9		* documentation, and that the name of M.I.T. not be used in	
+10		* advertising or publicity pertaining to distribution of the	
+11		* software without specific, written prior permission.	
+12		* M.I.T. makes no representations about the suitability of	
+13		* this software for any purpose.  It is provided "as is"	
+14		* without express or implied warranty.	
+15		*/	
+16			
+17		#include "ares_setup.h"	
+18			
+19		#ifdef HAVE_STRINGS_H	
+20		#  include <strings.h>	
+21		#endif	
+22			
+23		#include "ares.h"	
+24		#include "ares_private.h"	
+25			
+26		struct search_query {	
+27		/* Arguments passed to ares_search */	
+28		ares_channel channel;	
+29		char *name;                   /* copied into an allocated buffer */	
+30		int dnsclass;	
+31		int type;	
+32		ares_callback callback;	
+33		void *arg;	
+34			
+35		int status_as_is;             /* error status from trying as-is */	
+36		int next_domain;              /* next search domain to try */	
+37		int trying_as_is;             /* current query is for name as-is */	
+38		int timeouts;                 /* number of timeouts we saw for this request */	
+39		int ever_got_nodata;          /* did we ever get ARES_ENODATA along the way? */	
+40		};	
+41			
+42		static void search_callback(void *arg, int status, int timeouts,	
+43		unsigned char *abuf, int alen);	
+44		static void end_squery(struct search_query *squery, int status,	
+45		unsigned char *abuf, int alen);	
+46			
+47		void ares_search(ares_channel channel, const char *name, int dnsclass,	
+48		int type, ares_callback callback, void *arg)	
+49	0	{	
+50	0	struct search_query *squery;	
+51	0	char *s;	
+52	0	const char *p;	
+53	0	int status, ndots;	
+54			
+55		/* Per RFC 7686, reject queries for ".onion" domain names with NXDOMAIN. */	
+56	0	if (ares__is_onion_domain(name))	
+57	0	{	
+58	0	callback(arg,ARES_ENOTFOUND, 0,NULL, 0);	
+59	0	return;	
+60	0	}	
+61			
+62		/* If name only yields one domain to search, then we don't have	
+63		* to keep extra state, so just do an ares_query().	
+64		*/	
+65	0	status = ares__single_domain(channel, name, &s);	
+66	0	if (status !=ARES_SUCCESS)	
+67	0	{	
+68	0	callback(arg, status, 0,NULL, 0);	
+69	0	return;	
+70	0	}	
+71	0	if (s)	
+72	0	{	
+73	0	ares_query(channel, s, dnsclass, type, callback, arg);	
+74	0	ares_free(s);	
+75	0	return;	
+76	0	}	
+77			
+78		/* Allocate a search_query structure to hold the state necessary for	
+79		* doing multiple lookups.	
+80		*/	
+81	0	squery = ares_malloc(sizeof(struct search_query));	
+82	0	if (!squery)	
+83	0	{	
+84	0	callback(arg,ARES_ENOMEM, 0,NULL, 0);	
+85	0	return;	
+86	0	}	
+87	0	squery->channel = channel;	
+88	0	squery->name = ares_strdup(name);	
+89	0	if (!squery->name)	
+90	0	{	
+91	0	ares_free(squery);	
+92	0	callback(arg,ARES_ENOMEM, 0,NULL, 0);	
+93	0	return;	
+94	0	}	
+95	0	squery->dnsclass = dnsclass;	
+96	0	squery->type = type;	
+97	0	squery->status_as_is = -1;	
+98	0	squery->callback = callback;	
+99	0	squery->arg = arg;	
+100	0	squery->timeouts = 0;	
+101	0	squery->ever_got_nodata = 0;	
+102			
+103		/* Count the number of dots in name. */	
+104	0	ndots = 0;	
+105	0	for (p = name;*p;p++)	
+106	0	{	
+107	0	if (*p == '.')	
+108	0	ndots++;	
+109	0	}	
+110			
+111		/* If ndots is at least the channel ndots threshold (usually 1),	
+112		* then we try the name as-is first.  Otherwise, we try the name	
+113		* as-is last.	
+114		*/	
+115	0	if (ndots >= channel->ndots)	
+116	0	{	
+117		/* Try the name as-is first. */	
+118	0	squery->next_domain = 0;	
+119	0	squery->trying_as_is = 1;	
+120	0	ares_query(channel, name, dnsclass, type, search_callback, squery);	
+121	0	}	
+122	0	else	
+123	0	{	
+124		/* Try the name as-is last; start with the first search domain. */	
+125	0	squery->next_domain = 1;	
+126	0	squery->trying_as_is = 0;	
+127	0	status = ares__cat_domain(name, channel->domains[0], &s);	
+128	0	if (status ==ARES_SUCCESS)	
+129	0	{	
+130	0	ares_query(channel, s, dnsclass, type, search_callback, squery);	
+131	0	ares_free(s);	
+132	0	}	
+133	0	else	
+134	0	{	
+135		/* failed, free the malloc()ed memory */	
+136	0	ares_free(squery->name);	
+137	0	ares_free(squery);	
+138	0	callback(arg, status, 0,NULL, 0);	
+139	0	}	
+140	0	}	
+141	0	}	
+142			
+143		static void search_callback(void *arg, int status, int timeouts,	
+144		unsigned char *abuf, int alen)	
+145	0	{	
+146	0	struct search_query *squery = (struct search_query *) arg;	
+147	0	ares_channel channel = squery->channel;	
+148	0	char *s;	
+149			
+150	0	squery->timeouts += timeouts;	
+151			
+152		/* Stop searching unless we got a non-fatal error. */	
+153	0	if (status !=ARES_ENODATA&&status !=ARES_ESERVFAIL	
+154	0	&&status !=ARES_ENOTFOUND)	
+155	0	end_squery(squery, status, abuf, alen);	
+156	0	else	
+157	0	{	
+158		/* Save the status if we were trying as-is. */	
+159	0	if (squery->trying_as_is)	
+160	0	squery->status_as_is = status;	
+161			
+162		/*	
+163		* If we ever get ARES_ENODATA along the way, record that; if the search	
+164		* should run to the very end and we got at least one ARES_ENODATA,	
+165		* then callers like ares_gethostbyname() may want to try a T_A search	
+166		* even if the last domain we queried for T_AAAA resource records	
+167		* returned ARES_ENOTFOUND.	
+168		*/	
+169	0	if (status ==ARES_ENODATA)	
+170	0	squery->ever_got_nodata = 1;	
+171			
+172	0	if (squery->next_domain < channel->ndomains)	
+173	0	{	
+174		/* Try the next domain. */	
+175	0	status = ares__cat_domain(squery->name,	
+176	0	channel->domains[squery->next_domain], &s);	
+177	0	if (status !=ARES_SUCCESS)	
+178	0	end_squery(squery, status,NULL, 0);	
+179	0	else	
+180	0	{	
+181	0	squery->trying_as_is = 0;	
+182	0	squery->next_domain++;	
+183	0	ares_query(channel, s, squery->dnsclass, squery->type,	
+184	0	search_callback, squery);	
+185	0	ares_free(s);	
+186	0	}	
+187	0	}	
+188	0	elseif (squery->status_as_is == -1)	
+189	0	{	
+190		/* Try the name as-is at the end. */	
+191	0	squery->trying_as_is = 1;	
+192	0	ares_query(channel, squery->name, squery->dnsclass, squery->type,	
+193	0	search_callback, squery);	
+194	0	}	
+195	0	else{	
+196	0	if (squery->status_as_is ==ARES_ENOTFOUND&&squery->ever_got_nodata){	
+197	0	end_squery(squery,ARES_ENODATA,NULL, 0);	
+198	0	}	
+199	0	else	
+200	0	end_squery(squery, squery->status_as_is,NULL, 0);	
+201	0	}	
+202	0	}	
+203	0	}	
+204			
+205		static void end_squery(struct search_query *squery, int status,	
+206		unsigned char *abuf, int alen)	
+207	0	{	
+208	0	squery->callback(squery->arg, status, squery->timeouts, abuf, alen);	
+209	0	ares_free(squery->name);	
+210	0	ares_free(squery);	
+211	0	}	
+212			
+213		/* Concatenate two domains. */	
+214		int ares__cat_domain(const char *name, const char *domain, char **s)	
+215	0	{	
+216	0	size_t nlen = strlen(name);	
+217	0	size_t dlen = strlen(domain);	
+218			
+219	0	*s = ares_malloc(nlen + 1 + dlen + 1);	
+220	0	if (!*s)	
+221	0	returnARES_ENOMEM;	
+222	0	memcpy(*s, name, nlen);	
+223	0	(*s)[nlen] = '.';	
+224	0	memcpy(*s + nlen + 1, domain, dlen);	
+225	0	(*s)[nlen + 1 + dlen] = 0;	
+226	0	returnARES_SUCCESS;	
+227	0	}	
+228			
+229		/* Determine if this name only yields one query.  If it does, set *s to	
+230		* the string we should query, in an allocated buffer.  If not, set *s	
+231		* to NULL.	
+232		*/	
+233		int ares__single_domain(ares_channel channel, const char *name, char **s)	
+234	0	{	
+235	0	size_t len = strlen(name);	
+236	0	const char *hostaliases;	
+237	0	FILE *fp;	
+238	0	char *line =NULL;	
+239	0	int status;	
+240	0	size_t linesize;	
+241	0	const char *p, *q;	
+242	0	int error;	
+243			
+244		/* If the name contains a trailing dot, then the single query is the name	
+245		* sans the trailing dot.	
+246		*/	
+247	0	if ((len > 0)&&(name[len - 1] == '.'))	
+248	0	{	
+249	0	*s = ares_strdup(name);	
+250	0	return(*s)?ARES_SUCCESS:ARES_ENOMEM;	
+251	0	}	
+252			
+253	0	if (!(channel->flags &ARES_FLAG_NOALIASES) &&!strchr(name, '.'))	
+254	0	{	
+255		/* The name might be a host alias. */	
+256	0	hostaliases = getenv("HOSTALIASES");	
+257	0	if (hostaliases)	
+258	0	{	
+259	0	fp = fopen(hostaliases, "r");	
+260	0	if (fp)	
+261	0	{	
+262	0	while ((status = ares__read_line(fp, &line, &linesize))	
+263	0	==ARES_SUCCESS)	
+264	0	{	
+265	0	if (strncasecmp(line, name, len) != 0||	
+266	0	!ISSPACE(line[len]))	
+267	0	continue;	
+268	0	p = line + len;	
+269	0	while (ISSPACE(*p))	
+270	0	p++;	
+271	0	if (*p)	
+272	0	{	
+273	0	q = p + 1;	
+274	0	while (*q&&!ISSPACE(*q))	
+275	0	q++;	
+276	0	*s = ares_malloc(q - p + 1);	
+277	0	if (*s)	
+278	0	{	
+279	0	memcpy(*s, p, q - p);	
+280	0	(*s)[q - p] = 0;	
+281	0	}	
+282	0	ares_free(line);	
+283	0	fclose(fp);	
+284	0	return(*s)?ARES_SUCCESS:ARES_ENOMEM;	
+285	0	}	
+286	0	}	
+287	0	ares_free(line);	
+288	0	fclose(fp);	
+289	0	if (status !=ARES_SUCCESS&&status !=ARES_EOF)	
+290	0	return status;	
+291	0	}	
+292	0	else	
+293	0	{	
+294	0	error =ERRNO;	
+295	0	switch(error)	
+296	0	{	
+297	0	caseENOENT:	
+298	0	caseESRCH:	
+299	0	break;	
+300	0	default:	
+301	0	DEBUGF(fprintf(stderr, "fopen() failed with error: %d %s\n",	
+302	0	error, strerror(error)));	
+303	0	DEBUGF(fprintf(stderr, "Error opening file: %s\n",	
+304	0	hostaliases));	
+305	0	*s =NULL;	
+306	0	returnARES_EFILE;	
+307	0	}	
+308	0	}	
+309	0	}	
+310	0	}	
+311			
+312	0	if (channel->flags &ARES_FLAG_NOSEARCH||channel->ndomains == 0)	
+313	0	{	
+314		/* No domain search to do; just try the name as-is. */	
+315	0	*s = ares_strdup(name);	
+316	0	return(*s)?ARES_SUCCESS:ARES_ENOMEM;	
+317	0	}	
+318			
+319	0	*s =NULL;	
+320	0	returnARES_SUCCESS;	
+321	0	}	
+
+

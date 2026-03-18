@@ -1,0 +1,526 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int ares_get_servers(ares_channel channel,\n                     struct ares_addr_node **servers)\n{\n  struct ares_addr_node *srvr_head = NULL;\n  struct ares_addr_node *srvr_last = NULL;\n  struct ares_addr_node *srvr_curr;\n  int status = ARES_SUCCESS;\n  int i;\n\n  if (!channel)\n    return ARES_ENODATA;\n\n  for (i = 0; i < channel->nservers; i++)\n    {\n      /* Allocate storage for this server node appending it to the list */\n      srvr_curr = ares_malloc_data(ARES_DATATYPE_ADDR_NODE);\n      if (!srvr_curr)\n        {\n          status = ARES_ENOMEM;\n          break;\n        }\n      if (srvr_last)\n        {\n          srvr_last->next = srvr_curr;\n        }\n      else\n        {\n          srvr_head = srvr_curr;\n        }\n      srvr_last = srvr_curr;\n\n      /* Fill this server node data */\n      srvr_curr->family = channel->servers[i].addr.family;\n      if (srvr_curr->family == AF_INET)\n        memcpy(&srvr_curr->addrV4, &channel->servers[i].addr.addrV4,\n               sizeof(srvr_curr->addrV4));\n      else\n        memcpy(&srvr_curr->addrV6, &channel->servers[i].addr.addrV6,\n               sizeof(srvr_curr->addrV6));\n    }\n\n  if (status != ARES_SUCCESS)\n    {\n      if (srvr_head)\n        {\n          ares_free_data(srvr_head);\n          srvr_head = NULL;\n        }\n    }\n\n  *servers = srvr_head;\n\n  return status;\n}",
+      "fn_code_pos": [
+        [
+          30,
+          0
+        ],
+        [
+          83,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_get_servers",
+        "parameters": {
+          "channel": "ares_channel",
+          "servers": "struct ares_addr_node"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ares_get_servers_ports(ares_channel channel,\n                           struct ares_addr_port_node **servers)\n{\n  struct ares_addr_port_node *srvr_head = NULL;\n  struct ares_addr_port_node *srvr_last = NULL;\n  struct ares_addr_port_node *srvr_curr;\n  int status = ARES_SUCCESS;\n  int i;\n\n  if (!channel)\n    return ARES_ENODATA;\n\n  for (i = 0; i < channel->nservers; i++)\n    {\n      /* Allocate storage for this server node appending it to the list */\n      srvr_curr = ares_malloc_data(ARES_DATATYPE_ADDR_PORT_NODE);\n      if (!srvr_curr)\n        {\n          status = ARES_ENOMEM;\n          break;\n        }\n      if (srvr_last)\n        {\n          srvr_last->next = srvr_curr;\n        }\n      else\n        {\n          srvr_head = srvr_curr;\n        }\n      srvr_last = srvr_curr;\n\n      /* Fill this server node data */\n      srvr_curr->family = channel->servers[i].addr.family;\n      srvr_curr->udp_port = ntohs((unsigned short)channel->servers[i].addr.udp_port);\n      srvr_curr->tcp_port = ntohs((unsigned short)channel->servers[i].addr.tcp_port);\n      if (srvr_curr->family == AF_INET)\n        memcpy(&srvr_curr->addrV4, &channel->servers[i].addr.addrV4,\n               sizeof(srvr_curr->addrV4));\n      else\n        memcpy(&srvr_curr->addrV6, &channel->servers[i].addr.addrV6,\n               sizeof(srvr_curr->addrV6));\n    }\n\n  if (status != ARES_SUCCESS)\n    {\n      if (srvr_head)\n        {\n          ares_free_data(srvr_head);\n          srvr_head = NULL;\n        }\n    }\n\n  *servers = srvr_head;\n\n  return status;\n}",
+      "fn_code_pos": [
+        [
+          85,
+          0
+        ],
+        [
+          140,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_get_servers_ports",
+        "parameters": {
+          "channel": "ares_channel",
+          "servers": "struct ares_addr_port_node"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ares_set_servers(ares_channel channel,\n                     struct ares_addr_node *servers)\n{\n  struct ares_addr_node *srvr;\n  int num_srvrs = 0;\n  int i;\n\n  if (ares_library_initialized() != ARES_SUCCESS)\n    return ARES_ENOTINITIALIZED;  /* LCOV_EXCL_LINE: n/a on non-WinSock */\n\n  if (!channel)\n    return ARES_ENODATA;\n\n  if (!ares__is_list_empty(&channel->all_queries))\n    return ARES_ENOTIMP;\n\n  ares__destroy_servers_state(channel);\n\n  for (srvr = servers; srvr; srvr = srvr->next)\n    {\n      num_srvrs++;\n    }\n\n  if (num_srvrs > 0)\n    {\n      /* Allocate storage for servers state */\n      channel->servers = ares_malloc(num_srvrs * sizeof(struct server_state));\n      if (!channel->servers)\n        {\n          return ARES_ENOMEM;\n        }\n      channel->nservers = num_srvrs;\n      /* Fill servers state address data */\n      for (i = 0, srvr = servers; srvr; i++, srvr = srvr->next)\n        {\n          channel->servers[i].addr.family = srvr->family;\n          channel->servers[i].addr.udp_port = 0;\n          channel->servers[i].addr.tcp_port = 0;\n          if (srvr->family == AF_INET)\n            memcpy(&channel->servers[i].addr.addrV4, &srvr->addrV4,\n                   sizeof(srvr->addrV4));\n          else\n            memcpy(&channel->servers[i].addr.addrV6, &srvr->addrV6,\n                   sizeof(srvr->addrV6));\n        }\n      /* Initialize servers state remaining data */\n      ares__init_servers_state(channel);\n    }\n\n  return ARES_SUCCESS;\n}",
+      "fn_code_pos": [
+        [
+          142,
+          0
+        ],
+        [
+          192,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_set_servers",
+        "parameters": {
+          "channel": "ares_channel",
+          "servers": "struct ares_addr_node"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ares_set_servers_ports(ares_channel channel,\n                           struct ares_addr_port_node *servers)\n{\n  struct ares_addr_port_node *srvr;\n  int num_srvrs = 0;\n  int i;\n\n  if (ares_library_initialized() != ARES_SUCCESS)\n    return ARES_ENOTINITIALIZED;  /* LCOV_EXCL_LINE: n/a on non-WinSock */\n\n  if (!channel)\n    return ARES_ENODATA;\n\n  if (!ares__is_list_empty(&channel->all_queries))\n    return ARES_ENOTIMP;\n\n  ares__destroy_servers_state(channel);\n\n  for (srvr = servers; srvr; srvr = srvr->next)\n    {\n      num_srvrs++;\n    }\n\n  if (num_srvrs > 0)\n    {\n      /* Allocate storage for servers state */\n      channel->servers = ares_malloc(num_srvrs * sizeof(struct server_state));\n      if (!channel->servers)\n        {\n          return ARES_ENOMEM;\n        }\n      channel->nservers = num_srvrs;\n      /* Fill servers state address data */\n      for (i = 0, srvr = servers; srvr; i++, srvr = srvr->next)\n        {\n          channel->servers[i].addr.family = srvr->family;\n          channel->servers[i].addr.udp_port = htons((unsigned short)srvr->udp_port);\n          channel->servers[i].addr.tcp_port = htons((unsigned short)srvr->tcp_port);\n          if (srvr->family == AF_INET)\n            memcpy(&channel->servers[i].addr.addrV4, &srvr->addrV4,\n                   sizeof(srvr->addrV4));\n          else\n            memcpy(&channel->servers[i].addr.addrV6, &srvr->addrV6,\n                   sizeof(srvr->addrV6));\n        }\n      /* Initialize servers state remaining data */\n      ares__init_servers_state(channel);\n    }\n\n  return ARES_SUCCESS;\n}",
+      "fn_code_pos": [
+        [
+          194,
+          0
+        ],
+        [
+          244,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_set_servers_ports",
+        "parameters": {
+          "channel": "ares_channel",
+          "servers": "struct ares_addr_port_node"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int set_servers_csv(ares_channel channel,\n                           const char* _csv, int use_port)\n{\n  size_t i;\n  char* csv = NULL;\n  char* ptr;\n  char* start_host;\n  int cc = 0;\n  int rv = ARES_SUCCESS;\n  struct ares_addr_port_node *servers = NULL;\n  struct ares_addr_port_node *last = NULL;\n\n  if (ares_library_initialized() != ARES_SUCCESS)\n    return ARES_ENOTINITIALIZED;  /* LCOV_EXCL_LINE: n/a on non-WinSock */\n\n  if (!channel)\n    return ARES_ENODATA;\n\n  i = strlen(_csv);\n  if (i == 0)\n     return ARES_SUCCESS; /* blank all servers */\n\n  csv = ares_malloc(i + 2);\n  if (!csv)\n    return ARES_ENOMEM;\n\n  strcpy(csv, _csv);\n  if (csv[i-1] != ',') { /* make parsing easier by ensuring ending ',' */\n    csv[i] = ',';\n    csv[i+1] = 0;\n  }\n\n  start_host = csv;\n  for (ptr = csv; *ptr; ptr++) {\n    if (*ptr == ':') {\n      /* count colons to determine if we have an IPv6 number or IPv4 with\n         port */\n      cc++;\n    }\n    else if (*ptr == '[') {\n      /* move start_host if an open square bracket is found wrapping an IPv6\n         address */\n      start_host = ptr + 1;\n    }\n    else if (*ptr == ',') {\n      char* pp = ptr - 1;\n      char* p = ptr;\n      int port = 0;\n      struct in_addr in4;\n      struct ares_in6_addr in6;\n      struct ares_addr_port_node *s = NULL;\n\n      *ptr = 0; /* null terminate host:port string */\n      /* Got an entry..see if the port was specified. */\n      if (cc > 0) {\n        while (pp > start_host) {\n          /* a single close square bracket followed by a colon, ']:' indicates\n             an IPv6 address with port */\n          if ((*pp == ']') && (*p == ':'))\n            break; /* found port */\n          /* a single colon, ':' indicates an IPv4 address with port */\n          if ((*pp == ':') && (cc == 1))\n            break; /* found port */\n          if (!(ISDIGIT(*pp) || (*pp == ':'))) {\n            /* Found end of digits before we found :, so wasn't a port */\n            /* must allow ':' for IPv6 case of ']:' indicates we found a port */\n            pp = p = ptr;\n            break;\n          }\n          pp--;\n          p--;\n        }\n        if ((pp != start_host) && ((pp + 1) < ptr)) {\n          /* Found it. Parse over the port number */\n          /* when an IPv6 address is wrapped with square brackets the port\n             starts at pp + 2 */\n          if (*pp == ']')\n            p++; /* move p before ':' */\n          /* p will point to the start of the port */\n          port = (int)strtol(p, NULL, 10);\n          *pp = 0; /* null terminate host */\n        }\n      }\n      /* resolve host, try ipv4 first, rslt is in network byte order */\n      rv = ares_inet_pton(AF_INET, start_host, &in4);\n      if (!rv) {\n        /* Ok, try IPv6 then */\n        rv = ares_inet_pton(AF_INET6, start_host, &in6);\n        if (!rv) {\n          rv = ARES_EBADSTR;\n          goto out;\n        }\n        /* was ipv6, add new server */\n        s = ares_malloc(sizeof(*s));\n        if (!s) {\n          rv = ARES_ENOMEM;\n          goto out;\n        }\n        s->family = AF_INET6;\n        memcpy(&s->addr, &in6, sizeof(struct ares_in6_addr));\n      }\n      else {\n        /* was ipv4, add new server */\n        s = ares_malloc(sizeof(*s));\n        if (!s) {\n          rv = ARES_ENOMEM;\n          goto out;\n        }\n        s->family = AF_INET;\n        memcpy(&s->addr, &in4, sizeof(struct in_addr));\n      }\n      if (s) {\n        s->udp_port = use_port ? port: 0;\n        s->tcp_port = s->udp_port;\n        s->next = NULL;\n        if (last) {\n          last->next = s;\n          /* need to move last to maintain the linked list */\n          last = last->next;\n        }\n        else {\n          servers = s;\n          last = s;\n        }\n      }\n\n      /* Set up for next one */\n      start_host = ptr + 1;\n      cc = 0;\n    }\n  }\n\n  rv = ares_set_servers_ports(channel, servers);\n\n  out:\n  if (csv)\n    ares_free(csv);\n  while (servers) {\n    struct ares_addr_port_node *s = servers;\n    servers = servers->next;\n    ares_free(s);\n  }\n\n  return rv;\n}",
+      "fn_code_pos": [
+        [
+          248,
+          0
+        ],
+        [
+          392,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "set_servers_csv",
+        "parameters": {
+          "channel": "ares_channel",
+          "_csv": "char",
+          "use_port": "int"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ares_set_servers_csv(ares_channel channel,\n                         const char* _csv)\n{\n  return set_servers_csv(channel, _csv, FALSE);\n}",
+      "fn_code_pos": [
+        [
+          394,
+          0
+        ],
+        [
+          398,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_set_servers_csv",
+        "parameters": {
+          "channel": "ares_channel",
+          "_csv": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int ares_set_servers_ports_csv(ares_channel channel,\n                               const char* _csv)\n{\n  return set_servers_csv(channel, _csv, TRUE);\n}",
+      "fn_code_pos": [
+        [
+          400,
+          0
+        ],
+        [
+          404,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "ares_set_servers_ports_csv",
+        "parameters": {
+          "channel": "ares_channel",
+          "_csv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        31,
+        21
+      ],
+      [
+        31,
+        42
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        33,
+        2
+      ],
+      [
+        33,
+        23
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        34,
+        2
+      ],
+      [
+        34,
+        23
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        35,
+        2
+      ],
+      [
+        35,
+        23
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        86,
+        27
+      ],
+      [
+        86,
+        53
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        88,
+        2
+      ],
+      [
+        88,
+        28
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        89,
+        2
+      ],
+      [
+        89,
+        28
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        90,
+        2
+      ],
+      [
+        90,
+        28
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        143,
+        21
+      ],
+      [
+        143,
+        42
+      ]
+    ],
+    [
+      "struct ares_addr_node",
+      {},
+      "",
+      [
+        145,
+        2
+      ],
+      [
+        145,
+        23
+      ]
+    ],
+    [
+      "struct server_state",
+      {},
+      "",
+      [
+        168,
+        56
+      ],
+      [
+        168,
+        75
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        195,
+        27
+      ],
+      [
+        195,
+        53
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        197,
+        2
+      ],
+      [
+        197,
+        28
+      ]
+    ],
+    [
+      "struct server_state",
+      {},
+      "",
+      [
+        220,
+        56
+      ],
+      [
+        220,
+        75
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        257,
+        2
+      ],
+      [
+        257,
+        28
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        258,
+        2
+      ],
+      [
+        258,
+        28
+      ]
+    ],
+    [
+      "struct in_addr",
+      {},
+      "",
+      [
+        296,
+        6
+      ],
+      [
+        296,
+        20
+      ]
+    ],
+    [
+      "struct ares_in6_addr",
+      {},
+      "",
+      [
+        297,
+        6
+      ],
+      [
+        297,
+        26
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        298,
+        6
+      ],
+      [
+        298,
+        32
+      ]
+    ],
+    [
+      "struct ares_in6_addr",
+      {},
+      "",
+      [
+        347,
+        38
+      ],
+      [
+        347,
+        58
+      ]
+    ],
+    [
+      "struct in_addr",
+      {},
+      "",
+      [
+        357,
+        38
+      ],
+      [
+        357,
+        52
+      ]
+    ],
+    [
+      "struct ares_addr_port_node",
+      {},
+      "",
+      [
+        386,
+        4
+      ],
+      [
+        386,
+        30
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include \"ares_setup.h\"\n",
+      [
+        18,
+        0
+      ],
+      [
+        19,
+        0
+      ]
+    ],
+    [
+      "#  include <arpa/inet.h>\n",
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ]
+    ],
+    [
+      "#include \"ares.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_data.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_inet_net_pton.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"ares_private.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

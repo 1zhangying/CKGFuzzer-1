@@ -1,0 +1,195 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int PackBitsPreEncode(TIFF *tif, uint16_t s)\n{\n    (void)s;\n\n    tif->tif_data = (uint8_t *)_TIFFmallocExt(tif, sizeof(tmsize_t));\n    if (tif->tif_data == NULL)\n        return (0);\n    /*\n     * Calculate the scanline/tile-width size in bytes.\n     */\n    if (isTiled(tif))\n        *(tmsize_t *)tif->tif_data = TIFFTileRowSize(tif);\n    else\n        *(tmsize_t *)tif->tif_data = TIFFScanlineSize(tif);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          33,
+          0
+        ],
+        [
+          48,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PackBitsPreEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int PackBitsPostEncode(TIFF *tif)\n{\n    if (tif->tif_data)\n        _TIFFfreeExt(tif, tif->tif_data);\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          50,
+          0
+        ],
+        [
+          55,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PackBitsPostEncode",
+        "parameters": {
+          "tif": "TIFF"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int PackBitsEncode(TIFF *tif, uint8_t *buf, tmsize_t cc, uint16_t s)\n{\n    unsigned char *bp = (unsigned char *)buf;\n    uint8_t *op;\n    uint8_t *ep;\n    uint8_t *lastliteral;\n    long n, slop;\n    int b;\n    enum\n    {\n        BASE,\n        LITERAL,\n        RUN,\n        LITERAL_RUN\n    } state;\n\n    (void)s;\n    op = tif->tif_rawcp;\n    ep = tif->tif_rawdata + tif->tif_rawdatasize;\n    state = BASE;\n    lastliteral = 0;\n    while (cc > 0)\n    {\n        /*\n         * Find the longest string of identical bytes.\n         */\n        b = *bp++;\n        cc--;\n        n = 1;\n        for (; cc > 0 && b == *bp; cc--, bp++)\n            n++;\n    again:\n        if (op + 2 >= ep)\n        { /* insure space for new data */\n            /*\n             * Be careful about writing the last\n             * literal.  Must write up to that point\n             * and then copy the remainder to the\n             * front of the buffer.\n             */\n            if (state == LITERAL || state == LITERAL_RUN)\n            {\n                slop = (long)(op - lastliteral);\n                tif->tif_rawcc += (tmsize_t)(lastliteral - tif->tif_rawcp);\n                if (!TIFFFlushData1(tif))\n                    return (0);\n                op = tif->tif_rawcp;\n                while (slop-- > 0)\n                    *op++ = *lastliteral++;\n                lastliteral = tif->tif_rawcp;\n            }\n            else\n            {\n                tif->tif_rawcc += (tmsize_t)(op - tif->tif_rawcp);\n                if (!TIFFFlushData1(tif))\n                    return (0);\n                op = tif->tif_rawcp;\n            }\n        }\n        switch (state)\n        {\n            case BASE: /* initial state, set run/literal */\n                if (n > 1)\n                {\n                    state = RUN;\n                    if (n > 128)\n                    {\n                        *op++ = (uint8_t)-127;\n                        *op++ = (uint8_t)b;\n                        n -= 128;\n                        goto again;\n                    }\n                    *op++ = (uint8_t)(-(n - 1));\n                    *op++ = (uint8_t)b;\n                }\n                else\n                {\n                    lastliteral = op;\n                    *op++ = 0;\n                    *op++ = (uint8_t)b;\n                    state = LITERAL;\n                }\n                break;\n            case LITERAL: /* last object was literal string */\n                if (n > 1)\n                {\n                    state = LITERAL_RUN;\n                    if (n > 128)\n                    {\n                        *op++ = (uint8_t)-127;\n                        *op++ = (uint8_t)b;\n                        n -= 128;\n                        goto again;\n                    }\n                    *op++ = (uint8_t)(-(n - 1)); /* encode run */\n                    *op++ = (uint8_t)b;\n                }\n                else\n                { /* extend literal */\n                    if (++(*lastliteral) == 127)\n                        state = BASE;\n                    *op++ = (uint8_t)b;\n                }\n                break;\n            case RUN: /* last object was run */\n                if (n > 1)\n                {\n                    if (n > 128)\n                    {\n                        *op++ = (uint8_t)-127;\n                        *op++ = (uint8_t)b;\n                        n -= 128;\n                        goto again;\n                    }\n                    *op++ = (uint8_t)(-(n - 1));\n                    *op++ = (uint8_t)b;\n                }\n                else\n                {\n                    lastliteral = op;\n                    *op++ = 0;\n                    *op++ = (uint8_t)b;\n                    state = LITERAL;\n                }\n                break;\n            case LITERAL_RUN: /* literal followed by a run */\n                /*\n                 * Check to see if previous run should\n                 * be converted to a literal, in which\n                 * case we convert literal-run-literal\n                 * to a single literal.\n                 */\n                if (n == 1 && op[-2] == (uint8_t)-1 && *lastliteral < 126)\n                {\n                    state = (((*lastliteral) += 2) == 127 ? BASE : LITERAL);\n                    op[-2] = op[-1]; /* replicate */\n                }\n                else\n                    state = RUN;\n                goto again;\n        }\n    }\n    tif->tif_rawcc += (tmsize_t)(op - tif->tif_rawcp);\n    tif->tif_rawcp = op;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          60,
+          0
+        ],
+        [
+          205,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PackBitsEncode",
+        "parameters": {
+          "tif": "TIFF",
+          "buf": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int PackBitsEncodeChunk(TIFF *tif, uint8_t *bp, tmsize_t cc, uint16_t s)\n{\n    tmsize_t rowsize = *(tmsize_t *)tif->tif_data;\n\n    while (cc > 0)\n    {\n        tmsize_t chunk = rowsize;\n\n        if (cc < chunk)\n            chunk = cc;\n\n        if (PackBitsEncode(tif, bp, chunk, s) < 0)\n            return (-1);\n        bp += chunk;\n        cc -= chunk;\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          214,
+          0
+        ],
+        [
+          231,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PackBitsEncodeChunk",
+        "parameters": {
+          "tif": "TIFF",
+          "bp": "uint8_t",
+          "cc": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static int PackBitsDecode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)\n{\n    static const char module[] = \"PackBitsDecode\";\n    int8_t *bp;\n    tmsize_t cc;\n    long n;\n    int b;\n\n    (void)s;\n    bp = (int8_t *)tif->tif_rawcp;\n    cc = tif->tif_rawcc;\n    while (cc > 0 && occ > 0)\n    {\n        n = (long)*bp++;\n        cc--;\n        if (n < 0)\n        {                  /* replicate next byte -n+1 times */\n            if (n == -128) /* nop */\n                continue;\n            n = -n + 1;\n            if (occ < (tmsize_t)n)\n            {\n                TIFFWarningExtR(tif, module,\n                                \"Discarding %\" TIFF_SSIZE_FORMAT\n                                \" bytes to avoid buffer overrun\",\n                                (tmsize_t)n - occ);\n                n = (long)occ;\n            }\n            if (cc == 0)\n            {\n                TIFFWarningExtR(\n                    tif, module,\n                    \"Terminating PackBitsDecode due to lack of data.\");\n                break;\n            }\n            occ -= n;\n            b = *bp++;\n            cc--;\n            while (n-- > 0)\n                *op++ = (uint8_t)b;\n        }\n        else\n        { /* copy next n+1 bytes literally */\n            if (occ < (tmsize_t)(n + 1))\n            {\n                TIFFWarningExtR(tif, module,\n                                \"Discarding %\" TIFF_SSIZE_FORMAT\n                                \" bytes to avoid buffer overrun\",\n                                (tmsize_t)n - occ + 1);\n                n = (long)occ - 1;\n            }\n            if (cc < (tmsize_t)(n + 1))\n            {\n                TIFFWarningExtR(\n                    tif, module,\n                    \"Terminating PackBitsDecode due to lack of data.\");\n                break;\n            }\n            _TIFFmemcpy(op, bp, ++n);\n            op += n;\n            occ -= n;\n            bp += n;\n            cc -= n;\n        }\n    }\n    tif->tif_rawcp = (uint8_t *)bp;\n    tif->tif_rawcc = cc;\n    if (occ > 0)\n    {\n        memset(op, 0, (size_t)occ);\n        TIFFErrorExtR(tif, module, \"Not enough data for scanline %\" PRIu32,\n                      tif->tif_row);\n        return (0);\n    }\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          233,
+          0
+        ],
+        [
+          308,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "PackBitsDecode",
+        "parameters": {
+          "tif": "TIFF",
+          "op": "uint8_t",
+          "occ": "tmsize_t",
+          "s": "uint16_t"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "int TIFFInitPackBits(TIFF *tif, int scheme)\n{\n    (void)scheme;\n    tif->tif_decoderow = PackBitsDecode;\n    tif->tif_decodestrip = PackBitsDecode;\n    tif->tif_decodetile = PackBitsDecode;\n    tif->tif_preencode = PackBitsPreEncode;\n    tif->tif_postencode = PackBitsPostEncode;\n    tif->tif_encoderow = PackBitsEncode;\n    tif->tif_encodestrip = PackBitsEncodeChunk;\n    tif->tif_encodetile = PackBitsEncodeChunk;\n    return (1);\n}",
+      "fn_code_pos": [
+        [
+          310,
+          0
+        ],
+        [
+          322,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TIFFInitPackBits",
+        "parameters": {
+          "tif": "TIFF",
+          "scheme": "int"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"tiffiop.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include <stdio.h>\n",
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": [
+    [
+      "enum\n    {\n        BASE,\n        LITERAL,\n        RUN,\n        LITERAL_RUN\n    }",
+      {
+        "BASE": "",
+        "LITERAL": "",
+        "RUN": "",
+        "LITERAL_RUN": ""
+      },
+      "",
+      [
+        68,
+        4
+      ],
+      [
+        74,
+        5
+      ]
+    ]
+  ]
+}
