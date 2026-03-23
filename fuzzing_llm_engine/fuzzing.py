@@ -111,7 +111,7 @@ if __name__ == '__main__':
     api_code_file = os.path.join(fuzz_projects_dir, "src/src_api_code.json")
     api_call_graph_file = os.path.join(fuzz_projects_dir, "api_combine/combined_call_graph.csv")
     agents_result_dir = os.path.join(fuzz_projects_dir, "agents_results")
-    fuzz_dir=os.path.join(work_dir,"/home/cc/CKGFuzzer/fuzzing_llm_engine/")
+    fuzz_dir=os.path.join(work_dir, "fuzzing_llm_engine/")
 
     # parameters for construting graph knowledge
     chromadb_dir = os.path.join(fuzz_projects_dir, "chromadb/")

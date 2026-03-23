@@ -22,7 +22,6 @@ from llama_index.core.indices.property_graph import (
     VectorContextRetriever,
 )
 from llama_index.core import VectorStoreIndex
-from llama_index.llms.ollama import Ollama
 from llama_index.core import PropertyGraphIndex
 from llama_index.core import Settings
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
@@ -162,7 +161,9 @@ def getCodeCallKGGraph(method_call_csv_file:str, code_base:CodeRepository, api_s
         file_name = os.path.basename(callee_src)
         if file_name in api_summary:
            file_summary = api_summary[file_name]["file_summary"]
-           file_proerties = {"summary":file_summary}
+           file_proerties = {"file summary":file_summary}
+        else:
+           file_proerties = {}
         ids_in_graph.append(f"{callee_src}-{callee}")
         callee_file_entity = EntityNode(
             name=f"{callee_src}",
@@ -360,13 +361,13 @@ def getCodeKG_CodeBase( chromadb_dir: str,  \
         saved_pg_api_code_dir = os.path.join(saved_folder, "kg", "index_pg_api_code")
         saved_pg_file_summary_dir = os.path.join(saved_folder, "kg", "index_pg_file_summary")
         
-        all_src_code_vector_index = get_or_construct_chromadb(os.path.join(chromadb_dir, "all_src_text_nodes"), "all_src_text_nodes", all_src_text_nodes, initGraphKG, llm, embed_model)
+        all_src_code_vector_index = get_or_construct_chromadb(os.path.join(chromadb_dir, "all_src_text_nodes"), "all_src_text_nodes", [], initGraphKG, llm, embed_model)
         
-        summary_api_vector_index = get_or_construct_chromadb(os.path.join(chromadb_dir, "summary_api_nodes"), "summary_api_nodes", summary_api_nodes, initGraphKG, llm, embed_model)
+        summary_api_vector_index = get_or_construct_chromadb(os.path.join(chromadb_dir, "summary_api_nodes"), "summary_api_nodes", [], initGraphKG, llm, embed_model)
         
-        api_src_vector_index = get_or_construct_chromadb(os.path.join(chromadb_dir, "api_src_text_nodes"), "api_src_text_nodes", api_src_text_nodes, initGraphKG, llm, embed_model)
+        api_src_vector_index = get_or_construct_chromadb(os.path.join(chromadb_dir, "api_src_text_nodes"), "api_src_text_nodes", [], initGraphKG, llm, embed_model)
         
-        summary_file_vector_index = get_or_construct_chromadb(os.path.join(chromadb_dir, "file_summary_nodes"), "file_summary_nodes", file_summary_nodes, initGraphKG, llm, embed_model)
+        summary_file_vector_index = get_or_construct_chromadb(os.path.join(chromadb_dir, "file_summary_nodes"), "file_summary_nodes", [], initGraphKG, llm, embed_model)
 
         
         index_pg_all_code = PropertyGraphIndex.from_existing(\
@@ -380,7 +381,7 @@ def getCodeKG_CodeBase( chromadb_dir: str,  \
                         embed_kg_nodes=True, show_progress=True, \
                         llm=llm, embed_model=embed_model, **kwargs)
         index_pg_api_code = PropertyGraphIndex.from_existing(\
-                        property_graph_store = SimplePropertyGraphStore.from_persist_dir(saved_pg_api_summary_dir), \
+                        property_graph_store = SimplePropertyGraphStore.from_persist_dir(saved_pg_api_code_dir), \
                         vector_store=api_src_vector_index._vector_store,\
                         embed_kg_nodes=True, show_progress=True, \
                         llm=llm, embed_model=embed_model, **kwargs)

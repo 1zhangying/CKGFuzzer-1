@@ -339,7 +339,7 @@ from loguru import logger
 def check_compilation(args):
     fuzz_driver_file = args.fuzz_driver_file
     project_name = args.project.name
-    fuzz_driver_file = fuzz_driver_file.rsplit('.', 1)[0]
+    # Pass full filename (with extension) to the shell script
     command = ['bash', f'/{LLM_WORK_DIR}/fuzz_driver/{project_name}/scripts/check_compilation.sh', project_name, fuzz_driver_file]
     result = docker_exec_command(command, project_name)
     if len(result) > 5000:
@@ -1043,13 +1043,24 @@ def build_image_impl(project, cache=True, pull=False, architecture='x86_64'):
   build_args = []
   image_name = 'gcr.io/%s/%s' % (image_project, image_name)
   
-  # Check if the image exists
+  # Check if the image already exists — skip expensive rebuild
   if subprocess.call(['docker', 'image', 'inspect', image_name], 
                      stdout=subprocess.DEVNULL, 
-                     stderr=subprocess.DEVNULL) != 0:
-    # If the image doesn't exist, try the alternative name
-    image_name = '%s_base_image' % (image_name)
-  
+                     stderr=subprocess.DEVNULL) == 0:
+    logger.info('Image %s already exists, skipping build.', image_name)
+    return True
+
+  # Try the alternative <project>_base_image name
+  alt_name = '%s_base_image' % (project.name,)
+  if subprocess.call(['docker', 'image', 'inspect', alt_name],
+                     stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL) == 0:
+    subprocess.check_call(['docker', 'tag', alt_name, image_name])
+    logger.info('Reused existing image %s as %s, skipping build.', alt_name, image_name)
+    return True
+
+  # Neither image exists — must build; use alt_name as target
+  image_name = alt_name
   
   if architecture == 'aarch64':
     build_args += [
@@ -1126,25 +1137,22 @@ def docker_run(run_args, print_output=True, architecture='x86_64'):
   logger.info(' '.join(command))
 
   logger.info('Running: %s.', _get_command_string(command))
-  # stdout = None
-  # if not print_output:
-  #   stdout = open(os.devnull, 'w')
 
-
+  process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT)
   try:
-      process = subprocess.check_output(command, stderr=subprocess.STDOUT)
-      process_str = process.decode('utf-8', errors='ignore')
+      stdout, _ = process.communicate()
+      process_str = stdout.decode('utf-8', errors='ignore')
       return process_str
-  except subprocess.CalledProcessError as e:
-      if print_output:
-        return e.output.decode('utf-8', errors='ignore')
-      
-  # try:
-  #   subprocess.check_call(command, stdout=stdout, stderr=subprocess.STDOUT)
-  # except subprocess.CalledProcessError:
-  #   return False
-
-  # return True
+  except KeyboardInterrupt:
+      logger.info("KeyboardInterrupt received. Terminating Docker container...")
+      process.terminate()
+      try:
+          process.wait(timeout=5)
+      except subprocess.TimeoutExpired:
+          process.kill()
+          process.wait()
+      raise
       
 
 def build_fuzzer_file(args):
@@ -1256,7 +1264,7 @@ def build_fuzzers_impl(  args, # pylint: disable=too-many-arguments,too-many-loc
 
 def docker_build(build_args):
   """Calls `docker build`."""
-  command = ['docker', 'build']
+  command = ['docker', 'build', '--network=host']
   command.extend(build_args)
   logger.info('Running: %s.', _get_command_string(command))
 

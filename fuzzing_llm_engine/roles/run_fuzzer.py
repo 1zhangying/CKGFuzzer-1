@@ -14,6 +14,7 @@ from loguru import logger
 # import shutil
 # import re
 from datetime import datetime
+from typing import Optional
 import textwrap
 
 import zipfile
@@ -21,11 +22,363 @@ import yaml
 import json
 import time
 import csv
+import shutil
+
+import time as _time
+
+from crash.sanitizer_parser import parse_sanitizer_output, format_crash_summary
+from crash.triage import triage_crash
+from crash.locator import locate_crash_site, format_call_chain_for_llm
+from crash.debugger import reproduce_with_gdb, format_runtime_context_for_llm
+from crash.dedup import DeduplicationEngine
+from crash.poc import locate_poc_on_host, safe_copy_poc
+from crash.report import build_crash_report, save_crash_report
+
+
+# Module-level dedup engine (shared across all crash analyses in a session)
+_dedup_engine: Optional[DeduplicationEngine] = None
+
+def _get_dedup_engine(db_path: Optional[str] = None) -> DeduplicationEngine:
+    global _dedup_engine
+    if _dedup_engine is None:
+        _dedup_engine = DeduplicationEngine()
+        if db_path and os.path.isfile(db_path):
+            _dedup_engine.load_from_file(db_path)
+    return _dedup_engine
+
+
+def _extract_crash_entry(crash: dict):
+    crash_id = list(crash.keys())[0]
+    return crash_id, crash[crash_id]
+
+
+def _find_duplicate_of(crash_data: list, signature: str):
+    if not signature:
+        return None
+    for crash in crash_data:
+        _id, entry = _extract_crash_entry(crash)
+        if entry.get("signature") == signature:
+            return _id
+    return None
+
+
+def _run_repro_once(project_name: str, fuzz_driver_file: str, fuzzer_name: str, fuzzing_llm_dir: str, corpus_dir: str, poc_name_in_corpus: str, timeout: str) -> str:
+    """Run the fuzzer once with a specific PoC to reproduce a crash.
+
+    Uses '--' to separate fuzzer-level arguments from libFuzzer arguments,
+    preventing argparse from rejecting the PoC container path.
+    Catches SystemExit from argparse failures to avoid crashing the whole process.
+    """
+    poc_container_path = f"/tmp/{fuzzer_name}_corpus/{poc_name_in_corpus}"
+    run_args = [
+        "run_fuzzer",
+        project_name,
+        "--timeout",
+        timeout,
+        "--fuzz_driver_file",
+        fuzz_driver_file,
+        fuzzer_name,
+        "--fuzzing_llm_dir",
+        fuzzing_llm_dir,
+        "--corpus-dir",
+        corpus_dir,
+        "--",
+        poc_container_path,
+    ]
+    try:
+        result = run(run_args)
+        return result if isinstance(result, str) else ""
+    except SystemExit as e:
+        logger.warning(f"[Repro] argparse rejected args (exit code {e.code}), "
+                       f"poc={poc_container_path}")
+        return ""
+
+
+def _run_minimize(project_name: str, fuzz_driver_file: str, fuzzer_name: str, fuzzing_llm_dir: str, corpus_dir: str, poc_name_in_corpus: str, out_name_in_corpus: str, timeout: str) -> str:
+    """Run libFuzzer minimization on a crash PoC.
+
+    Uses '--' separator so that libFuzzer-specific flags (starting with '-')
+    are not misinterpreted by argparse as unknown optional arguments.
+    Catches SystemExit from argparse failures to avoid crashing the whole process.
+    """
+    poc_container_path = f"/tmp/{fuzzer_name}_corpus/{poc_name_in_corpus}"
+    out_container_path = f"/tmp/{fuzzer_name}_corpus/{out_name_in_corpus}"
+    run_args = [
+        "run_fuzzer",
+        project_name,
+        "--timeout",
+        timeout,
+        "--fuzz_driver_file",
+        fuzz_driver_file,
+        fuzzer_name,
+        "--fuzzing_llm_dir",
+        fuzzing_llm_dir,
+        "--corpus-dir",
+        corpus_dir,
+        "--",
+        f"-runs=1",
+        f"-minimize_crash=1",
+        f"-exact_artifact_path={out_container_path}",
+        poc_container_path,
+    ]
+    try:
+        result = run(run_args)
+        return result if isinstance(result, str) else ""
+    except SystemExit as e:
+        logger.warning(f"[Minimize] argparse rejected args (exit code {e.code}), "
+                       f"poc={poc_container_path}")
+        return ""
 
 
 
 
-def save_crash_analysis(fuzz_project_dir, fuzz_driver_file, is_api_bug, crash_category, crash_analysis, crash_info, fuzz_driver_path):
+def run_enhanced_crash_pipeline(
+    crash_info: str,
+    fuzz_driver_path: str,
+    api_combine: list,
+    crash_analyzer: "CrashAnalyzer",
+    *,
+    project_name: Optional[str] = None,
+    fuzzer_name: Optional[str] = None,
+    corpus_dir: Optional[str] = None,
+    fuzzing_llm_dir: Optional[str] = None,
+    binary_path: Optional[str] = None,
+    fuzz_project_dir: Optional[str] = None,
+    run_baseline: bool = False,
+) -> dict:
+    """Run the full 6-stage enhanced crash analysis pipeline.
+
+    Stages:
+      1. Sanitizer parse (deterministic)
+      2. Rule-based triage (deterministic)
+      3. Precise code location + call chain context
+      4. PoC locate + reproduction + GDB runtime context
+      5. Multi-level deduplication
+      6. LLM context-enriched analysis (only if triage says worth it)
+
+    Returns a dict with all stage results + final verdict.
+    """
+    fuzz_driver_basename = os.path.basename(fuzz_driver_path) if fuzz_driver_path else None
+    _timings = {}  # collect per-stage wall-clock time for experiment metrics
+
+    # Stage 1: Deterministic sanitizer parse
+    _t0 = _time.monotonic()
+    parsed = parse_sanitizer_output(crash_info or "")
+    _timings["stage1_parse_ms"] = round((_time.monotonic() - _t0) * 1000, 1)
+    logger.info(f"[Pipeline] Stage 1 — Parsed: bug_type={parsed.get('bug_type')}, "
+                f"frames={len(parsed.get('frames', []))}, "
+                f"first_project_frame={parsed.get('first_in_project_frame')} "
+                f"({_timings['stage1_parse_ms']}ms)")
+
+    # Stage 2: Rule-based triage
+    _t0 = _time.monotonic()
+    triage = triage_crash(parsed, fuzz_driver_basename=fuzz_driver_basename)
+    _timings["stage2_triage_ms"] = round((_time.monotonic() - _t0) * 1000, 1)
+    logger.info(f"[Pipeline] Stage 2 — Triage: label={triage.get('label')}, "
+                f"confidence={triage.get('confidence')}, "
+                f"rules={triage.get('matched_rules')} "
+                f"({_timings['stage2_triage_ms']}ms)")
+
+    # Stage 3: Precise code location
+    _t0 = _time.monotonic()
+    location = locate_crash_site(parsed, driver_basename=fuzz_driver_basename,
+                                 binary_path=binary_path)
+    _timings["stage3_locate_ms"] = round((_time.monotonic() - _t0) * 1000, 1)
+    logger.info(f"[Pipeline] Stage 3 — Location: {location.get('crash_function')} "
+                f"@ {location.get('crash_file')}:{location.get('crash_line')}, "
+                f"symbolized={location.get('symbolized')} "
+                f"({_timings['stage3_locate_ms']}ms)")
+
+    # Stage 4: PoC locate + reproduce + GDB
+    poc_info = None
+    poc_paths = {}
+    poc_copy = {"copied": False}
+    runtime_ctx = None
+    repro_info = {"enabled": False}
+
+    if project_name:
+        poc_info = locate_poc_on_host(parsed, project_name=project_name, corpus_dir=corpus_dir)
+        if poc_info.get("exists") and poc_info.get("host_path"):
+            crash_dir = os.path.join(fuzz_project_dir, "crash") if fuzz_project_dir else "/tmp"
+            pocs_dir = os.path.join(crash_dir, "pocs")
+            poc_dst = os.path.join(pocs_dir, f"poc_{fuzzer_name or 'unknown'}")
+            ok, err = safe_copy_poc(poc_info["host_path"], poc_dst)
+            poc_copy = {"copied": ok, "error": err, "dst": poc_dst}
+            if ok:
+                poc_paths["poc"] = poc_dst
+
+    # Try reproduction via container (existing mechanism)
+    if poc_copy.get("copied") and fuzzer_name and corpus_dir and fuzzing_llm_dir and project_name:
+        repro_info["enabled"] = True
+        repro_name = f"repro_{fuzzer_name}"
+        try:
+            ok, err = safe_copy_poc(poc_copy["dst"], os.path.join(corpus_dir, repro_name))
+            repro_info["prepared"] = ok
+            if ok:
+                runs = []
+                for _ in range(3):
+                    from utils.check_gen_fuzzer import run as _run
+                    fuzz_driver_file = os.path.basename(fuzz_driver_path)
+                    out = _run_repro_once(project_name, fuzz_driver_file, fuzzer_name,
+                                          fuzzing_llm_dir, corpus_dir, repro_name, timeout="10s")
+                    p2 = parse_sanitizer_output(out or "")
+                    t2 = triage_crash(p2, fuzz_driver_basename=fuzz_driver_basename)
+                    runs.append({
+                        "has_error": ("ERROR" in out) if isinstance(out, str) else False,
+                        "signature": t2.get("signature"),
+                        "same_signature": t2.get("signature") == triage.get("signature"),
+                    })
+                repro_info["runs"] = runs
+                repro_info["repro_rate"] = f"{sum(1 for r in runs if r.get('same_signature'))}/{len(runs)}"
+        except (Exception, SystemExit) as e:
+            logger.warning(f"[Pipeline] Reproduction failed: {e}")
+            repro_info["error"] = str(e)
+
+    # Try GDB if binary is available and PoC exists
+    if binary_path and poc_paths.get("poc") and os.path.isfile(binary_path):
+        try:
+            runtime_ctx = reproduce_with_gdb(binary_path, poc_paths["poc"], timeout=15)
+            logger.info(f"[Pipeline] Stage 4 — GDB: reproduced={runtime_ctx.get('reproduced')}")
+        except Exception as e:
+            logger.warning(f"[Pipeline] GDB failed: {e}")
+
+    # Stage 5: Deduplication
+    _t0 = _time.monotonic()
+    dedup_db_path = os.path.join(fuzz_project_dir, "crash", "dedup_db.yaml") if fuzz_project_dir else None
+    dedup_engine = _get_dedup_engine(dedup_db_path)
+    crash_id_for_dedup = f"{fuzzer_name or 'unknown'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    dedup_info = dedup_engine.add_crash(crash_id_for_dedup, triage, parsed)
+    _timings["stage5_dedup_ms"] = round((_time.monotonic() - _t0) * 1000, 1)
+    logger.info(f"[Pipeline] Stage 5 — Dedup: is_duplicate={dedup_info.get('is_duplicate')}, "
+                f"cluster={dedup_info.get('cluster_id')} "
+                f"({_timings['stage5_dedup_ms']}ms)")
+
+    # Save dedup DB
+    if dedup_db_path:
+        try:
+            dedup_engine.save_to_file(dedup_db_path)
+        except Exception as e:
+            logger.warning(f"[Pipeline] Failed to save dedup DB: {e}")
+
+    # Stage 6: LLM analysis (only if worth it and not duplicate)
+    is_api_bug = False
+    crash_category = parsed.get("bug_type") or "Unknown"
+    analysis_text = ""
+    enhanced_result = {}
+
+    _t0 = _time.monotonic()
+    if triage.get("is_worth_llm_analysis") and not dedup_info.get("is_duplicate"):
+        logger.info("[Pipeline] Stage 6 — Running enhanced LLM analysis...")
+        try:
+            is_api_bug, crash_category, analysis_text, enhanced_result = \
+                crash_analyzer.analyze_crash_enhanced(
+                    crash_info, fuzz_driver_path, api_combine,
+                    triage_result=triage,
+                    location_result=location,
+                    runtime_context=runtime_ctx,
+                )
+        except Exception as e:
+            logger.error(f"[Pipeline] Enhanced LLM analysis failed, falling back: {e}")
+            try:
+                is_api_bug, crash_category, analysis_text = \
+                    crash_analyzer.analyze_crash(crash_info, fuzz_driver_path, api_combine)
+                enhanced_result = {"is_api_bug": is_api_bug, "crash_category": crash_category}
+            except Exception as e2:
+                logger.error(f"[Pipeline] Fallback analysis also failed: {e2}")
+                analysis_text = f"Analysis failed: {e2}"
+    elif dedup_info.get("is_duplicate"):
+        logger.info(f"[Pipeline] Stage 6 — Skipping LLM (duplicate of {dedup_info.get('duplicate_of')})")
+        analysis_text = f"Duplicate crash — same as {dedup_info.get('duplicate_of')}"
+    else:
+        logger.info(f"[Pipeline] Stage 6 — Skipping LLM (triage: {triage.get('label')})")
+        is_api_bug = False
+        analysis_text = f"Skipped LLM analysis — triage label: {triage.get('label')}"
+    _timings["stage6_llm_ms"] = round((_time.monotonic() - _t0) * 1000, 1)
+    _timings["llm_skipped"] = not (triage.get("is_worth_llm_analysis") and not dedup_info.get("is_duplicate"))
+    _timings["llm_skip_reason"] = (
+        "duplicate" if dedup_info.get("is_duplicate") else
+        f"triage:{triage.get('label')}" if not triage.get("is_worth_llm_analysis") else
+        "none"
+    )
+    logger.info(f"[Pipeline] Stage 6 done ({_timings['stage6_llm_ms']}ms, skipped={_timings['llm_skipped']})")
+
+    # ── Ablation baseline: call OLD analyze_crash (no triage context) ────
+    # This produces the "baseline LLM" judgment for A/B comparison in the paper.
+    # Enabled by run_baseline=True or env ABLATION_BASELINE=1.
+    _run_bl = run_baseline or os.environ.get("ABLATION_BASELINE", "") == "1"
+    baseline_result = {"enabled": False}
+    if _run_bl:
+        logger.info("[Pipeline] Ablation — Running OLD analyze_crash (baseline, no triage context)...")
+        _tb0 = _time.monotonic()
+        try:
+            bl_api_bug, bl_category, bl_text = crash_analyzer.analyze_crash(
+                crash_info, fuzz_driver_path, api_combine
+            )
+            baseline_result = {
+                "enabled": True,
+                "is_api_bug": bl_api_bug,
+                "crash_category": bl_category,
+                "analysis_text": bl_text[:3000],  # truncate for storage
+            }
+        except Exception as e:
+            logger.error(f"[Pipeline] Baseline analysis failed: {e}")
+            baseline_result = {"enabled": True, "error": str(e)}
+        _timings["baseline_llm_ms"] = round((_time.monotonic() - _tb0) * 1000, 1)
+        logger.info(f"[Pipeline] Ablation baseline done ({_timings.get('baseline_llm_ms')}ms): "
+                    f"is_api_bug={baseline_result.get('is_api_bug')}")
+
+    logger.info(f"[Pipeline] === Timing summary: {_timings} ===")
+
+    # Build report
+    report = build_crash_report(
+        crash_id_for_dedup,
+        parsed=parsed,
+        triage=triage,
+        location=location,
+        runtime_ctx=runtime_ctx,
+        llm_analysis_text=analysis_text,
+        enhanced_result=enhanced_result,
+        dedup_info=dedup_info,
+        poc_paths=poc_paths,
+        repro_info=repro_info,
+        fuzz_driver_file=os.path.basename(fuzz_driver_path) if fuzz_driver_path else None,
+    )
+
+    return {
+        "is_api_bug": is_api_bug,
+        "crash_category": crash_category,
+        "analysis_text": analysis_text,
+        "enhanced_result": enhanced_result,
+        "parsed": parsed,
+        "triage": triage,
+        "location": location,
+        "runtime_context": runtime_ctx,
+        "dedup_info": dedup_info,
+        "poc_paths": poc_paths,
+        "repro": repro_info,
+        "report": report,
+        "timings": _timings,
+        "baseline": baseline_result,
+    }
+
+
+def save_crash_analysis(
+    fuzz_project_dir,
+    fuzz_driver_file,
+    is_api_bug,
+    crash_category,
+    crash_analysis,
+    crash_info,
+    fuzz_driver_path,
+    *,
+    project_name=None,
+    fuzzer_name=None,
+    corpus_dir=None,
+    fuzzing_llm_dir=None,
+    enable_repro=True,
+    enable_minimize=True,
+    pipeline_result=None,
+):
     crash_dir = os.path.join(fuzz_project_dir, "crash")
     if not os.path.exists(crash_dir):
         os.makedirs(crash_dir)
@@ -56,17 +409,124 @@ def save_crash_analysis(fuzz_project_dir, fuzz_driver_file, is_api_bug, crash_ca
     formatted_crash_analysis = textwrap.indent(crash_analysis.strip(), '      ')
     formatted_crash_info = textwrap.indent(crash_info.strip(), '      ')
 
-    # Append new crash analysis
-    crash_data.append({
-        crash_id: {
-            "is_api_bug": is_api_bug,
-            "crash_category": crash_category,
-            "crash_analysis": f"|\n{formatted_crash_analysis}",
-            "crash_info": f"|\n{formatted_crash_info}",
-            "fuzz_driver_file": os.path.basename(fuzz_driver_dest),
-            "timestamp": datetime.now().isoformat()
-        }
-    })
+    fuzz_driver_basename = os.path.basename(fuzz_driver_path) if fuzz_driver_path else None
+    sanitizer_parsed = parse_sanitizer_output(crash_info or "")
+    triage = triage_crash(sanitizer_parsed, fuzz_driver_basename=fuzz_driver_basename)
+    signature = triage.get("signature")
+
+    duplicate_of = _find_duplicate_of(crash_data, signature)
+    group_id = signature
+
+    poc = None
+    poc_copy = {"copied": False}
+    poc_paths = {}
+
+    if project_name:
+        poc = locate_poc_on_host(sanitizer_parsed, project_name=project_name, corpus_dir=corpus_dir)
+        if poc.get("exists") and poc.get("host_path"):
+            pocs_dir = os.path.join(fuzz_driver_crash_dir, "pocs")
+            poc_dst = os.path.join(pocs_dir, f"{crash_id}_poc")
+            ok, err = safe_copy_poc(poc["host_path"], poc_dst)
+            poc_copy = {"copied": ok, "error": err, "dst": poc_dst, "src": poc["host_path"]}
+            if ok:
+                poc_paths["poc"] = poc_dst
+
+    repro = {"enabled": False}
+    minimize = {"enabled": False}
+    if enable_repro and project_name and fuzzer_name and corpus_dir and fuzzing_llm_dir and poc_copy.get("copied"):
+        repro["enabled"] = True
+        repro_name = f"repro_{crash_id}"
+        ok, err = safe_copy_poc(poc_copy["dst"], os.path.join(corpus_dir, repro_name))
+        repro["prepared"] = ok
+        repro["prepare_error"] = err
+        if ok:
+            runs = []
+            for _ in range(3):
+                out = _run_repro_once(project_name, fuzz_driver_file, fuzzer_name, fuzzing_llm_dir, corpus_dir, repro_name, timeout="10s")
+                parsed2 = parse_sanitizer_output(out or "")
+                triage2 = triage_crash(parsed2, fuzz_driver_basename=fuzz_driver_basename)
+                runs.append(
+                    {
+                        "has_error": ("ERROR" in out) if isinstance(out, str) else False,
+                        "signature": triage2.get("signature"),
+                        "same_signature": triage2.get("signature") == signature,
+                    }
+                )
+            repro["runs"] = runs
+            repro["repro_rate"] = f"{sum(1 for r in runs if r.get('same_signature'))}/{len(runs)}"
+
+            if enable_minimize:
+                minimize["enabled"] = True
+                min_name = f"min_{crash_id}"
+                _ = _run_minimize(project_name, fuzz_driver_file, fuzzer_name, fuzzing_llm_dir, corpus_dir, repro_name, min_name, timeout="60s")
+                min_host_path = os.path.join(corpus_dir, min_name)
+                if os.path.exists(min_host_path):
+                    pocs_dir = os.path.join(fuzz_driver_crash_dir, "pocs")
+                    min_dst = os.path.join(pocs_dir, f"{crash_id}_min_poc")
+                    ok2, err2 = safe_copy_poc(min_host_path, min_dst)
+                    minimize["created"] = True
+                    minimize["copied"] = ok2
+                    minimize["copy_error"] = err2
+                    if ok2:
+                        poc_paths["min_poc"] = min_dst
+                else:
+                    minimize["created"] = False
+
+    # Build crash entry
+    entry = {
+        "is_api_bug": is_api_bug,
+        "crash_category": crash_category,
+        "crash_analysis": f"|\n{formatted_crash_analysis}",
+        "crash_info": f"|\n{formatted_crash_info}",
+        "sanitizer_parsed": sanitizer_parsed,
+        "triage": triage,
+        "signature": signature,
+        "group_id": group_id,
+        "duplicate_of": duplicate_of,
+        "poc_locate": poc,
+        "poc_copy": poc_copy,
+        "poc_paths": poc_paths,
+        "repro": repro,
+        "minimize": minimize,
+        "fuzz_driver_file": os.path.basename(fuzz_driver_dest),
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    # Merge enhanced pipeline results if available
+    if pipeline_result:
+        pr = pipeline_result
+        if pr.get("location"):
+            entry["location"] = {
+                "crash_file": pr["location"].get("crash_file"),
+                "crash_line": pr["location"].get("crash_line"),
+                "crash_function": pr["location"].get("crash_function"),
+                "symbolized": pr["location"].get("symbolized"),
+            }
+        if pr.get("enhanced_result"):
+            entry["enhanced_analysis"] = pr["enhanced_result"]
+        if pr.get("dedup_info"):
+            entry["dedup"] = pr["dedup_info"]
+        if pr.get("report", {}).get("verdict"):
+            entry["verdict"] = pr["report"]["verdict"]
+        if pr.get("timings"):
+            entry["timings"] = pr["timings"]
+        # Ablation baseline results (old LLM without triage context)
+        bl = pr.get("baseline", {})
+        if bl.get("enabled"):
+            entry["baseline_llm"] = {
+                "is_api_bug": bl.get("is_api_bug"),
+                "crash_category": bl.get("crash_category"),
+            }
+
+    # Save enhanced report as separate file
+    if pipeline_result and pipeline_result.get("report"):
+        try:
+            reports_dir = os.path.join(fuzz_driver_crash_dir, "reports")
+            save_crash_report(pipeline_result["report"], reports_dir)
+        except Exception as e:
+            logger.warning(f"Failed to save enhanced report: {e}")
+
+    crash_data.append({crash_id: entry})
     
     # Custom YAML dumper to preserve multi-line strings
     class literal_str(str):
@@ -287,12 +747,41 @@ class Fuzzer():
                 self.failed_builds.append(fuzz_driver_file)
                 return
             if isinstance(run_fuzzer_result, str) and "ERROR" in run_fuzzer_result:
-                logger.info("Crash detected. Analyzing...")
+                logger.info("Crash detected. Running enhanced analysis pipeline...")
                 error_index = run_fuzzer_result.index("ERROR")
-                crash_info = run_fuzzer_result[error_index:]  # Extract only the error message
-                is_api_bug, crash_category, crash_analysis = self.crash_analyzer.analyze_crash(crash_info, f"{fix_fuzz_driver_dir}/{fuzz_driver_file}", api_combine)
-                save_crash_analysis(self.fuzz_project_dir, fuzz_driver_file, is_api_bug, crash_category, crash_analysis, crash_info,f"{fix_fuzz_driver_dir}/{fuzz_driver_file}")
-            
+                crash_info = run_fuzzer_result[error_index:]
+                fuzz_driver_fullpath = f"{fix_fuzz_driver_dir}/{fuzz_driver_file}"
+
+                pipeline_result = run_enhanced_crash_pipeline(
+                    crash_info,
+                    fuzz_driver_fullpath,
+                    api_combine,
+                    self.crash_analyzer,
+                    project_name=self.project,
+                    fuzzer_name=fuzzer_name,
+                    corpus_dir=corpus_dir,
+                    fuzzing_llm_dir=self.directory,
+                    fuzz_project_dir=self.fuzz_project_dir,
+                )
+
+                is_api_bug = pipeline_result.get("is_api_bug", False)
+                crash_category = pipeline_result.get("crash_category", "Unknown")
+                crash_analysis = pipeline_result.get("analysis_text", "")
+
+                save_crash_analysis(
+                    self.fuzz_project_dir,
+                    fuzz_driver_file,
+                    is_api_bug,
+                    crash_category,
+                    crash_analysis,
+                    crash_info,
+                    fuzz_driver_fullpath,
+                    project_name=self.project,
+                    fuzzer_name=fuzzer_name,
+                    corpus_dir=corpus_dir,
+                    fuzzing_llm_dir=self.directory,
+                    pipeline_result=pipeline_result,
+                )
 
             # build fuzzer with coverage to collect the coverage reports
             run_args=['build_fuzzers',self.project, "--sanitizer", "coverage", "--fuzzing_llm_dir", self.directory, "--fuzz_driver_file", fuzz_driver_file]
@@ -354,7 +843,14 @@ class Fuzzer():
                         low_coverage_apis = self.analyze_low_coverage_files(current_branch_coverage,file_coverages)
                         logger.info(f"Low coverage APIs: {low_coverage_apis}")
      
-                        new_api_combine = self.planner.generate_single_api_combination(api_name, current_api_combine, low_coverage_apis,)
+                        try:
+                            new_api_combine = self.planner.generate_single_api_combination(api_name, current_api_combine, low_coverage_apis,)
+                        except RuntimeError as e:
+                            # 网络异常重试耗尽，放弃优化循环但保留已有 fuzzing 成果
+                            logger.warning(f"API combination generation failed: {e}. "
+                                           f"Keeping existing results for {fuzz_driver_file}.")
+                            new_api_combine = current_api_combine
+                            break
                         logger.info(f"New API Combination: {new_api_combine}")
                         
                         self.fuzz_gen.generate_single_fuzz_driver(new_api_combine, fuzz_driver_file, self.api_code, self.api_summary, self.fuzz_gen_code_output_dir)
@@ -371,22 +867,56 @@ class Fuzzer():
                         build_fuzzer_result =  run(run_args) 
                         logger.info(f"compile {fuzz_driver_file}, result {build_fuzzer_result}")
 
-                        if "ERROR" in build_fuzzer_result or "error" in build_fuzzer_result.lower():
-                            logger.error(f"Failed to build fuzzer {fuzz_driver_file}. Skipping this file.")
+                        if "Compilation failed" in build_fuzzer_result or "Compilation succeeded" not in build_fuzzer_result:
+                            logger.error(f"Failed to build fuzzer {fuzz_driver_file}. Skipping this iteration.")
+                            i+=1
                             continue
 
                         run_args = ["run_fuzzer", self.project,"--timeout", self.time_budget, "--fuzz_driver_file", fuzz_driver_file, fuzzer_name,"--fuzzing_llm_dir", self.directory,"--corpus-dir",f"{corpus_dir}"]  
                         run_fuzzer_result =  run(run_args)  
                         logger.info(f"run_fuzzer {fuzz_driver_file}, result {run_fuzzer_result}")
 
-                          
+                        if run_fuzzer_result is False:
+                            logger.error(f"Failed to run fuzzer {fuzz_driver_file} in optimization loop. Fuzzer may not exist.")
+                            i+=1
+                            continue
 
-                        if "ERROR" in run_fuzzer_result:
-                            logger.info("Crash detected. Analyzing...")
+                        if isinstance(run_fuzzer_result, str) and "ERROR" in run_fuzzer_result:
+                            logger.info("Crash detected. Running enhanced analysis pipeline...")
                             error_index = run_fuzzer_result.index("ERROR")
-                            crash_info = run_fuzzer_result[error_index:]  
-                            is_api_bug, crash_category, crash_analysis = self.crash_analyzer.analyze_crash(crash_info, f"{fix_fuzz_driver_dir}/{fuzz_driver_file}", current_api_combine)
-                            save_crash_analysis(self.fuzz_project_dir, fuzz_driver_file, is_api_bug, crash_category, crash_analysis, crash_info,f"{fix_fuzz_driver_dir}/{fuzz_driver_file}")
+                            crash_info = run_fuzzer_result[error_index:]
+                            fuzz_driver_fullpath = f"{fix_fuzz_driver_dir}/{fuzz_driver_file}"
+
+                            pipeline_result = run_enhanced_crash_pipeline(
+                                crash_info,
+                                fuzz_driver_fullpath,
+                                current_api_combine,
+                                self.crash_analyzer,
+                                project_name=self.project,
+                                fuzzer_name=fuzzer_name,
+                                corpus_dir=corpus_dir,
+                                fuzzing_llm_dir=self.directory,
+                                fuzz_project_dir=self.fuzz_project_dir,
+                            )
+
+                            is_api_bug = pipeline_result.get("is_api_bug", False)
+                            crash_category = pipeline_result.get("crash_category", "Unknown")
+                            crash_analysis = pipeline_result.get("analysis_text", "")
+
+                            save_crash_analysis(
+                                self.fuzz_project_dir,
+                                fuzz_driver_file,
+                                is_api_bug,
+                                crash_category,
+                                crash_analysis,
+                                crash_info,
+                                fuzz_driver_fullpath,
+                                project_name=self.project,
+                                fuzzer_name=fuzzer_name,
+                                corpus_dir=corpus_dir,
+                                fuzzing_llm_dir=self.directory,
+                                pipeline_result=pipeline_result,
+                            )
                       
                         # build fuzzer with coverage to collect the coverage reports
                         run_args=['build_fuzzers',self.project, "--sanitizer", "coverage", "--fuzzing_llm_dir", self.directory, "--fuzz_driver_file", fuzz_driver_file]
@@ -421,7 +951,7 @@ class Fuzzer():
                             
                             logger.info(f"Updated api_combine saved to {json_file_path}")
                             return
-                        i += 1
+                    
                     # Update api_combine with new_api_combine even if max iterations reached
                     self.api_combination[fuzzer_number-1] = new_api_combine
                     
@@ -431,15 +961,15 @@ class Fuzzer():
                         json.dump(self.api_combination, f, indent=2)
                     self.planner.update_api_usage_count(new_api_combine)
                     
-                    logger.info(f"Updated api_combine saved to {json_file_path} after reaching max iterations")
+                    logger.info(f"Updated api_combine saved to {json_file_path} after optimization loop ended")
+                    logger.info(f"Coverage: covered lines={self.covered_lines}, total lines={total_lines}, "
+                                f"covered branches={self.covered_branches}, total branches={total_branches}")
 
-                    logger.info("Max iterations reached.")
-                    logger.info(f"Coverage updated. Current covered lines: {self.covered_lines}, Total lines: {total_lines}")
-                    logger.info(f"Current covered branches: {self.covered_branches}, Total branches: {total_branches}")
-                      
+                    # 优化循环结束（达到最大迭代次数或网络异常 break），标记为 completed
+                    self.completed_drivers.append(fuzz_driver_file)
+                    self.save_checkpoint(fuzz_driver_file, "completed")
+                    gc.collect()
 
-    
-    
     def build_and_fuzz(self, resume=True):
         fix_fuzz_driver_dir = os.path.join(self.directory, f"fuzz_driver/{self.project}/compilation_pass_rag/")
         if not os.path.exists(fix_fuzz_driver_dir):
@@ -471,7 +1001,18 @@ class Fuzzer():
                 
             logger.info(f"Fuzz Driver File {fuzz_driver_file}")
             self.save_checkpoint(fuzz_driver_file, "in_progress")
-            self.build_and_fuzz_one_file(fuzz_driver_file, fix_fuzz_driver_dir=fix_fuzz_driver_dir)
+            try:
+                self.build_and_fuzz_one_file(fuzz_driver_file, fix_fuzz_driver_dir=fix_fuzz_driver_dir)
+            except KeyboardInterrupt:
+                logger.info(f"User interrupted (Ctrl+C). Saving checkpoint and exiting...")
+                self.save_checkpoint(fuzz_driver_file, "interrupted")
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error processing {fuzz_driver_file}: {type(e).__name__}: {e}")
+                if fuzz_driver_file not in self.failed_builds:
+                    self.failed_builds.append(fuzz_driver_file)
+                self.save_checkpoint(fuzz_driver_file, "failed")
+                continue
              
         #logger.info(f"Failed builds: {self.failed_builds}")
         # ← 添加这部分：检查成功数

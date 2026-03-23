@@ -9,6 +9,16 @@ script_path=$(realpath "$0")
 script_dir=$(dirname "$script_path")
 cd "$script_dir"
 
+# Resolve the correct codeql binary relative to this script:
+#   script is at docker_shared/qlpacks/cpp_queries/
+#   codeql is at docker_shared/codeql/codeql
+CODEQL_BIN="$(realpath "$script_dir/../../codeql/codeql")"
+if [ ! -x "$CODEQL_BIN" ]; then
+    echo "WARNING: Could not find codeql at $CODEQL_BIN, falling back to PATH"
+    CODEQL_BIN="codeql"
+fi
+echo "Using codeql: $CODEQL_BIN ($($CODEQL_BIN --version 2>&1 | head -1))"
+
 fn_name=$1
 fn_file=$2
 fn_file="${fn_file//\//_}"
@@ -55,11 +65,11 @@ sed -i "s/ENTRY_FNC/$fn_name/g" "$QUERY"
 # Limit CodeQL JVM memory to prevent OOM
 export CODEQL_JAVA_ARGS="-Xmx4g"
 
-echo "Running query: codeql query run $QUERY --database=$dbbase --output=$outputfile"
-if codeql query run "$QUERY" --database="$dbbase" --output="$outputfile"; then
+echo "Running query: $CODEQL_BIN query run $QUERY --database=$dbbase --output=$outputfile"
+if "$CODEQL_BIN" query run "$QUERY" --database="$dbbase" --output="$outputfile"; then
     echo "Query executed successfully. Converting BQRS to CSV."
     csv_output="${outputfile%.bqrs}.csv"
-    if codeql bqrs decode --format=csv "$outputfile" --output="$csv_output"; then
+    if "$CODEQL_BIN" bqrs decode --format=csv "$outputfile" --output="$csv_output"; then
         echo "BQRS file successfully converted to CSV: $csv_output"
     else
         echo "Error converting BQRS to CSV"

@@ -251,7 +251,12 @@ class FuzzingPlanner:
             
         return api_combination
     
-    def generate_single_api_combination(self, api, api_combine, low_coverage_apis):
+    def generate_single_api_combination(self, api, api_combine, low_coverage_apis, max_retries=3, retry_delay=10):
+        """生成单个 API 组合，带网络异常重试机制。
+
+        Raises:
+            RuntimeError: 超过最大重试次数后仍然失败
+        """
         api_list = self.extract_api_list()
 
         Settings.llm=self.llm
@@ -290,22 +295,48 @@ class FuzzingPlanner:
             logger.info("New question with the historical context")
             logger.info(question)
 
-        response_obj = combine_query_engine.query(question)
-        response_format = response_format_program(raw_answer=response_obj.response)
-        response = response_format.api_combination
-        logger.info(f"API Combination Response:{response_obj} {response_format}")
+        # 带重试的 LLM 查询，防止网络瞬断导致整个流程崩溃
+        last_exception = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                response_obj = combine_query_engine.query(question)
+                response_format = response_format_program(raw_answer=response_obj.response)
+                response = response_format.api_combination
+                logger.info(f"API Combination Response:{response_obj} {response_format}")
 
-        query_answer = [
-            ChatMessage.from_str(question, "user"),
-            ChatMessage.from_str(f"{response_obj.response}", "assistant"),
-        ]
-        self.vector_memory.put_messages(query_answer)
+                query_answer = [
+                    ChatMessage.from_str(question, "user"),
+                    ChatMessage.from_str(f"{response_obj.response}", "assistant"),
+                ]
+                self.vector_memory.put_messages(query_answer)
 
-        if response == "Empty Response":
-            response = []
-        response.append(api)
+                if response == "Empty Response":
+                    response = []
+                response.append(api)
+                return response
 
-        return response
+            except (ConnectionError, TimeoutError) as e:
+                last_exception = e
+                logger.warning(f"[Retry {attempt}/{max_retries}] Network error in API combination query: {type(e).__name__}: {e}")
+                if attempt < max_retries:
+                    import time
+                    time.sleep(retry_delay * attempt)
+            except Exception as e:
+                # openai.APIConnectionError 等第三方库网络异常不继承标准 ConnectionError
+                error_type = type(e).__name__
+                if "Connection" in error_type or "Timeout" in error_type:
+                    last_exception = e
+                    logger.warning(f"[Retry {attempt}/{max_retries}] API connection error: {error_type}: {e}")
+                    if attempt < max_retries:
+                        import time
+                        time.sleep(retry_delay * attempt)
+                else:
+                    raise
+
+        raise RuntimeError(
+            f"API combination generation failed after {max_retries} retries. "
+            f"Last error: {type(last_exception).__name__}: {last_exception}"
+        )
     
 
    

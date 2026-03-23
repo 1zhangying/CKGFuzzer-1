@@ -10,8 +10,8 @@ def add_codeql_to_path():
 
     # Check if CodeQL path is already in PATH
     if codeql_path not in current_path:
-        # Adding CodeQL to PATH
-        os.environ['PATH'] += os.pathsep + codeql_path
+        # Prepend CodeQL to PATH so it takes priority over system-installed versions
+        os.environ['PATH'] = codeql_path + os.pathsep + current_path
         print(f"CodeQL has been added to PATH. New PATH: {os.environ['PATH']}")
     else:
         print("CodeQL is already in the PATH.")
@@ -19,12 +19,15 @@ def add_codeql_to_path():
 add_codeql_to_path()
 
 
-def run_command(command):
+def run_command(command, timeout=3600):
     logger.info(f'Running: %s {_get_command_string(command)}' )
     try:
-        subprocess.run(command, check=True)
+        subprocess.run(command, check=True, timeout=timeout)
         #logger.info('Running: remove duplication from the csv file.')
         # subprocess.run(["sort", "--parallel", "5","-u", f"{output_file.replace('.bqrs', '.csv')}", "-o", f"{output_file.replace('.bqrs', '.csv')}"], shell=True, check=True)
+    except subprocess.TimeoutExpired:
+        logger.error(f"Command timed out after {timeout}s: {_get_command_string(command)}")
+        return ""
     except subprocess.CalledProcessError as e:
         logger.error(f"Failed to run the query: {e}")
         return ""
@@ -70,7 +73,10 @@ def run_query(query_script, output_file, database_db: str, additional_options=No
     logger.info(f'Running: %s {_get_command_string(command)}' )
     print(" ".join(command))
     try:
-        subprocess.run(command, check=True, text=True)
+        subprocess.run(command, check=True, text=True, timeout=3600)
+    except subprocess.TimeoutExpired:
+        logger.error(f"CodeQL query timed out after 3600s")
+        return ""
     except subprocess.CalledProcessError as e:
         logger.error(f"Failed to run the query: {e}")
         return ""

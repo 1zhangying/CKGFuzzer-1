@@ -94,7 +94,10 @@ class RepositoryAgent:
         build_command = f'docker build -t {image_name} -f {dockerfile_path} {project_dir}'
         
         try:
-            subprocess.run(build_command, shell=True, check=True)
+            subprocess.run(build_command, shell=True, check=True, timeout=3600)
+        except subprocess.TimeoutExpired:
+            print(f"Docker build timed out after 3600s for {image_name}")
+            return
         except subprocess.CalledProcessError as e:
             print(f"Failed to build Docker image: {e}")
             return
@@ -108,12 +111,17 @@ class RepositoryAgent:
         # Run the Docker container with the CodeQL command
         command = [
             'docker', 'run', '--rm',
+            '--memory=4g', '--memory-swap=5g',  # Prevent OOM kill of host
             '-v', f'{args.shared_llm_dir}:/src/fuzzing_os',
             '-t', image_name,
             '/bin/bash', '-c', codeql_command
         ]
 
-        result = subprocess.run(command, capture_output=True, text=True)
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=10800)
+        except subprocess.TimeoutExpired:
+            logger.error(f"CodeQL database creation timed out after 3h for {args.project_name}")
+            return
 
         change_folder_owner(f"{args.shared_llm_dir}/change_owner.sh", f'{args.shared_llm_dir}/codeqldb/{args.project_name}', USER_NAME)
 
@@ -152,7 +160,7 @@ class RepositoryAgent:
     
 
     # read the function name and its source code name from the returned dict of extract_api_from_head
-    # pool_num=4修改为1
+    # pool_num=4修改为1 (DO NOT increase — memory limited machine)
     def extract_src_test_api_call_graph(self, data: Dict, pool_num=1) -> Dict:
         """
         ToDO: multple thread SUPPORT, need to keep the copy database for each thread
@@ -213,11 +221,42 @@ class RepositoryAgent:
         else:
             assert False, f"Extract call graph shell script {extract_shell_script} does not exist. PWD {os.getcwd()}"
               
+    # Mapping from project_name (used in configs) to actual folder name in code/
+    _LOCAL_CODE_MAP = {
+        "cjson": "cJSON",
+        "c-ares": "c-ares",
+        "curl": "curl",
+        "lcms": "Little-CMS",
+        "libpcap": "libpcap",
+        "libtiff": "libtiff",
+        "libvpx": "libvpx",
+        "zlib": "zlib",
+    }
+
     def copy_source_code_fromDocker(self):
         """
-        Extracts the source code from the repository.
+        Copy source code to shared_llm_dir/source_code/<project>.
+        Prefers local code/ directory (fast, no Docker) when available.
+        Falls back to Docker container copy if local code is not found.
         """
-        logger.info("Extracting source code from the repository.")
+        project = args.project_name
+        dest = f'{os.path.abspath(args.shared_llm_dir)}/source_code/{project}'
+
+        # --- Try local copy first ---
+        code_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'code')
+        local_name = self._LOCAL_CODE_MAP.get(project, project)
+        local_src = os.path.join(code_root, local_name)
+
+        if os.path.isdir(local_src):
+            logger.info(f"Copying source from local code/ directory: {local_src} -> {dest}")
+            os.makedirs(dest, exist_ok=True)
+            # Use shutil.copytree with dirs_exist_ok (Python 3.8+)
+            shutil.copytree(local_src, dest, dirs_exist_ok=True)
+            logger.info(f"Local copy done. Files: {len(os.listdir(dest))}")
+            return
+
+        # --- Fallback: copy from Docker container ---
+        logger.info(f"Local source not found at {local_src}, falling back to Docker copy.")
         
         # First, create the necessary directories
         mkdir_command = ['-v', f'{os.path.abspath(args.shared_llm_dir)}:/src/fuzzing_os', 
@@ -349,7 +388,7 @@ import repo.constants as constants
 def setup_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Example application")
     parser.add_argument('--project_name', type=str, default="c-ares", help='Project Name')
-    parser.add_argument('--shared_llm_dir', type=str, default="../docker_shared", help='Shared LLM Directory')
+    parser.add_argument('--shared_llm_dir', type=str, default="/home/cc/CKGFuzzer-1/docker_shared", help='Shared LLM Directory')
     parser.add_argument('--saved_dir', type=str, default="./external_database/c-ares/codebase", help='Saved Directory')
     parser.add_argument('--language', type=str, default="c++", help='Language')
     parser.add_argument('--build_command', type=str, default="/src/fuzzing_os/build_c_ares.sh", help='Build command')

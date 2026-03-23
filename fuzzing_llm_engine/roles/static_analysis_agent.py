@@ -13,14 +13,27 @@ from llama_index.core.memory import (
 from llama_index.core.llms import ChatMessage
 from loguru import logger
 
-# Get the current file path
+# Get the current file path and tree-sitter location
 if "TREE_SITTER" not in os.environ:
     current_file_path = os.path.abspath(__file__)
-    tree_folder = os.path.dirname( os.path.dirname(current_file_path) )
+    tree_folder = os.path.dirname(os.path.dirname(current_file_path))
 else:
-    tree_folder = os.environ['TREE_SITTER']
+    tree_folder = os.environ["TREE_SITTER"]
 
-CPP_LANGUAGE = Language(f'{tree_folder}/codetext/parser/tree-sitter/cpp.so', 'cpp')
+_CPP_SO_PATH = os.path.join(tree_folder, "codetext/parser/tree-sitter/cpp.so")
+_CPP_GRAMMAR_DIR = os.path.join(tree_folder, "codetext/parser/tree-sitter/tree-sitter-cpp")
+
+# Auto-build cpp.so if missing, so that users don't need a manual build step.
+if not os.path.exists(_CPP_SO_PATH):
+    try:
+        os.makedirs(os.path.dirname(_CPP_SO_PATH), exist_ok=True)
+        logger.info(f"cpp.so not found, building tree-sitter C++ grammar to {_CPP_SO_PATH}")
+        Language.build_library(_CPP_SO_PATH, [_CPP_GRAMMAR_DIR])
+        logger.info("Successfully built cpp.so for tree-sitter C++.")
+    except Exception as e:
+        logger.error(f"Failed to build cpp.so for tree-sitter C++: {e}")
+
+CPP_LANGUAGE = Language(_CPP_SO_PATH, "cpp")
 
 
 class StaticAnalysisAgent:

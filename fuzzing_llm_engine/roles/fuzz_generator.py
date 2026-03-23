@@ -131,11 +131,14 @@ class FuzzingGenerationAgent:
     def driver_gen(self, api_combination, api_code, api_summary, fuzz_gen_code_output_dir,project):
         i = 1
         for api_list in api_combination:
-            api_list = list(set(api_list))
+            api_list = list(dict.fromkeys(api_list))
             api_list_proc = []
             api_info = ""
             api_sum = ""
             for api in api_list:
+                if api not in api_code:
+                    logger.warning(f"API '{api}' not found in api_code, skipping")
+                    continue
                 for file_key in api_summary.keys():
                     summary = api_summary[file_key].get(api, None)
                     if summary:
@@ -156,15 +159,19 @@ class FuzzingGenerationAgent:
                     f.write(fuzz_driver_generation_response)
                 i += 1
             else:
-                return False
+                logger.warning(f"No valid API info found for combination {api_list}, skipping")
+                continue
 
     def generate_single_fuzz_driver(self, api_list, fuzzer_name, api_code, api_summary, fuzz_gen_code_output_dir):
-        api_list = list(set(api_list))
+        api_list = list(dict.fromkeys(api_list))
         api_info = ""
         api_sum = ""
         api_list_proc = []
         
         for api in api_list:
+            if api not in api_code:
+                logger.warning(f"API '{api}' not found in api_code, skipping")
+                continue
             for file_key in api_summary.keys():
                 summary = api_summary[file_key].get(api, None)
                 if summary:

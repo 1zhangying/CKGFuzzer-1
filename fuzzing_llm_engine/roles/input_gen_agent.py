@@ -264,30 +264,27 @@ class InputGenerationAgent:
             
 
     def generate_input_fuzz_driver(self, file_path):
+        """为指定的 fuzz driver 生成初始种子。如果 corpus 目录已有种子则跳过，避免重复调用 LLM。"""
+        file_name = os.path.basename(file_path)
+        fuzzer_name = os.path.splitext(file_name)[0]
+        corpus_folder = os.path.join(self.output_dir, f"{fuzzer_name}_corpus")
+
+        # 如果 corpus 目录已存在且包含文件，复用先前的种子
+        if os.path.isdir(corpus_folder) and os.listdir(corpus_folder):
+            logger.info(f"Corpus folder already has {len(os.listdir(corpus_folder))} seeds for {fuzzer_name}, skipping seed generation.")
+            return
 
         with open(file_path, 'r', encoding='utf-8') as f:
             source_code = f.read()
             file_id = self.extract_number_from_filename(file_path)
             input_seed = self.generate_input(source_code, file_id)
             logger.info(f"{file_path} Generate Input seed: {input_seed}")
-            
-            file_name = os.path.basename(file_path)
-            fuzzer_name = os.path.splitext(file_name)[0]
             logger.info(f"================ {fuzzer_name}")
-            
-            # corpus_folder = os.path.join(self.output_dir, f"{fuzzer_name}_corpus")
-            # os.makedirs(corpus_folder, exist_ok=True)
-            
-            # hash_code_file = generate_hash(f"{fuzzer_name}_corpus.txt")
-            # with open(os.path.join(corpus_folder, f"{hash_code_file}.txt"), 'w', encoding='utf-8') as f:
-            #     f.write(input_seed)
 
-
-            corpus_folder = os.path.join(self.output_dir, f"{fuzzer_name}_corpus")
             os.makedirs(corpus_folder, exist_ok=True)
             
             hash_code_file = generate_hash(f"{fuzzer_name}_corpus")
-            seed_file_path = os.path.join(corpus_folder, hash_code_file)  # 去掉 .txt 后缀
+            seed_file_path = os.path.join(corpus_folder, hash_code_file)
             
             # 将转义字符串转换为真正的二进制字节
             seed_bytes = convert_escape_to_bytes(input_seed)

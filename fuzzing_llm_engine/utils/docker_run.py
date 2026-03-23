@@ -50,12 +50,13 @@ def print_and_capture_output(process):
         output.append(line)
     return ''.join(output)
   
-def docker_run(run_args, print_output=True, architecture='x86_64'):
+def docker_run(run_args, print_output=True, architecture='x86_64', timeout=10800):
   """Calls `docker run`."""
   platform = 'linux/arm64' if architecture == 'aarch64' else 'linux/amd64'
   command = [
-      'docker', 'run', '--rm', '--privileged', '--shm-size=2g', '--platform',
-      platform
+      'docker', 'run', '--rm', '--privileged', '--shm-size=2g',
+      '--memory=4g', '--memory-swap=5g',  # Prevent OOM kill of host
+      '--platform', platform
   ]
   # Support environments with a TTY.
   if sys.stdin.isatty():
@@ -70,6 +71,8 @@ def docker_run(run_args, print_output=True, architecture='x86_64'):
   process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
   output = []
 
+  import time as _time
+  _start = _time.monotonic()
   # Read output from stdout in real-time and print it
   while True:
       line = process.stdout.readline()
@@ -77,6 +80,12 @@ def docker_run(run_args, print_output=True, architecture='x86_64'):
           break
       print(line, end='')  # Print to console
       output.append(line)  # Save to list for return
+      # Check timeout
+      if _time.monotonic() - _start > timeout:
+          logger.warning(f"docker_run timed out after {timeout}s, killing process...")
+          process.kill()
+          process.wait()
+          return ''.join(output) + '\n[TIMEOUT]', False
 
   # Wait for the process to finish and get the exit status
   process.wait()
