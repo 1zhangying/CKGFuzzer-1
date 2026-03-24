@@ -34,6 +34,17 @@ from crash.dedup import DeduplicationEngine
 from crash.poc import locate_poc_on_host, safe_copy_poc
 from crash.report import build_crash_report, save_crash_report
 
+_FUZZING_LLM_ENGINE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _get_binary_path(project_name: str, fuzzer_name: str) -> Optional[str]:
+    """Return host-side path to the compiled fuzz target binary, or None."""
+    path = os.path.join(_FUZZING_LLM_ENGINE_DIR, 'build', 'out', project_name, fuzzer_name)
+    if os.path.isfile(path):
+        return path
+    logger.debug(f"[GDB] Binary not found at {path}")
+    return None
+
 
 # Module-level dedup engine (shared across all crash analyses in a session)
 _dedup_engine: Optional[DeduplicationEngine] = None
@@ -751,6 +762,7 @@ class Fuzzer():
                 error_index = run_fuzzer_result.index("ERROR")
                 crash_info = run_fuzzer_result[error_index:]
                 fuzz_driver_fullpath = f"{fix_fuzz_driver_dir}/{fuzz_driver_file}"
+                binary_path = _get_binary_path(self.project, fuzzer_name)
 
                 pipeline_result = run_enhanced_crash_pipeline(
                     crash_info,
@@ -761,6 +773,7 @@ class Fuzzer():
                     fuzzer_name=fuzzer_name,
                     corpus_dir=corpus_dir,
                     fuzzing_llm_dir=self.directory,
+                    binary_path=binary_path,
                     fuzz_project_dir=self.fuzz_project_dir,
                 )
 
@@ -886,6 +899,7 @@ class Fuzzer():
                             error_index = run_fuzzer_result.index("ERROR")
                             crash_info = run_fuzzer_result[error_index:]
                             fuzz_driver_fullpath = f"{fix_fuzz_driver_dir}/{fuzz_driver_file}"
+                            binary_path = _get_binary_path(self.project, fuzzer_name)
 
                             pipeline_result = run_enhanced_crash_pipeline(
                                 crash_info,
@@ -896,6 +910,7 @@ class Fuzzer():
                                 fuzzer_name=fuzzer_name,
                                 corpus_dir=corpus_dir,
                                 fuzzing_llm_dir=self.directory,
+                                binary_path=binary_path,
                                 fuzz_project_dir=self.fuzz_project_dir,
                             )
 
