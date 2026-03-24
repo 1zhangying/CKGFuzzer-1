@@ -1,0 +1,207 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void assert_print_number(const char *expected, double input)\n{\n    unsigned char printed[1024];\n    unsigned char new_buffer[26];\n    unsigned int i = 0;\n    cJSON item[1];\n    printbuffer buffer = { 0, 0, 0, 0, 0, 0, { 0, 0, 0 } };\n    buffer.buffer = printed;\n    buffer.length = sizeof(printed);\n    buffer.offset = 0;\n    buffer.noalloc = true;\n    buffer.hooks = global_hooks;\n    buffer.buffer = new_buffer;\n\n    memset(item, 0, sizeof(item));\n    memset(new_buffer, 0, sizeof(new_buffer));\n    cJSON_SetNumberValue(item, input);\n    TEST_ASSERT_TRUE_MESSAGE(print_number(item, &buffer), \"Failed to print number.\");\n    \n    /* In MinGW or visual studio(before 2015),the exponten is represented using three digits,like:\"1e-009\",\"1e+017\"\n     * remove extra \"0\" to output \"1e-09\" or \"1e+17\",which makes testcase PASS */\n    for(i = 0;i <sizeof(new_buffer);i++)\n    {\n        if(i >3 && new_buffer[i] =='0')\n        {\n            if((new_buffer[i-3] =='e' && new_buffer[i-2] == '-' && new_buffer[i] =='0') ||(new_buffer[i-2] =='e' && new_buffer[i-1] =='+'))\n            {\n                while(new_buffer[i] !='\\0')\n                {\n                    new_buffer[i] = new_buffer[i+1];\n                    i++;\n                }\n            }        \n        }  \n    }    \n    TEST_ASSERT_EQUAL_STRING_MESSAGE(expected, buffer.buffer, \"Printed number is not as expected.\");\n}",
+      "fn_code_pos": [
+        [
+          26,
+          0
+        ],
+        [
+          62,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_print_number",
+        "parameters": {
+          "expected": "char",
+          "input": "double"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void print_number_should_print_zero(void)\n{\n    assert_print_number(\"0\", 0);\n}",
+      "fn_code_pos": [
+        [
+          64,
+          0
+        ],
+        [
+          67,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_number_should_print_zero",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void print_number_should_print_negative_integers(void)\n{\n    assert_print_number(\"-1\", -1.0);\n    assert_print_number(\"-32768\", -32768.0);\n    assert_print_number(\"-2147483648\", -2147483648.0);\n}",
+      "fn_code_pos": [
+        [
+          69,
+          0
+        ],
+        [
+          74,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_number_should_print_negative_integers",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void print_number_should_print_positive_integers(void)\n{\n    assert_print_number(\"1\", 1.0);\n    assert_print_number(\"32767\", 32767.0);\n    assert_print_number(\"2147483647\", 2147483647.0);\n}",
+      "fn_code_pos": [
+        [
+          76,
+          0
+        ],
+        [
+          81,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_number_should_print_positive_integers",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void print_number_should_print_positive_reals(void)\n{\n    assert_print_number(\"0.123\", 0.123);\n    assert_print_number(\"1e-09\", 10e-10);\n    assert_print_number(\"1000000000000\", 10e11);\n    assert_print_number(\"1.23e+129\", 123e+127);\n    assert_print_number(\"1.23e-126\", 123e-128);\n    assert_print_number(\"3.1415926535897931\", 3.1415926535897931);\n}",
+      "fn_code_pos": [
+        [
+          83,
+          0
+        ],
+        [
+          91,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_number_should_print_positive_reals",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void print_number_should_print_negative_reals(void)\n{\n    assert_print_number(\"-0.0123\", -0.0123);\n    assert_print_number(\"-1e-09\", -10e-10);\n    assert_print_number(\"-1e+21\", -10e20);\n    assert_print_number(\"-1.23e+129\", -123e+127);\n    assert_print_number(\"-1.23e-126\", -123e-128);\n}",
+      "fn_code_pos": [
+        [
+          93,
+          0
+        ],
+        [
+          100,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_number_should_print_negative_reals",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void print_number_should_print_non_number(void)\n{\n    TEST_IGNORE();\n    /* FIXME: Cannot test this easily in C89! */\n    /* assert_print_number(\"null\", NaN); */\n    /* assert_print_number(\"null\", INFTY); */\n    /* assert_print_number(\"null\", -INFTY); */\n}",
+      "fn_code_pos": [
+        [
+          102,
+          0
+        ],
+        [
+          109,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_number_should_print_non_number",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int CJSON_CDECL main(void)\n{\n    /* initialize cJSON item */\n    UNITY_BEGIN();\n\n    RUN_TEST(print_number_should_print_zero);\n    RUN_TEST(print_number_should_print_negative_integers);\n    RUN_TEST(print_number_should_print_positive_integers);\n    RUN_TEST(print_number_should_print_positive_reals);\n    RUN_TEST(print_number_should_print_negative_reals);\n    RUN_TEST(print_number_should_print_non_number);\n\n    return UNITY_END();\n}",
+      "fn_code_pos": [
+        [
+          111,
+          0
+        ],
+        [
+          124,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CJSON_CDECL main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"unity/examples/unity_config.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/src/unity.h\"\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include \"common.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

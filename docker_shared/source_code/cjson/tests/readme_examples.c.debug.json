@@ -1,0 +1,280 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static char* create_monitor(void)\n{\n    const unsigned int resolution_numbers[3][2] = {\n        {1280, 720},\n        {1920, 1080},\n        {3840, 2160}\n    };\n    char *string = NULL;\n    cJSON *name = NULL;\n    cJSON *resolutions = NULL;\n    cJSON *resolution = NULL;\n    cJSON *width = NULL;\n    cJSON *height = NULL;\n    size_t index = 0;\n\n    cJSON *monitor = cJSON_CreateObject();\n    if (monitor == NULL)\n    {\n        goto end;\n    }\n\n    name = cJSON_CreateString(\"Awesome 4K\");\n    if (name == NULL)\n    {\n        goto end;\n    }\n    /* after creation was successful, immediately add it to the monitor,\n     * thereby transferring ownership of the pointer to it */\n    cJSON_AddItemToObject(monitor, \"name\", name);\n\n    resolutions = cJSON_CreateArray();\n    if (resolutions == NULL)\n    {\n        goto end;\n    }\n    cJSON_AddItemToObject(monitor, \"resolutions\", resolutions);\n\n    for (index = 0; index < (sizeof(resolution_numbers) / (2 * sizeof(int))); ++index)\n    {\n        resolution = cJSON_CreateObject();\n        if (resolution == NULL)\n        {\n            goto end;\n        }\n        cJSON_AddItemToArray(resolutions, resolution);\n\n        width = cJSON_CreateNumber(resolution_numbers[index][0]);\n        if (width == NULL)\n        {\n            goto end;\n        }\n        cJSON_AddItemToObject(resolution, \"width\", width);\n\n        height = cJSON_CreateNumber(resolution_numbers[index][1]);\n        if (height == NULL)\n        {\n            goto end;\n        }\n        cJSON_AddItemToObject(resolution, \"height\", height);\n    }\n\n    string = cJSON_Print(monitor);\n    if (string == NULL)\n    {\n        fprintf(stderr, \"Failed to print monitor.\\n\");\n    }\n\nend:\n    cJSON_Delete(monitor);\n    return string;\n}",
+      "fn_code_pos": [
+        [
+          44,
+          0
+        ],
+        [
+          114,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "create_monitor",
+        "parameters": {},
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static char *create_monitor_with_helpers(void)\n{\n    const unsigned int resolution_numbers[3][2] = {\n        {1280, 720},\n        {1920, 1080},\n        {3840, 2160}\n    };\n    char *string = NULL;\n    cJSON *resolutions = NULL;\n    size_t index = 0;\n\n    cJSON *monitor = cJSON_CreateObject();\n\n    if (cJSON_AddStringToObject(monitor, \"name\", \"Awesome 4K\") == NULL)\n    {\n        goto end;\n    }\n\n    resolutions = cJSON_AddArrayToObject(monitor, \"resolutions\");\n    if (resolutions == NULL)\n    {\n        goto end;\n    }\n\n    for (index = 0; index < (sizeof(resolution_numbers) / (2 * sizeof(int))); ++index)\n    {\n        cJSON *resolution = cJSON_CreateObject();\n\n        if (cJSON_AddNumberToObject(resolution, \"width\", resolution_numbers[index][0]) == NULL)\n        {\n            goto end;\n        }\n\n        if(cJSON_AddNumberToObject(resolution, \"height\", resolution_numbers[index][1]) == NULL)\n        {\n            goto end;\n        }\n\n        cJSON_AddItemToArray(resolutions, resolution);\n    }\n\n    string = cJSON_Print(monitor);\n    if (string == NULL) {\n        fprintf(stderr, \"Failed to print monitor.\\n\");\n    }\n\nend:\n    cJSON_Delete(monitor);\n    return string;\n}",
+      "fn_code_pos": [
+        [
+          116,
+          0
+        ],
+        [
+          165,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "create_monitor_with_helpers",
+        "parameters": {},
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "static int supports_full_hd(const char * const monitor)\n{\n    const cJSON *resolution = NULL;\n    const cJSON *resolutions = NULL;\n    const cJSON *name = NULL;\n    int status = 0;\n    cJSON *monitor_json = cJSON_Parse(monitor);\n    if (monitor_json == NULL)\n    {\n        const char *error_ptr = cJSON_GetErrorPtr();\n        if (error_ptr != NULL)\n        {\n            fprintf(stderr, \"Error before: %s\\n\", error_ptr);\n        }\n        status = 0;\n        goto end;\n    }\n\n    name = cJSON_GetObjectItemCaseSensitive(monitor_json, \"name\");\n    if (cJSON_IsString(name) && (name->valuestring != NULL))\n    {\n        printf(\"Checking monitor \\\"%s\\\"\\n\", name->valuestring);\n    }\n\n    resolutions = cJSON_GetObjectItemCaseSensitive(monitor_json, \"resolutions\");\n    cJSON_ArrayForEach(resolution, resolutions)\n    {\n        cJSON *width = cJSON_GetObjectItemCaseSensitive(resolution, \"width\");\n        cJSON *height = cJSON_GetObjectItemCaseSensitive(resolution, \"height\");\n\n        if (!cJSON_IsNumber(width) || !cJSON_IsNumber(height))\n        {\n            status = 0;\n            goto end;\n        }\n\n        if (compare_double(width->valuedouble, 1920) && compare_double(height->valuedouble, 1080))\n        {\n            status = 1;\n            goto end;\n        }\n    }\n\nend:\n    cJSON_Delete(monitor_json);\n    return status;\n}",
+      "fn_code_pos": [
+        [
+          168,
+          0
+        ],
+        [
+          214,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "supports_full_hd",
+        "parameters": {
+          "monitor": "char"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "cJSON_ArrayForEach(resolution, resolutions)\n    {\n        cJSON *width = cJSON_GetObjectItemCaseSensitive(resolution, \"width\");\n        cJSON *height = cJSON_GetObjectItemCaseSensitive(resolution, \"height\");\n\n        if (!cJSON_IsNumber(width) || !cJSON_IsNumber(height))\n        {\n            status = 0;\n            goto end;\n        }\n\n        if (compare_double(width->valuedouble, 1920) && compare_double(height->valuedouble, 1080))\n        {\n            status = 1;\n            goto end;\n        }\n    }",
+      "fn_code_pos": [
+        [
+          193,
+          4
+        ],
+        [
+          209,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cJSON_ArrayForEach",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static void create_monitor_should_create_a_monitor(void)\n{\n    char *monitor = create_monitor();\n\n    TEST_ASSERT_EQUAL_STRING(monitor, json);\n\n    free(monitor);\n}",
+      "fn_code_pos": [
+        [
+          216,
+          0
+        ],
+        [
+          223,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "create_monitor_should_create_a_monitor",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void create_monitor_with_helpers_should_create_a_monitor(void)\n{\n    char *monitor = create_monitor_with_helpers();\n\n    TEST_ASSERT_EQUAL_STRING(json, monitor);\n\n    free(monitor);\n}",
+      "fn_code_pos": [
+        [
+          225,
+          0
+        ],
+        [
+          232,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "create_monitor_with_helpers_should_create_a_monitor",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void supports_full_hd_should_check_for_full_hd_support(void)\n{\n    static const char *monitor_without_hd = \"{\\n\\\n\\t\\t\\\"name\\\": \\\"lame monitor\\\",\\n\\\n\\t\\t\\\"resolutions\\\":\\t[{\\n\\\n\\t\\t\\t\\\"width\\\":\\t640,\\n\\\n\\t\\t\\t\\\"height\\\":\\t480\\n\\\n\\t\\t}]\\n\\\n}\";\n\n    TEST_ASSERT(supports_full_hd(json));\n    TEST_ASSERT_FALSE(supports_full_hd(monitor_without_hd));\n}",
+      "fn_code_pos": [
+        [
+          234,
+          0
+        ],
+        [
+          246,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "supports_full_hd_should_check_for_full_hd_support",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int CJSON_CDECL main(void)\n{\n    UNITY_BEGIN();\n\n    RUN_TEST(create_monitor_should_create_a_monitor);\n    RUN_TEST(create_monitor_with_helpers_should_create_a_monitor);\n    RUN_TEST(supports_full_hd_should_check_for_full_hd_support);\n\n    return UNITY_END();\n}",
+      "fn_code_pos": [
+        [
+          248,
+          0
+        ],
+        [
+          257,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CJSON_CDECL main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "create_monitor(void)",
+      "fn_dec_pos": [
+        [
+          44,
+          13
+        ],
+        [
+          44,
+          33
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "create_monitor",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "create_monitor_with_helpers(void)",
+      "fn_dec_pos": [
+        [
+          116,
+          13
+        ],
+        [
+          116,
+          46
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "create_monitor_with_helpers",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/examples/unity_config.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/src/unity.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"common.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

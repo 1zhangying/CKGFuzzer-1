@@ -1,0 +1,102 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)\n{\n    cJSON *json;\n    size_t offset = 4;\n    unsigned char *copied;\n    char *printed_json = NULL;\n    int minify, require_termination, formatted, buffered;\n\n\n    if(size <= offset) return 0;\n    if(data[size-1] != '\\0') return 0;\n    if(data[0] != '1' && data[0] != '0') return 0;\n    if(data[1] != '1' && data[1] != '0') return 0;\n    if(data[2] != '1' && data[2] != '0') return 0;\n    if(data[3] != '1' && data[3] != '0') return 0;\n\n    minify              = data[0] == '1' ? 1 : 0;\n    require_termination = data[1] == '1' ? 1 : 0;\n    formatted           = data[2] == '1' ? 1 : 0;\n    buffered            = data[3] == '1' ? 1 : 0;\n\n    json = cJSON_ParseWithOpts((const char*)data + offset, NULL, require_termination);\n\n    if(json == NULL) return 0;\n\n    if(buffered)\n    {\n        printed_json = cJSON_PrintBuffered(json, 1, formatted);\n    }\n    else\n    {\n        /* unbuffered printing */\n        if(formatted)\n        {\n            printed_json = cJSON_Print(json);\n        }\n        else\n        {\n            printed_json = cJSON_PrintUnformatted(json);\n        }\n    }\n\n    if(printed_json != NULL) free(printed_json);\n\n    if(minify)\n    {\n        copied = (unsigned char*)malloc(size);\n        if(copied == NULL) return 0;\n\n        memcpy(copied, data, size);\n\n        cJSON_Minify((char*)copied + offset);\n\n        free(copied);\n    }\n\n    cJSON_Delete(json);\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          12,
+          0
+        ],
+        [
+          71,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LLVMFuzzerTestOneInput",
+        "parameters": {
+          "data": "uint8_t",
+          "size": "size_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)",
+      "fn_dec_pos": [
+        [
+          10,
+          4
+        ],
+        [
+          10,
+          60
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "LLVMFuzzerTestOneInput",
+        "parameters": {
+          "data": "uint8_t",
+          "size": "size_t"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdlib.h>\n",
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    [
+      "#include <stdint.h>\n",
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        2,
+        0
+      ],
+      [
+        3,
+        0
+      ]
+    ],
+    [
+      "#include \"../cJSON.h\"\n",
+      [
+        8,
+        0
+      ],
+      [
+        9,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

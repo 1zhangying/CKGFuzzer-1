@@ -1,0 +1,208 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void json_pointer_tests(void)\n{\n    cJSON *root = NULL;\n    const char *json=\n        \"{\"\n        \"\\\"foo\\\": [\\\"bar\\\", \\\"baz\\\"],\"\n        \"\\\"\\\": 0,\"\n        \"\\\"a/b\\\": 1,\"\n        \"\\\"c%d\\\": 2,\"\n        \"\\\"e^f\\\": 3,\"\n        \"\\\"g|h\\\": 4,\"\n        \"\\\"i\\\\\\\\j\\\": 5,\"\n        \"\\\"k\\\\\\\"l\\\": 6,\"\n        \"\\\" \\\": 7,\"\n        \"\\\"m~n\\\": 8\"\n        \"}\";\n\n    root = cJSON_Parse(json);\n\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"\"), root);\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"/foo\"), cJSON_GetObjectItem(root, \"foo\"));\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"/foo/0\"), cJSON_GetObjectItem(root, \"foo\")->child);\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"/foo/0\"), cJSON_GetObjectItem(root, \"foo\")->child);\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"/\"), cJSON_GetObjectItem(root, \"\"));\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"/a~1b\"), cJSON_GetObjectItem(root, \"a/b\"));\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"/c%d\"), cJSON_GetObjectItem(root, \"c%d\"));\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"/c^f\"), cJSON_GetObjectItem(root, \"c^f\"));\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"/c|f\"), cJSON_GetObjectItem(root, \"c|f\"));\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"/i\\\\j\"), cJSON_GetObjectItem(root, \"i\\\\j\"));\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"/k\\\"l\"), cJSON_GetObjectItem(root, \"k\\\"l\"));\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"/ \"), cJSON_GetObjectItem(root, \" \"));\n    TEST_ASSERT_EQUAL_PTR(cJSONUtils_GetPointer(root, \"/m~0n\"), cJSON_GetObjectItem(root, \"m~n\"));\n\n    cJSON_Delete(root);\n}",
+      "fn_code_pos": [
+        [
+          51,
+          0
+        ],
+        [
+          85,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "json_pointer_tests",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void misc_tests(void)\n{\n    /* Misc tests */\n    int numbers[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};\n    cJSON *object = NULL;\n    cJSON *object1 = NULL;\n    cJSON *object2 = NULL;\n    cJSON *object3 = NULL;\n    cJSON *object4 = NULL;\n    cJSON *nums = NULL;\n    cJSON *num6 = NULL;\n    char *pointer = NULL;\n\n    printf(\"JSON Pointer construct\\n\");\n    object = cJSON_CreateObject();\n    nums = cJSON_CreateIntArray(numbers, 10);\n    num6 = cJSON_GetArrayItem(nums, 6);\n    cJSON_AddItemToObject(object, \"numbers\", nums);\n\n    pointer = cJSONUtils_FindPointerFromObjectTo(object, num6);\n    TEST_ASSERT_EQUAL_STRING(\"/numbers/6\", pointer);\n    free(pointer);\n\n    pointer = cJSONUtils_FindPointerFromObjectTo(object, nums);\n    TEST_ASSERT_EQUAL_STRING(\"/numbers\", pointer);\n    free(pointer);\n\n    pointer = cJSONUtils_FindPointerFromObjectTo(object, object);\n    TEST_ASSERT_EQUAL_STRING(\"\", pointer);\n    free(pointer);\n\n    object1 = cJSON_CreateObject();\n    object2 = cJSON_CreateString(\"m~n\");\n    cJSON_AddItemToObject(object1, \"m~n\", object2);\n    pointer = cJSONUtils_FindPointerFromObjectTo(object1, object2);\n    TEST_ASSERT_EQUAL_STRING(\"/m~0n\",pointer);\n    free(pointer);\n\n    object3 = cJSON_CreateObject();\n    object4 = cJSON_CreateString(\"m/n\");\n    cJSON_AddItemToObject(object3, \"m/n\", object4);\n    pointer = cJSONUtils_FindPointerFromObjectTo(object3, object4);\n    TEST_ASSERT_EQUAL_STRING(\"/m~1n\",pointer);\n    free(pointer);\n\n    cJSON_Delete(object);\n    cJSON_Delete(object1);\n    cJSON_Delete(object3);\n}",
+      "fn_code_pos": [
+        [
+          87,
+          0
+        ],
+        [
+          135,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "misc_tests",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void sort_tests(void)\n{\n    /* Misc tests */\n    const char *random = \"QWERTYUIOPASDFGHJKLZXCVBNM\";\n    char buf[2] = {'\\0', '\\0'};\n    cJSON *sortme = NULL;\n    size_t i = 0;\n    cJSON *current_element = NULL;\n\n    /* JSON Sort test: */\n    sortme = cJSON_CreateObject();\n    for (i = 0; i < 26; i++)\n    {\n        buf[0] = random[i];\n        cJSON_AddItemToObject(sortme, buf, cJSON_CreateNumber(1));\n    }\n\n    cJSONUtils_SortObject(sortme);\n\n    /* check sorting */\n    current_element = sortme->child->next;\n    for (i = 1; (i < 26) && (current_element != NULL) && (current_element->prev != NULL); i++)\n    {\n        TEST_ASSERT_TRUE(current_element->string[0] >= current_element->prev->string[0]);\n        current_element = current_element->next;\n    }\n\n    cJSON_Delete(sortme);\n}",
+      "fn_code_pos": [
+        [
+          137,
+          0
+        ],
+        [
+          165,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "sort_tests",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void merge_tests(void)\n{\n    size_t i = 0;\n    char *patchtext = NULL;\n    char *after = NULL;\n\n    /* Merge tests: */\n    printf(\"JSON Merge Patch tests\\n\");\n    for (i = 0; i < 15; i++)\n    {\n        cJSON *object_to_be_merged = cJSON_Parse(merges[i][0]);\n        cJSON *patch = cJSON_Parse(merges[i][1]);\n        patchtext = cJSON_PrintUnformatted(patch);\n        object_to_be_merged = cJSONUtils_MergePatch(object_to_be_merged, patch);\n        after = cJSON_PrintUnformatted(object_to_be_merged);\n        TEST_ASSERT_EQUAL_STRING(merges[i][2], after);\n\n        free(patchtext);\n        free(after);\n        cJSON_Delete(object_to_be_merged);\n        cJSON_Delete(patch);\n    }\n}",
+      "fn_code_pos": [
+        [
+          167,
+          0
+        ],
+        [
+          189,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "merge_tests",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void generate_merge_tests(void)\n{\n    size_t i = 0;\n    char *patchedtext = NULL;\n\n    /* Generate Merge tests: */\n    for (i = 0; i < 15; i++)\n    {\n        cJSON *from = cJSON_Parse(merges[i][0]);\n        cJSON *to = cJSON_Parse(merges[i][2]);\n        cJSON *patch = cJSONUtils_GenerateMergePatch(from,to);\n        from = cJSONUtils_MergePatch(from,patch);\n        patchedtext = cJSON_PrintUnformatted(from);\n        TEST_ASSERT_EQUAL_STRING(merges[i][2], patchedtext);\n\n        cJSON_Delete(from);\n        cJSON_Delete(to);\n        cJSON_Delete(patch);\n        free(patchedtext);\n    }\n}",
+      "fn_code_pos": [
+        [
+          191,
+          0
+        ],
+        [
+          211,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "generate_merge_tests",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int main(void)\n{\n    UNITY_BEGIN();\n\n    RUN_TEST(json_pointer_tests);\n    RUN_TEST(misc_tests);\n    RUN_TEST(sort_tests);\n    RUN_TEST(merge_tests);\n    RUN_TEST(generate_merge_tests);\n\n    return UNITY_END();\n}",
+      "fn_code_pos": [
+        [
+          213,
+          0
+        ],
+        [
+          224,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/examples/unity_config.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/src/unity.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"common.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include \"../cJSON_Utils.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

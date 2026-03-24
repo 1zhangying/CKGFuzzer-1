@@ -1,0 +1,267 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void assert_is_object(cJSON *object_item)\n{\n    TEST_ASSERT_NOT_NULL_MESSAGE(object_item, \"Item is NULL.\");\n\n    assert_not_in_list(object_item);\n    assert_has_type(object_item, cJSON_Object);\n    assert_has_no_reference(object_item);\n    assert_has_no_const_string(object_item);\n    assert_has_no_valuestring(object_item);\n    assert_has_no_string(object_item);\n}",
+      "fn_code_pos": [
+        [
+          32,
+          0
+        ],
+        [
+          42,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_is_object",
+        "parameters": {
+          "object_item": "cJSON"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void assert_is_child(cJSON *child_item, const char *name, int type)\n{\n    TEST_ASSERT_NOT_NULL_MESSAGE(child_item, \"Child item is NULL.\");\n    TEST_ASSERT_NOT_NULL_MESSAGE(child_item->string, \"Child item doesn't have a name.\");\n    TEST_ASSERT_EQUAL_STRING_MESSAGE(name, child_item->string, \"Child item has the wrong name.\");\n    TEST_ASSERT_BITS(0xFF, type, child_item->type);\n}",
+      "fn_code_pos": [
+        [
+          44,
+          0
+        ],
+        [
+          50,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_is_child",
+        "parameters": {
+          "child_item": "cJSON",
+          "name": "char",
+          "type": "int"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void assert_not_object(const char *json)\n{\n    parse_buffer parsebuffer = { 0, 0, 0, 0, { 0, 0, 0 } };\n    parsebuffer.content = (const unsigned char*)json;\n    parsebuffer.length = strlen(json) + sizeof(\"\");\n    parsebuffer.hooks = global_hooks;\n\n    TEST_ASSERT_FALSE(parse_object(item, &parsebuffer));\n    assert_is_invalid(item);\n    reset(item);\n}",
+      "fn_code_pos": [
+        [
+          52,
+          0
+        ],
+        [
+          62,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_not_object",
+        "parameters": {
+          "json": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void assert_parse_object(const char *json)\n{\n    parse_buffer parsebuffer = { 0, 0, 0, 0, { 0, 0, 0 } };\n    parsebuffer.content = (const unsigned char*)json;\n    parsebuffer.length = strlen(json) + sizeof(\"\");\n    parsebuffer.hooks = global_hooks;\n\n    TEST_ASSERT_TRUE(parse_object(item, &parsebuffer));\n    assert_is_object(item);\n}",
+      "fn_code_pos": [
+        [
+          64,
+          0
+        ],
+        [
+          73,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_parse_object",
+        "parameters": {
+          "json": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_object_should_parse_empty_objects(void)\n{\n    assert_parse_object(\"{}\");\n    assert_has_no_child(item);\n    reset(item);\n\n    assert_parse_object(\"{\\n\\t}\");\n    assert_has_no_child(item);\n    reset(item);\n}",
+      "fn_code_pos": [
+        [
+          75,
+          0
+        ],
+        [
+          84,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_object_should_parse_empty_objects",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_object_should_parse_objects_with_one_element(void)\n{\n\n    assert_parse_object(\"{\\\"one\\\":1}\");\n    assert_is_child(item->child, \"one\", cJSON_Number);\n    reset(item);\n\n    assert_parse_object(\"{\\\"hello\\\":\\\"world!\\\"}\");\n    assert_is_child(item->child, \"hello\", cJSON_String);\n    reset(item);\n\n    assert_parse_object(\"{\\\"array\\\":[]}\");\n    assert_is_child(item->child, \"array\", cJSON_Array);\n    reset(item);\n\n    assert_parse_object(\"{\\\"null\\\":null}\");\n    assert_is_child(item->child, \"null\", cJSON_NULL);\n    reset(item);\n}",
+      "fn_code_pos": [
+        [
+          86,
+          0
+        ],
+        [
+          104,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_object_should_parse_objects_with_one_element",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_object_should_parse_objects_with_multiple_elements(void)\n{\n    assert_parse_object(\"{\\\"one\\\":1\\t,\\t\\\"two\\\"\\n:2, \\\"three\\\":3}\");\n    assert_is_child(item->child, \"one\", cJSON_Number);\n    assert_is_child(item->child->next, \"two\", cJSON_Number);\n    assert_is_child(item->child->next->next, \"three\", cJSON_Number);\n    reset(item);\n\n    {\n        size_t i = 0;\n        cJSON *node = NULL;\n        int expected_types[7] =\n        {\n            cJSON_Number,\n            cJSON_NULL,\n            cJSON_True,\n            cJSON_False,\n            cJSON_Array,\n            cJSON_String,\n            cJSON_Object\n        };\n        const char *expected_names[7] =\n        {\n            \"one\",\n            \"NULL\",\n            \"TRUE\",\n            \"FALSE\",\n            \"array\",\n            \"world\",\n            \"object\"\n        };\n        assert_parse_object(\"{\\\"one\\\":1, \\\"NULL\\\":null, \\\"TRUE\\\":true, \\\"FALSE\\\":false, \\\"array\\\":[], \\\"world\\\":\\\"hello\\\", \\\"object\\\":{}}\");\n\n        node = item->child;\n        for (\n                i = 0;\n                (i < (sizeof(expected_types)/sizeof(int)))\n                && (node != NULL);\n                (void)i++, node = node->next)\n        {\n            assert_is_child(node, expected_names[i], expected_types[i]);\n        }\n        TEST_ASSERT_EQUAL_INT(i, 7);\n        reset(item);\n    }\n}",
+      "fn_code_pos": [
+        [
+          106,
+          0
+        ],
+        [
+          151,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_object_should_parse_objects_with_multiple_elements",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_object_should_not_parse_non_objects(void)\n{\n    assert_not_object(\"\");\n    assert_not_object(\"{\");\n    assert_not_object(\"}\");\n    assert_not_object(\"[\\\"hello\\\",{}]\");\n    assert_not_object(\"42\");\n    assert_not_object(\"3.14\");\n    assert_not_object(\"\\\"{}hello world!\\n\\\"\");\n}",
+      "fn_code_pos": [
+        [
+          153,
+          0
+        ],
+        [
+          162,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_object_should_not_parse_non_objects",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int CJSON_CDECL main(void)\n{\n    /* initialize cJSON item */\n    memset(item, 0, sizeof(cJSON));\n\n    UNITY_BEGIN();\n    RUN_TEST(parse_object_should_parse_empty_objects);\n    RUN_TEST(parse_object_should_not_parse_non_objects);\n    RUN_TEST(parse_object_should_parse_objects_with_multiple_elements);\n    RUN_TEST(parse_object_should_parse_objects_with_one_element);\n    return UNITY_END();\n}",
+      "fn_code_pos": [
+        [
+          164,
+          0
+        ],
+        [
+          175,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CJSON_CDECL main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/examples/unity_config.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/src/unity.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"common.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

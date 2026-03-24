@@ -1,0 +1,123 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static char *read_file(const char *filename)\n{\n    FILE *file = NULL;\n    long length = 0;\n    char *content = NULL;\n    size_t read_chars = 0;\n\n    /* open in read binary mode */\n    file = fopen(filename, \"rb\");\n    if (file == NULL)\n    {\n        goto cleanup;\n    }\n\n    /* get the length */\n    if (fseek(file, 0, SEEK_END) != 0)\n    {\n        goto cleanup;\n    }\n    length = ftell(file);\n    if (length < 0)\n    {\n        goto cleanup;\n    }\n    if (fseek(file, 0, SEEK_SET) != 0)\n    {\n        goto cleanup;\n    }\n\n    /* allocate content buffer */\n    content = (char*)malloc((size_t)length + sizeof(\"\"));\n    if (content == NULL)\n    {\n        goto cleanup;\n    }\n\n    /* read the file into memory */\n    read_chars = fread(content, sizeof(char), (size_t)length, file);\n    if ((long)read_chars != length)\n    {\n        free(content);\n        content = NULL;\n        goto cleanup;\n    }\n    content[read_chars] = '\\0';\n\n\ncleanup:\n    if (file != NULL)\n    {\n        fclose(file);\n    }\n\n    return content;\n}",
+      "fn_code_pos": [
+        [
+          28,
+          0
+        ],
+        [
+          82,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "read_file",
+        "parameters": {
+          "filename": "char"
+        },
+        "return_type": "char"
+      }
+    },
+    {
+      "fn_code": "int main(int argc, char** argv)\n{\n    const char *filename = NULL;\n    cJSON *item = NULL;\n    char *json = NULL;\n    int status = EXIT_FAILURE;\n    char *printed_json = NULL;\n\n    if ((argc < 2) || (argc > 3))\n    {\n        printf(\"Usage:\\n\");\n        printf(\"%s input_file [enable_printing]\\n\", argv[0]);\n        printf(\"\\t input_file: file containing the test data\\n\");\n        printf(\"\\t enable_printing: print after parsing, 'yes' or 'no', defaults to 'no'\\n\");\n        goto cleanup;\n    }\n\n    filename = argv[1];\n\n#if __AFL_HAVE_MANUAL_CONTROL\n    while (__AFL_LOOP(1000))\n    {\n#endif\n    status = EXIT_SUCCESS;\n\n    json = read_file(filename);\n    if ((json == NULL) || (json[0] == '\\0') || (json[1] == '\\0'))\n    {\n        status = EXIT_FAILURE;\n        goto cleanup;\n    }\n    item = cJSON_Parse(json + 2);\n    if (item == NULL)\n    {\n        goto cleanup;\n    }\n\n    if ((argc == 3) && (strncmp(argv[2], \"yes\", 3) == 0))\n    {\n        int do_format = 0;\n        if (json[1] == 'f')\n        {\n            do_format = 1;\n        }\n\n        if (json[0] == 'b')\n        {\n            /* buffered printing */\n            printed_json = cJSON_PrintBuffered(item, 1, do_format);\n        }\n        else\n        {\n            /* unbuffered printing */\n            if (do_format)\n            {\n                printed_json = cJSON_Print(item);\n            }\n            else\n            {\n                printed_json = cJSON_PrintUnformatted(item);\n            }\n        }\n        if (printed_json == NULL)\n        {\n            status = EXIT_FAILURE;\n            goto cleanup;\n        }\n        printf(\"%s\\n\", printed_json);\n    }\n\ncleanup:\n    if (item != NULL)\n    {\n        cJSON_Delete(item);\n        item = NULL;\n    }\n    if (json != NULL)\n    {\n        free(json);\n        json = NULL;\n    }\n    if (printed_json != NULL)\n    {\n        free(printed_json);\n        printed_json = NULL;\n    }\n#if __AFL_HAVE_MANUAL_CONTROL\n    }\n#endif\n\n    return status;\n}",
+      "fn_code_pos": [
+        [
+          84,
+          0
+        ],
+        [
+          175,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {
+          "argc": "int",
+          "argv": "char"
+        },
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "read_file(const char *filename)",
+      "fn_dec_pos": [
+        [
+          28,
+          13
+        ],
+        [
+          28,
+          44
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "read_file",
+        "parameters": {
+          "filename": "char"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"../cJSON.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

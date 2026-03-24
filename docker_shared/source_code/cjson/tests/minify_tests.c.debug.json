@@ -1,0 +1,237 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void cjson_minify_should_not_overflow_buffer(void)\n{\n    char unclosed_multiline_comment[] = \"/* bla\";\n    char pending_escape[] = \"\\\"\\\\\";\n\n    cJSON_Minify(unclosed_multiline_comment);\n    TEST_ASSERT_EQUAL_STRING(\"\", unclosed_multiline_comment);\n\n    cJSON_Minify(pending_escape);\n    TEST_ASSERT_EQUAL_STRING(\"\\\"\\\\\", pending_escape);\n}",
+      "fn_code_pos": [
+        [
+          31,
+          0
+        ],
+        [
+          41,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cjson_minify_should_not_overflow_buffer",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void cjson_minify_should_remove_single_line_comments(void)\n{\n    const char to_minify[] = \"{// this is {} \\\"some kind\\\" of [] comment /*, don't you see\\n}\";\n\n    char* minified = (char*) malloc(sizeof(to_minify));\n    TEST_ASSERT_NOT_NULL(minified);\n    strcpy(minified, to_minify);\n\n    cJSON_Minify(minified);\n    TEST_ASSERT_EQUAL_STRING(\"{}\", minified);\n\n    free(minified);\n}",
+      "fn_code_pos": [
+        [
+          43,
+          0
+        ],
+        [
+          55,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cjson_minify_should_remove_single_line_comments",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void cjson_minify_should_remove_spaces(void)\n{\n    const char to_minify[] = \"{ \\\"key\\\":\\ttrue\\r\\n    }\";\n\n    char* minified = (char*) malloc(sizeof(to_minify));\n    TEST_ASSERT_NOT_NULL(minified);\n    strcpy(minified, to_minify);\n\n    cJSON_Minify(minified);\n    TEST_ASSERT_EQUAL_STRING(\"{\\\"key\\\":true}\", minified);\n\n    free(minified);\n}",
+      "fn_code_pos": [
+        [
+          57,
+          0
+        ],
+        [
+          69,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cjson_minify_should_remove_spaces",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void cjson_minify_should_remove_multiline_comments(void)\n{\n    const char to_minify[] = \"{/* this is\\n a /* multi\\n //line \\n {comment \\\"\\\\\\\" */}\";\n\n    char* minified = (char*) malloc(sizeof(to_minify));\n    TEST_ASSERT_NOT_NULL(minified);\n    strcpy(minified, to_minify);\n\n    cJSON_Minify(minified);\n    TEST_ASSERT_EQUAL_STRING(\"{}\", minified);\n\n    free(minified);\n}",
+      "fn_code_pos": [
+        [
+          71,
+          0
+        ],
+        [
+          83,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cjson_minify_should_remove_multiline_comments",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void cjson_minify_should_not_modify_strings(void)\n{\n    const char to_minify[] = \"\\\"this is a string \\\\\\\" \\\\t bla\\\"\";\n\n    char* minified = (char*) malloc(sizeof(to_minify));\n    TEST_ASSERT_NOT_NULL(minified);\n    strcpy(minified, to_minify);\n\n    cJSON_Minify(minified);\n    TEST_ASSERT_EQUAL_STRING(to_minify, minified);\n\n    free(minified);\n}",
+      "fn_code_pos": [
+        [
+          85,
+          0
+        ],
+        [
+          97,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cjson_minify_should_not_modify_strings",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void cjson_minify_should_minify_json(void) {\n    const char to_minify[] =\n            \"{\\n\"\n            \"    \\\"glossary\\\": { // comment\\n\"\n            \"        \\\"title\\\": \\\"example glossary\\\",\\n\"\n            \"  /* multi\\n\"\n            \" line */\\n\"\n            \"\t\t\\\"GlossDiv\\\": {\\n\"\n            \"            \\\"title\\\": \\\"S\\\",\\n\"\n            \"\t\t\t\\\"GlossList\\\": {\\n\"\n            \"                \\\"GlossEntry\\\": {\\n\"\n            \"                    \\\"ID\\\": \\\"SGML\\\",\\n\"\n            \"\t\t\t\t\t\\\"SortAs\\\": \\\"SGML\\\",\\n\"\n            \"\t\t\t\t\t\\\"Acronym\\\": \\\"SGML\\\",\\n\"\n            \"\t\t\t\t\t\\\"Abbrev\\\": \\\"ISO 8879:1986\\\",\\n\"\n            \"\t\t\t\t\t\\\"GlossDef\\\": {\\n\"\n            \"\t\t\t\t\t\t\\\"GlossSeeAlso\\\": [\\\"GML\\\", \\\"XML\\\"]\\n\"\n            \"                    },\\n\"\n            \"\t\t\t\t\t\\\"GlossSee\\\": \\\"markup\\\"\\n\"\n            \"                }\\n\"\n            \"            }\\n\"\n            \"        }\\n\"\n            \"    }\\n\"\n            \"}\";\n    const char* minified =\n            \"{\"\n            \"\\\"glossary\\\":{\"\n            \"\\\"title\\\":\\\"example glossary\\\",\"\n            \"\\\"GlossDiv\\\":{\"\n            \"\\\"title\\\":\\\"S\\\",\"\n            \"\\\"GlossList\\\":{\"\n            \"\\\"GlossEntry\\\":{\"\n            \"\\\"ID\\\":\\\"SGML\\\",\"\n            \"\\\"SortAs\\\":\\\"SGML\\\",\"\n            \"\\\"Acronym\\\":\\\"SGML\\\",\"\n            \"\\\"Abbrev\\\":\\\"ISO 8879:1986\\\",\"\n            \"\\\"GlossDef\\\":{\"\n            \"\\\"GlossSeeAlso\\\":[\\\"GML\\\",\\\"XML\\\"]\"\n            \"},\"\n            \"\\\"GlossSee\\\":\\\"markup\\\"\"\n            \"}\"\n            \"}\"\n            \"}\"\n            \"}\"\n            \"}\";\n\n    char *buffer = (char*) malloc(sizeof(to_minify));\n    strcpy(buffer, to_minify);\n\n    cJSON_Minify(buffer);\n    TEST_ASSERT_EQUAL_STRING(minified, buffer);\n\n    free(buffer);\n}",
+      "fn_code_pos": [
+        [
+          99,
+          0
+        ],
+        [
+          152,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cjson_minify_should_minify_json",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void cjson_minify_should_not_loop_infinitely(void) {\n    char string[] = { '8', ' ', '/', ' ', '5', '\\n', '\\0' };\n    /* this should not be an infinite loop */\n    cJSON_Minify(string);\n}",
+      "fn_code_pos": [
+        [
+          154,
+          0
+        ],
+        [
+          158,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cjson_minify_should_not_loop_infinitely",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int CJSON_CDECL main(void)\n{\n    UNITY_BEGIN();\n\n    RUN_TEST(cjson_minify_should_not_overflow_buffer);\n    RUN_TEST(cjson_minify_should_minify_json);\n    RUN_TEST(cjson_minify_should_remove_single_line_comments);\n    RUN_TEST(cjson_minify_should_remove_multiline_comments);\n    RUN_TEST(cjson_minify_should_remove_spaces);\n    RUN_TEST(cjson_minify_should_not_modify_strings);\n    RUN_TEST(cjson_minify_should_not_loop_infinitely);\n\n    return UNITY_END();\n}",
+      "fn_code_pos": [
+        [
+          160,
+          0
+        ],
+        [
+          173,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CJSON_CDECL main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/examples/unity_config.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/src/unity.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"common.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

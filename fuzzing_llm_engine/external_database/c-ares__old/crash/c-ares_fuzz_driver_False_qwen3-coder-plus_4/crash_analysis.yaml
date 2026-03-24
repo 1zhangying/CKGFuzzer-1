@@ -1,0 +1,166 @@
+- crash_1:
+    is_api_bug: false
+    crash_category: Memory Management Error (Double-Free)
+    crash_analysis: "|\n      # Comprehensive Analysis of the Double-Free Crash\n\n\
+      \      ## 1. Is this an API bug?\n      **False** - This is a fuzz driver bug,\
+      \ not an API bug.\n\n      ## 2. Specific location in the code where the crash\
+      \ likely occurred\n      The crash occurs in the `ares_parse_srv_reply` test\
+      \ section of the fuzz driver at lines 137-148, specifically:\n      - Line 137:\
+      \ `int result = ares_parse_srv_reply(data + offset, srv_reply_size, &srv_out);`\n\
+      \      - Line 146: `ares_free(srv_out);` (incorrectly called instead of proper\
+      \ cleanup)\n      - Line 148: `ares_free_data(current);` (second attempt to\
+      \ free same memory)\n\n      ## 3. Description of the variables involved in\
+      \ the crash\n      - `srv_out`: Pointer to `ares_srv_reply` structure returned\
+      \ by `ares_parse_srv_reply`\n      - `current`: Iterator through the linked\
+      \ list of `ares_srv_reply` structures\n      - `current->host`: String field\
+      \ within the structure that gets freed via `ares_free_string`\n      - `0x7b36d783e710`:\
+      \ The specific memory address that gets double-freed (1-byte region)\n\n   \
+      \   ## 4. Relevant potential error patterns\n      From the fuzz driver error\
+      \ patterns, the most relevant ones are:\n      - **Manual memory management**:\
+      \ \"Using `ares_free_data()` on structures that may require specific cleanup\
+      \ functions\"\n      - **Incorrect cleanup sequence**: \"Calling `ares_free_string()`\
+      \ on host field without confirming it was allocated by c-ares\"\n      - **Linked\
+      \ list traversal without bounds checking**: \"Loop through linked list without\
+      \ bounds checking\"\n\n      From the API error patterns: \"In `ares_parse_srv_reply`,\
+      \ if `ares_expand_name` fails within the loop, the allocated `srv_curr` structure\
+      \ is not freed, causing memory leak\"\n\n      ## 5. Violations of expected\
+      \ behavior\n      The fuzz driver violates proper memory management by:\n  \
+      \    - Attempting to manually free memory that should be handled by `ares_free_data()`\
+      \ \n      - Calling both `ares_free()` and `ares_free_data()` on the same memory\n\
+      \      - Not following the exact cleanup pattern expected by c-ares for the\
+      \ returned structure\n      - Improper handling of the linked-list structure\
+      \ returned by `ares_parse_srv_reply`\n\n      ## 6. Relevant CWE vulnerabilities\n\
+      \      - **CWE-415: Double Free** - Primary vulnerability causing the crash\n\
+      \      - **CWE-404: Improper Resource Shutdown or Release** - Contributing factor\
+      \ in resource management\n\n      ## 7. Detailed explanation of reasoning\n\n\
+      \      Looking at the stack trace, the crash sequence is:\n      1. `ares_parse_srv_reply`\
+      \ allocates memory internally (line 137 calls `ares__expand_name_validated`\
+      \ which calls `malloc`)\n      2. The fuzz driver correctly attempts to free\
+      \ the structure using the linked list cleanup (lines 144-149)\n      3. However,\
+      \ somewhere in the cleanup process, the same memory gets freed twice\n\n   \
+      \   The problem lies in the fuzz driver's cleanup code:\n      ```c\n      if\
+      \ (srv_out != NULL) {\n          struct ares_srv_reply *current = srv_out;\n\
+      \          while (current) {\n              struct ares_srv_reply *next = current->next;\n\
+      \              if (current->host) {\n                  ares_free_string(current->host);\
+      \  // This is correct\n              }\n              ares_free_data(current);\
+      \  // This should handle entire structure\n              current = next;\n \
+      \         }\n      }\n      ```\n\n      But looking more carefully at the stack\
+      \ trace, the issue appears to be that somewhere in the code, the same pointer\
+      \ is being freed both with `free()` and `ares_free_data()`. The real issue is\
+      \ that the fuzz driver is likely calling `ares_free()` directly on the same\
+      \ memory that gets freed internally by `ares_free_data()`.\n\n      Actually,\
+      \ looking more closely at the stack trace:\n      - One free happens at line\
+      \ 146: `free(srv_out)` (direct call to free)\n      - Another free happens at\
+      \ line 148: `ares_free_data(current)` (in the loop)\n\n      Wait, let me re-examine\
+      \ the stack trace more carefully. The first free is at line 146 calling `free(srv_out)`,\
+      \ but the stack shows it calls the internal `ares_free_data`. The second free\
+      \ is also through `ares_free_data` at line 148.\n\n      Looking at the actual\
+      \ stack trace again:\n      - First free: `LLVMFuzzerTestOneInput` line 146\
+      \ (the `ares_free_data(current)` call in the loop)\n      - Second free: `LLVMFuzzerTestOneInput`\
+      \ line 148 (another `ares_free_data` call in the loop)\n\n      This suggests\
+      \ there's a logic error where the same node is being freed twice. Looking at\
+      \ the fuzz driver code, I see that there are two separate sections that might\
+      \ both try to free `srv_out`:\n\n      There must be some issue with the linked\
+      \ list handling. The code shows:\n      ```c\n      // This happens during normal\
+      \ execution flow\n      if (srv_out != NULL) {\n          // ... cleanup loop\
+      \ that calls ares_free_data on each node\n      }\n      ```\n\n      But then\
+      \ there might be additional cleanup happening elsewhere. Actually, re-examining\
+      \ - I think the real problem is in the linked list cleanup code itself. The\
+      \ pattern `ares_free_data(current)` being called twice for the same memory indicates\
+      \ either:\n      1. The same pointer appears twice in the linked list (circular\
+      \ reference), or  \n      2. The fuzz driver code has been modified and there\
+      \ are two places trying to free the same structure\n\n      Based on the provided\
+      \ code, the issue appears to be in how the fuzz driver handles the linked list\
+      \ of `ares_srv_reply` structures returned by `ares_parse_srv_reply`.\n\n   \
+      \   Actually, looking at the stack trace more carefully, I notice that the crash\
+      \ happens when the same memory block (0x7b36d783e710) is freed twice:\n    \
+      \  - Once in the loop calling `ares_free_data(current)`\n      - Possibly there's\
+      \ a duplicate pointer in the linked list structure due to malformed input\n\n\
+      \      ## 8. Crash categorization\n      **Memory Management Error (Double-Free)**\n\
+      \n      This crash doesn't fit perfectly into the provided categories, so I'd\
+      \ categorize it as a new category: **Memory Management Error (Double-Free)**.\
+      \ This is needed because it represents a specific type of memory corruption\
+      \ that occurs when the same heap-allocated memory is freed twice, which is distinct\
+      \ from simple buffer overflows or null pointer dereferences.\n\n      ## Root\
+      \ Cause in Fuzz Driver Code\n\n      The specific issue is in the `ares_parse_srv_reply`\
+      \ test section:\n\n      ```c\n      // Free the srv reply structure if allocated\n\
+      \      if (srv_out != NULL) {\n          struct ares_srv_reply *current = srv_out;\n\
+      \          while (current) {\n              struct ares_srv_reply *next = current->next;\n\
+      \              if (current->host) {\n                  ares_free_string(current->host);\n\
+      \              }\n              ares_free_data(current);  // This line causes\
+      \ the crash\n              current = next;\n          }\n      }\n      ```\n\
+      \n      With malformed input data, the `ares_parse_srv_reply` function may create\
+      \ a circular linked list or duplicate pointers, causing the same memory to be\
+      \ freed multiple times during traversal. The fuzz driver doesn't properly validate\
+      \ the linked list structure before attempting to free it, allowing malformed\
+      \ DNS responses to create dangerous memory management patterns."
+    crash_info: "|\n      ERROR: AddressSanitizer: attempting double-free on 0x7b36d783e710\
+      \ in thread T0:\r\n      \e[1m\e[0mSCARINESS: 42 (double-free)\r\n         \
+      \ #0 0x55d64220c536 in free /src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\r\
+      \n          #1 0x55d642251748 in ares_free_data /src/c-ares/src/lib/ares_data.c\r\
+      \n          #2 0x55d642250f3d in LLVMFuzzerTestOneInput /src/c-ares/test/c-ares_fuzz_driver_False_qwen3-coder-plus_4.cc:148:21\r\
+      \n          #3 0x55d6420ede7d in fuzzer::Fuzzer::ExecuteCallback(unsigned char\
+      \ const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:619:13\r\
+      \n          #4 0x55d6420ed4b5 in fuzzer::Fuzzer::RunOne(unsigned char const*,\
+      \ unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7\r\
+      \n          #5 0x55d6420ef185 in fuzzer::Fuzzer::MutateAndTestOne() /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:765:19\r\
+      \n          #6 0x55d6420efde5 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector<fuzzer::SizedFile,\
+      \ std::__Fuzzer::allocator<fuzzer::SizedFile>>&) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:910:5\r\
+      \n          #7 0x55d6420de985 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned\
+      \ char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:917:6\r\
+      \n          #8 0x55d64210a5f2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10\r\
+      \n          #9 0x7f16d87e4082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082)\
+      \ (BuildId: 5792732f783158c66fb4f3756458ca24e46e827d)\r\n          #10 0x55d6420d1cdd\
+      \ in _start (/out/c-ares_fuzz_driver_False_qwen3-coder-plus_4+0x48cdd)\r\n\r\
+      \n      DEDUP_TOKEN: __interceptor_free--ares_free_data--LLVMFuzzerTestOneInput\r\
+      \n      \e[1m\e[32m0x7b36d783e710 is located 0 bytes inside of 1-byte region\
+      \ [0x7b36d783e710,0x7b36d783e711)\r\n      \e[1m\e[0m\e[1m\e[35mfreed by thread\
+      \ T0 here:\e[1m\e[0m\r\n          #0 0x55d64220c536 in free /src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\r\
+      \n          #1 0x55d642250f21 in LLVMFuzzerTestOneInput /src/c-ares/test/c-ares_fuzz_driver_False_qwen3-coder-plus_4.cc:146:25\r\
+      \n          #2 0x55d6420ede7d in fuzzer::Fuzzer::ExecuteCallback(unsigned char\
+      \ const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:619:13\r\
+      \n          #3 0x55d6420ed4b5 in fuzzer::Fuzzer::RunOne(unsigned char const*,\
+      \ unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7\r\
+      \n          #4 0x55d6420ef185 in fuzzer::Fuzzer::MutateAndTestOne() /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:765:19\r\
+      \n          #5 0x55d6420efde5 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector<fuzzer::SizedFile,\
+      \ std::__Fuzzer::allocator<fuzzer::SizedFile>>&) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:910:5\r\
+      \n          #6 0x55d6420de985 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned\
+      \ char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:917:6\r\
+      \n          #7 0x55d64210a5f2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10\r\
+      \n          #8 0x7f16d87e4082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082)\
+      \ (BuildId: 5792732f783158c66fb4f3756458ca24e46e827d)\r\n\r\n      DEDUP_TOKEN:\
+      \ __interceptor_free--LLVMFuzzerTestOneInput--fuzzer::Fuzzer::ExecuteCallback(unsigned\
+      \ char const*, unsigned long)\r\n      \e[1m\e[35mpreviously allocated by thread\
+      \ T0 here:\e[1m\e[0m\r\n          #0 0x55d64220c7d4 in malloc /src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:67:3\r\
+      \n          #1 0x55d6422521e2 in ares__expand_name_validated /src/c-ares/src/lib/ares_expand_name.c:133:8\r\
+      \n          #2 0x55d642253cec in ares_parse_srv_reply /src/c-ares/src/lib/ares_parse_srv_reply.c:138:20\r\
+      \n          #3 0x55d642250ecd in LLVMFuzzerTestOneInput /src/c-ares/test/c-ares_fuzz_driver_False_qwen3-coder-plus_4.cc:137:26\r\
+      \n          #4 0x55d6420ede7d in fuzzer::Fuzzer::ExecuteCallback(unsigned char\
+      \ const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:619:13\r\
+      \n          #5 0x55d6420ed4b5 in fuzzer::Fuzzer::RunOne(unsigned char const*,\
+      \ unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7\r\
+      \n          #6 0x55d6420ef185 in fuzzer::Fuzzer::MutateAndTestOne() /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:765:19\r\
+      \n          #7 0x55d6420efde5 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector<fuzzer::SizedFile,\
+      \ std::__Fuzzer::allocator<fuzzer::SizedFile>>&) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:910:5\r\
+      \n          #8 0x55d6420de985 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned\
+      \ char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:917:6\r\
+      \n          #9 0x55d64210a5f2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10\r\
+      \n          #10 0x7f16d87e4082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082)\
+      \ (BuildId: 5792732f783158c66fb4f3756458ca24e46e827d)\r\n\r\n      DEDUP_TOKEN:\
+      \ __interceptor_malloc--ares__expand_name_validated--ares_parse_srv_reply\r\n\
+      \      SUMMARY: AddressSanitizer: double-free /src/c-ares/src/lib/ares_data.c\
+      \ in ares_free_data\r\n      ==12==ABORTING\r\n      MS: 1 CopyPart-; base unit:\
+      \ 7759aa4dae0ace49ed23a452fc546d97d69aa502\r\n      0x4,0x0,0x4,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x1,0x0,0x1,0x0,0x0,0x0,0x0,0x0,0x0,0x5,0xff,0xff,0xff,0xff,0x26,0xff,0xff,0x1,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x4,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x1,0x0,0x0,0x0,0x0,0x0,0x0,0x26,0x18,0x18,0x23,0x23,0x26,0x30,0x23,0xd8,0x0,0x0,0x28,0xdf,0xff,0x0,0x21,0x0,0x1,0x0,0x1,0x0,0x0,0x0,0xb,0x0,0x0,0x4,0x0,0x0,0x0,0x0,0x21,0x0,0x1,0x0,0x1,0x0,0x0,0x0,0xb,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x4,0x0,0x0,0x0,0x0,0x21,0x0,0x1,0x0,0x1,0x0,0x0,0x0,0xb,0x0,0x0,0x0,0x0,0x0,0x0,0x4,0xfe,0x5,0x0,0x1,0xfe,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x5,0x0,0x0,0x0,0x0,0x83,\r\
+      \n      \\004\\000\\004\\030\\030\\030\\030\\030\\030\\030\\030\\030\\001\\\
+      000\\001\\000\\000\\000\\000\\000\\000\\005\\377\\377\\377\\377&\\377\\377\\\
+      001\\000\\000\\000\\000\\000\\000\\000\\004\\030\\030\\030\\030\\030\\030\\\
+      030\\030\\030\\030\\030\\030\\030\\030\\001\\000\\000\\000\\000\\000\\000&\\\
+      030\\030##&0#\\330\\000\\000(\\337\\377\\000!\\000\\001\\000\\001\\000\\000\\\
+      000\\013\\000\\000\\004\\000\\000\\000\\000!\\000\\001\\000\\001\\000\\000\\\
+      000\\013\\000\\000\\000\\000\\000\\000\\000\\000\\004\\000\\000\\000\\000!\\\
+      000\\001\\000\\001\\000\\000\\000\\013\\000\\000\\000\\000\\000\\000\\004\\\
+      376\\005\\000\\001\\376\\000\\000\\000\\000\\000\\000\\000\\005\\000\\000\\\
+      000\\000\\203\r\n      artifact_prefix='./'; Test unit written to ./crash-fb6408de9a4183bab42852170e1b109c9599e2fa\r\
+      \n      Base64: BAAEGBgYGBgYGBgYAQABAAAAAAAABf////8m//8BAAAAAAAAAAQYGBgYGBgYGBgYGBgYGAEAAAAAAAAmGBgjIyYwI9gAACjf/wAhAAEAAQAAAAsAAAQAAAAAIQABAAEAAAALAAAAAAAAAAAEAAAAACEAAQABAAAACwAAAAAAAAT+BQAB/gAAAAAAAAAFAAAAAIM="
+    fuzz_driver_file: c-ares_fuzz_driver_False_qwen3-coder-plus_4_crash_1.cc
+    timestamp: '2026-02-25T13:17:23.692470'

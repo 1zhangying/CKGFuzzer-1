@@ -1,0 +1,165 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static int print_preallocated(cJSON *root)\n{\n    /* declarations */\n    char *out = NULL;\n    char *buf = NULL;\n    char *buf_fail = NULL;\n    size_t len = 0;\n    size_t len_fail = 0;\n\n    /* formatted print */\n    out = cJSON_Print(root);\n\n    /* create buffer to succeed */\n    /* the extra 5 bytes are because of inaccuracies when reserving memory */\n    len = strlen(out) + 5;\n    buf = (char*)malloc(len);\n    if (buf == NULL)\n    {\n        printf(\"Failed to allocate memory.\\n\");\n        exit(1);\n    }\n\n    /* create buffer to fail */\n    len_fail = strlen(out);\n    buf_fail = (char*)malloc(len_fail);\n    if (buf_fail == NULL)\n    {\n        printf(\"Failed to allocate memory.\\n\");\n        exit(1);\n    }\n\n    /* Print to buffer */\n    if (!cJSON_PrintPreallocated(root, buf, (int)len, 1)) {\n        printf(\"cJSON_PrintPreallocated failed!\\n\");\n        if (strcmp(out, buf) != 0) {\n            printf(\"cJSON_PrintPreallocated not the same as cJSON_Print!\\n\");\n            printf(\"cJSON_Print result:\\n%s\\n\", out);\n            printf(\"cJSON_PrintPreallocated result:\\n%s\\n\", buf);\n        }\n        free(out);\n        free(buf_fail);\n        free(buf);\n        return -1;\n    }\n\n    /* success */\n    printf(\"%s\\n\", buf);\n\n    /* force it to fail */\n    if (cJSON_PrintPreallocated(root, buf_fail, (int)len_fail, 1)) {\n        printf(\"cJSON_PrintPreallocated failed to show error with insufficient memory!\\n\");\n        printf(\"cJSON_Print result:\\n%s\\n\", out);\n        printf(\"cJSON_PrintPreallocated result:\\n%s\\n\", buf_fail);\n        free(out);\n        free(buf_fail);\n        free(buf);\n        return -1;\n    }\n\n    free(out);\n    free(buf_fail);\n    free(buf);\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          42,
+          0
+        ],
+        [
+          105,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_preallocated",
+        "parameters": {
+          "root": "cJSON"
+        },
+        "return_type": "int"
+      }
+    },
+    {
+      "fn_code": "static void create_objects(void)\n{\n    /* declare a few. */\n    cJSON *root = NULL;\n    cJSON *fmt = NULL;\n    cJSON *img = NULL;\n    cJSON *thm = NULL;\n    cJSON *fld = NULL;\n    int i = 0;\n\n    /* Our \"days of the week\" array: */\n    const char *strings[7] =\n    {\n        \"Sunday\",\n        \"Monday\",\n        \"Tuesday\",\n        \"Wednesday\",\n        \"Thursday\",\n        \"Friday\",\n        \"Saturday\"\n    };\n    /* Our matrix: */\n    int numbers[3][3] =\n    {\n        {0, -1, 0},\n        {1, 0, 0},\n        {0 ,0, 1}\n    };\n    /* Our \"gallery\" item: */\n    int ids[4] = { 116, 943, 234, 38793 };\n    /* Our array of \"records\": */\n    struct record fields[2] =\n    {\n        {\n            \"zip\",\n            37.7668,\n            -1.223959e+2,\n            \"\",\n            \"SAN FRANCISCO\",\n            \"CA\",\n            \"94107\",\n            \"US\"\n        },\n        {\n            \"zip\",\n            37.371991,\n            -1.22026e+2,\n            \"\",\n            \"SUNNYVALE\",\n            \"CA\",\n            \"94085\",\n            \"US\"\n        }\n    };\n    volatile double zero = 0.0;\n\n    /* Here we construct some JSON standards, from the JSON site. */\n\n    /* Our \"Video\" datatype: */\n    root = cJSON_CreateObject();\n    cJSON_AddItemToObject(root, \"name\", cJSON_CreateString(\"Jack (\\\"Bee\\\") Nimble\"));\n    cJSON_AddItemToObject(root, \"format\", fmt = cJSON_CreateObject());\n    cJSON_AddStringToObject(fmt, \"type\", \"rect\");\n    cJSON_AddNumberToObject(fmt, \"width\", 1920);\n    cJSON_AddNumberToObject(fmt, \"height\", 1080);\n    cJSON_AddFalseToObject (fmt, \"interlace\");\n    cJSON_AddNumberToObject(fmt, \"frame rate\", 24);\n\n    /* Print to text */\n    if (print_preallocated(root) != 0) {\n        cJSON_Delete(root);\n        exit(EXIT_FAILURE);\n    }\n    cJSON_Delete(root);\n\n    /* Our \"days of the week\" array: */\n    root = cJSON_CreateStringArray(strings, 7);\n\n    if (print_preallocated(root) != 0) {\n        cJSON_Delete(root);\n        exit(EXIT_FAILURE);\n    }\n    cJSON_Delete(root);\n\n    /* Our matrix: */\n    root = cJSON_CreateArray();\n    for (i = 0; i < 3; i++)\n    {\n        cJSON_AddItemToArray(root, cJSON_CreateIntArray(numbers[i], 3));\n    }\n\n    /* cJSON_ReplaceItemInArray(root, 1, cJSON_CreateString(\"Replacement\")); */\n\n    if (print_preallocated(root) != 0) {\n        cJSON_Delete(root);\n        exit(EXIT_FAILURE);\n    }\n    cJSON_Delete(root);\n\n    /* Our \"gallery\" item: */\n    root = cJSON_CreateObject();\n    cJSON_AddItemToObject(root, \"Image\", img = cJSON_CreateObject());\n    cJSON_AddNumberToObject(img, \"Width\", 800);\n    cJSON_AddNumberToObject(img, \"Height\", 600);\n    cJSON_AddStringToObject(img, \"Title\", \"View from 15th Floor\");\n    cJSON_AddItemToObject(img, \"Thumbnail\", thm = cJSON_CreateObject());\n    cJSON_AddStringToObject(thm, \"Url\", \"http:/*www.example.com/image/481989943\");\n    cJSON_AddNumberToObject(thm, \"Height\", 125);\n    cJSON_AddStringToObject(thm, \"Width\", \"100\");\n    cJSON_AddItemToObject(img, \"IDs\", cJSON_CreateIntArray(ids, 4));\n\n    if (print_preallocated(root) != 0) {\n        cJSON_Delete(root);\n        exit(EXIT_FAILURE);\n    }\n    cJSON_Delete(root);\n\n    /* Our array of \"records\": */\n    root = cJSON_CreateArray();\n    for (i = 0; i < 2; i++)\n    {\n        cJSON_AddItemToArray(root, fld = cJSON_CreateObject());\n        cJSON_AddStringToObject(fld, \"precision\", fields[i].precision);\n        cJSON_AddNumberToObject(fld, \"Latitude\", fields[i].lat);\n        cJSON_AddNumberToObject(fld, \"Longitude\", fields[i].lon);\n        cJSON_AddStringToObject(fld, \"Address\", fields[i].address);\n        cJSON_AddStringToObject(fld, \"City\", fields[i].city);\n        cJSON_AddStringToObject(fld, \"State\", fields[i].state);\n        cJSON_AddStringToObject(fld, \"Zip\", fields[i].zip);\n        cJSON_AddStringToObject(fld, \"Country\", fields[i].country);\n    }\n\n    /* cJSON_ReplaceItemInObject(cJSON_GetArrayItem(root, 1), \"City\", cJSON_CreateIntArray(ids, 4)); */\n\n    if (print_preallocated(root) != 0) {\n        cJSON_Delete(root);\n        exit(EXIT_FAILURE);\n    }\n    cJSON_Delete(root);\n\n    root = cJSON_CreateObject();\n    cJSON_AddNumberToObject(root, \"number\", 1.0 / zero);\n\n    if (print_preallocated(root) != 0) {\n        cJSON_Delete(root);\n        exit(EXIT_FAILURE);\n    }\n    cJSON_Delete(root);\n}",
+      "fn_code_pos": [
+        [
+          108,
+          0
+        ],
+        [
+          256,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "create_objects",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int CJSON_CDECL main(void)\n{\n    /* print the version */\n    printf(\"Version: %s\\n\", cJSON_Version());\n\n    /* Now some samplecode for building objects concisely: */\n    create_objects();\n\n    return 0;\n}",
+      "fn_code_pos": [
+        [
+          258,
+          0
+        ],
+        [
+          267,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CJSON_CDECL main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [
+    [
+      "struct record\n{\n    const char *precision;\n    double lat;\n    double lon;\n    const char *address;\n    const char *city;\n    const char *state;\n    const char *zip;\n    const char *country;\n}",
+      {
+        "char": "const",
+        "lat": "double",
+        "lon": "double"
+      },
+      "record",
+      [
+        28,
+        0
+      ],
+      [
+        38,
+        1
+      ]
+    ],
+    [
+      "struct record\n{\n    const char *precision;\n    double lat;\n    double lon;\n    const char *address;\n    const char *city;\n    const char *state;\n    const char *zip;\n    const char *country;\n}",
+      {
+        "char": "const",
+        "lat": "double",
+        "lon": "double"
+      },
+      "record",
+      [
+        28,
+        0
+      ],
+      [
+        38,
+        1
+      ]
+    ],
+    [
+      "struct record",
+      {},
+      "",
+      [
+        139,
+        4
+      ],
+      [
+        139,
+        17
+      ]
+    ]
+  ],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"cJSON.h\"\n",
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

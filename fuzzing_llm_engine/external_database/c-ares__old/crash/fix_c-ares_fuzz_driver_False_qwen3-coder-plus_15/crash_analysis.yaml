@@ -1,0 +1,224 @@
+- crash_1:
+    is_api_bug: true
+    crash_category: Use After Free
+    crash_analysis: "|\n      # Comprehensive Analysis of the Crash\n\n      ## 1.\
+      \ Is this an API bug?\n      **True** - This is an API bug\n\n      ## 2. Specific\
+      \ location in the code where the crash likely occurred\n      The crash occurred\
+      \ in the fuzz driver at line 48, but the root cause is in the `ares__parse_txt_reply`\
+      \ function (line 43 in the fuzz driver calls this). The actual memory corruption\
+      \ happens when `ares_free_data` is called on a structure that contains pointers\
+      \ to memory that is later accessed.\n\n      ## 3. Description of the variables\
+      \ involved in the crash\n      - `txt_out`: The output structure from `ares_parse_txt_reply`\
+      \ containing a linked list of TXT records\n      - `buf`: Input buffer containing\
+      \ DNS packet data (56-byte region starting at 0x7bf26f8a7a00)\n      - `txt_result`:\
+      \ Result code from the parsing operation\n      - Internal `ares_txt_reply`\
+      \ structures allocated by `ares_malloc_data` in `ares__parse_txt_reply`\n\n\
+      \      ## 4. Relevant potential error patterns\n      From the API error patterns:\n\
+      \      - **Buffer read overflow when accessing aptr after arithmetic operations\
+      \ without validation** - Critical in `ares__parse_txt_reply`\n      - **Unvalidated\
+      \ rr_len could cause boundary checks to pass incorrectly** - Relevant to DNS\
+      \ record parsing\n      - **Pointer arithmetic without bounds checking throughout\
+      \ DNS parsing routines** - Key issue in the TXT reply parser\n\n      From the\
+      \ fuzz driver error patterns:\n      - **Missing validation of the parsed data\
+      \ buffer content** - Malformed DNS packets causing crashes\n      - **Memory\
+      \ corruption possible if `ares_free_data()` or `ares_free_hostent()` are called\
+      \ on invalid or already-freed pointers**\n\n      ## 5. Violations of expected\
+      \ behavior\n      The API is failing to properly validate DNS packet content\
+      \ before parsing. Specifically, `ares__parse_txt_reply` appears to allocate\
+      \ memory for TXT record data and then later free some parts while leaving pointers\
+      \ to the freed memory in accessible structures. When the fuzz driver later accesses\
+      \ these structures (at line 48 in the crash trace), it reads from already-freed\
+      \ memory.\n\n      ## 6. Relevant CWE vulnerabilities\n      - **CWE-416: Use\
+      \ After Free** - Primary vulnerability as explicitly shown in the crash\n  \
+      \    - **CWE-122: Heap-based Buffer Overflow** - Potential secondary effect\
+      \ from use-after-free\n      - **CWE-787: Out-of-bounds Write** - Could occur\
+      \ due to corrupted memory access\n\n      ## 7. Detailed explanation of reasoning\n\
+      \n      Looking at the crash stack trace:\n\n      1. Memory is allocated at\
+      \ `ares__parse_txt_reply` line 131:26 via `ares_malloc_data`\n      2. The parsing\
+      \ function processes the DNS data and creates a linked list structure \n   \
+      \   3. The parsing function completes successfully and returns the structure\
+      \ to the fuzz driver\n      4. In the fuzz driver cleanup logic (after line\
+      \ 43), when `txt_result == ARES_SUCCESS`, it enters the cleanup block\n    \
+      \  5. However, there's a flaw: the code tries to access `current_txt->next`\
+      \ (line 48) after calling `ares_free_data(current_txt)` (line 49), but `ares_free_data`\
+      \ likely only partially frees the structure while leaving the `next` pointer\
+      \ intact in the now-freed memory.\n      6. The real issue is that `ares_free_data`\
+      \ may not properly nullify pointer fields in the structure before freeing the\
+      \ memory, or there's internal reference counting that's not handled correctly.\n\
+      \n      Actually, re-examining the stack trace more carefully:\n      - Line\
+      \ 43: `ares__parse_txt_reply` allocates memory\n      - Line 49: `ares_free_data`\
+      \ is called to free the memory  \n      - Line 48: There's a READ operation\
+      \ (the crash point), which suggests the code at line 48 reads from the freed\
+      \ memory after line 49\n\n      Wait, let me re-read the stack trace - the crash\
+      \ happens at line 48 (read), and `ares_free_data` is called at line 49. This\
+      \ means the read happens during the cleanup process, likely in the while loop\
+      \ condition check or when accessing the `next` pointer after calling `ares_free_data`.\n\
+      \n      The problem is that the fuzz driver's cleanup code:\n      ```c\n  \
+      \    struct ares_txt_reply *current_txt = txt_out;\n      while (current_txt\
+      \ != NULL) {\n          struct ares_txt_reply *next = current_txt->next;  //\
+      \ Line 48: READ happens here\n          ares_free_data(current_txt);  // Line\
+      \ 49: Memory gets freed\n          current_txt = next;  // Next iteration reads\
+      \ from freed memory\n      }\n      ```\n\n      The issue is that `ares_free_data`\
+      \ is supposed to free the entire linked list starting from the given node, but\
+      \ the fuzz driver's code assumes it only frees the current node and expects\
+      \ to traverse the `next` pointers. If `ares_free_data` properly handles linked\
+      \ lists recursively, then the second iteration tries to access freed memory.\n\
+      \n      However, the real bug is likely in the `ares__parse_txt_reply` function\
+      \ which might create a structure where `ares_free_data` doesn't properly clean\
+      \ up references before freeing memory, or creates circular references that lead\
+      \ to memory corruption.\n\n      ## 8. Crash categorization\n      **Use After\
+      \ Free** - This crash doesn't fit into the provided categories exactly, so I'm\
+      \ suggesting this new category.\n\n      **Explanation**: Use After Free is\
+      \ a distinct type of memory safety violation where a program continues to use\
+      \ a pointer after the memory it points to has been deallocated. This differs\
+      \ from other memory-related bugs because it specifically involves the temporal\
+      \ aspect of using memory after its lifetime has ended. While it can lead to\
+      \ buffer overflows or segment violations, the root cause is specifically the\
+      \ misuse of memory after deallocation.\n\n      The crash occurs because:\n\
+      \      - Memory is allocated for a `ares_txt_reply` structure \n      - The\
+      \ parsing function sets up the structure with valid pointers\n      - During\
+      \ cleanup, `ares_free_data` frees the memory but the parsing code may have left\
+      \ dangling pointers\n      - Subsequent access to the freed memory triggers\
+      \ the AddressSanitizer violation\n\n      This is fundamentally different from\
+      \ a simple buffer overflow or null pointer dereference - it's specifically about\
+      \ using memory after it's been returned to the allocator."
+    crash_info: "|\n      ERROR: AddressSanitizer: heap-use-after-free on address\
+      \ 0x7bf26f8a7a08 at pc 0x55cdb4cc3a59 bp 0x7fffe1081df0 sp 0x7fffe1081de8\r\n\
+      \      \e[1m\e[0m\e[1m\e[34mREAD of size 8 at 0x7bf26f8a7a08 thread T0\e[1m\e\
+      [0m\r\n      SCARINESS: 51 (8-byte-read-heap-use-after-free)\r\n          #0\
+      \ 0x55cdb4cc3a58 in LLVMFuzzerTestOneInput /src/c-ares/test/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_15.cc:48:56\r\
+      \n          #1 0x55cdb4b60e8d in fuzzer::Fuzzer::ExecuteCallback(unsigned char\
+      \ const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:619:13\r\
+      \n          #2 0x55cdb4b604c5 in fuzzer::Fuzzer::RunOne(unsigned char const*,\
+      \ unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7\r\
+      \n          #3 0x55cdb4b62195 in fuzzer::Fuzzer::MutateAndTestOne() /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:765:19\r\
+      \n          #4 0x55cdb4b62df5 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector<fuzzer::SizedFile,\
+      \ std::__Fuzzer::allocator<fuzzer::SizedFile>>&) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:910:5\r\
+      \n          #5 0x55cdb4b51995 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned\
+      \ char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:917:6\r\
+      \n          #6 0x55cdb4b7d602 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10\r\
+      \n          #7 0x7f927062f082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082)\
+      \ (BuildId: 5792732f783158c66fb4f3756458ca24e46e827d)\r\n          #8 0x55cdb4b44ced\
+      \ in _start (/out/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_15+0x48ced)\r\
+      \n\r\n      DEDUP_TOKEN: LLVMFuzzerTestOneInput--fuzzer::Fuzzer::ExecuteCallback(unsigned\
+      \ char const*, unsigned long)--fuzzer::Fuzzer::RunOne(unsigned char const*,\
+      \ unsigned long, bool, fuzzer::InputInfo*, bool, bool*)\r\n      \e[1m\e[32m0x7bf26f8a7a08\
+      \ is located 8 bytes inside of 56-byte region [0x7bf26f8a7a00,0x7bf26f8a7a38)\r\
+      \n      \e[1m\e[0m\e[1m\e[35mfreed by thread T0 here:\e[1m\e[0m\r\n        \
+      \  #0 0x55cdb4c7f546 in free /src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\r\
+      \n          #1 0x55cdb4cc41b1 in ares_free_data /src/c-ares/src/lib/ares_data.c:144:5\r\
+      \n          #2 0x55cdb4cc378b in LLVMFuzzerTestOneInput /src/c-ares/test/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_15.cc:49:13\r\
+      \n          #3 0x55cdb4b60e8d in fuzzer::Fuzzer::ExecuteCallback(unsigned char\
+      \ const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:619:13\r\
+      \n          #4 0x55cdb4b604c5 in fuzzer::Fuzzer::RunOne(unsigned char const*,\
+      \ unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7\r\
+      \n          #5 0x55cdb4b62195 in fuzzer::Fuzzer::MutateAndTestOne() /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:765:19\r\
+      \n          #6 0x55cdb4b62df5 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector<fuzzer::SizedFile,\
+      \ std::__Fuzzer::allocator<fuzzer::SizedFile>>&) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:910:5\r\
+      \n          #7 0x55cdb4b51995 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned\
+      \ char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:917:6\r\
+      \n          #8 0x55cdb4b7d602 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10\r\
+      \n          #9 0x7f927062f082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082)\
+      \ (BuildId: 5792732f783158c66fb4f3756458ca24e46e827d)\r\n\r\n      DEDUP_TOKEN:\
+      \ __interceptor_free--ares_free_data--LLVMFuzzerTestOneInput\r\n      \e[1m\e\
+      [35mpreviously allocated by thread T0 here:\e[1m\e[0m\r\n          #0 0x55cdb4c7f7e4\
+      \ in malloc /src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:67:3\r\
+      \n          #1 0x55cdb4cc43ad in ares_malloc_data /src/c-ares/src/lib/ares_data.c:165:9\r\
+      \n          #2 0x55cdb4cc7d6e in ares__parse_txt_reply /src/c-ares/src/lib/ares_parse_txt_reply.c:131:26\r\
+      \n          #3 0x55cdb4cc3741 in LLVMFuzzerTestOneInput /src/c-ares/test/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_15.cc:43:22\r\
+      \n          #4 0x55cdb4b60e8d in fuzzer::Fuzzer::ExecuteCallback(unsigned char\
+      \ const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:619:13\r\
+      \n          #5 0x55cdb4b604c5 in fuzzer::Fuzzer::RunOne(unsigned char const*,\
+      \ unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7\r\
+      \n          #6 0x55cdb4b62195 in fuzzer::Fuzzer::MutateAndTestOne() /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:765:19\r\
+      \n          #7 0x55cdb4b62df5 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector<fuzzer::SizedFile,\
+      \ std::__Fuzzer::allocator<fuzzer::SizedFile>>&) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:910:5\r\
+      \n          #8 0x55cdb4b51995 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned\
+      \ char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:917:6\r\
+      \n          #9 0x55cdb4b7d602 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10\r\
+      \n          #10 0x7f927062f082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082)\
+      \ (BuildId: 5792732f783158c66fb4f3756458ca24e46e827d)\r\n\r\n      DEDUP_TOKEN:\
+      \ __interceptor_malloc--ares_malloc_data--ares__parse_txt_reply\r\n      SUMMARY:\
+      \ AddressSanitizer: heap-use-after-free /src/c-ares/test/fix_c-ares_fuzz_driver_False_qwen3-coder-plus_15.cc:48:56\
+      \ in LLVMFuzzerTestOneInput\r\n      Shadow bytes around the buggy address:\r\
+      \n        0x7bf26f8a7780: \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e\
+      [1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e\
+      [31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e\
+      [1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e\
+      [0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m\
+      \ \e[1m\e[31mfa\e[1m\e[0m\r\n        0x7bf26f8a7800: \e[1m\e[31mfa\e[1m\e[0m\
+      \ \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e\
+      [1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e\
+      [31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e\
+      [1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e\
+      [0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m\r\n        0x7bf26f8a7880:\
+      \ \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e\
+      [1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e\
+      [31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e\
+      [1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e\
+      [0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m\r\
+      \n        0x7bf26f8a7900: \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e\
+      [1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e\
+      [31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e\
+      [1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e\
+      [0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m\
+      \ \e[1m\e[31mfa\e[1m\e[0m\r\n        0x7bf26f8a7980: \e[1m\e[31mfa\e[1m\e[0m\
+      \ \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e\
+      [1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e\
+      [31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e\
+      [1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e\
+      [0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m\r\n      =>0x7bf26f8a7a00:\
+      \ \e[1m\e[35mfd\e[1m\e[0m[\e[1m\e[35mfd\e[1m\e[0m]\e[1m\e[35mfd\e[1m\e[0m \e\
+      [1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e\
+      [35mfd\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e\
+      [1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e\
+      [0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m\r\
+      \n        0x7bf26f8a7a80: \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e\
+      [1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e\
+      [31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[35mfd\e\
+      [1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e\
+      [0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m\
+      \ \e[1m\e[31mfa\e[1m\e[0m\r\n        0x7bf26f8a7b00: \e[1m\e[31mfa\e[1m\e[0m\
+      \ \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e\
+      [1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e\
+      [35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e\
+      [1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e\
+      [0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m\r\n        0x7bf26f8a7b80:\
+      \ \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e\
+      [1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e\
+      [35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e\
+      [1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[35mfd\e[1m\e\
+      [0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m\r\
+      \n        0x7bf26f8a7c00: \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e\
+      [1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e\
+      [31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[35mfd\e\
+      [1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e\
+      [0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m\
+      \ \e[1m\e[35mfd\e[1m\e[0m\r\n        0x7bf26f8a7c80: \e[1m\e[31mfa\e[1m\e[0m\
+      \ \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e\
+      [1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e\
+      [35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[35mfd\e\
+      [1m\e[0m \e[1m\e[35mfd\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e\
+      [0m \e[1m\e[31mfa\e[1m\e[0m \e[1m\e[31mfa\e[1m\e[0m\r\n      Shadow byte legend\
+      \ (one shadow byte represents 8 application bytes):\r\n        Addressable:\
+      \           \e[1m\e[0m00\e[1m\e[0m\r\n        Partially addressable: \e[1m\e\
+      [0m01\e[1m\e[0m \e[1m\e[0m02\e[1m\e[0m \e[1m\e[0m03\e[1m\e[0m \e[1m\e[0m04\e\
+      [1m\e[0m \e[1m\e[0m05\e[1m\e[0m \e[1m\e[0m06\e[1m\e[0m \e[1m\e[0m07\e[1m\e[0m\
+      \ \r\n        Heap left redzone:       \e[1m\e[31mfa\e[1m\e[0m\r\n        Freed\
+      \ heap region:       \e[1m\e[35mfd\e[1m\e[0m\r\n        Stack left redzone:\
+      \      \e[1m\e[31mf1\e[1m\e[0m\r\n        Stack mid redzone:       \e[1m\e[31mf2\e\
+      [1m\e[0m\r\n        Stack right redzone:     \e[1m\e[31mf3\e[1m\e[0m\r\n   \
+      \     Stack after return:      \e[1m\e[35mf5\e[1m\e[0m\r\n        Stack use\
+      \ after scope:   \e[1m\e[35mf8\e[1m\e[0m\r\n        Global redzone:        \
+      \  \e[1m\e[31mf9\e[1m\e[0m\r\n        Global init order:       \e[1m\e[36mf6\e\
+      [1m\e[0m\r\n        Poisoned by user:        \e[1m\e[34mf7\e[1m\e[0m\r\n   \
+      \     Container overflow:      \e[1m\e[34mfc\e[1m\e[0m\r\n        Array cookie:\
+      \            \e[1m\e[31mac\e[1m\e[0m\r\n        Intra object redzone:    \e\
+      [1m\e[33mbb\e[1m\e[0m\r\n        ASan internal:           \e[1m\e[33mfe\e[1m\e\
+      [0m\r\n        Left alloca redzone:     \e[1m\e[34mca\e[1m\e[0m\r\n        Right\
+      \ alloca redzone:    \e[1m\e[34mcb\e[1m\e[0m\r\n      ==12==ABORTING\r\n   \
+      \   MS: 4 CrossOver-ShuffleBytes-ChangeBinInt-CMP- DE: \"\\014\\000\\000\\000\"\
+      -; base unit: 3329eea9f23d05ed0d21f9c4bec6e6297535f917\r\n      artifact_prefix='./';\
+      \ Test unit written to ./crash-d2edcc08b70e92da2dce553ba9869c76a65cbd2c"
+    fuzz_driver_file: fix_c-ares_fuzz_driver_False_qwen3-coder-plus_15_crash_1.cc
+    timestamp: '2026-02-24T13:25:48.816362'

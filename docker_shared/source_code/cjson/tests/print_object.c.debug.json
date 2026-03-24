@@ -1,0 +1,147 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void assert_print_object(const char * const expected, const char * const input)\n{\n    unsigned char printed_unformatted[1024];\n    unsigned char printed_formatted[1024];\n\n    cJSON item[1];\n\n    printbuffer formatted_buffer = { 0, 0, 0, 0, 0, 0, { 0, 0, 0 } };\n    printbuffer unformatted_buffer = { 0, 0, 0, 0, 0, 0, { 0, 0, 0 } };\n    parse_buffer parsebuffer = { 0, 0, 0, 0, { 0, 0, 0 } };\n\n    /* buffer for parsing */\n    parsebuffer.content = (const unsigned char*)input;\n    parsebuffer.length = strlen(input) + sizeof(\"\");\n    parsebuffer.hooks = global_hooks;\n\n    /* buffer for formatted printing */\n    formatted_buffer.buffer = printed_formatted;\n    formatted_buffer.length = sizeof(printed_formatted);\n    formatted_buffer.offset = 0;\n    formatted_buffer.noalloc = true;\n    formatted_buffer.hooks = global_hooks;\n\n    /* buffer for unformatted printing */\n    unformatted_buffer.buffer = printed_unformatted;\n    unformatted_buffer.length = sizeof(printed_unformatted);\n    unformatted_buffer.offset = 0;\n    unformatted_buffer.noalloc = true;\n    unformatted_buffer.hooks = global_hooks;\n\n    memset(item, 0, sizeof(item));\n    TEST_ASSERT_TRUE_MESSAGE(parse_object(item, &parsebuffer), \"Failed to parse object.\");\n\n    unformatted_buffer.format = false;\n    TEST_ASSERT_TRUE_MESSAGE(print_object(item, &unformatted_buffer), \"Failed to print unformatted string.\");\n    TEST_ASSERT_EQUAL_STRING_MESSAGE(input, printed_unformatted, \"Unformatted object is not correct.\");\n\n    formatted_buffer.format = true;\n    TEST_ASSERT_TRUE_MESSAGE(print_object(item, &formatted_buffer), \"Failed to print formatted string.\");\n    TEST_ASSERT_EQUAL_STRING_MESSAGE(expected, printed_formatted, \"Formatted ojbect is not correct.\");\n\n    reset(item);\n}",
+      "fn_code_pos": [
+        [
+          26,
+          0
+        ],
+        [
+          68,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_print_object",
+        "parameters": {
+          "expected": "char",
+          "input": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void print_object_should_print_empty_objects(void)\n{\n    assert_print_object(\"{\\n}\", \"{}\");\n}",
+      "fn_code_pos": [
+        [
+          70,
+          0
+        ],
+        [
+          73,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_object_should_print_empty_objects",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void print_object_should_print_objects_with_one_element(void)\n{\n\n    assert_print_object(\"{\\n\\t\\\"one\\\":\\t1\\n}\", \"{\\\"one\\\":1}\");\n    assert_print_object(\"{\\n\\t\\\"hello\\\":\\t\\\"world!\\\"\\n}\", \"{\\\"hello\\\":\\\"world!\\\"}\");\n    assert_print_object(\"{\\n\\t\\\"array\\\":\\t[]\\n}\", \"{\\\"array\\\":[]}\");\n    assert_print_object(\"{\\n\\t\\\"null\\\":\\tnull\\n}\", \"{\\\"null\\\":null}\");\n}",
+      "fn_code_pos": [
+        [
+          75,
+          0
+        ],
+        [
+          82,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_object_should_print_objects_with_one_element",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void print_object_should_print_objects_with_multiple_elements(void)\n{\n    assert_print_object(\"{\\n\\t\\\"one\\\":\\t1,\\n\\t\\\"two\\\":\\t2,\\n\\t\\\"three\\\":\\t3\\n}\", \"{\\\"one\\\":1,\\\"two\\\":2,\\\"three\\\":3}\");\n    assert_print_object(\"{\\n\\t\\\"one\\\":\\t1,\\n\\t\\\"NULL\\\":\\tnull,\\n\\t\\\"TRUE\\\":\\ttrue,\\n\\t\\\"FALSE\\\":\\tfalse,\\n\\t\\\"array\\\":\\t[],\\n\\t\\\"world\\\":\\t\\\"hello\\\",\\n\\t\\\"object\\\":\\t{\\n\\t}\\n}\", \"{\\\"one\\\":1,\\\"NULL\\\":null,\\\"TRUE\\\":true,\\\"FALSE\\\":false,\\\"array\\\":[],\\\"world\\\":\\\"hello\\\",\\\"object\\\":{}}\");\n}",
+      "fn_code_pos": [
+        [
+          84,
+          0
+        ],
+        [
+          88,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "print_object_should_print_objects_with_multiple_elements",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int CJSON_CDECL main(void)\n{\n    /* initialize cJSON item */\n    UNITY_BEGIN();\n\n    RUN_TEST(print_object_should_print_empty_objects);\n    RUN_TEST(print_object_should_print_objects_with_one_element);\n    RUN_TEST(print_object_should_print_objects_with_multiple_elements);\n\n    return UNITY_END();\n}",
+      "fn_code_pos": [
+        [
+          90,
+          0
+        ],
+        [
+          100,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CJSON_CDECL main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"unity/examples/unity_config.h\"\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/src/unity.h\"\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include \"common.h\"\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

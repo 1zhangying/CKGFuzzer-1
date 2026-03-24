@@ -1,0 +1,284 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void assert_is_string(cJSON *string_item)\n{\n    TEST_ASSERT_NOT_NULL_MESSAGE(string_item, \"Item is NULL.\");\n\n    assert_not_in_list(string_item);\n    assert_has_no_child(string_item);\n    assert_has_type(string_item, cJSON_String);\n    assert_has_no_reference(string_item);\n    assert_has_no_const_string(string_item);\n    assert_has_valuestring(string_item);\n    assert_has_no_string(string_item);\n}",
+      "fn_code_pos": [
+        [
+          32,
+          0
+        ],
+        [
+          43,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_is_string",
+        "parameters": {
+          "string_item": "cJSON"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void assert_parse_string(const char *string, const char *expected)\n{\n    parse_buffer buffer = { 0, 0, 0, 0, { 0, 0, 0 } };\n    buffer.content = (const unsigned char*)string;\n    buffer.length = strlen(string) + sizeof(\"\");\n    buffer.hooks = global_hooks;\n\n    TEST_ASSERT_TRUE_MESSAGE(parse_string(item, &buffer), \"Couldn't parse string.\");\n    assert_is_string(item);\n    TEST_ASSERT_EQUAL_STRING_MESSAGE(expected, item->valuestring, \"The parsed result isn't as expected.\");\n    global_hooks.deallocate(item->valuestring);\n    item->valuestring = NULL;\n}",
+      "fn_code_pos": [
+        [
+          45,
+          0
+        ],
+        [
+          57,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_parse_string",
+        "parameters": {
+          "string": "char",
+          "expected": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void assert_not_parse_string(const char * const string)\n{\n    parse_buffer buffer = { 0, 0, 0, 0, { 0, 0, 0 } };\n    buffer.content = (const unsigned char*)string;\n    buffer.length = strlen(string) + sizeof(\"\");\n    buffer.hooks = global_hooks;\n\n    TEST_ASSERT_FALSE_MESSAGE(parse_string(item, &buffer), \"Malformed string should not be accepted.\");\n    assert_is_invalid(item);\n}",
+      "fn_code_pos": [
+        [
+          59,
+          0
+        ],
+        [
+          68,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_not_parse_string",
+        "parameters": {
+          "string": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_string_should_parse_strings(void)\n{\n    assert_parse_string(\"\\\"\\\"\", \"\");\n    assert_parse_string(\n        \"\\\" !\\\\\\\"#$%&'()*+,-./\\\\/0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\\\\\]^_'abcdefghijklmnopqrstuvwxyz{|}~\\\"\",\n        \" !\\\"#$%&'()*+,-.//0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_'abcdefghijklmnopqrstuvwxyz{|}~\");\n    assert_parse_string(\n        \"\\\"\\\\\\\"\\\\\\\\\\\\/\\\\b\\\\f\\\\n\\\\r\\\\t\\\\u20AC\\\\u732b\\\"\",\n        \"\\\"\\\\/\\b\\f\\n\\r\\t\u20ac\u732b\");\n    reset(item);\n    assert_parse_string(\"\\\"\\b\\f\\n\\r\\t\\\"\", \"\\b\\f\\n\\r\\t\");\n    reset(item);\n}",
+      "fn_code_pos": [
+        [
+          72,
+          0
+        ],
+        [
+          84,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_string_should_parse_strings",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_string_should_parse_utf16_surrogate_pairs(void)\n{\n    assert_parse_string(\"\\\"\\\\uD83D\\\\udc31\\\"\", \"\ud83d\udc31\");\n    reset(item);\n}",
+      "fn_code_pos": [
+        [
+          86,
+          0
+        ],
+        [
+          90,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_string_should_parse_utf16_surrogate_pairs",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_string_should_not_parse_non_strings(void)\n{\n    assert_not_parse_string(\"this\\\" is not a string\\\"\");\n    reset(item);\n    assert_not_parse_string(\"\");\n    reset(item);\n}",
+      "fn_code_pos": [
+        [
+          92,
+          0
+        ],
+        [
+          98,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_string_should_not_parse_non_strings",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_string_should_not_parse_invalid_backslash(void)\n{\n    assert_not_parse_string(\"Abcdef\\\\123\");\n    reset(item);\n    assert_not_parse_string(\"Abcdef\\\\e23\");\n    reset(item);\n}",
+      "fn_code_pos": [
+        [
+          100,
+          0
+        ],
+        [
+          106,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_string_should_not_parse_invalid_backslash",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_string_should_not_overflow_with_closing_backslash(void)\n{\n    assert_not_parse_string(\"\\\"000000000000000000\\\\\");\n    reset(item);\n}",
+      "fn_code_pos": [
+        [
+          108,
+          0
+        ],
+        [
+          112,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_string_should_not_overflow_with_closing_backslash",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_string_should_parse_bug_94(void)\n{\n    const char string[] = \"\\\"~!@\\\\\\\\#$%^&*()\\\\\\\\\\\\\\\\-\\\\\\\\+{}[]:\\\\\\\\;\\\\\\\\\\\\\\\"\\\\\\\\<\\\\\\\\>?/.,DC=ad,DC=com\\\"\";\n    assert_parse_string(string, \"~!@\\\\#$%^&*()\\\\\\\\-\\\\+{}[]:\\\\;\\\\\\\"\\\\<\\\\>?/.,DC=ad,DC=com\");\n    reset(item);\n}",
+      "fn_code_pos": [
+        [
+          114,
+          0
+        ],
+        [
+          119,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_string_should_parse_bug_94",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int CJSON_CDECL main(void)\n{\n    /* initialize cJSON item and error pointer */\n    memset(item, 0, sizeof(cJSON));\n\n    UNITY_BEGIN();\n    RUN_TEST(parse_string_should_parse_strings);\n    RUN_TEST(parse_string_should_parse_utf16_surrogate_pairs);\n    RUN_TEST(parse_string_should_not_parse_non_strings);\n    RUN_TEST(parse_string_should_not_parse_invalid_backslash);\n    RUN_TEST(parse_string_should_parse_bug_94);\n    RUN_TEST(parse_string_should_not_overflow_with_closing_backslash);\n    return UNITY_END();\n}",
+      "fn_code_pos": [
+        [
+          121,
+          0
+        ],
+        [
+          134,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CJSON_CDECL main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/examples/unity_config.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/src/unity.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"common.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

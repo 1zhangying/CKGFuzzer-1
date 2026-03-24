@@ -1,0 +1,464 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static cJSON *parse_file(const char *filename)\n{\n    cJSON *parsed = NULL;\n    char *content = read_file(filename);\n\n    parsed = cJSON_Parse(content);\n\n    if (content != NULL)\n    {\n        free(content);\n    }\n\n    return parsed;\n}",
+      "fn_code_pos": [
+        [
+          30,
+          0
+        ],
+        [
+          43,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_file",
+        "parameters": {
+          "filename": "char"
+        },
+        "return_type": "cJSON"
+      }
+    },
+    {
+      "fn_code": "static void do_test(const char *test_name)\n{\n    char *expected = NULL;\n    char *actual = NULL;\n    cJSON *tree = NULL;\n\n    size_t test_name_length = 0;\n    /* path of the test input */\n    char *test_path = NULL;\n    /* path of the expected output */\n    char *expected_path = NULL;\n\n    test_name_length = strlen(test_name);\n\n    /* allocate file paths */\n#define TEST_DIR_PATH \"inputs/\"\n    test_path = (char*)malloc(sizeof(TEST_DIR_PATH) + test_name_length);\n    TEST_ASSERT_NOT_NULL_MESSAGE(test_path, \"Failed to allocate test_path buffer.\");\n    expected_path = (char*)malloc(sizeof(TEST_DIR_PATH) + test_name_length + sizeof(\".expected\"));\n    TEST_ASSERT_NOT_NULL_MESSAGE(expected_path, \"Failed to allocate expected_path buffer.\");\n\n    /* create file paths */\n    sprintf(test_path, TEST_DIR_PATH\"%s\", test_name);\n    sprintf(expected_path, TEST_DIR_PATH\"%s.expected\", test_name);\n\n    /* read expected output */\n    expected = read_file(expected_path);\n    TEST_ASSERT_NOT_NULL_MESSAGE(expected, \"Failed to read expected output.\");\n\n    /* read and parse test */\n    tree = parse_file(test_path);\n    TEST_ASSERT_NOT_NULL_MESSAGE(tree, \"Failed to read of parse test.\");\n\n    /* print the parsed tree */\n    actual = cJSON_Print(tree);\n    TEST_ASSERT_NOT_NULL_MESSAGE(actual, \"Failed to print tree back to JSON.\");\n\n\n    TEST_ASSERT_EQUAL_STRING(expected, actual);\n\n    /* cleanup resources */\n    if (expected != NULL)\n    {\n        free(expected);\n    }\n    if (tree != NULL)\n    {\n        cJSON_Delete(tree);\n    }\n    if (actual != NULL)\n    {\n        free(actual);\n    }\n    if (test_path != NULL)\n    {\n        free(test_path);\n    }\n    if (expected_path != NULL)\n    {\n        free(expected_path);\n    }\n}",
+      "fn_code_pos": [
+        [
+          45,
+          0
+        ],
+        [
+          106,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "do_test",
+        "parameters": {
+          "test_name": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void file_test1_should_be_parsed_and_printed(void)\n{\n    do_test(\"test1\");\n}",
+      "fn_code_pos": [
+        [
+          108,
+          0
+        ],
+        [
+          111,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_test1_should_be_parsed_and_printed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void file_test2_should_be_parsed_and_printed(void)\n{\n    do_test(\"test2\");\n}",
+      "fn_code_pos": [
+        [
+          113,
+          0
+        ],
+        [
+          116,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_test2_should_be_parsed_and_printed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void file_test3_should_be_parsed_and_printed(void)\n{\n    do_test(\"test3\");\n}",
+      "fn_code_pos": [
+        [
+          118,
+          0
+        ],
+        [
+          121,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_test3_should_be_parsed_and_printed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void file_test4_should_be_parsed_and_printed(void)\n{\n    do_test(\"test4\");\n}",
+      "fn_code_pos": [
+        [
+          123,
+          0
+        ],
+        [
+          126,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_test4_should_be_parsed_and_printed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void file_test5_should_be_parsed_and_printed(void)\n{\n    do_test(\"test5\");\n}",
+      "fn_code_pos": [
+        [
+          128,
+          0
+        ],
+        [
+          131,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_test5_should_be_parsed_and_printed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void file_test6_should_not_be_parsed(void)\n{\n    char *test6 = NULL;\n    cJSON *tree = NULL;\n\n    test6 = read_file(\"inputs/test6\");\n    TEST_ASSERT_NOT_NULL_MESSAGE(test6, \"Failed to read test6 data.\");\n\n    tree = cJSON_Parse(test6);\n    TEST_ASSERT_NULL_MESSAGE(tree, \"Should fail to parse what is not JSON.\");\n\n    TEST_ASSERT_EQUAL_PTR_MESSAGE(test6, cJSON_GetErrorPtr(), \"Error pointer is incorrect.\");\n\n    if (test6 != NULL)\n    {\n        free(test6);\n    }\n    if (tree != NULL)\n    {\n        cJSON_Delete(tree);\n    }\n}",
+      "fn_code_pos": [
+        [
+          133,
+          0
+        ],
+        [
+          154,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_test6_should_not_be_parsed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void file_test7_should_be_parsed_and_printed(void)\n{\n    do_test(\"test7\");\n}",
+      "fn_code_pos": [
+        [
+          156,
+          0
+        ],
+        [
+          159,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_test7_should_be_parsed_and_printed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void file_test8_should_be_parsed_and_printed(void)\n{\n    do_test(\"test8\");\n}",
+      "fn_code_pos": [
+        [
+          161,
+          0
+        ],
+        [
+          164,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_test8_should_be_parsed_and_printed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void file_test9_should_be_parsed_and_printed(void)\n{\n    do_test(\"test9\");\n}",
+      "fn_code_pos": [
+        [
+          166,
+          0
+        ],
+        [
+          169,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_test9_should_be_parsed_and_printed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void file_test10_should_be_parsed_and_printed(void)\n{\n    do_test(\"test10\");\n}",
+      "fn_code_pos": [
+        [
+          171,
+          0
+        ],
+        [
+          174,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_test10_should_be_parsed_and_printed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void file_test11_should_be_parsed_and_printed(void)\n{\n    do_test(\"test11\");\n}",
+      "fn_code_pos": [
+        [
+          176,
+          0
+        ],
+        [
+          179,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "file_test11_should_be_parsed_and_printed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void test12_should_not_be_parsed(void)\n{\n    const char *test12 = \"{ \\\"name\\\": \";\n    cJSON *tree = NULL;\n\n    tree = cJSON_Parse(test12);\n    TEST_ASSERT_NULL_MESSAGE(tree, \"Should fail to parse incomplete JSON.\");\n\n    TEST_ASSERT_EQUAL_PTR_MESSAGE(test12 + strlen(test12), cJSON_GetErrorPtr(), \"Error pointer is incorrect.\");\n\n    if (tree != NULL)\n    {\n        cJSON_Delete(tree);\n    }\n}",
+      "fn_code_pos": [
+        [
+          181,
+          0
+        ],
+        [
+          195,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test12_should_not_be_parsed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void test13_should_be_parsed_without_null_termination(void)\n{\n    cJSON *tree = NULL;\n    const char test_13[] = \"{\" \\\n                                \"\\\"Image\\\":{\" \\\n                                    \"\\\"Width\\\":800,\" \\\n                                    \"\\\"Height\\\":600,\" \\\n                                    \"\\\"Title\\\":\\\"Viewfrom15thFloor\\\",\" \\\n                                    \"\\\"Thumbnail\\\":{\" \\\n                                        \"\\\"Url\\\":\\\"http:/*www.example.com/image/481989943\\\",\" \\\n                                        \"\\\"Height\\\":125,\" \\\n                                        \"\\\"Width\\\":\\\"100\\\"\" \\\n                                    \"},\" \\\n                                    \"\\\"IDs\\\":[116,943,234,38793]\" \\\n                                \"}\" \\\n                            \"}\";\n\n    char test_13_wo_null[sizeof(test_13) - 1];\n    memcpy(test_13_wo_null, test_13, sizeof(test_13) - 1);\n\n    tree = cJSON_ParseWithLength(test_13_wo_null, sizeof(test_13) - 1);\n    TEST_ASSERT_NOT_NULL_MESSAGE(tree, \"Failed to parse valid json.\");\n\n    if (tree != NULL)\n    {\n        cJSON_Delete(tree);\n    }\n}",
+      "fn_code_pos": [
+        [
+          197,
+          0
+        ],
+        [
+          224,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test13_should_be_parsed_without_null_termination",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void test14_should_not_be_parsed(void)\n{\n    cJSON *tree = NULL;\n    const char test_14[] = \"{\" \\\n                                \"\\\"Image\\\":{\" \\\n                                    \"\\\"Width\\\":800,\" \\\n                                    \"\\\"Height\\\":600,\" \\\n                                    \"\\\"Title\\\":\\\"Viewfrom15thFloor\\\",\" \\\n                                    \"\\\"Thumbnail\\\":{\" \\\n                                        \"\\\"Url\\\":\\\"http:/*www.example.com/image/481989943\\\",\" \\\n                                        \"\\\"Height\\\":125,\" \\\n                                        \"\\\"Width\\\":\\\"100\\\"\" \\\n                                    \"},\" \\\n                                    \"\\\"IDs\\\":[116,943,234,38793]\" \\\n                                \"}\" \\\n                            \"}\";\n\n    tree = cJSON_ParseWithLength(test_14, sizeof(test_14) - 2);\n    TEST_ASSERT_NULL_MESSAGE(tree, \"Should not continue after buffer_length is reached.\");\n\n    if (tree != NULL)\n    {\n        cJSON_Delete(tree);\n    }\n}",
+      "fn_code_pos": [
+        [
+          226,
+          0
+        ],
+        [
+          250,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test14_should_not_be_parsed",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void test15_should_not_heap_buffer_overflow(void)\n{\n    const char *strings[] = {\n        \"{\\\"1\\\":1,\",\n        \"{\\\"1\\\":1, \",\n    };\n\n    size_t i;\n\n    for (i = 0; i < sizeof(strings) / sizeof(strings[0]); i+=1)\n    {\n        const char *json_string = strings[i];\n        size_t len = strlen(json_string);\n        cJSON *json = NULL;\n\n        char *exact_size_heap = (char*)malloc(len);\n        TEST_ASSERT_NOT_NULL(exact_size_heap);\n\n        memcpy(exact_size_heap, json_string, len);\n        json = cJSON_ParseWithLength(exact_size_heap, len);\n\n        cJSON_Delete(json);\n        free(exact_size_heap);\n    }\n}",
+      "fn_code_pos": [
+        [
+          253,
+          0
+        ],
+        [
+          277,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test15_should_not_heap_buffer_overflow",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int CJSON_CDECL main(void)\n{\n    UNITY_BEGIN();\n    RUN_TEST(file_test1_should_be_parsed_and_printed);\n    RUN_TEST(file_test2_should_be_parsed_and_printed);\n    RUN_TEST(file_test3_should_be_parsed_and_printed);\n    RUN_TEST(file_test4_should_be_parsed_and_printed);\n    RUN_TEST(file_test5_should_be_parsed_and_printed);\n    RUN_TEST(file_test6_should_not_be_parsed);\n    RUN_TEST(file_test7_should_be_parsed_and_printed);\n    RUN_TEST(file_test8_should_be_parsed_and_printed);\n    RUN_TEST(file_test9_should_be_parsed_and_printed);\n    RUN_TEST(file_test10_should_be_parsed_and_printed);\n    RUN_TEST(file_test11_should_be_parsed_and_printed);\n    RUN_TEST(test12_should_not_be_parsed);\n    RUN_TEST(test13_should_be_parsed_without_null_termination);\n    RUN_TEST(test14_should_not_be_parsed);\n    RUN_TEST(test15_should_not_heap_buffer_overflow);\n    return UNITY_END();\n}",
+      "fn_code_pos": [
+        [
+          279,
+          0
+        ],
+        [
+          298,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CJSON_CDECL main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "parse_file(const char *filename)",
+      "fn_dec_pos": [
+        [
+          30,
+          14
+        ],
+        [
+          30,
+          46
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_file",
+        "parameters": {
+          "filename": "char"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/examples/unity_config.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/src/unity.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"common.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

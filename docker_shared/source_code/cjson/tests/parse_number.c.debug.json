@@ -1,0 +1,243 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void assert_is_number(cJSON *number_item)\n{\n    TEST_ASSERT_NOT_NULL_MESSAGE(number_item, \"Item is NULL.\");\n\n    assert_not_in_list(number_item);\n    assert_has_no_child(number_item);\n    assert_has_type(number_item, cJSON_Number);\n    assert_has_no_reference(number_item);\n    assert_has_no_const_string(number_item);\n    assert_has_no_valuestring(number_item);\n    assert_has_no_string(number_item);\n}",
+      "fn_code_pos": [
+        [
+          32,
+          0
+        ],
+        [
+          43,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_is_number",
+        "parameters": {
+          "number_item": "cJSON"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void assert_parse_number(const char *string, int integer, double real)\n{\n    parse_buffer buffer = { 0, 0, 0, 0, { 0, 0, 0 } };\n    buffer.content = (const unsigned char*)string;\n    buffer.length = strlen(string) + sizeof(\"\");\n\n    TEST_ASSERT_TRUE(parse_number(item, &buffer));\n    assert_is_number(item);\n    TEST_ASSERT_EQUAL_INT(integer, item->valueint);\n    TEST_ASSERT_EQUAL_DOUBLE(real, item->valuedouble);\n}",
+      "fn_code_pos": [
+        [
+          45,
+          0
+        ],
+        [
+          55,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_parse_number",
+        "parameters": {
+          "string": "char",
+          "integer": "int",
+          "real": "double"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_number_should_parse_zero(void)\n{\n    assert_parse_number(\"0\", 0, 0);\n    assert_parse_number(\"0.0\", 0, 0.0);\n    assert_parse_number(\"-0\", 0, -0.0);\n}",
+      "fn_code_pos": [
+        [
+          57,
+          0
+        ],
+        [
+          62,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_number_should_parse_zero",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_number_should_parse_negative_integers(void)\n{\n    assert_parse_number(\"-1\", -1, -1);\n    assert_parse_number(\"-32768\", -32768, -32768.0);\n    assert_parse_number(\"-2147483648\", (int)-2147483648.0, -2147483648.0);\n}",
+      "fn_code_pos": [
+        [
+          64,
+          0
+        ],
+        [
+          69,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_number_should_parse_negative_integers",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_number_should_parse_positive_integers(void)\n{\n    assert_parse_number(\"1\", 1, 1);\n    assert_parse_number(\"32767\", 32767, 32767.0);\n    assert_parse_number(\"2147483647\", (int)2147483647.0, 2147483647.0);\n}",
+      "fn_code_pos": [
+        [
+          71,
+          0
+        ],
+        [
+          76,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_number_should_parse_positive_integers",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_number_should_parse_positive_reals(void)\n{\n    assert_parse_number(\"0.001\", 0, 0.001);\n    assert_parse_number(\"10e-10\", 0, 10e-10);\n    assert_parse_number(\"10E-10\", 0, 10e-10);\n    assert_parse_number(\"10e10\", INT_MAX, 10e10);\n    assert_parse_number(\"123e+127\", INT_MAX, 123e127);\n    assert_parse_number(\"123e-128\", 0, 123e-128);\n}",
+      "fn_code_pos": [
+        [
+          78,
+          0
+        ],
+        [
+          86,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_number_should_parse_positive_reals",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_number_should_parse_negative_reals(void)\n{\n    assert_parse_number(\"-0.001\", 0, -0.001);\n    assert_parse_number(\"-10e-10\", 0, -10e-10);\n    assert_parse_number(\"-10E-10\", 0, -10e-10);\n    assert_parse_number(\"-10e20\", INT_MIN, -10e20);\n    assert_parse_number(\"-123e+127\", INT_MIN, -123e127);\n    assert_parse_number(\"-123e-128\", 0, -123e-128);\n}",
+      "fn_code_pos": [
+        [
+          88,
+          0
+        ],
+        [
+          96,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_number_should_parse_negative_reals",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int CJSON_CDECL main(void)\n{\n    /* initialize cJSON item */\n    memset(item, 0, sizeof(cJSON));\n    UNITY_BEGIN();\n    RUN_TEST(parse_number_should_parse_zero);\n    RUN_TEST(parse_number_should_parse_negative_integers);\n    RUN_TEST(parse_number_should_parse_positive_integers);\n    RUN_TEST(parse_number_should_parse_positive_reals);\n    RUN_TEST(parse_number_should_parse_negative_reals);\n    return UNITY_END();\n}",
+      "fn_code_pos": [
+        [
+          98,
+          0
+        ],
+        [
+          109,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CJSON_CDECL main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/examples/unity_config.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/src/unity.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"common.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

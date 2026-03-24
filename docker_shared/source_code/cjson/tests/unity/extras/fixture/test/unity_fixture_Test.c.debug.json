@@ -1,0 +1,936 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "TEST_SETUP(UnityFixture)\n{\n}",
+      "fn_code_pos": [
+        [
+          14,
+          0
+        ],
+        [
+          16,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_SETUP",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_TEAR_DOWN(UnityFixture)\n{\n}",
+      "fn_code_pos": [
+        [
+          18,
+          0
+        ],
+        [
+          20,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_TEAR_DOWN",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityFixture, PointerSetting)\n{\n    TEST_ASSERT_POINTERS_EQUAL(pointer1, 0);\n    UT_PTR_SET(pointer1, &int1);\n    UT_PTR_SET(pointer2, &int2);\n    UT_PTR_SET(pointer3, &int3);\n    TEST_ASSERT_POINTERS_EQUAL(pointer1, &int1);\n    TEST_ASSERT_POINTERS_EQUAL(pointer2, &int2);\n    TEST_ASSERT_POINTERS_EQUAL(pointer3, &int3);\n    UT_PTR_SET(pointer1, &int4);\n    UnityPointer_UndoAllSets();\n    TEST_ASSERT_POINTERS_EQUAL(pointer1, 0);\n    TEST_ASSERT_POINTERS_EQUAL(pointer2, (int*)2);\n    TEST_ASSERT_POINTERS_EQUAL(pointer3, (int*)3);\n}",
+      "fn_code_pos": [
+        [
+          30,
+          0
+        ],
+        [
+          44,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityFixture, ForceMallocFail)\n{\n    void* m;\n    void* mfails;\n    UnityMalloc_MakeMallocFailAfterCount(1);\n    m = malloc(10);\n    CHECK(m);\n    mfails = malloc(10);\n    TEST_ASSERT_POINTERS_EQUAL(0, mfails);\n    free(m);\n}",
+      "fn_code_pos": [
+        [
+          46,
+          0
+        ],
+        [
+          56,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityFixture, ReallocSmallerIsUnchanged)\n{\n    void* m1 = malloc(10);\n    void* m2 = realloc(m1, 5);\n    TEST_ASSERT_POINTERS_EQUAL(m1, m2);\n    free(m2);\n}",
+      "fn_code_pos": [
+        [
+          58,
+          0
+        ],
+        [
+          64,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityFixture, ReallocSameIsUnchanged)\n{\n    void* m1 = malloc(10);\n    void* m2 = realloc(m1, 10);\n    TEST_ASSERT_POINTERS_EQUAL(m1, m2);\n    free(m2);\n}",
+      "fn_code_pos": [
+        [
+          66,
+          0
+        ],
+        [
+          72,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityFixture, ReallocLargerNeeded)\n{\n    void* m1 = malloc(10);\n    void* m2;\n    CHECK(m1);\n    strcpy((char*)m1, \"123456789\");\n    m2 = realloc(m1, 15);\n    /* CHECK(m1 != m2); //Depends on implementation */\n    STRCMP_EQUAL(\"123456789\", m2);\n    free(m2);\n}",
+      "fn_code_pos": [
+        [
+          74,
+          0
+        ],
+        [
+          84,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityFixture, ReallocNullPointerIsLikeMalloc)\n{\n    void* m = realloc(0, 15);\n    CHECK(m != 0);\n    free(m);\n}",
+      "fn_code_pos": [
+        [
+          86,
+          0
+        ],
+        [
+          91,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityFixture, ReallocSizeZeroFreesMemAndReturnsNullPointer)\n{\n    void* m1 = malloc(10);\n    void* m2 = realloc(m1, 0);\n    TEST_ASSERT_POINTERS_EQUAL(0, m2);\n}",
+      "fn_code_pos": [
+        [
+          93,
+          0
+        ],
+        [
+          98,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityFixture, CallocFillsWithZero)\n{\n    void* m = calloc(3, sizeof(char));\n    char* s = (char*)m;\n    CHECK(m);\n    TEST_ASSERT_BYTES_EQUAL(0, s[0]);\n    TEST_ASSERT_BYTES_EQUAL(0, s[1]);\n    TEST_ASSERT_BYTES_EQUAL(0, s[2]);\n    free(m);\n}",
+      "fn_code_pos": [
+        [
+          100,
+          0
+        ],
+        [
+          109,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityFixture, PointerSet)\n{\n    char c1;\n    char c2;\n    char newC1;\n    char newC2;\n    p1 = &c1;\n    p2 = &c2;\n\n    UnityPointer_Init();\n    UT_PTR_SET(p1, &newC1);\n    UT_PTR_SET(p2, &newC2);\n    TEST_ASSERT_POINTERS_EQUAL(&newC1, p1);\n    TEST_ASSERT_POINTERS_EQUAL(&newC2, p2);\n    UnityPointer_UndoAllSets();\n    TEST_ASSERT_POINTERS_EQUAL(&c1, p1);\n    TEST_ASSERT_POINTERS_EQUAL(&c2, p2);\n}",
+      "fn_code_pos": [
+        [
+          114,
+          0
+        ],
+        [
+          131,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityFixture, FreeNULLSafety)\n{\n    free(NULL);\n}",
+      "fn_code_pos": [
+        [
+          133,
+          0
+        ],
+        [
+          136,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityFixture, ConcludeTestIncrementsFailCount)\n{\n    UNITY_UINT savedFails = Unity.TestFailures;\n    UNITY_UINT savedIgnores = Unity.TestIgnores;\n    UnityOutputCharSpy_Enable(1);\n    Unity.CurrentTestFailed = 1;\n    UnityConcludeFixtureTest(); /* Resets TestFailed for this test to pass */\n    Unity.CurrentTestIgnored = 1;\n    UnityConcludeFixtureTest(); /* Resets TestIgnored */\n    UnityOutputCharSpy_Enable(0);\n    TEST_ASSERT_EQUAL(savedFails + 1, Unity.TestFailures);\n    TEST_ASSERT_EQUAL(savedIgnores + 1, Unity.TestIgnores);\n    Unity.TestFailures = savedFails;\n    Unity.TestIgnores = savedIgnores;\n}",
+      "fn_code_pos": [
+        [
+          138,
+          0
+        ],
+        [
+          152,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_SETUP(UnityCommandOptions)\n{\n    savedVerbose = UnityFixture.Verbose;\n    savedRepeat = UnityFixture.RepeatCount;\n    savedName = UnityFixture.NameFilter;\n    savedGroup = UnityFixture.GroupFilter;\n}",
+      "fn_code_pos": [
+        [
+          163,
+          0
+        ],
+        [
+          169,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_SETUP",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_TEAR_DOWN(UnityCommandOptions)\n{\n    UnityFixture.Verbose = savedVerbose;\n    UnityFixture.RepeatCount= savedRepeat;\n    UnityFixture.NameFilter = savedName;\n    UnityFixture.GroupFilter = savedGroup;\n}",
+      "fn_code_pos": [
+        [
+          171,
+          0
+        ],
+        [
+          177,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_TEAR_DOWN",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityCommandOptions, DefaultOptions)\n{\n    UnityGetCommandLineOptions(1, noOptions);\n    TEST_ASSERT_EQUAL(0, UnityFixture.Verbose);\n    TEST_ASSERT_POINTERS_EQUAL(0, UnityFixture.GroupFilter);\n    TEST_ASSERT_POINTERS_EQUAL(0, UnityFixture.NameFilter);\n    TEST_ASSERT_EQUAL(1, UnityFixture.RepeatCount);\n}",
+      "fn_code_pos": [
+        [
+          184,
+          0
+        ],
+        [
+          191,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityCommandOptions, OptionVerbose)\n{\n    TEST_ASSERT_EQUAL(0, UnityGetCommandLineOptions(2, verbose));\n    TEST_ASSERT_EQUAL(1, UnityFixture.Verbose);\n}",
+      "fn_code_pos": [
+        [
+          198,
+          0
+        ],
+        [
+          202,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityCommandOptions, OptionSelectTestByGroup)\n{\n    TEST_ASSERT_EQUAL(0, UnityGetCommandLineOptions(3, group));\n    STRCMP_EQUAL(\"groupname\", UnityFixture.GroupFilter);\n}",
+      "fn_code_pos": [
+        [
+          209,
+          0
+        ],
+        [
+          213,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityCommandOptions, OptionSelectTestByName)\n{\n    TEST_ASSERT_EQUAL(0, UnityGetCommandLineOptions(3, name));\n    STRCMP_EQUAL(\"testname\", UnityFixture.NameFilter);\n}",
+      "fn_code_pos": [
+        [
+          220,
+          0
+        ],
+        [
+          224,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityCommandOptions, OptionSelectRepeatTestsDefaultCount)\n{\n    TEST_ASSERT_EQUAL(0, UnityGetCommandLineOptions(2, repeat));\n    TEST_ASSERT_EQUAL(2, UnityFixture.RepeatCount);\n}",
+      "fn_code_pos": [
+        [
+          231,
+          0
+        ],
+        [
+          235,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityCommandOptions, OptionSelectRepeatTestsSpecificCount)\n{\n    TEST_ASSERT_EQUAL(0, UnityGetCommandLineOptions(3, repeat));\n    TEST_ASSERT_EQUAL(99, UnityFixture.RepeatCount);\n}",
+      "fn_code_pos": [
+        [
+          237,
+          0
+        ],
+        [
+          241,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityCommandOptions, MultipleOptions)\n{\n    TEST_ASSERT_EQUAL(0, UnityGetCommandLineOptions(8, multiple));\n    TEST_ASSERT_EQUAL(1, UnityFixture.Verbose);\n    STRCMP_EQUAL(\"groupname\", UnityFixture.GroupFilter);\n    STRCMP_EQUAL(\"testname\", UnityFixture.NameFilter);\n    TEST_ASSERT_EQUAL(98, UnityFixture.RepeatCount);\n}",
+      "fn_code_pos": [
+        [
+          251,
+          0
+        ],
+        [
+          258,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityCommandOptions, MultipleOptionsDashRNotLastAndNoValueSpecified)\n{\n    TEST_ASSERT_EQUAL(0, UnityGetCommandLineOptions(7, dashRNotLast));\n    TEST_ASSERT_EQUAL(1, UnityFixture.Verbose);\n    STRCMP_EQUAL(\"gggg\", UnityFixture.GroupFilter);\n    STRCMP_EQUAL(\"tttt\", UnityFixture.NameFilter);\n    TEST_ASSERT_EQUAL(2, UnityFixture.RepeatCount);\n}",
+      "fn_code_pos": [
+        [
+          268,
+          0
+        ],
+        [
+          275,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityCommandOptions, UnknownCommandIsIgnored)\n{\n    TEST_ASSERT_EQUAL(0, UnityGetCommandLineOptions(9, unknownCommand));\n    TEST_ASSERT_EQUAL(1, UnityFixture.Verbose);\n    STRCMP_EQUAL(\"groupname\", UnityFixture.GroupFilter);\n    STRCMP_EQUAL(\"testname\", UnityFixture.NameFilter);\n    TEST_ASSERT_EQUAL(98, UnityFixture.RepeatCount);\n}",
+      "fn_code_pos": [
+        [
+          285,
+          0
+        ],
+        [
+          292,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityCommandOptions, GroupOrNameFilterWithoutStringFails)\n{\n    TEST_ASSERT_EQUAL(1, UnityGetCommandLineOptions(3, unknownCommand));\n    TEST_ASSERT_EQUAL(1, UnityGetCommandLineOptions(5, unknownCommand));\n    TEST_ASSERT_EQUAL(1, UnityMain(3, unknownCommand, NULL));\n}",
+      "fn_code_pos": [
+        [
+          294,
+          0
+        ],
+        [
+          299,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(UnityCommandOptions, GroupFilterReallyFilters)\n{\n    UNITY_UINT saved = Unity.NumberOfTests;\n    TEST_ASSERT_EQUAL(0, UnityGetCommandLineOptions(4, unknownCommand));\n    UnityIgnoreTest(NULL, \"non-matching\", NULL);\n    TEST_ASSERT_EQUAL(saved, Unity.NumberOfTests);\n}",
+      "fn_code_pos": [
+        [
+          301,
+          0
+        ],
+        [
+          307,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "IGNORE_TEST(UnityCommandOptions, TestShouldBeIgnored)\n{\n    TEST_FAIL_MESSAGE(\"This test should not run!\");\n}",
+      "fn_code_pos": [
+        [
+          309,
+          0
+        ],
+        [
+          312,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "IGNORE_TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_SETUP(LeakDetection)\n{\n#ifdef UNITY_EXCLUDE_STDLIB_MALLOC\n    UnityOutputCharSpy_Create(200);\n#else\n    UnityOutputCharSpy_Create(1000);\n#endif\n}",
+      "fn_code_pos": [
+        [
+          318,
+          0
+        ],
+        [
+          325,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_SETUP",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_TEAR_DOWN(LeakDetection)\n{\n    UnityOutputCharSpy_Destroy();\n}",
+      "fn_code_pos": [
+        [
+          327,
+          0
+        ],
+        [
+          330,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_TEAR_DOWN",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(LeakDetection, DetectsLeak)\n{\n#ifndef USING_OUTPUT_SPY\n    TEST_IGNORE_MESSAGE(\"Build with '-D UNITY_OUTPUT_CHAR=UnityOutputCharSpy_OutputChar' to enable tests\");\n#else\n    void* m = malloc(10);\n    TEST_ASSERT_NOT_NULL(m);\n    UnityOutputCharSpy_Enable(1);\n    EXPECT_ABORT_BEGIN\n    UnityMalloc_EndTest();\n    EXPECT_ABORT_END\n    UnityOutputCharSpy_Enable(0);\n    Unity.CurrentTestFailed = 0;\n    CHECK(strstr(UnityOutputCharSpy_Get(), \"This test leaks!\"));\n    free(m);\n#endif\n}",
+      "fn_code_pos": [
+        [
+          366,
+          0
+        ],
+        [
+          382,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(LeakDetection, BufferOverrunFoundDuringFree)\n{\n#ifndef USING_OUTPUT_SPY\n    TEST_IGNORE();\n#else\n    void* m = malloc(10);\n    char* s = (char*)m;\n    TEST_ASSERT_NOT_NULL(m);\n    s[10] = (char)0xFF;\n    UnityOutputCharSpy_Enable(1);\n    EXPECT_ABORT_BEGIN\n    free(m);\n    EXPECT_ABORT_END\n    UnityOutputCharSpy_Enable(0);\n    Unity.CurrentTestFailed = 0;\n    CHECK(strstr(UnityOutputCharSpy_Get(), \"Buffer overrun detected during free()\"));\n#endif\n}",
+      "fn_code_pos": [
+        [
+          384,
+          0
+        ],
+        [
+          401,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(LeakDetection, BufferOverrunFoundDuringRealloc)\n{\n#ifndef USING_OUTPUT_SPY\n    TEST_IGNORE();\n#else\n    void* m = malloc(10);\n    char* s = (char*)m;\n    TEST_ASSERT_NOT_NULL(m);\n    s[10] = (char)0xFF;\n    UnityOutputCharSpy_Enable(1);\n    EXPECT_ABORT_BEGIN\n    m = realloc(m, 100);\n    EXPECT_ABORT_END\n    UnityOutputCharSpy_Enable(0);\n    Unity.CurrentTestFailed = 0;\n    CHECK(strstr(UnityOutputCharSpy_Get(), \"Buffer overrun detected during realloc()\"));\n#endif\n}",
+      "fn_code_pos": [
+        [
+          403,
+          0
+        ],
+        [
+          420,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(LeakDetection, BufferGuardWriteFoundDuringFree)\n{\n#ifndef USING_OUTPUT_SPY\n    TEST_IGNORE();\n#else\n    void* m = malloc(10);\n    char* s = (char*)m;\n    TEST_ASSERT_NOT_NULL(m);\n    s[-1] = (char)0x00; /* Will not detect 0 */\n    s[-2] = (char)0x01;\n    UnityOutputCharSpy_Enable(1);\n    EXPECT_ABORT_BEGIN\n    free(m);\n    EXPECT_ABORT_END\n    UnityOutputCharSpy_Enable(0);\n    Unity.CurrentTestFailed = 0;\n    CHECK(strstr(UnityOutputCharSpy_Get(), \"Buffer overrun detected during free()\"));\n#endif\n}",
+      "fn_code_pos": [
+        [
+          422,
+          0
+        ],
+        [
+          440,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(LeakDetection, BufferGuardWriteFoundDuringRealloc)\n{\n#ifndef USING_OUTPUT_SPY\n    TEST_IGNORE();\n#else\n    void* m = malloc(10);\n    char* s = (char*)m;\n    TEST_ASSERT_NOT_NULL(m);\n    s[-1] = (char)0x0A;\n    UnityOutputCharSpy_Enable(1);\n    EXPECT_ABORT_BEGIN\n    m = realloc(m, 100);\n    EXPECT_ABORT_END\n    UnityOutputCharSpy_Enable(0);\n    Unity.CurrentTestFailed = 0;\n    CHECK(strstr(UnityOutputCharSpy_Get(), \"Buffer overrun detected during realloc()\"));\n#endif\n}",
+      "fn_code_pos": [
+        [
+          442,
+          0
+        ],
+        [
+          459,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(LeakDetection, PointerSettingMax)\n{\n#ifndef USING_OUTPUT_SPY\n    TEST_IGNORE();\n#else\n    int i;\n    for (i = 0; i < UNITY_MAX_POINTERS; i++) UT_PTR_SET(pointer1, &int1);\n    UnityOutputCharSpy_Enable(1);\n    EXPECT_ABORT_BEGIN\n    UT_PTR_SET(pointer1, &int1);\n    EXPECT_ABORT_END\n    UnityOutputCharSpy_Enable(0);\n    Unity.CurrentTestFailed = 0;\n    CHECK(strstr(UnityOutputCharSpy_Get(), \"Too many pointers set\"));\n#endif\n}",
+      "fn_code_pos": [
+        [
+          461,
+          0
+        ],
+        [
+          476,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_SETUP(InternalMalloc) { }",
+      "fn_code_pos": [
+        [
+          486,
+          0
+        ],
+        [
+          486,
+          30
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_SETUP",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST_TEAR_DOWN(InternalMalloc) { }",
+      "fn_code_pos": [
+        [
+          487,
+          0
+        ],
+        [
+          487,
+          34
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST_TEAR_DOWN",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(InternalMalloc, MallocPastBufferFails)\n{\n#ifdef UNITY_EXCLUDE_STDLIB_MALLOC\n    void* m = malloc(UNITY_INTERNAL_HEAP_SIZE_BYTES/2 + 1);\n    void* n = malloc(UNITY_INTERNAL_HEAP_SIZE_BYTES/2);\n    free(m);\n    TEST_ASSERT_NOT_NULL(m);\n    TEST_ASSERT_NULL(n);\n    TEST_ASSERT_MEMORY_ALL_FREE_LIFO_ORDER(m, n);\n#endif\n}",
+      "fn_code_pos": [
+        [
+          489,
+          0
+        ],
+        [
+          499,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(InternalMalloc, CallocPastBufferFails)\n{\n#ifdef UNITY_EXCLUDE_STDLIB_MALLOC\n    void* m = calloc(1, UNITY_INTERNAL_HEAP_SIZE_BYTES/2 + 1);\n    void* n = calloc(1, UNITY_INTERNAL_HEAP_SIZE_BYTES/2);\n    free(m);\n    TEST_ASSERT_NOT_NULL(m);\n    TEST_ASSERT_NULL(n);\n    TEST_ASSERT_MEMORY_ALL_FREE_LIFO_ORDER(m, n);\n#endif\n}",
+      "fn_code_pos": [
+        [
+          501,
+          0
+        ],
+        [
+          511,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(InternalMalloc, MallocThenReallocGrowsMemoryInPlace)\n{\n#ifdef UNITY_EXCLUDE_STDLIB_MALLOC\n    void* m = malloc(UNITY_INTERNAL_HEAP_SIZE_BYTES/2 + 1);\n    void* n = realloc(m, UNITY_INTERNAL_HEAP_SIZE_BYTES/2 + 9);\n    free(n);\n    TEST_ASSERT_NOT_NULL(m);\n    TEST_ASSERT_EQUAL(m, n);\n    TEST_ASSERT_MEMORY_ALL_FREE_LIFO_ORDER(m, n);\n#endif\n}",
+      "fn_code_pos": [
+        [
+          513,
+          0
+        ],
+        [
+          523,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "TEST(InternalMalloc, ReallocFailDoesNotFreeMem)\n{\n#ifdef UNITY_EXCLUDE_STDLIB_MALLOC\n    void* m = malloc(UNITY_INTERNAL_HEAP_SIZE_BYTES/2);\n    void* n1 = malloc(10);\n    void* out_of_mem = realloc(n1, UNITY_INTERNAL_HEAP_SIZE_BYTES/2 + 1);\n    void* n2 = malloc(10);\n\n    free(n2);\n    if (out_of_mem == NULL) free(n1);\n    free(m);\n\n    TEST_ASSERT_NOT_NULL(m);       /* Got a real memory location */\n    TEST_ASSERT_NULL(out_of_mem);  /* The realloc should have failed */\n    TEST_ASSERT_NOT_EQUAL(n2, n1); /* If n1 != n2 then realloc did not free n1 */\n    TEST_ASSERT_MEMORY_ALL_FREE_LIFO_ORDER(m, n2);\n#endif\n}",
+      "fn_code_pos": [
+        [
+          525,
+          0
+        ],
+        [
+          542,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "TEST",
+        "parameters": {},
+        "return_type": null
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "UnityMalloc_EndTest()",
+      "fn_dec_pos": [
+        [
+          375,
+          4
+        ],
+        [
+          375,
+          25
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "UnityMalloc_EndTest",
+        "parameters": {},
+        "return_type": "EXPECT_ABORT_BEGIN"
+      }
+    },
+    {
+      "fn_code": "free(m)",
+      "fn_dec_pos": [
+        [
+          395,
+          4
+        ],
+        [
+          395,
+          11
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "free",
+        "parameters": {},
+        "return_type": "EXPECT_ABORT_BEGIN"
+      }
+    },
+    {
+      "fn_code": "free(m)",
+      "fn_dec_pos": [
+        [
+          434,
+          4
+        ],
+        [
+          434,
+          11
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "free",
+        "parameters": {},
+        "return_type": "EXPECT_ABORT_BEGIN"
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include \"unity_fixture.h\"\n",
+      [
+        7,
+        0
+      ],
+      [
+        8,
+        0
+      ]
+    ],
+    [
+      "#include \"unity_output_Spy.h\"\n",
+      [
+        8,
+        0
+      ],
+      [
+        9,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        9,
+        0
+      ],
+      [
+        10,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        10,
+        0
+      ],
+      [
+        11,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

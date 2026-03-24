@@ -1,0 +1,243 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static void assert_is_array(cJSON *array_item)\n{\n    TEST_ASSERT_NOT_NULL_MESSAGE(array_item, \"Item is NULL.\");\n\n    assert_not_in_list(array_item);\n    assert_has_type(array_item, cJSON_Array);\n    assert_has_no_reference(array_item);\n    assert_has_no_const_string(array_item);\n    assert_has_no_valuestring(array_item);\n    assert_has_no_string(array_item);\n}",
+      "fn_code_pos": [
+        [
+          32,
+          0
+        ],
+        [
+          42,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_is_array",
+        "parameters": {
+          "array_item": "cJSON"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void assert_not_array(const char *json)\n{\n    parse_buffer buffer = { 0, 0, 0, 0, { 0, 0, 0 } };\n    buffer.content = (const unsigned char*)json;\n    buffer.length = strlen(json) + sizeof(\"\");\n    buffer.hooks = global_hooks;\n\n    TEST_ASSERT_FALSE(parse_array(item, &buffer));\n    assert_is_invalid(item);\n}",
+      "fn_code_pos": [
+        [
+          44,
+          0
+        ],
+        [
+          53,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_not_array",
+        "parameters": {
+          "json": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void assert_parse_array(const char *json)\n{\n    parse_buffer buffer = { 0, 0, 0, 0, { 0, 0, 0 } };\n    buffer.content = (const unsigned char*)json;\n    buffer.length = strlen(json) + sizeof(\"\");\n    buffer.hooks = global_hooks;\n\n    TEST_ASSERT_TRUE(parse_array(item, &buffer));\n    assert_is_array(item);\n}",
+      "fn_code_pos": [
+        [
+          55,
+          0
+        ],
+        [
+          64,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "assert_parse_array",
+        "parameters": {
+          "json": "char"
+        },
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_array_should_parse_empty_arrays(void)\n{\n    assert_parse_array(\"[]\");\n    assert_has_no_child(item);\n\n    assert_parse_array(\"[\\n\\t]\");\n    assert_has_no_child(item);\n}",
+      "fn_code_pos": [
+        [
+          66,
+          0
+        ],
+        [
+          73,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_array_should_parse_empty_arrays",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_array_should_parse_arrays_with_one_element(void)\n{\n\n    assert_parse_array(\"[1]\");\n    assert_has_child(item);\n    assert_has_type(item->child, cJSON_Number);\n    reset(item);\n\n    assert_parse_array(\"[\\\"hello!\\\"]\");\n    assert_has_child(item);\n    assert_has_type(item->child, cJSON_String);\n    TEST_ASSERT_EQUAL_STRING(\"hello!\", item->child->valuestring);\n    reset(item);\n\n    assert_parse_array(\"[[]]\");\n    assert_has_child(item);\n    TEST_ASSERT_NOT_NULL(item->child);\n    assert_has_type(item->child, cJSON_Array);\n    assert_has_no_child(item->child);\n    reset(item);\n\n    assert_parse_array(\"[null]\");\n    assert_has_child(item);\n    assert_has_type(item->child, cJSON_NULL);\n    reset(item);\n}",
+      "fn_code_pos": [
+        [
+          76,
+          0
+        ],
+        [
+          101,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_array_should_parse_arrays_with_one_element",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_array_should_parse_arrays_with_multiple_elements(void)\n{\n    assert_parse_array(\"[1\\t,\\n2, 3]\");\n    assert_has_child(item);\n    TEST_ASSERT_NOT_NULL(item->child->next);\n    TEST_ASSERT_NOT_NULL(item->child->next->next);\n    TEST_ASSERT_NULL(item->child->next->next->next);\n    assert_has_type(item->child, cJSON_Number);\n    assert_has_type(item->child->next, cJSON_Number);\n    assert_has_type(item->child->next->next, cJSON_Number);\n    reset(item);\n\n    {\n        size_t i = 0;\n        cJSON *node = NULL;\n        int expected_types[7] =\n        {\n            cJSON_Number,\n            cJSON_NULL,\n            cJSON_True,\n            cJSON_False,\n            cJSON_Array,\n            cJSON_String,\n            cJSON_Object\n        };\n        assert_parse_array(\"[1, null, true, false, [], \\\"hello\\\", {}]\");\n\n        node = item->child;\n        for (\n                i = 0;\n                (i < (sizeof(expected_types)/sizeof(int)))\n                && (node != NULL);\n                (void)i++, node = node->next)\n        {\n            TEST_ASSERT_BITS(0xFF, expected_types[i], node->type);\n        }\n        TEST_ASSERT_EQUAL_INT(i, 7);\n        reset(item);\n    }\n}",
+      "fn_code_pos": [
+        [
+          103,
+          0
+        ],
+        [
+          142,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_array_should_parse_arrays_with_multiple_elements",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "static void parse_array_should_not_parse_non_arrays(void)\n{\n    assert_not_array(\"\");\n    assert_not_array(\"[\");\n    assert_not_array(\"]\");\n    assert_not_array(\"{\\\"hello\\\":[]}\");\n    assert_not_array(\"42\");\n    assert_not_array(\"3.14\");\n    assert_not_array(\"\\\"[]hello world!\\n\\\"\");\n}",
+      "fn_code_pos": [
+        [
+          144,
+          0
+        ],
+        [
+          153,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_array_should_not_parse_non_arrays",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "int CJSON_CDECL main(void)\n{\n    /* initialize cJSON item */\n    memset(item, 0, sizeof(cJSON));\n\n    UNITY_BEGIN();\n    RUN_TEST(parse_array_should_parse_empty_arrays);\n    RUN_TEST(parse_array_should_parse_arrays_with_one_element);\n    RUN_TEST(parse_array_should_parse_arrays_with_multiple_elements);\n    RUN_TEST(parse_array_should_not_parse_non_arrays);\n    return UNITY_END();\n}",
+      "fn_code_pos": [
+        [
+          155,
+          0
+        ],
+        [
+          166,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "CJSON_CDECL main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/examples/unity_config.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/src/unity.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"common.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}

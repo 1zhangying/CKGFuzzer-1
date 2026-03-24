@@ -1,0 +1,317 @@
+{
+  "fn_def_list": [
+    {
+      "fn_code": "static cJSON *parse_test_file(const char * const filename)\n{\n    char *file = NULL;\n    cJSON *json = NULL;\n\n    file = read_file(filename);\n    TEST_ASSERT_NOT_NULL_MESSAGE(file, \"Failed to read file.\");\n\n    json = cJSON_Parse(file);\n    TEST_ASSERT_NOT_NULL_MESSAGE(json, \"Failed to parse test json.\");\n    TEST_ASSERT_TRUE_MESSAGE(cJSON_IsArray(json), \"Json is not an array.\");\n\n    free(file);\n\n    return json;\n}",
+      "fn_code_pos": [
+        [
+          31,
+          0
+        ],
+        [
+          46,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_test_file",
+        "parameters": {
+          "filename": "char"
+        },
+        "return_type": "cJSON"
+      }
+    },
+    {
+      "fn_code": "static cJSON_bool test_apply_patch(const cJSON * const test)\n{\n    cJSON *doc = NULL;\n    cJSON *patch = NULL;\n    cJSON *expected = NULL;\n    cJSON *error_element = NULL;\n    cJSON *comment = NULL;\n    cJSON *disabled = NULL;\n\n    cJSON *object = NULL;\n    cJSON_bool successful = false;\n\n    /* extract all the data out of the test */\n    comment = cJSON_GetObjectItemCaseSensitive(test, \"comment\");\n    if (cJSON_IsString(comment))\n    {\n        printf(\"Testing \\\"%s\\\"\\n\", comment->valuestring);\n    }\n    else\n    {\n        printf(\"Testing unknown\\n\");\n    }\n\n    disabled = cJSON_GetObjectItemCaseSensitive(test, \"disabled\");\n    if (cJSON_IsTrue(disabled))\n    {\n        printf(\"SKIPPED\\n\");\n        return true;\n    }\n\n    doc = cJSON_GetObjectItemCaseSensitive(test, \"doc\");\n    TEST_ASSERT_NOT_NULL_MESSAGE(doc, \"No \\\"doc\\\" in the test.\");\n    patch = cJSON_GetObjectItemCaseSensitive(test, \"patch\");\n    TEST_ASSERT_NOT_NULL_MESSAGE(patch, \"No \\\"patch\\\"in the test.\");\n    /* Make a working copy of 'doc' */\n    object = cJSON_Duplicate(doc, true);\n    TEST_ASSERT_NOT_NULL(object);\n\n    expected = cJSON_GetObjectItemCaseSensitive(test, \"expected\");\n    error_element = cJSON_GetObjectItemCaseSensitive(test, \"error\");\n    if (error_element != NULL)\n    {\n        /* excepting an error */\n        TEST_ASSERT_TRUE_MESSAGE(0 != cJSONUtils_ApplyPatchesCaseSensitive(object, patch), \"Test didn't fail as it's supposed to.\");\n\n        successful = true;\n    }\n    else\n    {\n        /* apply the patch */\n        TEST_ASSERT_EQUAL_INT_MESSAGE(0, cJSONUtils_ApplyPatchesCaseSensitive(object, patch), \"Failed to apply patches.\");\n        successful = true;\n\n        if (expected != NULL)\n        {\n            successful = cJSON_Compare(object, expected, true);\n        }\n    }\n\n    cJSON_Delete(object);\n\n    if (successful)\n    {\n        printf(\"OK\\n\");\n    }\n    else\n    {\n        printf(\"FAILED\\n\");\n    }\n\n    return successful;\n}",
+      "fn_code_pos": [
+        [
+          48,
+          0
+        ],
+        [
+          119,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test_apply_patch",
+        "parameters": {
+          "test": "cJSON"
+        },
+        "return_type": "cJSON_bool"
+      }
+    },
+    {
+      "fn_code": "static cJSON_bool test_generate_test(cJSON *test)\n{\n    cJSON *doc = NULL;\n    cJSON *patch = NULL;\n    cJSON *expected = NULL;\n    cJSON *disabled = NULL;\n\n    cJSON *object = NULL;\n    cJSON_bool successful = false;\n\n    char *printed_patch = NULL;\n\n    disabled = cJSON_GetObjectItemCaseSensitive(test, \"disabled\");\n    if (cJSON_IsTrue(disabled))\n    {\n        printf(\"SKIPPED\\n\");\n        return true;\n    }\n\n    doc = cJSON_GetObjectItemCaseSensitive(test, \"doc\");\n    TEST_ASSERT_NOT_NULL_MESSAGE(doc, \"No \\\"doc\\\" in the test.\");\n\n    /* Make a working copy of 'doc' */\n    object = cJSON_Duplicate(doc, true);\n    TEST_ASSERT_NOT_NULL(object);\n\n    expected = cJSON_GetObjectItemCaseSensitive(test, \"expected\");\n    if (expected == NULL)\n    {\n        cJSON_Delete(object);\n        /* if there is no expected output, this test doesn't make sense */\n        return true;\n    }\n\n    patch = cJSONUtils_GeneratePatchesCaseSensitive(doc, expected);\n    TEST_ASSERT_NOT_NULL_MESSAGE(patch, \"Failed to generate patches.\");\n\n    printed_patch = cJSON_Print(patch);\n    printf(\"%s\\n\", printed_patch);\n    free(printed_patch);\n\n    /* apply the generated patch */\n    TEST_ASSERT_EQUAL_INT_MESSAGE(0, cJSONUtils_ApplyPatchesCaseSensitive(object, patch), \"Failed to apply generated patch.\");\n\n    successful = cJSON_Compare(object, expected, true);\n\n    cJSON_Delete(patch);\n    cJSON_Delete(object);\n\n    if (successful)\n    {\n        printf(\"generated patch: OK\\n\");\n    }\n    else\n    {\n        printf(\"generated patch: FAILED\\n\");\n    }\n\n    return successful;\n}",
+      "fn_code_pos": [
+        [
+          121,
+          0
+        ],
+        [
+          180,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "test_generate_test",
+        "parameters": {
+          "test": "cJSON"
+        },
+        "return_type": "cJSON_bool"
+      }
+    },
+    {
+      "fn_code": "static void cjson_utils_should_pass_json_patch_test_tests(void)\n{\n    cJSON *tests = parse_test_file(\"json-patch-tests/tests.json\");\n    cJSON *test = NULL;\n\n    cJSON_bool failed = false;\n    cJSON_ArrayForEach(test, tests)\n    {\n        failed |= !test_apply_patch(test);\n        failed |= !test_generate_test(test);\n    }\n\n    cJSON_Delete(tests);\n\n    TEST_ASSERT_FALSE_MESSAGE(failed, \"Some tests failed.\");\n}",
+      "fn_code_pos": [
+        [
+          182,
+          0
+        ],
+        [
+          197,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cjson_utils_should_pass_json_patch_test_tests",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cJSON_ArrayForEach(test, tests)\n    {\n        failed |= !test_apply_patch(test);\n        failed |= !test_generate_test(test);\n    }",
+      "fn_code_pos": [
+        [
+          188,
+          4
+        ],
+        [
+          192,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cJSON_ArrayForEach",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static void cjson_utils_should_pass_json_patch_test_spec_tests(void)\n{\n    cJSON *tests = parse_test_file(\"json-patch-tests/spec_tests.json\");\n    cJSON *test = NULL;\n\n    cJSON_bool failed = false;\n    cJSON_ArrayForEach(test, tests)\n    {\n        failed |= !test_apply_patch(test);\n        failed |= !test_generate_test(test);\n    }\n\n    cJSON_Delete(tests);\n\n    TEST_ASSERT_FALSE_MESSAGE(failed, \"Some tests failed.\");\n}",
+      "fn_code_pos": [
+        [
+          199,
+          0
+        ],
+        [
+          214,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cjson_utils_should_pass_json_patch_test_spec_tests",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cJSON_ArrayForEach(test, tests)\n    {\n        failed |= !test_apply_patch(test);\n        failed |= !test_generate_test(test);\n    }",
+      "fn_code_pos": [
+        [
+          205,
+          4
+        ],
+        [
+          209,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cJSON_ArrayForEach",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "static void cjson_utils_should_pass_json_patch_test_cjson_utils_tests(void)\n{\n    cJSON *tests = parse_test_file(\"json-patch-tests/cjson-utils-tests.json\");\n    cJSON *test = NULL;\n\n    cJSON_bool failed = false;\n    cJSON_ArrayForEach(test, tests)\n    {\n        failed |= !test_apply_patch(test);\n        failed |= !test_generate_test(test);\n    }\n\n    cJSON_Delete(tests);\n\n    TEST_ASSERT_FALSE_MESSAGE(failed, \"Some tests failed.\");\n}",
+      "fn_code_pos": [
+        [
+          216,
+          0
+        ],
+        [
+          231,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cjson_utils_should_pass_json_patch_test_cjson_utils_tests",
+        "parameters": {},
+        "return_type": "void"
+      }
+    },
+    {
+      "fn_code": "cJSON_ArrayForEach(test, tests)\n    {\n        failed |= !test_apply_patch(test);\n        failed |= !test_generate_test(test);\n    }",
+      "fn_code_pos": [
+        [
+          222,
+          4
+        ],
+        [
+          226,
+          5
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "cJSON_ArrayForEach",
+        "parameters": {},
+        "return_type": null
+      }
+    },
+    {
+      "fn_code": "int main(void)\n{\n    UNITY_BEGIN();\n\n    RUN_TEST(cjson_utils_should_pass_json_patch_test_tests);\n    RUN_TEST(cjson_utils_should_pass_json_patch_test_spec_tests);\n    RUN_TEST(cjson_utils_should_pass_json_patch_test_cjson_utils_tests);\n\n    return UNITY_END();\n}",
+      "fn_code_pos": [
+        [
+          233,
+          0
+        ],
+        [
+          242,
+          1
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "main",
+        "parameters": {},
+        "return_type": "int"
+      }
+    }
+  ],
+  "fn_declaraion": [
+    {
+      "fn_code": "parse_test_file(const char * const filename)",
+      "fn_dec_pos": [
+        [
+          31,
+          14
+        ],
+        [
+          31,
+          58
+        ]
+      ],
+      "class_code": "",
+      "class_node_pos": [],
+      "fn_meta": {
+        "identifier": "parse_test_file",
+        "parameters": {
+          "filename": "char"
+        },
+        "return_type": null
+      }
+    }
+  ],
+  "class_node_list": {},
+  "struct_node_list": [],
+  "include_list": [
+    [
+      "#include <stdio.h>\n",
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ]
+    ],
+    [
+      "#include <stdlib.h>\n",
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ]
+    ],
+    [
+      "#include <string.h>\n",
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/examples/unity_config.h\"\n",
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ]
+    ],
+    [
+      "#include \"unity/src/unity.h\"\n",
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ]
+    ],
+    [
+      "#include \"common.h\"\n",
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ]
+    ],
+    [
+      "#include \"../cJSON_Utils.h\"\n",
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ]
+    ]
+  ],
+  "global_variables": [],
+  "enumerate_node_list": []
+}
