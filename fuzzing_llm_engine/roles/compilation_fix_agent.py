@@ -25,14 +25,25 @@ from llama_index.core.indices.prompt_helper import PromptHelper
 
 
 def extract_code(s):
-    # 使用正则表达式匹配格式
     pattern = r'```(?:c|cpp|c\+\+)\s(.*?)```'
-    match = re.search(pattern, s, re.DOTALL)  # re.DOTALL允许点(.)匹配包括换行符在内的所有字符
+    match = re.search(pattern, s, re.DOTALL)
     if match:
-        # 返回匹配到的代码部分
         return match.group(1)
     else:
         return "No code found"
+
+def ensure_extern_c(code):
+    """Ensure LLVMFuzzerTestOneInput has extern "C" linkage for C++ compilation."""
+    if 'LLVMFuzzerTestOneInput' not in code:
+        return code
+    if re.search(r'extern\s+"C".*LLVMFuzzerTestOneInput', code, re.DOTALL):
+        return code
+    code = re.sub(
+        r'(?m)^(\s*)(int\s+LLVMFuzzerTestOneInput\s*\()',
+        r'\1extern "C" \2',
+        code
+    )
+    return code
     
 class CompilationFixAgent:
     fix_compilation_prompt = PromptTemplate(
@@ -52,8 +63,9 @@ class CompilationFixAgent:
         "5. If adding new functions or variables, make sure they are properly declared and used.\n"
         "6. Double-check that your changes don't introduce new errors.\n"
         "7. If an 'undeclared identifier' error refers to a function that does not exist in the library's public API, do NOT define a custom wrapper for it. Instead, find and use the correct deallocation/cleanup function that IS declared in the included headers (e.g., library-specific free functions like `*_free_hostent()`, `*_free_data()`, `*_free_string()`, `*_destroy()`, etc.), or fall back to the standard `free()` function.\n"
-        "8. Return only the complete, fixed code wrapped in triple backticks (```).\n"
-        "9. Add brief comments explaining your changes.\n"
+        "8. IMPORTANT: The `LLVMFuzzerTestOneInput` function MUST be declared with `extern \"C\"` linkage, i.e. `extern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)`. This is required for the linker to resolve the symbol when compiling C++ (.cc) files. If the function is missing `extern \"C\"`, add it.\n"
+        "9. Return only the complete, fixed code wrapped in triple backticks (```).\n"
+        "10. Add brief comments explaining your changes.\n"
         "Fix the code now:"
     )
     
@@ -74,8 +86,9 @@ class CompilationFixAgent:
         "5. If adding new functions or variables, make sure they are properly declared and used.\n"
         "6. Double-check that your changes don't introduce new errors.\n"
         "7. If an 'undeclared identifier' error refers to a function that does not exist in the library's public API, do NOT define a custom wrapper for it. Instead, find and use the correct deallocation/cleanup function that IS declared in the included headers (e.g., library-specific free functions like `*_free_hostent()`, `*_free_data()`, `*_free_string()`, `*_destroy()`, etc.), or fall back to the standard `free()` function.\n"
-        "8. Return only the complete, fixed code wrapped in triple backticks (```).\n"
-        "9. Add brief comments explaining your changes.\n"
+        "8. IMPORTANT: The `LLVMFuzzerTestOneInput` function MUST be declared with `extern \"C\"` linkage, i.e. `extern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)`. This is required for the linker to resolve the symbol when compiling C++ (.cc) files. If the function is missing `extern \"C\"`, add it.\n"
+        "9. Return only the complete, fixed code wrapped in triple backticks (```).\n"
+        "10. Add brief comments explaining your changes.\n"
         "Fix the code now:"
         "You are a software repair expert. You need fix one fuzz driver with some compilation errors.\n"
         "Below is the historical context (ignore if empty):\n"
@@ -253,6 +266,8 @@ class CompilationFixAgent:
                 while i<=self.max_fix_itrs:      
                     fxi_code_raw = self.fix_compilation(error=result,code=code)   
                     fix_code = extract_code(fxi_code_raw)
+                    if fix_code != "No code found":
+                        fix_code = ensure_extern_c(fix_code)
                     if fix_code == "No code found":
                         logger.info(fxi_code_raw)
                         i = self.max_fix_itrs + 1
@@ -313,6 +328,8 @@ class CompilationFixAgent:
             while i<=self.max_fix_itrs:     
                 fix_code_raw = self.fix_compilation(error=result,code=code)   
                 fix_code = extract_code(fix_code_raw)
+                if fix_code != "No code found":
+                    fix_code = ensure_extern_c(fix_code)
                 if fix_code == "No code found":
                     logger.info(fix_code_raw)
                     i = self.max_fix_itrs + 1

@@ -39,7 +39,7 @@ class FuzzingGenerationAgent:
         self.fuzz_driver_generation_prompt = PromptTemplate(
             "You are a fuzz driver expert, capable of writing a high-quality, compilable fuzz driver to test a library with extensive code coverage and robust error handling."
             "Please generate an executable {lang} fuzz driver according to the following instructions:\n"
-            "1. Create a function named `LLVMFuzzerTestOneInput` that achieves a task using the provided API combination. Each API should be called at least once. The function signature must be `int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)`.\n"
+            "1. Create a function named `LLVMFuzzerTestOneInput` that achieves a task using the provided API combination. Each API should be called at least once. The function MUST be declared with C linkage: `extern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)`. The `extern \"C\"` is REQUIRED for the linker to find the entry point when compiling as C++.\n"
             "2. Ensure the generated code correctly utilizes the fuzz driver inputs, `const uint8_t *data` and `size_t size`.\n"
             "3. API inputs must derive from the fuzz driver inputs, `const uint8_t *data` and `size_t size`.\n"
             "4. Include all the provided headers at the beginning of the file.\n"
@@ -71,7 +71,7 @@ class FuzzingGenerationAgent:
         self.fuzz_driver_generation_prompt_with_memory = PromptTemplate(
             "You are a fuzz driver expert, capable of writing a high-quality, compilable fuzz driver to test a library with extensive code coverage and robust error handling."
             "Please generate an executable {lang} fuzz driver according to the following instructions:\n"
-            "1. Create a function named `LLVMFuzzerTestOneInput` that achieves a task using the provided API combination. Each API should be called at least once. The function signature must be `int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)`.\n"
+            "1. Create a function named `LLVMFuzzerTestOneInput` that achieves a task using the provided API combination. Each API should be called at least once. The function MUST be declared with C linkage: `extern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)`. The `extern \"C\"` is REQUIRED for the linker to find the entry point when compiling as C++.\n"
             "2. Ensure the generated code correctly utilizes the fuzz driver inputs, `const uint8_t *data` and `size_t size`.\n"
             "3. API inputs must derive from the fuzz driver inputs, `const uint8_t *data` and `size_t size`.\n"
             "4. Include all the provided headers at the beginning of the file.\n"
@@ -130,6 +130,20 @@ class FuzzingGenerationAgent:
         else:
             return "No code found"
 
+    @staticmethod
+    def ensure_extern_c(code):
+        """Ensure LLVMFuzzerTestOneInput has extern "C" linkage for C++ compilation."""
+        if 'LLVMFuzzerTestOneInput' not in code:
+            return code
+        if re.search(r'extern\s+"C".*LLVMFuzzerTestOneInput', code, re.DOTALL):
+            return code
+        code = re.sub(
+            r'(?m)^(\s*)(int\s+LLVMFuzzerTestOneInput\s*\()',
+            r'\1extern "C" \2',
+            code
+        )
+        return code
+
     def driver_gen(self, api_combination, api_code, api_summary, fuzz_gen_code_output_dir,project):
         i = 1
         for api_list in api_combination:
@@ -154,6 +168,7 @@ class FuzzingGenerationAgent:
             if api_list_proc:
                 fuzz_driver_generation_response = self.fuzz_driver_generation(api_list_proc, api_info, self.headers, api_sum)
                 fuzz_driver_generation_response = self.extract_code(str(fuzz_driver_generation_response))
+                fuzz_driver_generation_response = self.ensure_extern_c(fuzz_driver_generation_response)
                 logger.info(fuzz_driver_generation_response)
                 model_name = self.llm_coder.model.replace(":", "_")
                 fuzzer_name = f"{project}_fuzz_driver_{self.use_memory}_{model_name}_{i}.{self.file_suffix[self.language.lower()]}"
@@ -187,6 +202,7 @@ class FuzzingGenerationAgent:
         if api_list_proc:
             fuzz_driver_generation_response = self.fuzz_driver_generation(api_list_proc, api_info, self.headers, api_sum)
             fuzz_driver_generation_response = self.extract_code(str(fuzz_driver_generation_response))
+            fuzz_driver_generation_response = self.ensure_extern_c(fuzz_driver_generation_response)
             logger.info(fuzz_driver_generation_response)
             with open(os.path.join(fuzz_gen_code_output_dir, fuzzer_name), "w") as f:
                 f.write(fuzz_driver_generation_response)
