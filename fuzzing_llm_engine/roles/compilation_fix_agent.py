@@ -273,7 +273,7 @@ class CompilationFixAgent:
                     if "error:" not in result:
                         # pdb.set_trace()
                         logger.info('Compilation check pass.')
-                        shutil.copy(f"{fix_tmp}/{fixed_file_name}", directory+f"fuzz_driver/{project}/compilation_pass_rag/")
+                        shutil.copy(f"{fix_tmp}/{fixed_file_name}", directory+f"fuzz_driver/{project}/compilation_pass_rag/{file}")
                         base_name = os.path.splitext(fixed_file_name)[0]
                         object_file = f"{base_name}.o"
                         object_file_path = os.path.join(directory, f"fuzz_driver/{project}/", object_file)
@@ -287,6 +287,7 @@ class CompilationFixAgent:
                     i+=1
 
     def single_fix_compilation(self,file_name,dir,project):
+        original_name = file_name[4:] if file_name.startswith("fix_") else file_name
         with open(dir+file_name,"r") as fr:
             code=fr.read()     
         run_args = ["check_compilation", project, "--fuzz_driver_file", file_name]
@@ -294,7 +295,7 @@ class CompilationFixAgent:
         logger.info(f"check_compilation for new fuzz driver {file_name}, result:\n {result}")
         if "error:" not in result:
             logger.info('Compilation check pass.')
-            shutil.copy(f"{dir}/{file_name}", dir+"compilation_pass_rag/")
+            shutil.copy(f"{dir}/{file_name}", f"{dir}compilation_pass_rag/{original_name}")
             base_name = os.path.splitext(file_name)[0]
             object_file = f"{base_name}.o"
             object_file_path = os.path.join(dir, object_file)
@@ -321,7 +322,6 @@ class CompilationFixAgent:
                     logger.info(dir)
                     logger.info(fix_code)
                     fw.write(fix_code) 
-                    # logger.info("Done Write")
                 run_args = ["check_compilation", project, "--fuzz_driver_file", fixed_file_name]
                 result =  run(run_args)
                 msg =[
@@ -330,9 +330,8 @@ class CompilationFixAgent:
                 logger.info(f"After fixing, the fixed code checking result is \n: {result}")
                 self.composable_memory.put_messages(msg)
                 if "error:" not in result:
-                    # pdb.set_trace()
                     logger.info('Compilation check pass.')
-                    shutil.copy(f"{dir}/{fixed_file_name}", dir+"compilation_pass_rag/")
+                    shutil.copy(f"{dir}/{fixed_file_name}", f"{dir}compilation_pass_rag/{original_name}")
                     base_name = os.path.splitext(fixed_file_name)[0]
                     object_file = f"{base_name}.o"
                     object_file_path = os.path.join(dir, object_file)
