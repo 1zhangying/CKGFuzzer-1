@@ -51,8 +51,9 @@ class CompilationFixAgent:
         "4. Ensure the fixes address all reported errors.\n"
         "5. If adding new functions or variables, make sure they are properly declared and used.\n"
         "6. Double-check that your changes don't introduce new errors.\n"
-        "7. Return only the complete, fixed code wrapped in triple backticks (```).\n"
-        "8. Add brief comments explaining your changes.\n"
+        "7. If an 'undeclared identifier' error refers to a function that does not exist in the library's public API, do NOT define a custom wrapper for it. Instead, find and use the correct deallocation/cleanup function that IS declared in the included headers (e.g., library-specific free functions like `*_free_hostent()`, `*_free_data()`, `*_free_string()`, `*_destroy()`, etc.), or fall back to the standard `free()` function.\n"
+        "8. Return only the complete, fixed code wrapped in triple backticks (```).\n"
+        "9. Add brief comments explaining your changes.\n"
         "Fix the code now:"
     )
     
@@ -72,8 +73,9 @@ class CompilationFixAgent:
         "4. Ensure the fixes address all reported errors.\n"
         "5. If adding new functions or variables, make sure they are properly declared and used.\n"
         "6. Double-check that your changes don't introduce new errors.\n"
-        "7. Return only the complete, fixed code wrapped in triple backticks (```).\n"
-        "8. Add brief comments explaining your changes.\n"
+        "7. If an 'undeclared identifier' error refers to a function that does not exist in the library's public API, do NOT define a custom wrapper for it. Instead, find and use the correct deallocation/cleanup function that IS declared in the included headers (e.g., library-specific free functions like `*_free_hostent()`, `*_free_data()`, `*_free_string()`, `*_destroy()`, etc.), or fall back to the standard `free()` function.\n"
+        "8. Return only the complete, fixed code wrapped in triple backticks (```).\n"
+        "9. Add brief comments explaining your changes.\n"
         "Fix the code now:"
         "You are a software repair expert. You need fix one fuzz driver with some compilation errors.\n"
         "Below is the historical context (ignore if empty):\n"
