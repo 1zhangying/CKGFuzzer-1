@@ -21,10 +21,18 @@ make -j$(nproc) clean
 make -j$(nproc) all
 make -j$(nproc) check
 
+$CC $CFLAGS -I. -Icontrib/minizip \
+    -c contrib/minizip/zip.c \
+    -o "$WORK/minizip_zip.o"
+$CC $CFLAGS -I. -Icontrib/minizip \
+    -c contrib/minizip/ioapi.c \
+    -o "$WORK/minizip_ioapi.o"
+ar rcs "$WORK/libminizip_fuzz.a" \
+    "$WORK/minizip_zip.o" \
+    "$WORK/minizip_ioapi.o"
 
 $CXX $CXXFLAGS -c $SRC/zlib/test/FUZZ_DRIVER_FILE -I$SRC/zlib -o FUZZ_DRIVER_FILE_TARGET.o
 $CXX $CXXFLAGS -std=c++11  FUZZ_DRIVER_FILE_TARGET.o -o $OUT/FUZZ_DRIVER_FILE_TARGET \
-    $LIB_FUZZING_ENGINE ./libz.a
-
+    $LIB_FUZZING_ENGINE "$WORK/libminizip_fuzz.a" ./libz.a
 
 

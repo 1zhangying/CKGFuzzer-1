@@ -39,6 +39,9 @@ class RuntimeContext:
     error_message: Optional[str]
 
 
+_IMPORTANT_REGS = ["rip", "rsp", "rbp", "rax", "rdi", "rsi", "rdx", "rcx"]
+_OSS_FUZZ_BASE_RUNNER_IMAGE = "gcr.io/oss-fuzz-base/base-runner"
+
 
 # GDB script generation
 
@@ -210,6 +213,221 @@ def _parse_backtrace(bt_text: str) -> List[FrameState]:
     return frames
 
 
+def _parse_gdb_marked_output(output: str, max_frames: int = 8) -> Dict[str, Any]:
+    """Parse marked GDB output into a RuntimeContext-compatible dict."""
+    bt_text = _extract_section(output, "===GDB_BACKTRACE_START===", "===GDB_BACKTRACE_END===")
+    reg_text = _extract_section(output, "===GDB_REGISTERS_START===", "===GDB_REGISTERS_END===")
+
+    registers = _parse_registers(reg_text)
+    call_stack = _parse_backtrace(bt_text) if bt_text else []
+
+    for i in range(max_frames):
+        frame_text = _extract_section(output, f"===GDB_FRAME_{i}_START===", f"===GDB_FRAME_{i}_END===")
+        if frame_text:
+            args, locals_ = _parse_frame_vars(frame_text)
+            for fs in call_stack:
+                if fs.frame_id == i:
+                    fs.arguments.update(args)
+                    fs.locals.update(locals_)
+                    break
+
+    reproduced = bt_text is not None and len(call_stack) > 0
+
+    exit_signal = None
+    import re
+    sig_match = re.search(r"Program received signal (\w+)", output)
+    if sig_match:
+        exit_signal = sig_match.group(1)
+
+    crash_frame = call_stack[0] if call_stack else None
+
+    ctx = RuntimeContext(
+        reproduced=reproduced,
+        exit_signal=exit_signal,
+        registers=registers,
+        crash_frame=crash_frame,
+        call_stack=call_stack,
+        backtrace_text=bt_text,
+        error_message=None if reproduced else "Could not reproduce crash",
+    )
+
+    d = asdict(ctx)
+    if crash_frame:
+        d["crash_frame"] = asdict(crash_frame)
+    d["call_stack"] = [asdict(fs) for fs in call_stack]
+    return d
+
+
+def _compute_runtime_evidence_quality(ctx: Dict[str, Any]) -> float:
+    """Compute a lightweight quality score for runtime evidence [0.0, 1.0]."""
+    if not ctx or not ctx.get("reproduced"):
+        return 0.0
+
+    score = 0.0
+    score += 0.4  # reproduced
+
+    cf = ctx.get("crash_frame") or {}
+    if cf.get("function"):
+        score += 0.2
+
+    regs = ctx.get("registers") or {}
+    reg_hits = sum(1 for r in _IMPORTANT_REGS if r in regs)
+    score += min(0.2, 0.025 * reg_hits)  # 8 regs -> 0.2
+
+    stack = ctx.get("call_stack") or []
+    score += min(0.1, 0.02 * len(stack))  # >=5 frames -> 0.1
+
+    args_cnt = len(cf.get("arguments") or {})
+    locals_cnt = len(cf.get("locals") or {})
+    if (args_cnt + locals_cnt) > 0:
+        score += 0.1
+
+    return round(min(1.0, score), 3)
+
+
+def _runtime_stability_key(ctx: Dict[str, Any]) -> Optional[str]:
+    """Create a stable key for runtime-context consistency checks."""
+    if not ctx or not ctx.get("reproduced"):
+        return None
+    cf = ctx.get("crash_frame") or {}
+    func = cf.get("function") or "?"
+    file_ = cf.get("file") or "?"
+    line = cf.get("line") or "?"
+    sig = ctx.get("exit_signal") or "?"
+    return f"{sig}|{func}|{file_}:{line}"
+
+
+def _docker_exec(container_id: str, cmd: str, timeout: int = 30) -> str:
+    try:
+        proc = subprocess.run(
+            ["docker", "exec", container_id, "/bin/bash", "-c", cmd],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return (proc.stdout or "") + "\n" + (proc.stderr or "")
+    except subprocess.TimeoutExpired:
+        return "[TIMEOUT]"
+    except Exception as e:
+        return f"[ERROR] {e}"
+
+
+def _reproduce_with_docker_gdb_once(
+    binary_path: str,
+    poc_path: str,
+    timeout: int = 15,
+    max_frames: int = 8,
+) -> Dict[str, Any]:
+    """Run GDB inside an OSS-Fuzz base-runner container (Docker-first path)."""
+    if not os.path.isfile(binary_path):
+        d = asdict(RuntimeContext(
+            reproduced=False, exit_signal=None, registers={},
+            crash_frame=None, call_stack=[], backtrace_text=None,
+            error_message=f"binary not found: {binary_path}",
+        ))
+        d["collection_method"] = "docker_gdb"
+        return d
+    if not os.path.isfile(poc_path):
+        d = asdict(RuntimeContext(
+            reproduced=False, exit_signal=None, registers={},
+            crash_frame=None, call_stack=[], backtrace_text=None,
+            error_message=f"PoC not found: {poc_path}",
+        ))
+        d["collection_method"] = "docker_gdb"
+        return d
+
+    out_dir = os.path.dirname(os.path.realpath(binary_path))
+    binary_name = os.path.basename(binary_path)
+    container_id = None
+
+    # Prefer existing gdb in image; fallback to apt install when available.
+    start_script = (
+        "if command -v gdb >/dev/null 2>&1; then "
+        "echo GDB_READY; "
+        "else "
+        "(apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq gdb >/dev/null 2>&1 && echo GDB_READY) "
+        "|| echo GDB_MISSING; "
+        "fi; sleep 300"
+    )
+    try:
+        start_cmd = [
+            "docker", "run", "-d", "--rm", "--privileged", "--shm-size=2g",
+            "--platform", "linux/amd64",
+            "-v", f"{out_dir}:/out",
+            _OSS_FUZZ_BASE_RUNNER_IMAGE,
+            "/bin/bash", "-c", start_script,
+        ]
+        container_id = subprocess.check_output(start_cmd, timeout=20).decode().strip()
+
+        ready = False
+        gdb_missing = False
+        for _ in range(15):
+            try:
+                logs = subprocess.check_output(["docker", "logs", container_id], timeout=5).decode()
+            except Exception:
+                logs = ""
+            if "GDB_READY" in logs:
+                ready = True
+                break
+            if "GDB_MISSING" in logs:
+                gdb_missing = True
+                break
+        if not ready:
+            err = "GDB not available in container" if gdb_missing else "Docker GDB setup timed out"
+            d = asdict(RuntimeContext(
+                reproduced=False, exit_signal=None, registers={},
+                crash_frame=None, call_stack=[], backtrace_text=None,
+                error_message=err,
+            ))
+            d["collection_method"] = "docker_gdb"
+            return d
+
+        poc_name = f"poc_{os.getpid()}"
+        subprocess.run(
+            ["docker", "cp", poc_path, f"{container_id}:/tmp/{poc_name}"],
+            timeout=10, capture_output=True, check=True,
+        )
+
+        gdb_script = _generate_gdb_script(f"/tmp/{poc_name}", max_frames=max_frames)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".gdb", delete=False) as f:
+            f.write(gdb_script)
+            local_script = f.name
+        try:
+            script_name = f"run_{os.getpid()}.gdb"
+            subprocess.run(
+                ["docker", "cp", local_script, f"{container_id}:/tmp/{script_name}"],
+                timeout=10, capture_output=True, check=True,
+            )
+        finally:
+            try:
+                os.unlink(local_script)
+            except OSError:
+                pass
+
+        output = _docker_exec(
+            container_id,
+            f"timeout {timeout} gdb --batch -x /tmp/{script_name} /out/{binary_name} 2>&1 || true",
+            timeout=timeout + 10,
+        )
+        ctx = _parse_gdb_marked_output(output, max_frames=max_frames)
+        ctx["collection_method"] = "docker_gdb"
+        return ctx
+    except Exception as e:
+        d = asdict(RuntimeContext(
+            reproduced=False, exit_signal=None, registers={},
+            crash_frame=None, call_stack=[], backtrace_text=None,
+            error_message=f"Docker GDB failed: {e}",
+        ))
+        d["collection_method"] = "docker_gdb"
+        return d
+    finally:
+        if container_id:
+            try:
+                subprocess.run(["docker", "stop", container_id], timeout=10, capture_output=True)
+            except Exception:
+                pass
+
+
 # ---------------------------------------------------------------------------
 # Main debugger interface
 # ---------------------------------------------------------------------------
@@ -286,50 +504,106 @@ def reproduce_with_gdb(
         except OSError:
             pass
 
-    # Parse output
-    bt_text = _extract_section(output, "===GDB_BACKTRACE_START===", "===GDB_BACKTRACE_END===")
-    reg_text = _extract_section(output, "===GDB_REGISTERS_START===", "===GDB_REGISTERS_END===")
-
-    registers = _parse_registers(reg_text)
-    call_stack = _parse_backtrace(bt_text) if bt_text else []
-
-    # Parse individual frame details
-    for i in range(max_frames):
-        frame_text = _extract_section(output, f"===GDB_FRAME_{i}_START===", f"===GDB_FRAME_{i}_END===")
-        if frame_text:
-            args, locals_ = _parse_frame_vars(frame_text)
-            for fs in call_stack:
-                if fs.frame_id == i:
-                    fs.arguments.update(args)
-                    fs.locals.update(locals_)
-                    break
-
-    reproduced = bt_text is not None and len(call_stack) > 0
-
-    # Detect signal
-    exit_signal = None
-    import re
-    sig_match = re.search(r"Program received signal (\w+)", output)
-    if sig_match:
-        exit_signal = sig_match.group(1)
-
-    crash_frame = call_stack[0] if call_stack else None
-
-    ctx = RuntimeContext(
-        reproduced=reproduced,
-        exit_signal=exit_signal,
-        registers=registers,
-        crash_frame=crash_frame,
-        call_stack=call_stack,
-        backtrace_text=bt_text,
-        error_message=None if reproduced else "Could not reproduce crash",
-    )
-
-    d = asdict(ctx)
-    if crash_frame:
-        d["crash_frame"] = asdict(crash_frame)
-    d["call_stack"] = [asdict(fs) for fs in call_stack]
+    d = _parse_gdb_marked_output(output, max_frames=max_frames)
+    d["collection_method"] = "local_gdb"
     return d
+
+
+def collect_runtime_context(
+    binary_path: str,
+    poc_path: str,
+    *,
+    attempts: int = 3,
+    timeout: int = 15,
+    max_frames: int = 8,
+    prefer_docker: bool = True,
+) -> Dict[str, Any]:
+    """Collect runtime context with stability checks and quality scoring.
+
+    Strategy:
+      1) Docker GDB first (environment closer to fuzzing runtime)
+      2) Fallback to local GDB if Docker path fails
+      3) Repeat for N attempts, pick best context, and compute stability metadata
+    """
+    attempts = max(1, attempts)
+    attempt_records: List[Dict[str, Any]] = []
+
+    best_ctx: Optional[Dict[str, Any]] = None
+    best_quality = -1.0
+
+    for i in range(attempts):
+        ctx = None
+        if prefer_docker:
+            ctx = _reproduce_with_docker_gdb_once(
+                binary_path, poc_path, timeout=timeout, max_frames=max_frames
+            )
+
+        # Fallback to local GDB if Docker path did not reproduce.
+        if not ctx or not ctx.get("reproduced"):
+            local_ctx = reproduce_with_gdb(
+                binary_path, poc_path, timeout=timeout, max_frames=max_frames
+            )
+            if not ctx or local_ctx.get("reproduced"):
+                ctx = local_ctx
+
+        quality = _compute_runtime_evidence_quality(ctx or {})
+        key = _runtime_stability_key(ctx or {})
+
+        if ctx is None:
+            ctx = asdict(RuntimeContext(
+                reproduced=False, exit_signal=None, registers={},
+                crash_frame=None, call_stack=[], backtrace_text=None,
+                error_message="runtime collection failed",
+            ))
+            ctx["collection_method"] = "none"
+
+        ctx["attempt_index"] = i + 1
+        ctx["attempt_quality"] = quality
+        ctx["attempt_stability_key"] = key
+
+        attempt_records.append({
+            "attempt": i + 1,
+            "collection_method": ctx.get("collection_method", "unknown"),
+            "reproduced": bool(ctx.get("reproduced")),
+            "exit_signal": ctx.get("exit_signal"),
+            "crash_function": (ctx.get("crash_frame") or {}).get("function"),
+            "stability_key": key,
+            "attempt_quality": quality,
+        })
+
+        if quality > best_quality:
+            best_quality = quality
+            best_ctx = ctx
+
+    reproduced_attempts = [a for a in attempt_records if a.get("reproduced")]
+    if reproduced_attempts:
+        key_count: Dict[str, int] = {}
+        for a in reproduced_attempts:
+            k = a.get("stability_key") or "?"
+            key_count[k] = key_count.get(k, 0) + 1
+        max_count = max(key_count.values()) if key_count else 0
+        stability_ratio = round(max_count / len(reproduced_attempts), 3) if reproduced_attempts else 0.0
+        stable = max_count >= 2 if len(reproduced_attempts) >= 2 else True
+    else:
+        stability_ratio = 0.0
+        stable = False
+
+    if best_ctx is None:
+        best_ctx = asdict(RuntimeContext(
+            reproduced=False, exit_signal=None, registers={},
+            crash_frame=None, call_stack=[], backtrace_text=None,
+            error_message="runtime collection failed",
+        ))
+        best_ctx["collection_method"] = "none"
+
+    # Blend best-sample quality and cross-attempt stability.
+    final_quality = round(min(1.0, (0.7 * max(best_quality, 0.0)) + (0.3 * stability_ratio)), 3)
+    best_ctx["evidence_quality"] = final_quality
+    best_ctx["stable"] = stable
+    best_ctx["stability_ratio"] = stability_ratio
+    best_ctx["collection_attempts"] = attempt_records
+    best_ctx["attempts"] = attempts
+    return best_ctx
 
 
 def format_runtime_context_for_llm(ctx: Dict[str, Any], max_frames: int = 5) -> str:
@@ -339,6 +613,12 @@ def format_runtime_context_for_llm(ctx: Dict[str, Any], max_frames: int = 5) -> 
         return f"[RUNTIME] Crash reproduction failed: {err}"
 
     lines = []
+    if "evidence_quality" in ctx:
+        lines.append(
+            f"[RUNTIME] quality={ctx.get('evidence_quality')} "
+            f"stable={ctx.get('stable')} "
+            f"method={ctx.get('collection_method', 'unknown')}"
+        )
     lines.append(f"[RUNTIME] Signal: {ctx.get('exit_signal', 'unknown')}")
 
     cf = ctx.get("crash_frame")
@@ -354,7 +634,7 @@ def format_runtime_context_for_llm(ctx: Dict[str, Any], max_frames: int = 5) -> 
 
     regs = ctx.get("registers") or {}
     if regs:
-        important = ["rip", "rsp", "rbp", "rax", "rdi", "rsi", "rdx", "rcx"]
+        important = _IMPORTANT_REGS
         reg_strs = []
         for r in important:
             if r in regs:

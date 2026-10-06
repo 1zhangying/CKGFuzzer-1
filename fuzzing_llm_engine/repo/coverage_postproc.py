@@ -36,7 +36,7 @@ def html2txt(file_dir, coverage_dir):
             if file.endswith(('.c.html', '.cc.html', '.cpp.html')) and 'fuzz_driver' not in file:
                 files_processed += 1
                 file_path = os.path.join(root, file)
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                     html_content = f.read()
                 soup = BeautifulSoup(html_content, 'html.parser')
                 output_text = ""

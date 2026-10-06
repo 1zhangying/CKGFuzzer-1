@@ -65,6 +65,10 @@ _REGISTER_RE = re.compile(
 
 _DEADLY_SIGNAL_RE = re.compile(r"libFuzzer:\s*deadly signal", re.MULTILINE)
 _TIMEOUT_RE = re.compile(r"ALARM:\s*working on the last", re.MULTILINE)
+_LIBFUZZER_TIMEOUT_SECONDS_RE = re.compile(
+    r"libFuzzer:\s*timeout after\s*(?P<seconds>\d+)\s*seconds",
+    re.IGNORECASE,
+)
 _OOM_RE = re.compile(r"out-of-memory|oom|rss limit exhausted", re.IGNORECASE)
 
 
@@ -103,6 +107,7 @@ class SanitizerParseResult:
     first_in_project_function: Optional[str] = None
     is_deadly_signal_only: bool = False
     is_timeout: bool = False
+    timeout_seconds: Optional[int] = None
     is_oom: bool = False
     has_asan_stack: bool = False
 
@@ -187,7 +192,10 @@ def parse_sanitizer_output(crash_info: str) -> Dict[str, Any]:
     # --- SCARINESS ---
     m = _SCARINESS_RE.search(crash_info)
     if m:
-        result.scariness_score = int(m.group("score"))
+        try:
+            result.scariness_score = int(m.group("score"))
+        except (ValueError, TypeError):
+            result.scariness_score = None
         result.scariness_desc = m.group("desc")
 
     # --- DEDUP_TOKEN ---
@@ -266,6 +274,12 @@ def parse_sanitizer_output(crash_info: str) -> Dict[str, Any]:
 
     # --- Special conditions ---
     result.is_deadly_signal_only = bool(_DEADLY_SIGNAL_RE.search(crash_info)) and not result.has_asan_stack
+    timeout_seconds = _LIBFUZZER_TIMEOUT_SECONDS_RE.search(crash_info)
+    if timeout_seconds:
+        try:
+            result.timeout_seconds = int(timeout_seconds.group("seconds"))
+        except (ValueError, TypeError):
+            result.timeout_seconds = None
     result.is_timeout = bool(_TIMEOUT_RE.search(crash_info))
     result.is_oom = bool(_OOM_RE.search(crash_info))
 

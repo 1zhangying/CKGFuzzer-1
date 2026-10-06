@@ -18,10 +18,9 @@
 
 mkdir -p build
 cd build
-cmake -DBUILD_SHARED_LIBS=OFF -DENABLE_CJSON_TEST=OFF ..
+cmake -DBUILD_SHARED_LIBS=OFF -DENABLE_CJSON_TEST=OFF -DENABLE_CJSON_UTILS=ON ..
 make -j$(nproc)
 
-$CC $CFLAGS -c $SRC/cjson/fuzzing/FUZZ_DRIVER_FILE -I$SRC/cjson -o FUZZ_DRIVER_FILE_TARGET.o
+$CXX $CXXFLAGS -std=c++11 -c $SRC/cjson/fuzzing/FUZZ_DRIVER_FILE -I$SRC/cjson -o FUZZ_DRIVER_FILE_TARGET.o
 $CXX $CXXFLAGS -std=c++11  FUZZ_DRIVER_FILE_TARGET.o -o $OUT/FUZZ_DRIVER_FILE_TARGET \
-    $LIB_FUZZING_ENGINE ./libcjson.a
-
+    $LIB_FUZZING_ENGINE ./libcjson_utils.a ./libcjson.a

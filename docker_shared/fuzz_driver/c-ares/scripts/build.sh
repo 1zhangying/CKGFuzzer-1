@@ -37,8 +37,8 @@ fi
 echo "Building fuzz driver: ${FUZZ_FILE}"
 echo "Output target: ${FUZZ_TARGET}"
 
-# Compile the fuzz driver
-$CC $CFLAGS -Iinclude -Isrc/lib -c $SRC/c-ares/test/${FUZZ_FILE} -o $WORK/${FUZZ_TARGET}.o
+# Compile the fuzz driver (.cc files require $CXX/$CXXFLAGS)
+$CXX $CXXFLAGS -std=c++11 -Iinclude -Isrc/lib -c $SRC/c-ares/test/${FUZZ_FILE} -o $WORK/${FUZZ_TARGET}.o
 $CXX $CXXFLAGS -std=c++11 $WORK/${FUZZ_TARGET}.o \
     -o $OUT/${FUZZ_TARGET} \
     $LIB_FUZZING_ENGINE $SRC/c-ares/src/lib/.libs/libcares.a \

@@ -48,7 +48,7 @@ class FuzzingPlanner:
             "{api}\n"
             "API information:\n"
             "{api_info}\n"
-            "Call graph (The call graph is in CSV format, where each column represents the following attributes: 'caller', 'callee', 'caller_src', 'callee_src', 'start_body_start_line', 'start_body_end_line', 'end_body_start_line', 'end_body_end_line', 'caller_signature', 'caller_parameter_string', 'caller_return_type', 'caller_return_type_inferred', 'callee_signature', 'callee_parameter_string', 'callee_return_type', 'callee_return_type_inferred'.):\n"
+            "Call graph (The call graph is in CSV format, where each column represents the following attributes: 'caller', 'callee', 'caller_src', 'callee_src', 'caller_start_line', 'caller_end_line', 'callee_start_line', 'callee_end_line', 'caller_signature', 'caller_parameter_string', 'caller_return_type', 'caller_return_type_inferred', 'callee_signature', 'callee_parameter_string', 'callee_return_type', 'callee_return_type_inferred'.):\n"
             "{call_graph}\n"
             "Please generate a code summary for this function in no more than 60 words, covering the following two dimensions: code functionality and usage scenario."
         )

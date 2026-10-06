@@ -37,8 +37,29 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from crash.retroanalyze import retroanalyze_dir, print_summary
 
+ABLATION_VARIANTS = ("V0", "V1", "V2", "V3")
+ABLATION_DESCRIPTIONS = {
+    "V0": "Raw LLM",
+    "V1": "Triage Evidence",
+    "V2": "V1 + Dedup",
+    "V3": "CrashSage Full",
+}
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
+def _csv_bool(value: Any) -> Any:
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("true", "1", "yes"):
+            return "TRUE"
+        if lowered in ("false", "0", "no"):
+            return "FALSE"
+    return value
+
 
 def discover_projects(db_root: str) -> List[str]:
     """Find all project directories under db_root that have a crash/ subfolder."""
@@ -113,6 +134,12 @@ def aggregate_summary(all_reports: Dict[str, Dict]) -> Dict[str, Any]:
     total_llm_saved = 0
     per_project = []
 
+    # Aggregate per-variant ablation metrics across projects
+    agg_ablation: Dict[str, Dict[str, int]] = {
+        v: {"llm_invocations": 0, "llm_saved": 0, "classified_as_api_bug": 0}
+        for v in ABLATION_VARIANTS
+    }
+
     for proj, report in all_reports.items():
         s = report["summary"]
         tc = s["total_crashes"]
@@ -122,6 +149,13 @@ def aggregate_summary(all_reports: Dict[str, Dict]) -> Dict[str, Any]:
         total_changed += s["judgments_changed"]
         total_unique += s["unique_crashes_after_dedup"]
         total_llm_saved += s["llm_calls_saved"]
+
+        proj_ablation = s.get("ablation_variants", {})
+        for v in ABLATION_VARIANTS:
+            vs = proj_ablation.get(v, {})
+            agg_ablation[v]["llm_invocations"] += vs.get("llm_invocations", 0)
+            agg_ablation[v]["llm_saved"] += vs.get("llm_saved", 0)
+            agg_ablation[v]["classified_as_api_bug"] += vs.get("classified_as_api_bug", 0)
 
         per_project.append({
             "project": proj,
@@ -135,7 +169,13 @@ def aggregate_summary(all_reports: Dict[str, Dict]) -> Dict[str, Any]:
             "llm_saved": s["llm_calls_saved"],
             "llm_saved_ratio": s["llm_calls_saved_ratio"],
             "triage_dist": s["triage_label_distribution"],
+            "ablation_variants": proj_ablation,
         })
+
+    # Compute ablation ratios
+    for v in ABLATION_VARIANTS:
+        a = agg_ablation[v]
+        a["llm_saved_ratio"] = round(a["llm_saved"] / total_crashes, 3) if total_crashes else 0
 
     agg = {
         "timestamp": datetime.now().isoformat(),
@@ -144,12 +184,13 @@ def aggregate_summary(all_reports: Dict[str, Dict]) -> Dict[str, Any]:
         "total_old_api_bug": total_old_api,
         "total_new_api_bug": total_new_api,
         "total_judgments_changed": total_changed,
-        "aggregate_fp_rate_old": round(1 - total_new_api / total_old_api, 3) if total_old_api else 0,
+        "aggregate_fp_rate_old": round(total_old_api / total_crashes, 3) if total_crashes else 0,
         "total_unique_after_dedup": total_unique,
         "aggregate_dedup_ratio": round(1 - total_unique / total_crashes, 3) if total_crashes else 0,
         "total_llm_saved": total_llm_saved,
         "aggregate_llm_saved_ratio": round(total_llm_saved / total_crashes, 3) if total_crashes else 0,
         "per_project": per_project,
+        "ablation_aggregate": agg_ablation,
     }
     return agg
 
@@ -189,6 +230,24 @@ def print_aggregate(agg: Dict[str, Any]):
               f"{p['unique_after_dedup']:7d} "
               f"{p['dedup_ratio']:6.1%} "
               f"{p['llm_saved']:4d}/{p['total_crashes']:<4d}")
+
+    # Ablation variant comparison (Paper Table 5 / Fig 9)
+    ablation_agg = agg.get("ablation_aggregate")
+    if ablation_agg:
+        tc = agg["total_crashes"]
+        print()
+        print("  " + "-" * 68)
+        print("  ABLATION VARIANT COMPARISON (Paper RQ5)")
+        print("  " + "-" * 68)
+        print(f"    {'Variant':10s} {'Description':28s} {'LLMCalls':>9s} {'Saved':>7s} {'SavedRatio':>11s} {'ApiBugs':>8s}")
+        for v in ABLATION_VARIANTS:
+            a = ablation_agg.get(v, {})
+            print(f"    {v:10s} {ABLATION_DESCRIPTIONS.get(v, ''):28s} "
+                  f"{a.get('llm_invocations', 0):9d} "
+                  f"{a.get('llm_saved', 0):7d} "
+                  f"{a.get('llm_saved_ratio', 0):10.1%} "
+                  f"{a.get('classified_as_api_bug', 0):8d}")
+
     print("=" * 70)
 
 
@@ -217,7 +276,7 @@ def export_per_project_csv(agg: Dict[str, Any], output_dir: str):
 
 
 def export_per_crash_csv(all_reports: Dict[str, Dict], output_dir: str):
-    """Export per-crash detail as CSV (for detailed analysis / ground-truth labeling).
+    """Export per-crash detail as CSV (for detailed ground-truth labeling).
 
     Columns include THREE judgments for comparison:
       - BaselineIsApiBug: old LLM without triage (ablation or old-format data)
@@ -234,7 +293,7 @@ def export_per_crash_csv(all_reports: Dict[str, Dict], output_dir: str):
             "TriageRules", "TriageConfidence",
             "JudgmentChanged", "IsDuplicate", "DuplicateOf",
             "Signature", "CrashFile", "CrashFunction",
-            "GroundTruth",  # Empty — for human labeling
+            "GroundTruth",
         ])
         for proj, report in sorted(all_reports.items()):
             for c in report["crashes"]:
@@ -257,10 +316,10 @@ def export_per_crash_csv(all_reports: Dict[str, Dict], output_dir: str):
                     c.get("signature", ""),
                     c.get("crash_file", ""),
                     c.get("crash_function", ""),
-                    "",  # GroundTruth: 留给人工标注
+                    "",
                 ])
     print(f"  CSV saved: {csv_path}")
-    print(f"  ↑ 打开这个CSV，在 GroundTruth 列填入 True/False 进行人工标注")
+    print(f"  ↑ Fill the GroundTruth column with True/False for evaluation")
     print(f"  ↑ 三列对比: BaselineIsApiBug / TriageIsApiBug / EnhancedIsApiBug")
     return csv_path
 
@@ -287,10 +346,109 @@ def export_triage_distribution_csv(all_reports: Dict[str, Dict], output_dir: str
     return csv_path
 
 
+# ── Ablation CSV export ──────────────────────────────────────────────────────
+
+def export_ablation_csv(all_reports: Dict[str, Dict], output_dir: str):
+    """Export per-variant ablation comparison as CSV (Paper Table 5 / Fig 9).
+
+    Two files:
+      - ablation_per_project.csv: per-project per-variant LLM calls and api_bug counts
+      - ablation_per_crash.csv:   per-crash per-variant sent_to_llm and is_api_bug
+    """
+    # Per-project ablation CSV
+    csv1 = os.path.join(output_dir, "ablation_per_project.csv")
+    with open(csv1, "w", newline="") as f:
+        w = csv.writer(f)
+        header = ["Project", "TotalCrashes"]
+        for v in ABLATION_VARIANTS:
+            header.extend([f"{v}_LLMCalls", f"{v}_LLMSaved", f"{v}_SavedRatio", f"{v}_ApiBugs"])
+        w.writerow(header)
+        for proj, report in sorted(all_reports.items()):
+            s = report["summary"]
+            row = [proj, s["total_crashes"]]
+            ablation = s.get("ablation_variants", {})
+            for v in ABLATION_VARIANTS:
+                a = ablation.get(v, {})
+                row.extend([
+                    a.get("llm_invocations", 0),
+                    a.get("llm_saved", 0),
+                    f"{a.get('llm_saved_ratio', 0):.3f}",
+                    a.get("classified_as_api_bug", 0),
+                ])
+            w.writerow(row)
+    print(f"  Ablation per-project CSV saved: {csv1}")
+
+    # Per-crash ablation CSV
+    csv2 = os.path.join(output_dir, "ablation_per_crash.csv")
+    with open(csv2, "w", newline="") as f:
+        w = csv.writer(f)
+        header = ["Project", "CrashID", "Driver", "BugType", "TriageLabel",
+                   "IsDuplicate", "DuplicateOf"]
+        for v in ABLATION_VARIANTS:
+            header.extend([f"{v}_SentToLLM", f"{v}_IsApiBug", f"{v}_SkipReason"])
+        header.append("GroundTruth")
+        w.writerow(header)
+        for proj, report in sorted(all_reports.items()):
+            for c in report["crashes"]:
+                row = [
+                    proj,
+                    c["crash_id"],
+                    c.get("driver", ""),
+                    c.get("parsed_bug_type", ""),
+                    c.get("triage_label", ""),
+                    _csv_bool(c.get("is_duplicate", False)),
+                    c.get("duplicate_of", ""),
+                ]
+                av = c.get("ablation_variants", {})
+                for v in ABLATION_VARIANTS:
+                    vd = av.get(v, {})
+                    row.extend([
+                        _csv_bool(vd.get("sent_to_llm", "")),
+                        _csv_bool(vd.get("is_api_bug", "")),
+                        vd.get("skip_reason", ""),
+                    ])
+                row.append("")
+                w.writerow(row)
+    print(f"  Ablation per-crash CSV saved: {csv2}")
+    print(f"  ↑ Fill the GroundTruth column, then run --evaluate-ablation {csv2}")
+    return csv1, csv2
+
+
 # ── Ground truth evaluation ──────────────────────────────────────────────────
 
+def _compute_metrics(rows, pred_fn):
+    """Compute TP/FP/TN/FN/Precision/Recall/F1 for a prediction function."""
+    tp = fp = tn = fn = 0
+    for r in rows:
+        gt = r["_gt"]
+        pred = pred_fn(r)
+        if pred and gt:
+            tp += 1
+        elif pred and not gt:
+            fp += 1
+        elif not pred and gt:
+            fn += 1
+        else:
+            tn += 1
+    total = tp + fp + tn + fn
+    precision = tp / (tp + fp) if (tp + fp) else 0
+    recall = tp / (tp + fn) if (tp + fn) else 0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0
+    accuracy = (tp + tn) / total if total else 0
+    return {
+        "TP": tp, "FP": fp, "TN": tn, "FN": fn,
+        "precision": precision, "recall": recall,
+        "f1": f1, "accuracy": accuracy,
+    }
+
+
+def _ground_truth_value(row: Dict[str, str]) -> str:
+    """Read the current GroundTruth column, with LLMLabel fallback for old CSVs."""
+    return (row.get("GroundTruth") or row.get("LLMLabel") or "").strip().lower()
+
+
 def evaluate_ground_truth(csv_path: str):
-    """Read per_crash_detail.csv with human-labeled GroundTruth, compute precision/recall/F1."""
+    """Read per_crash_detail.csv with GroundTruth, compute precision/recall/F1."""
     if not os.path.isfile(csv_path):
         print(f"[!] {csv_path} not found. Run experiment first, then label GroundTruth column.")
         return
@@ -299,7 +457,7 @@ def evaluate_ground_truth(csv_path: str):
     with open(csv_path) as f:
         reader = csv.DictReader(f)
         for row in reader:
-            gt = row.get("GroundTruth", "").strip().lower()
+            gt = _ground_truth_value(row)
             if gt in ("true", "false", "1", "0", "yes", "no"):
                 row["_gt"] = gt in ("true", "1", "yes")
                 rows.append(row)
@@ -314,70 +472,133 @@ def evaluate_ground_truth(csv_path: str):
     print(f"{'='*70}\n")
 
     methods = {
-        "Old LLM (baseline)": lambda r: r["OldIsApiBug"].strip().lower() in ("true", "1"),
+        "Baseline LLM":       lambda r: r["BaselineIsApiBug"].strip().lower() in ("true", "1"),
         "Triage rules":       lambda r: r["TriageLabel"] in ("likely_api_bug", "needs_review"),
-        "Triage (new_is_api)": lambda r: r["NewIsApiBug"].strip().lower() in ("true", "1"),
+        "Triage (is_api)":    lambda r: r["TriageIsApiBug"].strip().lower() in ("true", "1"),
+        "Enhanced LLM":       lambda r: r["EnhancedIsApiBug"].strip().lower() in ("true", "1"),
     }
 
     for method_name, pred_fn in methods.items():
-        tp = fp = tn = fn = 0
-        for r in rows:
-            gt = r["_gt"]
-            pred = pred_fn(r)
-            if pred and gt:
-                tp += 1
-            elif pred and not gt:
-                fp += 1
-            elif not pred and gt:
-                fn += 1
-            else:
-                tn += 1
-
-        total = tp + fp + tn + fn
-        precision = tp / (tp + fp) if (tp + fp) else 0
-        recall = tp / (tp + fn) if (tp + fn) else 0
-        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0
-        accuracy = (tp + tn) / total if total else 0
-
+        m = _compute_metrics(rows, pred_fn)
         print(f"  Method: {method_name}")
-        print(f"    TP={tp} FP={fp} TN={tn} FN={fn}")
-        print(f"    Precision: {precision:.3f}  Recall: {recall:.3f}  F1: {f1:.3f}  Accuracy: {accuracy:.3f}")
+        print(f"    TP={m['TP']} FP={m['FP']} TN={m['TN']} FN={m['FN']}")
+        print(f"    Precision: {m['precision']:.3f}  Recall: {m['recall']:.3f}  "
+              f"F1: {m['f1']:.3f}  Accuracy: {m['accuracy']:.3f}")
         print()
 
     print("=" * 70)
 
 
+def evaluate_ablation_ground_truth(csv_path: str):
+    """Read ablation_per_crash.csv with GroundTruth, compute per-variant metrics.
+
+    This produces the key table for paper RQ5 (Ablation Study):
+      Variant | Precision | Recall | F1 | LLM Invocations
+
+    V2 uses the V1 judgment while saving calls through deduplication. Duplicate
+    judgments are materialized in the CSV before evaluation.
+    """
+    if not os.path.isfile(csv_path):
+        print(f"[!] {csv_path} not found.")
+        return
+
+    rows = []
+    with open(csv_path) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            gt = _ground_truth_value(row)
+            if gt in ("true", "false", "1", "0", "yes", "no"):
+                row["_gt"] = gt in ("true", "1", "yes")
+                rows.append(row)
+
+    if not rows:
+        print(f"[!] No GroundTruth labels found in {csv_path}.")
+        print(f"    Fill the GroundTruth column with True/False first.")
+        return
+
+    def _make_pred_fn(v):
+        """Build prediction function for each ablation variant."""
+        def pred_fn(r):
+            val = r.get(f"{v}_IsApiBug", "").strip().lower()
+            return val in ("true", "1")
+        return pred_fn
+
+    print(f"\n{'='*78}")
+    print(f"  ABLATION STUDY — GROUND TRUTH EVALUATION ({len(rows)} labeled crashes)")
+    print(f"{'='*78}\n")
+    print(f"  {'Variant':10s} {'Description':22s} {'Prec':>6s} {'Rec':>6s} {'F1':>6s} "
+          f"{'LLMCalls':>9s} {'TP':>4s} {'FP':>4s} {'TN':>4s} {'FN':>4s}")
+    print(f"  {'-'*76}")
+
+    results = []
+    for v in ABLATION_VARIANTS:
+        pred_fn = _make_pred_fn(v)
+        m = _compute_metrics(rows, pred_fn)
+        llm_calls = sum(
+            1 for r in rows
+            if r.get(f"{v}_SentToLLM", "").strip().lower() in ("true", "1")
+        )
+        print(f"  {v:10s} {ABLATION_DESCRIPTIONS.get(v, ''):22s} "
+              f"{m['precision']:6.3f} {m['recall']:6.3f} {m['f1']:6.3f} "
+              f"{llm_calls:9d} "
+              f"{m['TP']:4d} {m['FP']:4d} {m['TN']:4d} {m['FN']:4d}")
+        results.append((v, m, llm_calls))
+
+    print(f"\n  {'='*76}")
+    print(f"  Note: duplicate predictions are materialized per crash before evaluation.")
+    print(f"  LLMCalls counts only non-skipped invocations (dedup+triage saves).")
+    print(f"{'='*78}")
+
+    out_csv = csv_path.replace(".csv", "_results.csv")
+    with open(out_csv, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["Variant", "Description", "Precision", "Recall", "F1",
+                     "LLMInvocations", "TP", "FP", "TN", "FN"])
+        for v, m, llm_calls in results:
+            w.writerow([v, ABLATION_DESCRIPTIONS.get(v, ""), f"{m['precision']:.3f}",
+                         f"{m['recall']:.3f}", f"{m['f1']:.3f}",
+                         llm_calls, m["TP"], m["FP"], m["TN"], m["FN"]])
+    print(f"\n  Results CSV: {out_csv}")
+
+
 # ── main ─────────────────────────────────────────────────────────────────────
+
+def _load_reports_from_yaml(db_root: str, output_dir: str) -> Dict[str, Dict]:
+    """Load previously saved retroanalyze YAML results."""
+    projects = discover_projects(db_root)
+    all_reports = {}
+    for proj in projects:
+        retro_path = os.path.join(output_dir, f"{proj}_retro.yaml")
+        if os.path.isfile(retro_path):
+            with open(retro_path) as f:
+                all_reports[proj] = yaml.safe_load(f)
+    return all_reports
+
 
 def main():
     parser = argparse.ArgumentParser(
         description="Batch experiment runner for crash analysis comparison",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Run retroanalyze on all projects
-  python -m crash.experiment --db-root external_database --output results/
-
-  # Export CSV tables for paper
-  python -m crash.experiment --db-root external_database --output results/ --mode csv
-
-  # Evaluate after human labeling ground truth
-  python -m crash.experiment --evaluate results/per_crash_detail.csv
-        """,
     )
     parser.add_argument("--db-root", default="external_database",
                         help="Root directory containing project subdirs (default: external_database)")
     parser.add_argument("--output", default="results/",
                         help="Output directory for results (default: results/)")
-    parser.add_argument("--mode", choices=["retroanalyze", "summary", "csv"], default="retroanalyze",
-                        help="Mode: retroanalyze (full run), summary (re-aggregate), csv (export tables)")
+    parser.add_argument("--mode", choices=["retroanalyze", "summary", "csv", "ablation"],
+                        default="retroanalyze",
+                        help="Mode: retroanalyze (full run), summary (re-aggregate), "
+                             "csv (export tables), ablation (export ablation CSVs)")
     parser.add_argument("--evaluate", default=None,
-                        help="Path to per_crash_detail.csv with GroundTruth labels for evaluation")
+                        help="Path to per_crash_detail.csv with GroundTruth for evaluation")
+    parser.add_argument("--evaluate-ablation", default=None,
+                        help="Path to ablation_per_crash.csv with GroundTruth for per-variant evaluation")
     args = parser.parse_args()
 
-    # Ground truth evaluation mode
+    # Ground truth evaluation modes
     if args.evaluate:
         evaluate_ground_truth(args.evaluate)
+        return
+    if args.evaluate_ablation:
+        evaluate_ablation_ground_truth(args.evaluate_ablation)
         return
 
     os.makedirs(args.output, exist_ok=True)
@@ -402,16 +623,10 @@ Examples:
         export_per_project_csv(agg, args.output)
         export_per_crash_csv(all_reports, args.output)
         export_triage_distribution_csv(all_reports, args.output)
+        export_ablation_csv(all_reports, args.output)
 
     elif args.mode == "summary":
-        # Re-aggregate from saved YAML files
-        projects = discover_projects(args.db_root)
-        all_reports = {}
-        for proj in projects:
-            retro_path = os.path.join(args.output, f"{proj}_retro.yaml")
-            if os.path.isfile(retro_path):
-                with open(retro_path) as f:
-                    all_reports[proj] = yaml.safe_load(f)
+        all_reports = _load_reports_from_yaml(args.db_root, args.output)
         if not all_reports:
             print("[!] No saved retroanalyze results found. Run --mode retroanalyze first.")
             sys.exit(1)
@@ -419,14 +634,7 @@ Examples:
         print_aggregate(agg)
 
     elif args.mode == "csv":
-        # Re-aggregate and export CSVs
-        projects = discover_projects(args.db_root)
-        all_reports = {}
-        for proj in projects:
-            retro_path = os.path.join(args.output, f"{proj}_retro.yaml")
-            if os.path.isfile(retro_path):
-                with open(retro_path) as f:
-                    all_reports[proj] = yaml.safe_load(f)
+        all_reports = _load_reports_from_yaml(args.db_root, args.output)
         if not all_reports:
             print("[!] No saved retroanalyze results found. Run --mode retroanalyze first.")
             sys.exit(1)
@@ -435,6 +643,17 @@ Examples:
         export_per_project_csv(agg, args.output)
         export_per_crash_csv(all_reports, args.output)
         export_triage_distribution_csv(all_reports, args.output)
+        export_ablation_csv(all_reports, args.output)
+
+    elif args.mode == "ablation":
+        # Always re-run retroanalyze to ensure ablation_variants are computed
+        all_reports = run_all_retroanalyze(args.db_root, args.output)
+        if not all_reports:
+            print("[!] No projects with crash data found.")
+            sys.exit(1)
+        agg = aggregate_summary(all_reports)
+        print_aggregate(agg)
+        export_ablation_csv(all_reports, args.output)
 
 
 if __name__ == "__main__":

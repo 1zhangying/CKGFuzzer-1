@@ -103,36 +103,53 @@ class RepositoryAgent:
             return
 
         # Prepare the CodeQL command
-        codeql_command = f'/src/fuzzing_os/codeql/codeql database create /src/fuzzing_os/codeqldb/{args.project_name} --language={args.language}'
+        codeql_command = f'/src/fuzzing_os/codeql/codeql database create /src/fuzzing_os/codeqldb/{args.project_name} --language={args.language} --source-root=/src/{args.project_name}'
         
         if args.language in ['c', 'cpp', 'c++', 'java', 'csharp', 'go', 'java-kotlin']:
             codeql_command += f' --command="/src/fuzzing_os/wrapper.sh {args.project_name}"'
 
         # Run the Docker container with the CodeQL command
+        host_proxy = os.environ.get('http_proxy', os.environ.get('HTTP_PROXY', ''))
+        proxy_env = []
+        if host_proxy:
+            proxy_env = [
+                '-e', f'http_proxy={host_proxy}',
+                '-e', f'https_proxy={host_proxy}',
+                '-e', f'HTTP_PROXY={host_proxy}',
+                '-e', f'HTTPS_PROXY={host_proxy}',
+            ]
         command = [
             'docker', 'run', '--rm',
-            '--memory=4g', '--memory-swap=5g',  # Prevent OOM kill of host
+            '--network=host',
+            '--memory=4g', '--memory-swap=5g',
+            *proxy_env,
             '-v', f'{args.shared_llm_dir}:/src/fuzzing_os',
             '-t', image_name,
             '/bin/bash', '-c', codeql_command
         ]
 
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=10800)
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            stdout_lines = []
+            for line in process.stdout:
+                print(line, end='', flush=True)
+                stdout_lines.append(line)
+            process.wait(timeout=10800)
+            result_stdout = ''.join(stdout_lines)
         except subprocess.TimeoutExpired:
+            process.kill()
             logger.error(f"CodeQL database creation timed out after 3h for {args.project_name}")
             return
 
         change_folder_owner(f"{args.shared_llm_dir}/change_owner.sh", f'{args.shared_llm_dir}/codeqldb/{args.project_name}', USER_NAME)
 
-        if f"Successfully created database at /src/fuzzing_os/codeqldb/{args.project_name}" in result.stdout:
+        if f"Successfully created database at /src/fuzzing_os/codeqldb/{args.project_name}" in result_stdout:
             with open(f'{args.shared_llm_dir}/codeqldb/{args.project_name}/.successfully_created', 'w') as f:
                 f.write('')
-            logger.info(result.stdout)
+            logger.info(result_stdout)
             logger.info(f"Confirmed Successfully created database at /src/fuzzing_os/codeqldb/{args.project_name}")
         else:
-            print(result.stdout)
-            print(result.stderr)
+            print(result_stdout)
             assert False, f"Failed to create database at /src/fuzzing_os/codeqldb/{args.project_name}"
 
     def _add_repo_to_database(self, args: Dict) -> None:
@@ -143,7 +160,7 @@ class RepositoryAgent:
         # USER_NAME = getpass.getuser()
         if args.language in ['c','cpp', 'java', 'csharp','go', 'java-kotlin']:
             logger.info(f"args.shared_llm_dir {args.shared_llm_dir}")
-            command = ['-v', f'{os.path.abspath(args.shared_llm_dir)}:/src/fuzzing_os', '-t', f'gcr.io/oss-fuzz/{args.project_name}', '/bin/bash', '-c', f'/src/fuzzing_os/codeql/codeql database create /src/fuzzing_os/codeqldb/{args.project_name} --language={args.language}  --command="/src/fuzzing_os/wrapper.sh {args.project_name}" && chown -R 1000:1000 /src/fuzzing_os/codeqldb/{args.project_name}' ] # --command="/src/fuzzing_os/wrapper.sh {args.project_name} --source-root={args.project_name}
+            command = ['-v', f'{os.path.abspath(args.shared_llm_dir)}:/src/fuzzing_os', '-t', f'gcr.io/oss-fuzz/{args.project_name}', '/bin/bash', '-c', f'/src/fuzzing_os/codeql/codeql database create /src/fuzzing_os/codeqldb/{args.project_name} --language={args.language} --source-root=/src/{args.project_name} --command="/src/fuzzing_os/wrapper.sh {args.project_name}" && chown -R 1000:1000 /src/fuzzing_os/codeqldb/{args.project_name}' ]
         else:
             command = ['-v', f'{os.path.abspath(args.shared_llm_dir)}:/src/fuzzing_os', '-t', f'gcr.io/oss-fuzz/{args.project_name}', '/bin/bash', '-c', f'/src/fuzzing_os/codeql/codeql database create /src/fuzzing_os/codeqldb/{args.project_name} --language={args.language} && chown -R 1000:1000 /src/fuzzing_os/codeqldb/{args.project_name}' ] # --source-root={args.project_name}
         result,_ = docker_run(command, print_output=True, architecture='x86_64')
@@ -159,12 +176,10 @@ class RepositoryAgent:
             assert False, f"Failed to create database at /src/fuzzing_os/codeqldb/{args.project_name}"    
     
 
-    # read the function name and its source code name from the returned dict of extract_api_from_head
-    # pool_num=4修改为1 (DO NOT increase — memory limited machine)
     def extract_src_test_api_call_graph(self, data: Dict, pool_num=1) -> Dict:
         """
-        ToDO: multple thread SUPPORT, need to keep the copy database for each thread
-        Extracts the source and test API information from the repository.
+        Extracts call graph for all source functions.
+        Each function launches a separate CodeQL query (JVM) for accurate per-function analysis.
         """
         logger.info("Extracting source and test API information from the repository.")
         src_api = []
@@ -173,24 +188,31 @@ class RepositoryAgent:
             for item in fn_def_list:
                 fn_name = item['fn_meta']['identifier']
                 src_api.append((fn_name, src_file.replace(f'{args.shared_llm_dir}/source_code/', '/src/')))
-        
-        eggs = [ (api[0].strip(), api[1].strip(), self.database_db, self.output_results_folder, self.shared_llm_dir) for api in src_api ]
-        logger.info(f"Total number of API to be processed: {len(eggs)}")
+
+        logger.info(f"Total number of API to be processed: {len(src_api)}")
+        self._extract_call_graph_per_function(src_api, pool_num)
+
+    # pool_num=4修改为1 (DO NOT increase — memory limited machine)
+    def _extract_call_graph_per_function(self, src_api, pool_num=1) -> None:
+        eggs = [(api[0].strip(), api[1].strip(), self.database_db,
+                 self.output_results_folder, self.shared_llm_dir) for api in src_api]
+        logger.info(f"Per-function mode: {len(eggs)} functions, pool_num={pool_num}")
         logger.info("Copy Database for each thread.")
         for i in tqdm(range(pool_num)):
             shutil.copytree(self.database_db, f'{self.database_db}_{i}', dirs_exist_ok=True)
             queue_id.put(i)
 
-        with Pool(pool_num) as pool:   
-            results = list(tqdm(pool.imap(RepositoryAgent.handle_extract_api_call_graph_multiple_path, eggs), total=len(eggs), desc='Processing transactions'))     
-          
+        with Pool(pool_num) as pool:
+            results = list(tqdm(pool.imap(RepositoryAgent.handle_extract_api_call_graph_multiple_path, eggs),
+                                total=len(eggs), desc='Processing transactions'))
+
         for i in range(pool_num):
             shutil.rmtree(f'{self.database_db}_{i}')
 
     @staticmethod
     def handle_extract_api_call_graph_multiple_path(item):
         global queue_id
-        pid = os.getpid()  # Get the current process ID
+        pid = os.getpid()
         bid = queue_id.get()
         logger.info(f"============================ {pid} Consuming {bid}")
         fn_name, fn_file_name, dbbase, outputfolder, shared_llm_dir = item
@@ -199,25 +221,19 @@ class RepositoryAgent:
 
     @staticmethod
     def _extract_call_graph(shared_llm_dir, fn_name, fn_file_name, dbbase, outputfolder, pid):
-        """
-        Extracts the call graph from the repository.
-        """
         logger.info("Extracting call graph from the repository.")
         extract_shell_script = f"{shared_llm_dir}/qlpacks/cpp_queries/extract_call_graph.sh"
         pname = fn_file_name.replace('/', '_')
         if os.path.isfile(extract_shell_script):
             if not os.path.isfile(f"{outputfolder}/call_graph/{pname}@{fn_name}_call_graph.bqrs"):
                 logger.info(f"{outputfolder}/call_graph/{pname}@{fn_name}_call_graph.bqrs")
-                # convert dbbase and outputfolder to the absolute path
                 dbbase = os.path.abspath(dbbase)
                 outputfolder = os.path.abspath(outputfolder)
-                #fn_name="ares__dns_options_free"
                 logger.info(f"Extracting call graph for {fn_name} in {fn_file_name}.")
                 run_command([extract_shell_script, fn_name, fn_file_name, dbbase, outputfolder, str(pid)])
                 logger.info("Call graph is converted into the csv file.")
-                #fn_file="${fn_file//\//_}"
             if not os.path.isfile(f"{outputfolder}/call_graph/{pname}@{fn_name}_call_graph.csv"):
-                run_converted_csv(f"{outputfolder}/call_graph/{pname}@{fn_name}_call_graph.bqrs")  
+                run_converted_csv(f"{outputfolder}/call_graph/{pname}@{fn_name}_call_graph.bqrs")
         else:
             assert False, f"Extract call graph shell script {extract_shell_script} does not exist. PWD {os.getcwd()}"
               
@@ -231,6 +247,11 @@ class RepositoryAgent:
         "libtiff": "libtiff",
         "libvpx": "libvpx",
         "zlib": "zlib",
+        "json-c": "json-c",
+        "uriparser": "uriparser",
+        "tinyxml2": "tinyxml2",
+        "expat": "expat",
+        "yaml-cpp": "yaml-cpp",
     }
 
     def copy_source_code_fromDocker(self):

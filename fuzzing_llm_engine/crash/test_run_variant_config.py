@@ -1,0 +1,36 @@
+"""Tests for the controlled run/prompt compatibility matrix."""
+from __future__ import annotations
+
+import unittest
+
+from crash.run_variant_config import validate_run_prompt_variant
+
+
+class RunVariantConfigTest(unittest.TestCase):
+    def test_v0_supports_the_clean_direct_prompt_without_context(self) -> None:
+        validate_run_prompt_variant("V0", "direct_v1")
+
+    def test_v2_supports_the_clean_direct_prompt_without_context(self) -> None:
+        validate_run_prompt_variant("V2", "direct_v1")
+
+    def test_existing_controlled_pairs_remain_valid(self) -> None:
+        for run_variant, prompt_variant in (
+            ("V0", "direct_v1"),
+            ("V1", "differential"),
+            ("V2", "differential"),
+            ("V3", "differential"),
+            ("V4", "direct_v1"),
+        ):
+            with self.subTest(run_variant=run_variant, prompt_variant=prompt_variant):
+                validate_run_prompt_variant(run_variant, prompt_variant)
+
+    def test_invalid_pair_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "V4 requires"):
+            validate_run_prompt_variant("V4", "differential")
+
+        with self.assertRaisesRegex(ValueError, "V0 requires"):
+            validate_run_prompt_variant("V0", "differential")
+
+
+if __name__ == "__main__":
+    unittest.main()

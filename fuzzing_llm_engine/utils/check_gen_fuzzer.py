@@ -243,7 +243,10 @@ def extract_code(s):
 def docker_exec_command(run_args, project_name, print_output=True):
   """Calls `docker run`."""
   command = [
-      'docker', 'exec', '-u', 'root','-it', project_name+"_check" ]
+      'docker', 'exec', '-u', 'root' ]
+  if sys.stdin.isatty():
+    command.append('-it')
+  command.append(project_name+"_check")
   command.extend(run_args)
   #logger.info(' '.join(command))
   try:
@@ -514,6 +517,20 @@ def coverage(args):
     coverage_cmds.append(args.fuzz_target)
 
   coverage_cmds = " ".join( coverage_cmds )
+  if args.coverage_timeout:
+    if not re.match(r'^\d+[smhd]?$', args.coverage_timeout):
+      logger.error('Invalid --coverage_timeout value: %s',
+                   args.coverage_timeout)
+      return False
+    coverage_cmds = (
+        f"timeout -k 30s {args.coverage_timeout} {coverage_cmds}; "
+        "status=$?; "
+        "if [ $status -eq 124 ] || [ $status -eq 137 ]; then "
+        f"echo COVERAGE_TIMEOUT_AFTER_{args.coverage_timeout}; "
+        "exit $status; "
+        "fi; "
+        "exit $status"
+    )
   # command += ["/bin/bash", "-c", "bash /fuzz_driver/entrancy.sh && compile"] 
   # command += [ "-v", f"/home/mawei/Desktop/work1/wei/fuzzing_llm/fuzzing_os/oss-fuzz-modified/docker_shared/:/fuzz_driver" ]
   run_args.extend(
@@ -530,7 +547,9 @@ def coverage(args):
   )
   logger.info(f"Coverage docker command: {run_args}")
   result = docker_run(run_args, architecture=args.architecture)
-  if result:
+  if isinstance(result, str) and "COVERAGE_TIMEOUT_AFTER_" in result:
+    logger.error('Coverage timed out.')
+  elif result:
     logger.info('Successfully generated clang code coverage report.')
   else:
     logger.error('Failed to generate clang code coverage report.')
@@ -823,6 +842,9 @@ def get_parser():  # pylint: disable=too-many-statements,too-many-locals
   coverage_parser.add_argument(
       '--fuzz_driver_file', help='fuzz driver file name'
   )
+  coverage_parser.add_argument(
+      '--coverage_timeout',
+      help='maximum time for a single coverage collection, e.g. 10m')
   coverage_parser.add_argument('extra_args',
                                help='additional arguments to '
                                'pass to llvm-cov utility.',
@@ -1164,7 +1186,10 @@ def build_fuzzer_file(args):
     #logger.info(' '.join(command))
     result = docker_exec_command(command, project_name)
     if len(result) > 5000:
-      result = extract_errors(result)
+      if "Compilation succeeded" in result:
+        result = "Compilation succeeded"
+      else:
+        result = extract_errors(result)
     return result
     
      

@@ -21,10 +21,10 @@ cd libpcap
 # build project
 mkdir -p build
 cd build
-cmake ..
+cmake -DENABLE_REMOTE=ON ..
 make
 
 $CXX $CXXFLAGS  -I/src/libpcap -c $SRC/libpcap/tests/FUZZ_DRIVER_FILE -o $WORK/FUZZ_DRIVER_FILE_TARGET.o
 $CXX $CXXFLAGS  -std=c++11 $WORK/FUZZ_DRIVER_FILE_TARGET.o \
     -o $OUT/FUZZ_DRIVER_FILE_TARGET \
-    $LIB_FUZZING_ENGINE libpcap.a
+    $LIB_FUZZING_ENGINE libpcap.a -lssl -lcrypto

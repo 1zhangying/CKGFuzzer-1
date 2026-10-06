@@ -15,31 +15,26 @@ def extract_api_from_file(src_api_file_path):
 
     api_file_dict = {}
     api_cnt = 0
-    for key,value in src_api_data.items():
-        if key == "src":
-            for src_key,src_value in value.items():
-                api_file = src_key.split('/')[-1]
-                #api_file_dict[api_file] = {}
-                apis = {}
-                for key,value in src_value.items():
-                    if key == "fn_def_list":
-                        for api in value:
-                            api_dict = {}
-                            api_name = api["fn_meta"]["identifier"]
-                            if api_name == '':
-                                continue
-                            if api_name in api_list:
-                                api_cnt += 1
-                                apis[api_name] = ''
-                if apis:
-                    api_file_dict[api_file] = apis
+    for section in ("src", "head"):
+        for src_key, src_value in src_api_data.get(section, {}).items():
+            api_file = src_key.split('/')[-1]
+            apis = api_file_dict.get(api_file, {})
+            for key, value in src_value.items():
+                if key == "fn_def_list":
+                    for api in value:
+                        api_name = api["fn_meta"]["identifier"]
+                        if api_name == '':
+                            continue
+                        if api_name in api_list:
+                            api_cnt += 1
+                            apis[api_name] = ''
+            if apis:
+                api_file_dict[api_file] = apis
     print(api_cnt)
     # Check if the directory exists, if not create it
     os.makedirs(os.path.dirname(api_summary_path), exist_ok=True)
-    # Check if the file exists, if not create it
-    if not os.path.exists(api_summary_path):
-        with open(api_summary_path, "w", encoding='utf-8') as f:
-            json.dump(api_file_dict, f, indent=2, sort_keys=True, ensure_ascii=False)  
+    with open(api_summary_path, "w", encoding='utf-8') as f:
+        json.dump(api_file_dict, f, indent=2, sort_keys=True, ensure_ascii=False)  
     # Copy api_summary file to src_api_file_path/api_combine
     api_combine_dir = os.path.join(src_api_file_path, "api_combine")
     os.makedirs(api_combine_dir, exist_ok=True)
@@ -107,18 +102,17 @@ def extract_fn_code(src_api_file_path):
     same_api_list = []
     api_code = ""
     api_cnt = 0
-    for key,value in src_api_data.items():
-        if key == "src":
-            for src_key,src_value in value.items():
-                api_file = src_key.split('/')[-1]
-                for key,value in src_value.items():
-                    if key == "fn_def_list":
-                        for api in value:
-                            api_name = api["fn_meta"]["identifier"]
-                            api_code = api["fn_code"]
-                            if api_name in api_list:
-                                api_cnt += 1
-                                api_code_dict[api_name] = api_code
+    for section in ("src", "head"):
+        for src_key, src_value in src_api_data.get(section, {}).items():
+            api_file = src_key.split('/')[-1]
+            for key, value in src_value.items():
+                if key == "fn_def_list":
+                    for api in value:
+                        api_name = api["fn_meta"]["identifier"]
+                        api_code = api["fn_code"]
+                        if api_name in api_list:
+                            api_cnt += 1
+                            api_code_dict[api_name] = api_code
   
     print(api_cnt)
     with open(api_code_path, 'w', encoding="utf-8") as f:
@@ -170,11 +164,32 @@ def combine_call_graph(src_api_file_path):
 
     combined_csv = pd.concat(data_frames, ignore_index=True)
 
+    # Dedup pass 1: remove fully identical rows.
+    rows_before_exact = len(combined_csv)
+    combined_csv = combined_csv.drop_duplicates(ignore_index=True)
+    rows_after_exact = len(combined_csv)
+
+    # Dedup pass 2: remove repeated call relations.
+    # A relation is identified by caller/callee function and source file pair.
+    relation_key_cols = ['caller', 'callee', 'caller_src', 'callee_src']
+    relation_key_cols = [c for c in relation_key_cols if c in combined_csv.columns]
+    rows_before_relation = len(combined_csv)
+    if relation_key_cols:
+        combined_csv = combined_csv.drop_duplicates(
+            subset=relation_key_cols, keep='first', ignore_index=True
+        )
+    rows_after_relation = len(combined_csv)
+
     if combined_csv.empty:
         print("Combined DataFrame is empty. Check your CSV files and api_list.")
     else:
         print(f"Combined DataFrame shape: {combined_csv.shape}")
-        print(combined_csv)
+        print(
+            "Dedup stats: "
+            f"exact_removed={rows_before_exact - rows_after_exact}, "
+            f"relation_removed={rows_before_relation - rows_after_relation}, "
+            f"final_rows={rows_after_relation}"
+        )
     # Create the 'api_combine' directory if it doesn't exist
     api_combine_dir = os.path.join(src_api_file_path, 'api_combine')
     if not os.path.exists(api_combine_dir):
@@ -235,8 +250,5 @@ if __name__ == "__main__":
 
     
     
-
-
-
 
 
