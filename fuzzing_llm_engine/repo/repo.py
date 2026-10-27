@@ -121,7 +121,7 @@ class RepositoryAgent:
         command = [
             'docker', 'run', '--rm',
             '--network=host',
-            '--memory=4g', '--memory-swap=5g',
+            f'--memory={args.memory}', f'--memory-swap={args.memory_swap}',
             *proxy_env,
             '-v', f'{args.shared_llm_dir}:/src/fuzzing_os',
             '-t', image_name,
@@ -415,6 +415,8 @@ def setup_parser() -> argparse.ArgumentParser:
     parser.add_argument('--build_command', type=str, default="/src/fuzzing_os/build_c_ares.sh", help='Build command')
     parser.add_argument('--project_build_info', type=str, default=None, help='Build information of the project')
     parser.add_argument('--environment_vars', dest='environment_vars', action='append', help="Set environment variable e.g., VAR=value")
+    parser.add_argument('--memory', type=str, default="8g", help='CodeQL container memory limit')
+    parser.add_argument('--memory-swap', type=str, default="9g", help='CodeQL container memory+swap limit')
     parser.add_argument('--engine', default=constants.DEFAULT_ENGINE, choices=constants.ENGINES, help='Engine used for building')
     parser.add_argument('--architecture', default=constants.DEFAULT_ARCHITECTURE, choices=constants.ARCHITECTURES, help='CPU architecture')
     parser.add_argument('--sanitizer', default=None, choices=constants.SANITIZERS, help='Sanitizer type')

@@ -37,7 +37,11 @@ def get_model(llm_config=None):
 
 def get_embedding_model(llm_config=None, device='cpu'):
     if llm_config is None:
-        return HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5",device=device)
+        embedding_model = os.environ.get(
+            "EMBEDDING_MODEL_PATH",
+            "BAAI/bge-small-en-v1.5",
+        )
+        return HuggingFaceEmbedding(model_name=embedding_model, device=device)
         #return OllamaEmbedding( model_name = "llama3:70b", base_url="http://csl-server14.dynip.ntu.edu.sg:51030", ollama_additional_kwargs={"mirostat": 0})
     model_name = llm_config['model']
     if model_name.startswith("openai"):

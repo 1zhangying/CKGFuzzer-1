@@ -587,6 +587,7 @@ def enrich_project(
     dry_run: bool = False,
     backup: bool = True,
     prefer_build_out: bool = False,
+    driver_filter: str | None = None,
 ) -> Dict[str, Any]:
     """Enrich all crashes for one project."""
 
@@ -605,10 +606,14 @@ def enrich_project(
         if os.path.isdir(os.path.join(crash_dir, d))
         and os.path.isfile(os.path.join(crash_dir, d, "crash_analysis.yaml"))
     )
+    if driver_filter:
+        target = os.path.splitext(os.path.basename(driver_filter.strip()))[0]
+        driver_dirs = [d for d in driver_dirs if d == target]
 
     if not driver_dirs:
-        logger.info(f"[{project_name}] No crash_analysis.yaml found")
-        return {"project": project_name, "status": "no_crashes"}
+        status = "driver_not_found" if driver_filter else "no_crashes"
+        logger.info(f"[{project_name}] No matching crash_analysis.yaml found")
+        return {"project": project_name, "status": status}
 
     logger.info(f"\n{'='*60}")
     logger.info(f"  Enriching: {project_name} ({len(driver_dirs)} drivers)")
@@ -797,6 +802,9 @@ Examples:
                         help="Root directory (default: external_database)")
     parser.add_argument("--project", default=None,
                         help="Specific project to enrich (default: all)")
+    parser.add_argument("--driver", default=None,
+                        help="Only enrich one fuzz driver (.cc filename or "
+                             "crash-directory basename)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Preview only, do not modify files")
     parser.add_argument("--no-backup", action="store_true",
@@ -834,6 +842,7 @@ Examples:
             dry_run=args.dry_run,
             backup=not args.no_backup,
             prefer_build_out=args.rebuild_asan and not args.dry_run,
+            driver_filter=args.driver,
         )
         all_results[proj] = result
 

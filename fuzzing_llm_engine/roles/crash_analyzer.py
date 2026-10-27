@@ -704,8 +704,8 @@ def _extract_decisive_evidence_context(
         )
 
     lines = [
-        "[DECISIVE-EVIDENCE] Uniform auto-generated audit; no ground-truth labels are used.",
-        "Before returning is_api_bug=true, explicitly resolve every high-priority negative item below using concrete source/runtime/API evidence. Generic 'library should handle malformed input' language is not enough.",
+        "[DECISIVE-EVIDENCE] Uniform auto-generated audit candidates; no ground-truth labels are used.",
+        "These items are inspection prompts, not negative evidence or labels. Their mere presence does not demonstrate driver misuse and must not by itself change the attribution. Resolve each applicable item against the actual crash path, driver source, target source, and visible contracts. Generic 'library should handle malformed input' language is not enough for either attribution.",
     ]
     if negative_items:
         lines.append("High-priority negative evidence to resolve:")
@@ -1057,9 +1057,10 @@ def _extract_precondition_risk_context(fuzz_driver: str, window: int = 4) -> str
         return "[PRECONDITION] No obvious caller-precondition risk pattern detected by the lightweight source scan."
 
     return (
-        "[PRECONDITION] Lightweight source scan flags possible caller-precondition risks below. "
-        "These are not ground truth, but every listed risk must be explicitly resolved before returning is_api_bug=true. "
-        "If a listed risk explains the crash and no visible target API contract requires tolerance, it is driver_evidence. "
+        "[PRECONDITION] Lightweight source scan lists possible caller-precondition checks below. "
+        "They are candidate checks, not findings, ground truth, or negative labels. "
+        "A listed pattern demonstrates driver evidence only when the actual driver code and the exposed or visible API contract establish the concrete violation on the crash path; pattern presence alone must not produce a false attribution. "
+        "Conversely, do not infer target tolerance from generic robustness language when the concrete caller violation is visible. "
         "A cleanup/deallocator risk is relevant only when the crash happens during cleanup/deallocator/destructor processing or the cleanup call is on the causal path; ignore normal cleanup that appears after an already-reported post-call oracle.\n\n"
         + "\n\n".join(findings[:18])
     )
@@ -1129,6 +1130,9 @@ class EnhancedCrashAnalysis(BaseModel):
     caller_precondition_verdict: str = "unclear"
     precondition_violations: List[str] = []
     tolerance_contract_evidence: str = ""
+    driver_misuse_evidence_strength: str = "unclear"
+    driver_misuse_location: Optional[str] = ""
+    target_surface_evidence: Optional[str] = ""
     is_api_bug: bool
     crash_category: str
     root_cause_type: str
@@ -1233,6 +1237,9 @@ _DIFFERENTIAL_DECISION_OUTPUT_CONTRACT = """
 Return exactly one valid JSON object and no markdown or surrounding text. Use this schema:
 {
   "caller_precondition_verdict": "valid|violated|unclear",
+  "driver_misuse_evidence_strength": "hard|soft|none",
+  "driver_misuse_location": "exact driver file:line and violated contract, or empty string",
+  "target_surface_evidence": "the public target input/object/state that reaches the failing operation, or empty string",
   "precondition_violations": ["concrete caller-side violation, or empty list"],
   "tolerance_contract_evidence": "visible target API contract requiring tolerance of the listed violation, or empty string",
   "is_api_bug": true,
@@ -1398,6 +1405,290 @@ If the timeout can be explained by normal blocking behavior, environment-depende
 """
 
 
+_DIFFERENTIAL_V2_DECISION_OUTPUT_CONTRACT = """
+Return exactly one valid JSON object and no markdown or surrounding text. Use this schema:
+{
+  "caller_precondition_verdict": "valid|violated|unclear",
+  "precondition_violations": ["concrete caller-side violation, or empty list"],
+  "tolerance_contract_evidence": "visible target API contract relevant to the exact behavior under review, or empty string",
+  "is_api_bug": true,
+  "crash_category": "string",
+  "root_cause_type": "string",
+  "root_cause_location": "file:line, unknown when unavailable",
+  "root_cause_trigger": "string",
+  "severity": "critical|high|medium|low|unknown",
+  "data_flow": ["ordered key step"],
+  "fix_suggestion": "string",
+  "confidence": 0.0,
+  "decision_basis": "target_evidence|driver_evidence|insufficient_evidence",
+  "evidence_summary": "short causal explanation that identifies the fault origin and the decisive contract evidence"
+}
+
+The JSON fields are outputs of your own analysis, not evidence to be copied from
+the prompt. Fill them only after comparing both attribution hypotheses.
+"""
+
+
+_DIFFERENTIAL_V2_ANALYSIS_INSTRUCTIONS = """Analyze the supplied evidence to determine whether the fault originates
+in the primary target component or in the generated fuzz driver.
+
+The sanitizer's crash-frame location is a symptom, not sufficient attribution
+evidence. Do not use prior labels, expected label distributions, benchmark
+outcomes, or prompt-variant names as evidence.
+
+First reconstruct the causal path:
+- Identify the target-facing calls and their actual arguments.
+- Determine where each buffer, object, handle, length, and state originated.
+- Trace ownership, lifetime, initialization, and required state transitions.
+- Determine which properties are attacker-controlled data and which are
+  caller-side call-contract properties.
+
+Separate malformed data from malformed calls:
+- Malformed bytes delivered through a documented data buffer and explicit
+  length are legitimate fuzz input. The target may still be responsible for
+  crashing on such input.
+- Invalid pointer provenance, a pointer/length relation that exceeds the
+  underlying allocation, an invalid object representation, an incompatible
+  lifecycle or ownership transition, or an impossible required state is a
+  caller-side contract problem.
+- Missing required storage capacity, termination, alignment, padding, or
+  sentinel state is a caller-side contract problem when the target source
+  requires that property.
+- Starting from an invalid protocol state is a caller-side problem, whereas
+  malformed payload received after a valid state transition can expose a
+  target defect.
+- Ignoring a required transition or status check before later processing is a
+  caller-side problem.
+
+Evaluate component scope:
+- A primary-target defect belongs to the component under evaluation or to a
+  dependency exposed through its documented public behavior.
+- A crash from the driver directly invoking an auxiliary or separately scoped
+  dependency is not sufficient evidence for a primary-target defect unless the
+  evidence establishes that dependency as part of the evaluated target surface.
+
+Perform two counterfactual comparisons:
+
+Driver-repair hypothesis:
+Keep the same attacker-controlled data, but use a documented valid call
+structure, state sequence, pointer provenance, allocation extent, required
+storage capacity, and lifecycle. Would the same invalid memory access or broken
+invariant still occur?
+
+Target-defect hypothesis:
+Assume every visible call and state contract is satisfied. Is there a specific
+target-side rule, arithmetic path, lifetime behavior, or validation failure
+that still produces the crash?
+
+Decision criteria:
+- Return true only when the target-defect hypothesis is more specifically
+  supported and the driver-repair hypothesis does not explain the crash.
+- Return false when a caller-side contract or state-sequence problem is the
+  more specific cause.
+- Do not return true merely because the crash frame is in target code, a target
+  function appears in the stack, or an additional defensive check could have
+  prevented the crash.
+- Do not return false merely because the payload bytes are attacker-controlled
+  or malformed.
+- Prefer causal specificity over generic robustness claims.
+- If the evidence conflicts or is incomplete, make the best-supported binary
+  decision and explain the unresolved evidence and confidence in the JSON.
+
+When the supplied evidence contains a public vulnerability reference, require
+agreement in the crashing path, affected code, and affected-version evidence.
+A match by symbol name alone is insufficient.
+
+Before finalizing the JSON, perform one internal rebuttal:
+- State the strongest evidence against the current decision.
+- Check whether malformed payload data was mistaken for caller-contract misuse.
+- Check whether caller-contract misuse was mistaken for a missing target check.
+- Check whether the crashing operation was reached through a valid state
+  sequence and the evaluated component surface.
+- Change the decision if the supplied evidence supports the opposite
+  attribution more strongly.
+
+Explain the fault origin, the decisive caller or target contract, and why the
+selected hypothesis is more specific. Do not manufacture source facts,
+contracts, runtime state, or public references.
+"""
+
+
+_DIFFERENTIAL_V3_DECISION_OUTPUT_CONTRACT = """
+Return exactly one valid JSON object and no markdown or surrounding text. Use this schema:
+{
+  "caller_precondition_verdict": "valid|violated|unclear",
+  "driver_misuse_evidence_strength": "hard|soft|none",
+  "driver_misuse_location": "exact driver file:line and violated contract, or empty string",
+  "target_surface_evidence": "the public target input/object/state that reaches the failing operation, or empty string",
+  "precondition_violations": ["concrete caller-side violation, or empty list"],
+  "tolerance_contract_evidence": "visible target API contract relevant to the exact behavior under review, or empty string",
+  "is_api_bug": true,
+  "crash_category": "string",
+  "root_cause_type": "string",
+  "root_cause_location": "file:line, unknown when unavailable",
+  "root_cause_trigger": "string",
+  "severity": "critical|high|medium|low|unknown",
+  "data_flow": ["ordered key step"],
+  "fix_suggestion": "string",
+  "confidence": 0.0,
+  "decision_basis": "target_evidence|driver_evidence|insufficient_evidence",
+  "evidence_summary": "short causal explanation that identifies the fault origin and the decisive evidence"
+}
+
+The fields are outputs of your own analysis. Set driver_misuse_evidence_strength
+to "hard" only when the exact driver code and a visible or source-supported
+contract establish a decisive caller violation. A plausible repair, absent
+documentation, or a generic request for more defensive validation is "soft".
+"""
+
+
+_DIFFERENTIAL_V3_ANALYSIS_INSTRUCTIONS = """Analyze the supplied evidence to determine whether the crash should be
+attributed to the primary target component or is decisively caused by the
+generated fuzz driver.
+
+This is not a test of whether the driver is an ideal harness. Incompetent or
+contract-violating generated drivers are expected. The question is which
+hypothesis better explains the observed target failure.
+
+Do not use prior labels, project identities, expected label distributions,
+benchmark outcomes, public-reference names, or prompt-version names as labels.
+Use them only when the evidence independently establishes the same crash path
+and affected behavior.
+
+Step 1: reconstruct the causal path.
+- Identify the target-facing call that admitted the input or created the failing
+  state.
+- Trace the origin, ownership, lifetime, allocation extent, and validation of
+  every relevant pointer, object, length, and state value.
+- Separate attacker-controlled payload bytes from caller-controlled call
+  structure and from target-created state.
+
+Step 2: classify suspected driver misuse. Do not treat every suspicion as a
+proven violation.
+
+Hard misuse requires exact evidence from the driver and, where applicable, a
+visible header, API contract, source implementation, or reproduced state:
+- A pointer is NULL, freed, out of allocation, or incompatible with the object
+  type expected by the called API.
+- A pointer/length pair exceeds the backing allocation for an API that is
+  plainly a raw memory copy/read operation and has no protocol-level way to
+  validate the claimed extent.
+- An object was fabricated with the wrong concrete layout or passed to the
+  wrong allocator/deallocator family.
+- A target-created object or handle was closed, freed, or invalidated before a
+  later use.
+- The driver demonstrably ignored a status or required state transition whose
+  documented failure leaves the later call invalid. The evidence must show the
+  failed status or invalid state, not merely infer it from a missing check.
+- Visible API documentation explicitly forbids the exact argument or state
+  transition used by the driver.
+
+The following are generally soft concerns, not hard misuse:
+- malformed or adversarial payload bytes delivered in a declared data buffer;
+- extreme but type-correct scalar lengths, counts, indices, or metadata values
+  accepted by a public API;
+- mutation of fields on a live object created by the matching target
+  constructor or open/new/parse API when that public API later accepts the
+  object;
+- a callback receiving a name, path, token, or output state produced by the
+  target parser;
+- a public file, URI, source, or resource string that the target API is
+  responsible for parsing, opening, or rejecting;
+- deeply nested, highly repetitive, or otherwise structurally hostile input
+  delivered through a documented byte-buffer API;
+- the mere absence of an additional defensive check, bounds check, recursion
+  limit, or error check inside the target;
+- incomplete source visibility or an unavailable reproduction by itself.
+
+Step 3: apply a symmetric decision rule.
+- If hard misuse is established and no visible contract requires the target to
+  tolerate that exact behavior, return false.
+- If no hard misuse is established, determine whether a target-side memory
+  operation, assertion, resource non-progress, or invariant still fails on the
+  admitted public input or target-created state. Return true when that
+  target-side failure is more specific than a soft misuse hypothesis.
+- Do not return false merely because a stricter driver could have avoided the
+  crash, the final sanitizer frame is in driver-adjacent code, or the input is
+  malformed.
+- Do not return true merely because the crash frame is in target code. For true
+  attribution, name the target-side operation or invariant that fails and the
+  public path through which the relevant input or state reached it.
+
+Step 4: perform the counterfactual correctly.
+- Driver-repair hypothesis: repair only a concrete hard misuse identified in
+  the actual driver while preserving the same attacker-controlled data values.
+  Do not invent a different API, a different object, or a more defensive target
+  implementation and call that a driver repair.
+- Target-defect hypothesis: keep the same public input values and valid call
+  structure. Identify the target rule, arithmetic, lifetime, validation, or
+  resource behavior that still fails.
+- If the only difference between hypotheses is the target gaining a generic
+  defensive check, the comparison is insufficient for false attribution when
+  the crash is a concrete memory-safety or non-progress failure reached through
+  the public boundary.
+
+Before finalizing, audit both mistakes:
+- Did you label an attacker-controlled data value as caller misuse?
+- Did you infer a precondition that is not present in visible documentation or
+  source?
+- Did you ignore an explicit positive boundary candidate in the evidence?
+- Did you call an unverified initialization failure or object defect "hard"
+  without showing the failed status or invalid layout?
+- Conversely, did you excuse a wrong deallocator, fabricated object, invalid
+  pointer, or invalid lifetime merely because the final crash remained in target
+  code?
+
+Prefer the most concrete causal explanation. Do not manufacture source facts,
+contracts, runtime state, or public references.
+"""
+
+
+_DIFFERENTIAL_V4_ANALYSIS_INSTRUCTIONS = _DIFFERENTIAL_V3_ANALYSIS_INSTRUCTIONS + """
+
+Final arbitration rules for boundary cases:
+
+- A callback registered through a public target API and invoked by the target
+  parser, decoder, resolver, or event loop is executing on target-produced
+  output. Do not classify the callback as hard misuse merely because it
+  dereferences or bounds-checks a target-produced name, path, token, buffer, or
+  state. The callback is useful evidence that the target produced an invalid
+  value, unless the callback itself overwrites or frees target-owned memory.
+- If the evidence identifies a live object created by the matching target
+  constructor/open/new/parse API and the driver changes fields that are visible
+  through a public definition, classify that action as at most soft evidence.
+  A crash in a later public target operation that computes addresses, sizes, or
+  bounds from those fields supports target attribution.
+- A caller-owned public structure that is actually allocated and passed with
+  its declared size is not "uninitialized" merely because its field values are
+  derived from adversarial bytes. Treat it as boundary data. It is hard misuse
+  only when the storage itself is absent, too small for the declared type, or
+  contains a pointer that the driver never made usable.
+- Do not infer that a special scalar value, sentinel, negative index, or
+  unusual stream state is forbidden unless the visible API/header/source
+  establishes that restriction or the evidence shows the corresponding call
+  returned an explicit failure.
+- When no hard misuse is established and the evidence identifies a
+  target-side memory operation, assertion, non-progress path, or invariant
+  failure reached through target-created state, return true.
+- Final fields must be internally consistent:
+  driver_misuse_evidence_strength="hard" supports false only when that misuse
+  is the decisive cause;
+  decision_basis="target_evidence" together with soft/no hard misuse supports
+  true;
+  decision_basis="driver_evidence" requires the concrete driver-side cause.
+- A generic robustness statement or the statement that a different driver
+  could avoid the input is not enough to set hard misuse.
+"""
+
+
+_DIFFERENTIAL_V4_DECISION_OUTPUT_CONTRACT = _DIFFERENTIAL_V3_DECISION_OUTPUT_CONTRACT + """
+Before returning, verify that is_api_bug agrees with decision_basis.
+If decision_basis is "target_evidence", use is_api_bug=true unless a concrete
+hard misuse is also identified and is the direct cause. If the final answer is
+false, driver_misuse_evidence_strength must not be "none".
+"""
+
+
 _DIRECT_V1_OUTPUT_CONTRACT = """
 Return exactly one valid JSON object and no markdown or surrounding text. Use this schema:
 {
@@ -1417,7 +1708,13 @@ Return exactly one valid JSON object and no markdown or surrounding text. Use th
   "evidence_summary": "short explanation naming the decisive evidence"
 }
 
-State the final attribution supported by the supplied evidence. Report concrete caller-side violations only when they are visible in the evidence, and record missing evidence in decision_basis or evidence_summary. Do not invent source facts, contracts, or runtime state.
+State the final attribution supported by the supplied evidence. Report concrete
+caller-side violations only when they are visible in the evidence, and record
+missing evidence in decision_basis or evidence_summary. Do not invent source
+facts, contracts, or runtime state. Set driver_misuse_evidence_strength to
+"hard" only when a concrete driver-side misuse is the decisive cause; use
+"soft" for avoidability or defensive-check concerns that do not establish
+caller-contract misuse.
 """
 
 
@@ -1460,7 +1757,67 @@ Compare the target-component-defect and driver-misuse hypotheses using concrete 
 
 _DIRECT_V1_ANALYSIS_INSTRUCTIONS = """Based on the supplied evidence, determine the final attribution for this crash.
 
-The pre-filter labeled this crash as "{triage_label}" with confidence {triage_confidence}. Use the crash details, source code, and runtime context as available. State the final attribution directly, then follow the final JSON output contract."""
+The pre-filter labeled this crash as "{triage_label}" with confidence
+{triage_confidence}. Treat that label as routing information, not ground truth
+or direct evidence.
+
+Reconstruct the fault path at the level supported by the supplied evidence.
+Identify which values and objects came from attacker-controlled input, which
+were created by the target, and which call structure or lifetime was controlled
+by the driver. Then state the final attribution directly.
+
+Use driver attribution only when the evidence identifies a concrete
+driver-side violation that is decisive for this crash, such as an invalid
+pointer, wrong allocation/deallocation family, invalid object layout, invalid
+lifetime or state transition, or a required failure/status transition that was
+demonstrably ignored. Malformed payload bytes, an extreme value accepted by a
+public parameter, a target-produced callback value, or the fact that a
+different driver could avoid the crash do not by themselves establish hard
+driver misuse.
+
+Use target attribution when the evidence identifies a target-side memory
+operation, assertion, non-progress path, or invariant failure reached through
+an admitted public input or target-created state. Do not require the target to
+have an explicit promise to tolerate arbitrary malformed payloads; the decisive
+question is whether the concrete driver defect better explains how the invalid
+state was produced.
+
+Keep the final fields internally consistent. If decision_basis is
+"target_evidence", is_api_bug should be true unless a concrete hard driver
+misuse is also identified as the direct cause. If is_api_bug is false,
+driver_misuse_evidence_strength must not be "none". Do not manufacture source
+facts, contracts, runtime state, or public references. Follow the final JSON
+output contract."""
+
+
+_DIFFERENTIAL_V5_ANALYSIS_INSTRUCTIONS = _DIRECT_V1_ANALYSIS_INSTRUCTIONS + """
+
+Before making the final decision, compare the target-defect and driver-misuse
+explanations once.
+
+Treat driver misuse as decisive only when the evidence establishes concrete
+hard misuse: an invalid or freed pointer, an impossible object layout or
+allocation family, a wrong deallocator/constructor family, a definitively
+invalid handle, or an ignored failure whose resulting invalid state is directly
+shown. Do not infer hard misuse merely from malformed payload data, an extreme
+value accepted by a public parameter, a live target-created object with exposed
+fields, a target-produced callback argument, a public path/source string, or
+the absence of an additional defensive check.
+
+If hard misuse is the decisive cause, return false. Otherwise evaluate whether
+the target-side memory operation, assertion, resource behavior, or invariant
+fails on the admitted input or target-created state. Return true when that
+target-side failure is better supported, even when the final abort or check is
+located in driver-side code.
+
+Do not require the model to invent a different valid call. A driver repair must
+correct a violation visible in the actual driver while preserving the same
+attacker-controlled data values. Do not manufacture source facts, contracts,
+runtime state, or public references.
+"""
+
+
+_DIFFERENTIAL_V5_DECISION_OUTPUT_CONTRACT = _DIFFERENTIAL_V4_DECISION_OUTPUT_CONTRACT
 
 _ENHANCED_EXTRACT_PROMPT = (
     "From the analysis below, extract the following fields into a structured format.\n\n"
@@ -2027,8 +2384,8 @@ class CrashAnalyzer:
             include_context: Legacy switch for both static and runtime context.
             include_static_context: Controls Section 3 independently of runtime context.
             include_runtime_context: Controls Section 4 independently of static context.
-            prompt_variant: ``differential`` for CrashSage or ``direct_v1`` for
-                the clean V4 prompt-form check.
+            prompt_variant: ``direct_v1`` for ablation V0-V3 or
+                ``differential`` for full CrashSage V4.
             capture_prompt: Keep the final prompt in experiment metadata for
                 an external runner to persist. Disabled for the main pipeline
                 to avoid enlarging crash-analysis records.
@@ -2116,12 +2473,12 @@ class CrashAnalyzer:
             runtime_str = _NO_RUNTIME
 
         if prompt_variant == "differential":
-            analysis_instructions = _DIFFERENTIAL_ANALYSIS_INSTRUCTIONS.format(
+            analysis_instructions = _DIFFERENTIAL_V4_ANALYSIS_INSTRUCTIONS.format(
                 triage_label=triage_label,
                 triage_confidence=triage_confidence,
                 init_crash=", ".join(self.init_crash),
             )
-            output_contract = _DIFFERENTIAL_DECISION_OUTPUT_CONTRACT
+            output_contract = _DIFFERENTIAL_V4_DECISION_OUTPUT_CONTRACT
         else:
             analysis_instructions = _DIRECT_V1_ANALYSIS_INSTRUCTIONS.format(
                 triage_label=triage_label,
@@ -2334,6 +2691,11 @@ class CrashAnalyzer:
         }
         enhanced_dict["_experiment_metadata"] = {
             "prompt_variant": prompt_variant,
+            "differential_prompt_version": (
+                "richer_differential_v4_20261027"
+                if prompt_variant == "differential"
+                else None
+            ),
             "include_triage": include_triage,
             "include_static_context": include_static_context,
             "include_runtime_context": include_runtime_context,

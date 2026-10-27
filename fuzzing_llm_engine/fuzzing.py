@@ -57,7 +57,21 @@ def extract_api_list(api_code_file):
 def initialize_api_usage_count(api_list):
     api_usage_count = {api: 0 for api in api_list}
     return api_usage_count
-    
+
+
+def _filter_driver_names(
+    driver_names: list[str],
+    driver_filter: str | None,
+) -> list[str]:
+    """Filter crash-directory names by a dynamic driver filename."""
+    if not driver_filter:
+        return driver_names
+    target = os.path.basename(driver_filter.strip())
+    if target.endswith(".cc"):
+        target = os.path.splitext(target)[0]
+    return [name for name in driver_names if name == target]
+
+
 import argparse
 def args_parser():
     parser = argparse.ArgumentParser(description='Description of fuzzing settings')
@@ -72,14 +86,16 @@ def args_parser():
     parser.add_argument("--skip_gen_input", dest='gen_input',action='store_false', help='Skip Generate Input')
     parser.add_argument("--coverage_timeout", type=str, default=None,
                         help="Maximum time for each driver's coverage collection, e.g. 10m")
+    parser.add_argument("--driver-file", default=None,
+                        help="Only process one fuzz driver. Accepts a .cc filename "
+                             "or the crash-directory basename.")
     parser.add_argument("--reanalyze", action='store_true', default=False,
                         help="Re-analyze existing crashes without re-fuzzing. "
                              "Reads crash data from YAML, re-runs crash analysis pipeline "
                              "with current ABLATION_MODE / ABLATION_BASELINE settings.")
     parser.add_argument("--reanalyze_ablation", action='store_true', default=False,
                         help="Run REAL ablation study on existing crashes. "
-                             "Saves paper variants V0/V1/V2/V3; V2 and V3 are "
-                             "derived from existing pipeline results. "
+                             "Saves paper variants V0/V1/V2/V3/V4. "
                              "This is the command for producing paper RQ5 data.")
     args = parser.parse_args()
     return args
@@ -125,13 +141,14 @@ def reanalyze_existing_crashes(
     shared_dir: str,
     corpus_dir: str,
     fuzzing_llm_dir: str,
+    driver_filter: str | None = None,
 ):
     """Re-analyze existing crashes without re-running fuzzing.
 
     Reads crash_analysis.yaml files, re-runs the crash analysis pipeline
     on each saved crash with current ABLATION_MODE / ABLATION_BASELINE settings.
     Useful for:
-      - Running ablation experiments (V0-V3) on existing crash data
+      - Running ablation experiments (V0-V4) on existing crash data
       - Collecting baseline LLM judgments (ABLATION_BASELINE=1)
       - Re-analyzing after code changes without expensive re-fuzzing
     """
@@ -142,13 +159,20 @@ def reanalyze_existing_crashes(
         return
 
     fix_fuzz_driver_dir = os.path.join(shared_dir, f"fuzz_driver/{project_name}/compilation_pass_rag/")
-    ablation_mode = os.environ.get("ABLATION_MODE", "V3")
+    ablation_mode = os.environ.get("ABLATION_MODE", "V4")
     run_baseline = os.environ.get("ABLATION_BASELINE", "") == "1"
     logger.info(f"[Reanalyze] Starting re-analysis: project={project_name}, "
                 f"ablation_mode={ablation_mode}, run_baseline={run_baseline}")
     logger.info(f"[Reanalyze] Crash root: {crash_root}")
 
-    driver_dirs = sorted(d for d in os.listdir(crash_root) if os.path.isdir(os.path.join(crash_root, d)))
+    driver_dirs = sorted(
+        d for d in os.listdir(crash_root)
+        if os.path.isdir(os.path.join(crash_root, d))
+    )
+    driver_dirs = _filter_driver_names(driver_dirs, driver_filter)
+    if not driver_dirs:
+        logger.error(f"[Reanalyze] No driver matched {driver_filter!r}")
+        return
     total_reanalyzed = 0
 
     for dname in driver_dirs:
@@ -282,19 +306,21 @@ def reanalyze_ablation_all_variants(
     shared_dir: str,
     corpus_dir: str,
     fuzzing_llm_dir: str,
+    driver_filter: str | None = None,
 ):
-    """Run REAL ablation study for the paper's V0/V1/V2/V3 variants.
+    """Run the paper-aligned V0-V4 crash-attribution ablation.
 
-    For each crash, runs the deterministic stages once, calls
-    analyze_crash_enhanced for the missing baseline prompt configurations, and
-    derives representative-selection/full-pipeline behavior from existing
-    results. Saves per-variant judgments in the ablation_results field.
+    The determinant of each variant is fixed:
+      V0: no filtering, no representatives, no context, clean direct prompt
+      V1: filtering, no representatives, no context, clean direct prompt
+      V2: filtering, representatives, no context, clean direct prompt
+      V3: filtering, representatives, static+runtime context, clean direct prompt
+      V4: filtering, representatives, static+runtime context, differential prompt
 
-    Variant mapping:
-      V0: include_triage=False, include_context=False  (raw LLM)
-      V1: include_triage=True,  include_context=False  (triage evidence only)
-      V2: = V1 + dedup (same LLM judgment as V1, computed offline)
-      V3: reuse existing full CrashSage result from the crash entry
+    V4 reuses the full CrashSage result already stored in crash_analysis.yaml.
+    V2 reuses V1's LLM result for representatives because their evidence
+    configurations are identical; it still records the representative as sent
+    to the LLM for ablation accounting.
     """
     import hashlib as _hashlib
     import re as _re
@@ -302,7 +328,7 @@ def reanalyze_ablation_all_variants(
     import threading as _threading
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from crash.sanitizer_parser import parse_sanitizer_output
-    from crash.triage import triage_crash
+    from crash.triage import compute_signatures, triage_crash
     from crash.locator import locate_crash_site
     from crash.debugger import reproduce_with_gdb
     from crash.dedup import DeduplicationEngine
@@ -314,11 +340,8 @@ def reanalyze_ablation_all_variants(
 
     fix_fuzz_driver_dir = os.path.join(shared_dir, f"fuzz_driver/{project_name}/compilation_pass_rag/")
 
-    VARIANTS = [
-        ("V0", False, False),
-        ("V1", True,  False),
-    ]
-    CACHE_PROMPT_VERSION = "ablation_v0_v1_2026_07"
+    CACHE_PROMPT_VERSION = "paper_v0_v4_clean_direct_2026_10"
+    ABLATION_FLOW_VERSION = "paper_v0_v4_2026_10"
 
     def _first_present_attr(obj, names):
         for name in names:
@@ -374,11 +397,13 @@ def reanalyze_ablation_all_variants(
 
     def _copy_llm_result(result):
         allowed_keys = (
+            "crash_id",
             "is_api_bug",
             "crash_category",
             "sent_to_llm",
             "skip_reason",
             "llm_ms",
+            "prompt_variant",
             "enhanced_result",
         )
         return {k: result[k] for k in allowed_keys if k in result}
@@ -414,76 +439,66 @@ def reanalyze_ablation_all_variants(
         }
         return _hashlib.sha256(_stable_json(payload).encode("utf-8")).hexdigest()
 
-    def _make_v3_cache_key(crash_id, crash_info, driver_source_hash, api_combine, triage):
-        return _make_cache_key(f"V3:{crash_id}", crash_info, driver_source_hash, api_combine, True, True, triage)
-
     llm_cache = _load_cache()
 
     logger.info(f"[Ablation] ═══ REAL ABLATION STUDY: project={project_name} ═══")
-    logger.info(f"[Ablation] Will save V0/V1/V2/V3 and run {len(VARIANTS)} distinct LLM configurations per crash")
+    logger.info(
+        "[Ablation] Will save paper V0/V1/V2/V3/V4 with the paper-aligned flow"
+    )
 
-    driver_dirs = sorted(d for d in os.listdir(crash_root)
-                         if os.path.isdir(os.path.join(crash_root, d)))
+    def _driver_number(name):
+        match = _re.search(r"_(\d+)$", name)
+        return int(match.group(1)) if match else 10**9
 
-    v2_dedup_engine = DeduplicationEngine()
-    ablation_by_crash_id = {}
-    total_crashes = 0
-    total_llm_calls = 0
+    driver_dirs = sorted(
+        (
+            d for d in os.listdir(crash_root)
+            if os.path.isdir(os.path.join(crash_root, d))
+        ),
+        key=_driver_number,
+    )
+    driver_dirs = _filter_driver_names(driver_dirs, driver_filter)
+    if not driver_dirs:
+        logger.error(f"[Ablation] No driver matched {driver_filter!r}")
+        return
 
+    records = []
+    data_by_driver = {}
     for dname in driver_dirs:
         yaml_path = os.path.join(crash_root, dname, "crash_analysis.yaml")
         if not os.path.isfile(yaml_path):
             continue
-
         with open(yaml_path) as f:
             data = yaml.safe_load(f)
         if not isinstance(data, list):
             continue
+        data_by_driver[dname] = {"path": yaml_path, "data": data, "records": []}
 
-        driver_complete_existing = True
-        for item in data:
-            if not isinstance(item, dict):
-                continue
-            for _cid, entry in item.items():
-                if not isinstance(entry, dict):
-                    continue
-                existing = entry.get("ablation_results")
-                if not (isinstance(existing, dict) and all(v in existing for v in ("V0", "V1", "V2", "V3"))):
-                    driver_complete_existing = False
-                    break
-            if not driver_complete_existing:
-                break
-
-        # Find fuzz driver source
         fuzz_driver_file = dname + ".cc"
         fuzz_driver_path = os.path.join(fix_fuzz_driver_dir, fuzz_driver_file)
         if not os.path.isfile(fuzz_driver_path):
-            saved_drivers = [fn for fn in os.listdir(os.path.join(crash_root, dname))
-                             if fn.endswith(".cc")]
-            if saved_drivers:
-                fuzz_driver_path = os.path.join(crash_root, dname, saved_drivers[0])
-            else:
-                if not driver_complete_existing:
-                    logger.warning(f"[Ablation] No driver source for {dname}, skipping")
-                    continue
-                fuzz_driver_path = None
+            saved_drivers = [
+                fn for fn in os.listdir(os.path.join(crash_root, dname))
+                if fn.endswith(".cc")
+            ]
+            fuzz_driver_path = (
+                os.path.join(crash_root, dname, saved_drivers[0])
+                if saved_drivers else None
+            )
         if fuzz_driver_path and os.path.isfile(fuzz_driver_path):
             with open(fuzz_driver_path, "rb") as f:
                 driver_source_hash = _hashlib.sha256(f.read()).hexdigest()
         else:
-            driver_source_hash = "complete-existing-no-driver-source"
+            driver_source_hash = "missing-driver-source"
 
-        # Determine api_combine
-        fuzzer_name = dname
-        m = _re.search(r"_(\d+)$", dname)
-        fuzzer_number = int(m.group(1)) if m else None
-        if fuzzer_number and fuzzer_number <= len(api_combine_all):
-            api_combine = api_combine_all[fuzzer_number - 1]
-        else:
-            api_combine = []
-
-        logger.info(f"[Ablation] Processing {dname}: {len(data)} crash(es)")
-        yaml_modified = False
+        fuzzer_number = _driver_number(dname)
+        api_combine = (
+            api_combine_all[fuzzer_number - 1]
+            if fuzzer_number <= len(api_combine_all) else []
+        )
+        fuzz_driver_basename = (
+            os.path.basename(fuzz_driver_path) if fuzz_driver_path else fuzz_driver_file
+        )
 
         for item in data:
             if not isinstance(item, dict):
@@ -491,253 +506,397 @@ def reanalyze_ablation_all_variants(
             for cid, entry in item.items():
                 if not isinstance(entry, dict):
                     continue
-
-                crash_info_raw = entry.get("crash_info", "")
-                if not crash_info_raw or not str(crash_info_raw).strip():
+                raw_crash = entry.get("crash_info", "")
+                if not raw_crash or not str(raw_crash).strip():
                     continue
-
-                crash_info = str(crash_info_raw)
+                crash_info = str(raw_crash)
                 if crash_info.startswith("|"):
                     crash_info = crash_info[1:].lstrip("\n")
 
-                total_crashes += 1
-                fuzz_driver_basename = os.path.basename(fuzz_driver_path) if fuzz_driver_path else fuzz_driver_file
-                crash_id = f"{dname}_{cid}"
-
-                logger.info(f"[Ablation] ── {crash_id} ──")
-
-                # ═══ Deterministic stages (run once) ═══
-                parsed = parse_sanitizer_output(crash_info)
-                triage = triage_crash(parsed, fuzz_driver_basename=fuzz_driver_basename)
-                saved_duplicate_of = entry.get("duplicate_of") or None
-                triage_filters = triage.get("label") in ("noise", "likely_driver_bug")
-
-                binary_path, binary_source = _resolve_binary_path_for_entry(project_name, fuzzer_name, entry)
-                location = locate_crash_site(parsed, driver_basename=fuzz_driver_basename,
-                                             binary_path=binary_path)
-                logger.info(f"[Ablation]   Binary source={binary_source}, path={binary_path}")
-
-                # GDB runtime context retained for evidence consistency; V3 reuses
-                # the existing full CrashSage result instead of re-calling the LLM.
-                # Prefer data already fixed by retro_enrich (Docker-based GDB)
-                # over re-collecting on host (which suffers from environment mismatch).
-                runtime_ctx = entry.get("gdb_runtime_context")
-                if runtime_ctx and runtime_ctx.get("reproduced"):
-                    logger.info(f"[Ablation]   Using existing GDB context from retro_enrich")
-                else:
-                    runtime_ctx = None
-                    poc_path = None
-                    if entry.get("poc_paths", {}).get("poc"):
-                        poc_path = entry["poc_paths"]["poc"]
-                    if binary_path and poc_path and os.path.isfile(binary_path) and os.path.isfile(poc_path):
-                        try:
-                            runtime_ctx = reproduce_with_gdb(binary_path, poc_path, timeout=15)
-                        except Exception as e:
-                            logger.warning(f"[Ablation] GDB failed: {e}")
-
-                # V2 dedup happens after triage filtering. Filtered crashes do
-                # not enter the V2 representative-selection stage.
-                dedup_info = None
-                if not triage_filters:
-                    dedup_info = v2_dedup_engine.add_crash(
-                        crash_id,
-                        triage,
-                        parsed,
-                        scope=fuzz_driver_basename,
-                    )
-                is_duplicate = bool(dedup_info and dedup_info.get("is_duplicate", False))
-
-                # ═══ Run LLM with each variant configuration (parallel) ═══
-                existing_ablation = entry.get("ablation_results") or {}
-                ablation_results = {}
-                if isinstance(existing_ablation, dict):
-                    for vname, inc_t, inc_c in VARIANTS:
-                        existing_result = existing_ablation.get(vname)
-                        if inc_t and triage_filters:
-                            continue
-                        if not _is_cacheable_llm_result(existing_result):
-                            continue
-                        cache_key = _make_cache_key(
-                            vname, crash_info, driver_source_hash, api_combine, inc_t, inc_c, triage
-                        )
-                        with cache_lock:
-                            if cache_key not in llm_cache:
-                                llm_cache[cache_key] = _copy_llm_result(existing_result)
-                                cache_dirty = True
-
-                def _run_variant(vname, inc_triage, inc_context):
-                    nonlocal cache_dirty
-                    if inc_triage and triage_filters:
-                        logger.info(f"[Ablation]   {vname}: SKIPPED (triage filtered)")
-                        return vname, {
-                            "is_api_bug": False,
-                            "crash_category": parsed.get("bug_type", "Unknown"),
-                            "sent_to_llm": False,
-                            "skip_reason": f"triage:{triage.get('label')}",
-                        }
-                    cache_key = _make_cache_key(
-                        vname, crash_info, driver_source_hash, api_combine, inc_triage, inc_context, triage
-                    )
-                    with cache_lock:
-                        cached_result = llm_cache.get(cache_key)
-                    if _is_cacheable_llm_result(cached_result):
-                        logger.info(f"[Ablation]   {vname}: cache hit")
-                        return vname, _copy_llm_result(cached_result)
-                    _t0 = _time.monotonic()
-                    try:
-                        is_api_bug, category, text, enhanced = \
-                            crash_analyzer.analyze_crash_enhanced(
-                                crash_info, fuzz_driver_path, api_combine,
-                                triage_result=triage if inc_triage else None,
-                                location_result=location if inc_context else None,
-                                runtime_context=runtime_ctx if inc_context else None,
-                                include_triage=inc_triage,
-                                include_context=inc_context,
-                            )
-                        elapsed = round((_time.monotonic() - _t0) * 1000, 1)
-                        logger.info(f"[Ablation]   {vname}: is_api_bug={is_api_bug} ({elapsed}ms)")
-                        result = {
-                            "is_api_bug": is_api_bug,
-                            "crash_category": category,
-                            "sent_to_llm": True,
-                            "skip_reason": "none",
-                            "llm_ms": elapsed,
-                            "enhanced_result": enhanced,
-                        }
-                        with cache_lock:
-                            llm_cache[cache_key] = _copy_llm_result(result)
-                            cache_dirty = True
-                        return vname, result
-                    except Exception as e:
-                        logger.error(f"[Ablation]   {vname}: FAILED: {e}")
-                        return vname, {
-                            "is_api_bug": None,
-                            "sent_to_llm": True,
-                            "skip_reason": "none",
-                            "error": str(e),
-                        }
-
-                with ThreadPoolExecutor(max_workers=4) as executor:
-                    futures = [
-                        executor.submit(_run_variant, vname, inc_t, inc_c)
-                        for vname, inc_t, inc_c in VARIANTS
-                        if vname not in ablation_results
-                    ]
-                    for fut in as_completed(futures):
-                        vname, result = fut.result()
-                        ablation_results[vname] = result
-                        if result.get("sent_to_llm"):
-                            total_llm_calls += 1
-
-                # V2 = V1 + representative selection, with no extra LLM call.
-                if "V2" not in ablation_results:
-                    v1_result = ablation_results.get("V1", {})
-                    if triage_filters:
-                        ablation_results["V2"] = {
-                            "is_api_bug": False,
-                            "crash_category": parsed.get("bug_type", "Unknown"),
-                            "sent_to_llm": False,
-                            "skip_reason": f"triage:{triage.get('label')}",
-                        }
-                    elif is_duplicate:
-                        ablation_results["V2"] = {
-                            "is_api_bug": v1_result.get("is_api_bug"),
-                            "crash_category": v1_result.get("crash_category", parsed.get("bug_type", "Unknown")),
-                            "sent_to_llm": False,
-                            "skip_reason": "duplicate",
-                        }
-                    elif v1_result.get("sent_to_llm") is False:
-                        ablation_results["V2"] = dict(v1_result)
-                    else:
-                        ablation_results["V2"] = {
-                            "is_api_bug": v1_result.get("is_api_bug"),
-                            "crash_category": v1_result.get("crash_category"),
-                            "sent_to_llm": v1_result.get("sent_to_llm"),
-                            "skip_reason": v1_result.get("skip_reason", "none"),
-                        }
-
-                # V3 is the already-produced full CrashSage judgment for this crash.
-                if "V3" not in ablation_results:
-                    timings = entry.get("timings") or {}
-                    skip_reason = timings.get("llm_skip_reason")
-                    llm_skipped = bool(timings.get("llm_skipped")) or bool(skip_reason and skip_reason != "none")
-                    v3_cache_key = _make_v3_cache_key(crash_id, crash_info, driver_source_hash, api_combine, triage)
-                    with cache_lock:
-                        cached_v3 = llm_cache.get(v3_cache_key)
-                    cached_v3_is_api_bug = (
-                        bool(cached_v3.get("is_api_bug")) if _has_cached_judgment(cached_v3) else None
-                    )
-                    if triage_filters:
-                        v3_result = {
-                            "is_api_bug": False,
-                            "crash_category": entry.get("crash_category", parsed.get("bug_type", "Unknown")),
-                            "sent_to_llm": False,
-                            "skip_reason": f"triage:{triage.get('label')}",
-                            "reused_existing": True,
-                        }
-                    elif _has_cached_judgment(existing_ablation.get("V3")):
-                        v3_result = _copy_llm_result(existing_ablation["V3"])
-                        v3_result["reused_existing"] = True
-                    elif saved_duplicate_of:
-                        rep_v3 = (ablation_by_crash_id.get(saved_duplicate_of) or {}).get("V3", {})
-                        v3_result = {
-                            "is_api_bug": bool(rep_v3.get("is_api_bug", False)),
-                            "crash_category": rep_v3.get("crash_category", entry.get("crash_category", parsed.get("bug_type", "Unknown"))),
-                            "sent_to_llm": False,
-                            "skip_reason": "duplicate",
-                            "reused_existing": True,
-                        }
-                    else:
-                        if skip_reason == "duplicate" or (
-                            isinstance(skip_reason, str)
-                            and skip_reason.startswith("triage:")
-                            and not triage_filters
-                        ):
-                            skip_reason = None
-                            llm_skipped = False
-                        v3_result = {
-                            "is_api_bug": entry.get("is_api_bug"),
-                            "crash_category": entry.get("crash_category", parsed.get("bug_type", "Unknown")),
-                            "sent_to_llm": not llm_skipped,
-                            "skip_reason": skip_reason or ("skipped" if llm_skipped else "none"),
-                            "reused_existing": True,
-                        }
-                    if cached_v3_is_api_bug is not None:
-                        v3_result["is_api_bug"] = cached_v3_is_api_bug
-                    if entry.get("enhanced_analysis"):
-                        v3_result["enhanced_result"] = entry["enhanced_analysis"]
-                    llm_ms = timings.get("stage6_llm_ms", timings.get("llm_ms"))
-                    if llm_ms is not None:
-                        v3_result["llm_ms"] = llm_ms
-                    ablation_results["V3"] = v3_result
-
-                # Save triage info alongside ablation results
-                entry["ablation_results"] = ablation_results
-                entry["triage"] = triage
-                if dedup_info is not None:
-                    entry["dedup"] = dedup_info
-                if location.get("crash_file"):
-                    entry["location"] = {
-                        "crash_file": location.get("crash_file"),
-                        "crash_line": location.get("crash_line"),
-                        "crash_function": location.get("crash_function"),
+                parsed = entry.get("sanitizer_parsed")
+                if not isinstance(parsed, dict):
+                    parsed = parse_sanitizer_output(crash_info)
+                saved_triage = entry.get("triage")
+                triage = (
+                    dict(saved_triage)
+                    if isinstance(saved_triage, dict) and saved_triage.get("label")
+                    else triage_crash(parsed, fuzz_driver_basename=fuzz_driver_basename)
+                )
+                exact_sig, exact_basis, stack_sig, fuzzy_sig = compute_signatures(parsed)
+                triage.update(
+                    {
+                        "signature": exact_sig,
+                        "signature_source": exact_basis,
+                        "stack_signature": stack_sig,
+                        "fuzzy_signature": fuzzy_sig,
                     }
-                ablation_by_crash_id[crash_id] = ablation_results
-                yaml_modified = True
+                )
+                triage_filtered = triage.get("label") in {
+                    "noise", "likely_driver_bug",
+                }
+                location = entry.get("location")
+                if not isinstance(location, dict) or not location.get("call_chain_context"):
+                    location = locate_crash_site(
+                        parsed,
+                        driver_basename=fuzz_driver_basename,
+                    )
 
-        if yaml_modified:
-            with open(yaml_path, 'w') as f:
-                yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-            logger.info(f"[Ablation] Saved: {yaml_path}")
-        if cache_dirty:
+                record = {
+                    "project": project_name,
+                    "driver": dname,
+                    "driver_file": fuzz_driver_file,
+                    "driver_path": fuzz_driver_path,
+                    "driver_basename": fuzz_driver_basename,
+                    "driver_source_hash": driver_source_hash,
+                    "api_combine": api_combine,
+                    "item": item,
+                    "crash_key": cid,
+                    "crash_id": f"{dname}_{cid}",
+                    "entry": entry,
+                    "crash_info": crash_info,
+                    "parsed": parsed,
+                    "triage": triage,
+                    "triage_filtered": triage_filtered,
+                    "location": location,
+                    "dedup": None,
+                    "representative_id": None,
+                    "results": {},
+                    "_runtime_lock": _threading.Lock(),
+                    "_runtime_checked": False,
+                    "_runtime_ctx": entry.get("gdb_runtime_context") or {},
+                }
+                records.append(record)
+                data_by_driver[dname]["records"].append(record)
+
+    # Representative selection happens before V2/V3 LLM analysis.
+    dedup_engine = DeduplicationEngine()
+    records_by_id = {record["crash_id"]: record for record in records}
+    representative_ids = []
+    duplicates = 0
+    filtered = 0
+    def _discovery_order_key(item):
+        original_index, record = item
+        timestamp = record["entry"].get("timestamp")
+        text = str(timestamp or "").strip()
+        if not text:
+            return 2, 0.0, "", original_index
+        try:
+            parsed_timestamp = datetime.fromisoformat(
+                text.replace("Z", "+00:00")
+            ).timestamp()
+            return 0, parsed_timestamp, text, original_index
+        except (TypeError, ValueError):
+            return 1, 0.0, text, original_index
+
+    indexed_records = list(enumerate(records))
+    indexed_records.sort(
+        key=_discovery_order_key
+    )
+    for discovery_index, (_, record) in enumerate(indexed_records):
+        if record["triage_filtered"]:
+            filtered += 1
+            continue
+        info = dedup_engine.add_crash(
+            record["crash_id"],
+            record["triage"],
+            record["parsed"],
+            timestamp=record["entry"].get("timestamp"),
+            discovery_index=discovery_index,
+        )
+        record["dedup"] = info
+        representative = info.get("duplicate_of") or record["crash_id"]
+        record["representative_id"] = representative
+        if info.get("is_duplicate"):
+            duplicates += 1
+        else:
+            representative_ids.append(record["crash_id"])
+    representatives = [records_by_id[cid] for cid in representative_ids]
+
+    def _make_cache_key(
+        vname, record, include_triage, include_static, include_runtime, prompt_variant
+    ):
+        payload = {
+            "variant": vname,
+            "crash_id": record["crash_id"],
+            "crash_info_hash": _hash_text(record["crash_info"]),
+            "driver_source_hash": record["driver_source_hash"],
+            "api_combine": record["api_combine"],
+            "include_triage": include_triage,
+            "include_static_context": include_static,
+            "include_runtime_context": include_runtime,
+            "prompt_variant": prompt_variant,
+            "triage_result": record["triage"] if include_triage else None,
+            "prompt_version": CACHE_PROMPT_VERSION,
+            "model_id": CACHE_MODEL_ID,
+            "temperature": CACHE_TEMPERATURE,
+        }
+        return _hashlib.sha256(_stable_json(payload).encode("utf-8")).hexdigest()
+
+    def _prepare_runtime(record):
+        with record["_runtime_lock"]:
+            if record["_runtime_checked"]:
+                return record["_runtime_ctx"]
+            record["_runtime_checked"] = True
+            ctx = record["_runtime_ctx"]
+            if isinstance(ctx, dict) and ctx.get("reproduced"):
+                return ctx
+            poc = (record["entry"].get("poc_paths") or {}).get("poc")
+            if record["driver_path"] and poc:
+                binary_path, _ = _resolve_binary_path_for_entry(
+                    project_name, record["driver"], record["entry"]
+                )
+                if binary_path and os.path.isfile(binary_path) and os.path.isfile(poc):
+                    try:
+                        record["_runtime_ctx"] = reproduce_with_gdb(
+                            binary_path, poc, timeout=15
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            f"[Ablation] GDB failed for {record['crash_id']}: {exc}"
+                        )
+            return record["_runtime_ctx"] or {}
+
+    def _run_llm(
+        vname, record, include_triage, include_static, include_runtime,
+        prompt_variant,
+    ):
+        nonlocal cache_dirty, actual_llm_calls, cache_hits, errors
+        if include_triage and record["triage_filtered"]:
+            return {
+                "is_api_bug": False,
+                "crash_category": record["parsed"].get("bug_type", "Unknown"),
+                "sent_to_llm": False,
+                "skip_reason": f"triage:{record['triage'].get('label')}",
+            }
+        if not record["driver_path"] or not os.path.isfile(record["driver_path"]):
+            errors += 1
+            return {
+                "is_api_bug": None,
+                "crash_category": record["parsed"].get("bug_type", "Unknown"),
+                "sent_to_llm": False,
+                "skip_reason": "driver_source_missing",
+                "error": "driver source missing",
+            }
+
+        cache_key = _make_cache_key(
+            vname, record, include_triage, include_static, include_runtime,
+            prompt_variant,
+        )
+        with cache_lock:
+            cached = llm_cache.get(cache_key)
+        if _is_cacheable_llm_result(cached):
+            cache_hits += 1
+            result = _copy_llm_result(cached)
+            result["cache_hit"] = True
+            return result
+
+        runtime_ctx = _prepare_runtime(record) if include_runtime else None
+        started = _time.monotonic()
+        try:
+            is_api_bug, category, _text, enhanced = (
+                crash_analyzer.analyze_crash_enhanced(
+                    record["crash_info"],
+                    record["driver_path"],
+                    record["api_combine"],
+                    triage_result=record["triage"] if include_triage else None,
+                    location_result=record["location"] if include_static else None,
+                    runtime_context=runtime_ctx if include_runtime else None,
+                    include_triage=include_triage,
+                    include_static_context=include_static,
+                    include_runtime_context=include_runtime,
+                    prompt_variant=prompt_variant,
+                )
+            )
+            elapsed = round((_time.monotonic() - started) * 1000, 1)
+            result = {
+                "is_api_bug": is_api_bug,
+                "crash_category": category,
+                "sent_to_llm": True,
+                "skip_reason": "none",
+                "llm_ms": elapsed,
+                "prompt_variant": prompt_variant,
+                "enhanced_result": enhanced,
+            }
+            actual_llm_calls += 1
             with cache_lock:
-                _save_cache(llm_cache)
-                cache_dirty = False
-            logger.info(f"[Ablation] Saved LLM cache: {cache_path}")
+                llm_cache[cache_key] = _copy_llm_result(result)
+                cache_dirty = True
+            logger.info(
+                f"[Ablation] {record['crash_id']} {vname}: "
+                f"is_api_bug={is_api_bug} ({elapsed}ms)"
+            )
+            return result
+        except Exception as exc:
+            errors += 1
+            logger.error(f"[Ablation] {record['crash_id']} {vname}: {exc}")
+            return {
+                "is_api_bug": None,
+                "crash_category": record["parsed"].get("bug_type", "Unknown"),
+                "sent_to_llm": True,
+                "skip_reason": "none",
+                "prompt_variant": prompt_variant,
+                "error": str(exc),
+            }
 
+    def _existing_v4(record):
+        entry = record["entry"]
+        existing = entry.get("ablation_results")
+        source = None
+        if isinstance(existing, dict):
+            source = existing.get("V4")
+            # Compatibility migration: the old controller called paper V4 "V3".
+            if not _has_cached_judgment(source):
+                source = existing.get("V3")
+        if _has_cached_judgment(source):
+            result = _copy_llm_result(source)
+            result["reused_existing"] = True
+            result["prompt_variant"] = "differential"
+            return result
+        timings = entry.get("timings") or {}
+        skip_reason = timings.get("llm_skip_reason")
+        sent = not bool(timings.get("llm_skipped")) and skip_reason in (None, "none")
+        return {
+            "is_api_bug": entry.get("is_api_bug"),
+            "crash_category": entry.get(
+                "crash_category", record["parsed"].get("bug_type", "Unknown")
+            ),
+            "sent_to_llm": sent,
+            "skip_reason": skip_reason or ("skipped" if not sent else "none"),
+            "prompt_variant": "differential",
+            "reused_existing": True,
+            "enhanced_result": entry.get("enhanced_analysis"),
+        }
+
+    actual_llm_calls = 0
+    cache_hits = 0
+    errors = 0
+    tasks = []
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        for record in records:
+            tasks.append((
+                record, "V0",
+                executor.submit(
+                    _run_llm, "V0", record, False, False, False, "direct_v1"
+                ),
+            ))
+        for record in records:
+            if not record["triage_filtered"]:
+                tasks.append((
+                    record, "V1",
+                    executor.submit(
+                        _run_llm, "V1", record, True, False, False, "direct_v1"
+                    ),
+                ))
+        for record in representatives:
+            tasks.append((
+                record, "V3",
+                executor.submit(
+                    _run_llm, "V3", record, True, True, True, "direct_v1"
+                ),
+            ))
+        for record, vname, future in tasks:
+            record["results"][vname] = future.result()
+
+    # V2 has the same evidence as V1 but only representatives are analyzed.
+    for record in records:
+        if record["triage_filtered"]:
+            triage_skip = {
+                "is_api_bug": False,
+                "crash_category": record["parsed"].get("bug_type", "Unknown"),
+                "sent_to_llm": False,
+                "skip_reason": f"triage:{record['triage'].get('label')}",
+            }
+            for vname in ("V1", "V2", "V3"):
+                record["results"][vname] = dict(triage_skip)
+        elif record["dedup"] and record["dedup"].get("is_duplicate"):
+            representative = records_by_id[record["representative_id"]]
+            for vname in ("V2", "V3"):
+                inherited = dict(representative["results"].get(vname) or {})
+                inherited["sent_to_llm"] = False
+                inherited["skip_reason"] = "duplicate"
+                inherited["duplicate_of"] = record["representative_id"]
+                record["results"][vname] = inherited
+        else:
+            v1_result = record["results"].get("V1", {})
+            record["results"]["V2"] = {
+                **dict(v1_result),
+                "sent_to_llm": bool(v1_result.get("is_api_bug") is not None),
+                "skip_reason": v1_result.get("skip_reason", "none"),
+                "reused_from": "V1",
+                "prompt_variant": "direct_v1",
+            }
+
+    # V4 is the already-produced full CrashSage result, inherited by duplicates.
+    for record in representatives:
+        record["results"]["V4"] = _existing_v4(record)
+    for record in records:
+        if record["triage_filtered"]:
+            record["results"]["V4"] = {
+                "is_api_bug": False,
+                "crash_category": record["entry"].get(
+                    "crash_category", record["parsed"].get("bug_type", "Unknown")
+                ),
+                "sent_to_llm": False,
+                "skip_reason": f"triage:{record['triage'].get('label')}",
+                "prompt_variant": "differential",
+                "reused_existing": True,
+            }
+        elif record["dedup"] and record["dedup"].get("is_duplicate"):
+            representative = records_by_id[record["representative_id"]]
+            inherited = dict(representative["results"].get("V4") or {})
+            inherited["sent_to_llm"] = False
+            inherited["skip_reason"] = "duplicate"
+            inherited["duplicate_of"] = record["representative_id"]
+            record["results"]["V4"] = inherited
+
+    total_crashes = len(records)
+    for driver, driver_data in data_by_driver.items():
+        for record in driver_data["records"]:
+            entry = record["entry"]
+            entry["triage"] = record["triage"]
+            if record["dedup"] is not None:
+                entry["dedup"] = record["dedup"]
+            if record["location"].get("crash_file"):
+                entry["location"] = {
+                    "crash_file": record["location"].get("crash_file"),
+                    "crash_line": record["location"].get("crash_line"),
+                    "crash_function": record["location"].get("crash_function"),
+                    "call_chain_context": record["location"].get("call_chain_context"),
+                }
+            entry["ablation_results"] = {
+                vname: record["results"].get(vname, {})
+                for vname in ("V0", "V1", "V2", "V3", "V4")
+            }
+            entry["ablation_flow_version"] = ABLATION_FLOW_VERSION
+        with open(driver_data["path"], "w") as f:
+            yaml.dump(
+                driver_data["data"], f, default_flow_style=False,
+                sort_keys=False, allow_unicode=True,
+            )
+        logger.info(f"[Ablation] Saved: {driver_data['path']}")
+
+    if cache_dirty:
+        with cache_lock:
+            _save_cache(llm_cache)
+        logger.info(f"[Ablation] Saved LLM cache: {cache_path}")
+
+    sent_by_variant = {
+        vname: sum(
+            1 for record in records
+            if (record["results"].get(vname) or {}).get("sent_to_llm")
+        )
+        for vname in ("V0", "V1", "V2", "V3", "V4")
+    }
     logger.info(f"[Ablation] ═══ DONE ═══")
-    logger.info(f"[Ablation] Total crashes: {total_crashes}, Total LLM calls: {total_llm_calls}")
-    logger.info(f"[Ablation] Avg LLM calls per crash: {total_llm_calls/total_crashes:.1f}" if total_crashes else "")
+    logger.info(
+        f"[Ablation] Crashes={total_crashes}, filtered={filtered}, "
+        f"representatives={len(representatives)}, duplicates={duplicates}"
+    )
+    logger.info(f"[Ablation] LLM submissions by variant: {sent_by_variant}")
+    logger.info(
+        f"[Ablation] Actual new LLM calls={actual_llm_calls}, "
+        f"cache hits={cache_hits}, errors={errors}"
+    )
 
 
 if __name__ == '__main__':
@@ -979,6 +1138,7 @@ if __name__ == '__main__':
     fuzzer.set_api_code(src_api_code)
     fuzzer.set_api_summary(api_summary)
     fuzzer.set_fuzz_gen_code_output_dir(os.path.join(work_dir, f"docker_shared/fuzz_driver/{project_name}/"))
+    fuzzer.set_driver_filter(args.driver_file)
 
     if args.reanalyze_ablation:
         reanalyze_ablation_all_variants(
@@ -989,6 +1149,7 @@ if __name__ == '__main__':
             shared_dir=shared_dir,
             corpus_dir=corpus_dir,
             fuzzing_llm_dir=shared_dir,
+            driver_filter=args.driver_file,
         )
     elif args.reanalyze:
         reanalyze_existing_crashes(
@@ -999,6 +1160,7 @@ if __name__ == '__main__':
             shared_dir=shared_dir,
             corpus_dir=corpus_dir,
             fuzzing_llm_dir=shared_dir,
+            driver_filter=args.driver_file,
         )
     else:
         fuzzer.build_and_fuzz()

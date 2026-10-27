@@ -55,6 +55,26 @@ SUMMARY: AddressSanitizer: SEGV /src/c-ares/src/lib/ares_init.c:428:31 in init_b
 artifact_prefix='./'; Test unit written to ./crash-601508730ba6091bbee742eee7ab68b559ee9aa9
 """
 
+CRASH_OVERSIZED_STACK_COPY = """\
+ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7f47d78304c8
+WRITE of size 9273 at 0x7f47d78304c8 thread T0
+    #0 0x56066161a48d in __asan_memcpy /src/llvm-project/compiler-rt/lib/asan/asan_interceptors_memintrinsics.cpp:63:3
+    #1 0x560661663a65 in send_record /src/target/src/send.c:67:5
+    #2 0x560661660855 in LLVMFuzzerTestOneInput /src/target/test/target_fuzz_driver_2.cc:106:42
+DEDUP_TOKEN: __asan_memcpy--send_record--LLVMFuzzerTestOneInput
+SUMMARY: AddressSanitizer: stack-buffer-overflow /src/target/src/send.c:67:5 in send_record
+"""
+
+CRASH_SMALL_INTERNAL_OOB = """\
+ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7f257e7e0028
+READ of size 1 at 0x7f257e7e0028 thread T0
+    #0 0x55556c9c6b35 in copy_bits /src/target/deps/bitfield/src/bitarray.c:73:18
+    #1 0x55556c9c73ce in set_field /src/target/deps/bitfield/src/bitfield.c:122:12
+    #2 0x55556c9c596b in LLVMFuzzerTestOneInput /src/target/test/target_fuzz_driver_11.cc:111:23
+DEDUP_TOKEN: copy_bits--set_field--LLVMFuzzerTestOneInput
+SUMMARY: AddressSanitizer: stack-buffer-overflow /src/target/deps/bitfield/src/bitarray.c:73:18 in copy_bits
+"""
+
 DRIVER_BASENAME = "c-ares_fuzz_driver_False_qwen3-coder-plus_10.cc"
 
 def _sep(title):
@@ -135,6 +155,29 @@ def test_triage():
     assert triage["is_worth_llm_analysis"] is True
     assert triage["signature"] is not None
     print("  PASS")
+
+
+def test_triage_oversized_stack_copy_contract():
+    _sep("TEST: triage — oversized caller-controlled stack copy")
+    parsed = parse_sanitizer_output(CRASH_OVERSIZED_STACK_COPY)
+    assert parsed["access_type"] == "write"
+    assert parsed["access_size"] == 9273
+    triage = triage_crash(
+        parsed,
+        fuzz_driver_basename="target_fuzz_driver_2.cc",
+    )
+    assert triage["label"] == "likely_driver_bug", triage
+    assert triage["is_worth_llm_analysis"] is False
+    assert "oversized_stack_copy_from_caller_length" in triage["matched_rules"]
+
+    _sep("TEST: triage — small internal read remains API evidence")
+    parsed = parse_sanitizer_output(CRASH_SMALL_INTERNAL_OOB)
+    triage = triage_crash(
+        parsed,
+        fuzz_driver_basename="target_fuzz_driver_11.cc",
+    )
+    assert triage["label"] == "likely_api_bug", triage
+    assert "oversized_stack_copy_from_caller_length" not in triage["matched_rules"]
 
 
 def test_signatures():
@@ -261,6 +304,7 @@ def main():
     tests = [
         test_sanitizer_parser,
         test_triage,
+        test_triage_oversized_stack_copy_contract,
         test_signatures,
         test_locator,
         test_dedup,

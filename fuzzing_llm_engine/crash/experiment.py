@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import glob
 import os
 import sys
 import yaml
@@ -37,12 +38,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from crash.retroanalyze import retroanalyze_dir, print_summary
 
-ABLATION_VARIANTS = ("V0", "V1", "V2", "V3")
+ABLATION_VARIANTS = ("V0", "V1", "V2", "V3", "V4")
 ABLATION_DESCRIPTIONS = {
     "V0": "Raw LLM",
-    "V1": "Triage Evidence",
-    "V2": "V1 + Dedup",
-    "V3": "CrashSage Full",
+    "V1": "Rule-guided filtering",
+    "V2": "Filtering + representatives",
+    "V3": "Representatives + context",
+    "V4": "Full CrashSage",
 }
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -80,9 +82,26 @@ def discover_projects(db_root: str) -> List[str]:
     return projects
 
 
-def run_all_retroanalyze(db_root: str, output_dir: str) -> Dict[str, Any]:
+def _output_path(output_dir: str, filename: str, run_tag: str | None) -> str:
+    """Return a dated sibling path without replacing the legacy filename."""
+    if not run_tag:
+        return os.path.join(output_dir, filename)
+    stem, ext = os.path.splitext(filename)
+    return os.path.join(output_dir, f"{stem}_{run_tag}{ext}")
+
+
+def run_all_retroanalyze(
+    db_root: str,
+    output_dir: str,
+    project: str | None = None,
+    run_tag: str | None = None,
+) -> Dict[str, Any]:
     """Run retroanalyze on every discovered project and save individual + aggregate results."""
     projects = discover_projects(db_root)
+    if project:
+        if project not in projects:
+            raise ValueError(f"Project not found under {db_root}: {project}")
+        projects = [project]
     if not projects:
         print(f"[!] No projects with crash data found under {db_root}")
         return {}
@@ -106,7 +125,7 @@ def run_all_retroanalyze(db_root: str, output_dir: str) -> Dict[str, Any]:
             all_reports[proj] = report
 
             # Save individual result
-            out_file = os.path.join(output_dir, f"{proj}_retro.yaml")
+            out_file = _output_path(output_dir, f"{proj}_retro.yaml", run_tag)
             with open(out_file, "w") as f:
                 yaml.dump(report, f, default_flow_style=False, allow_unicode=True, width=120)
             print(f"    Saved: {out_file}")
@@ -253,9 +272,11 @@ def print_aggregate(agg: Dict[str, Any]):
 
 # ── CSV export ───────────────────────────────────────────────────────────────
 
-def export_per_project_csv(agg: Dict[str, Any], output_dir: str):
+def export_per_project_csv(
+    agg: Dict[str, Any], output_dir: str, run_tag: str | None = None,
+):
     """Export per-project summary as CSV (Table 1 in paper)."""
-    csv_path = os.path.join(output_dir, "per_project_summary.csv")
+    csv_path = _output_path(output_dir, "per_project_summary.csv", run_tag)
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow([
@@ -275,7 +296,9 @@ def export_per_project_csv(agg: Dict[str, Any], output_dir: str):
     return csv_path
 
 
-def export_per_crash_csv(all_reports: Dict[str, Dict], output_dir: str):
+def export_per_crash_csv(
+    all_reports: Dict[str, Dict], output_dir: str, run_tag: str | None = None,
+):
     """Export per-crash detail as CSV (for detailed ground-truth labeling).
 
     Columns include THREE judgments for comparison:
@@ -283,7 +306,7 @@ def export_per_crash_csv(all_reports: Dict[str, Dict], output_dir: str):
       - TriageIsApiBug:   deterministic triage rules judgment
       - EnhancedIsApiBug: stored is_api_bug from YAML (enhanced LLM or old LLM)
     """
-    csv_path = os.path.join(output_dir, "per_crash_detail.csv")
+    csv_path = _output_path(output_dir, "per_crash_detail.csv", run_tag)
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow([
@@ -324,9 +347,11 @@ def export_per_crash_csv(all_reports: Dict[str, Dict], output_dir: str):
     return csv_path
 
 
-def export_triage_distribution_csv(all_reports: Dict[str, Dict], output_dir: str):
+def export_triage_distribution_csv(
+    all_reports: Dict[str, Dict], output_dir: str, run_tag: str | None = None,
+):
     """Export triage label distribution per project (for paper figure)."""
-    csv_path = os.path.join(output_dir, "triage_distribution.csv")
+    csv_path = _output_path(output_dir, "triage_distribution.csv", run_tag)
 
     # Collect all labels
     all_labels = set()
@@ -348,7 +373,9 @@ def export_triage_distribution_csv(all_reports: Dict[str, Dict], output_dir: str
 
 # ── Ablation CSV export ──────────────────────────────────────────────────────
 
-def export_ablation_csv(all_reports: Dict[str, Dict], output_dir: str):
+def export_ablation_csv(
+    all_reports: Dict[str, Dict], output_dir: str, run_tag: str | None = None,
+):
     """Export per-variant ablation comparison as CSV (Paper Table 5 / Fig 9).
 
     Two files:
@@ -356,7 +383,7 @@ def export_ablation_csv(all_reports: Dict[str, Dict], output_dir: str):
       - ablation_per_crash.csv:   per-crash per-variant sent_to_llm and is_api_bug
     """
     # Per-project ablation CSV
-    csv1 = os.path.join(output_dir, "ablation_per_project.csv")
+    csv1 = _output_path(output_dir, "ablation_per_project.csv", run_tag)
     with open(csv1, "w", newline="") as f:
         w = csv.writer(f)
         header = ["Project", "TotalCrashes"]
@@ -379,7 +406,7 @@ def export_ablation_csv(all_reports: Dict[str, Dict], output_dir: str):
     print(f"  Ablation per-project CSV saved: {csv1}")
 
     # Per-crash ablation CSV
-    csv2 = os.path.join(output_dir, "ablation_per_crash.csv")
+    csv2 = _output_path(output_dir, "ablation_per_crash.csv", run_tag)
     with open(csv2, "w", newline="") as f:
         w = csv.writer(f)
         header = ["Project", "CrashID", "Driver", "BugType", "TriageLabel",
@@ -563,15 +590,34 @@ def evaluate_ablation_ground_truth(csv_path: str):
 
 # ── main ─────────────────────────────────────────────────────────────────────
 
-def _load_reports_from_yaml(db_root: str, output_dir: str) -> Dict[str, Dict]:
+def _load_reports_from_yaml(
+    db_root: str,
+    output_dir: str,
+    project: str | None = None,
+    run_tag: str | None = None,
+) -> Dict[str, Dict]:
     """Load previously saved retroanalyze YAML results."""
-    projects = discover_projects(db_root)
+    projects = [project] if project else discover_projects(db_root)
     all_reports = {}
     for proj in projects:
-        retro_path = os.path.join(output_dir, f"{proj}_retro.yaml")
-        if os.path.isfile(retro_path):
-            with open(retro_path) as f:
-                all_reports[proj] = yaml.safe_load(f)
+        if run_tag:
+            candidates = [
+                _output_path(output_dir, f"{proj}_retro.yaml", run_tag),
+            ]
+        else:
+            candidates = [
+                os.path.join(output_dir, f"{proj}_retro.yaml"),
+                *glob.glob(os.path.join(output_dir, f"{proj}_retro_*.yaml")),
+            ]
+        existing = [path for path in candidates if os.path.isfile(path)]
+        if not existing:
+            continue
+        retro_path = max(
+            existing,
+            key=lambda path: (os.path.getmtime(path), path),
+        )
+        with open(retro_path) as f:
+            all_reports[proj] = yaml.safe_load(f)
     return all_reports
 
 
@@ -583,6 +629,12 @@ def main():
                         help="Root directory containing project subdirs (default: external_database)")
     parser.add_argument("--output", default="results/",
                         help="Output directory for results (default: results/)")
+    parser.add_argument("--project", default=None,
+                        help="Only analyze/load this specific project")
+    parser.add_argument("--run-tag", default=None,
+                        help="Output timestamp tag; defaults to the current time for "
+                             "retroanalyze/ablation and to the latest saved run for "
+                             "summary/csv")
     parser.add_argument("--mode", choices=["retroanalyze", "summary", "csv", "ablation"],
                         default="retroanalyze",
                         help="Mode: retroanalyze (full run), summary (re-aggregate), "
@@ -602,10 +654,17 @@ def main():
         return
 
     os.makedirs(args.output, exist_ok=True)
+    run_tag = args.run_tag or datetime.now().strftime("%Y%m%d_%H%M%S")
 
     if args.mode == "retroanalyze":
         # Full run
-        all_reports = run_all_retroanalyze(args.db_root, args.output)
+        try:
+            all_reports = run_all_retroanalyze(
+                args.db_root, args.output, project=args.project, run_tag=run_tag,
+            )
+        except ValueError as exc:
+            print(f"[!] {exc}")
+            sys.exit(1)
         if not all_reports:
             print("[!] No projects with crash data found.")
             sys.exit(1)
@@ -613,20 +672,23 @@ def main():
         print_aggregate(agg)
 
         # Save aggregate
-        agg_path = os.path.join(args.output, "aggregate_summary.yaml")
+        agg_path = _output_path(args.output, "aggregate_summary.yaml", run_tag)
         with open(agg_path, "w") as f:
             yaml.dump(agg, f, default_flow_style=False, allow_unicode=True, width=120)
         print(f"\n  Aggregate saved: {agg_path}")
 
         # Export CSVs
         print("\n  Exporting CSVs for paper...")
-        export_per_project_csv(agg, args.output)
-        export_per_crash_csv(all_reports, args.output)
-        export_triage_distribution_csv(all_reports, args.output)
-        export_ablation_csv(all_reports, args.output)
+        export_per_project_csv(agg, args.output, run_tag=run_tag)
+        export_per_crash_csv(all_reports, args.output, run_tag=run_tag)
+        export_triage_distribution_csv(all_reports, args.output, run_tag=run_tag)
+        export_ablation_csv(all_reports, args.output, run_tag=run_tag)
 
     elif args.mode == "summary":
-        all_reports = _load_reports_from_yaml(args.db_root, args.output)
+        all_reports = _load_reports_from_yaml(
+            args.db_root, args.output, project=args.project,
+            run_tag=args.run_tag,
+        )
         if not all_reports:
             print("[!] No saved retroanalyze results found. Run --mode retroanalyze first.")
             sys.exit(1)
@@ -634,26 +696,35 @@ def main():
         print_aggregate(agg)
 
     elif args.mode == "csv":
-        all_reports = _load_reports_from_yaml(args.db_root, args.output)
+        all_reports = _load_reports_from_yaml(
+            args.db_root, args.output, project=args.project,
+            run_tag=args.run_tag,
+        )
         if not all_reports:
             print("[!] No saved retroanalyze results found. Run --mode retroanalyze first.")
             sys.exit(1)
         agg = aggregate_summary(all_reports)
         print_aggregate(agg)
-        export_per_project_csv(agg, args.output)
-        export_per_crash_csv(all_reports, args.output)
-        export_triage_distribution_csv(all_reports, args.output)
-        export_ablation_csv(all_reports, args.output)
+        export_per_project_csv(agg, args.output, run_tag=run_tag)
+        export_per_crash_csv(all_reports, args.output, run_tag=run_tag)
+        export_triage_distribution_csv(all_reports, args.output, run_tag=run_tag)
+        export_ablation_csv(all_reports, args.output, run_tag=run_tag)
 
     elif args.mode == "ablation":
         # Always re-run retroanalyze to ensure ablation_variants are computed
-        all_reports = run_all_retroanalyze(args.db_root, args.output)
+        try:
+            all_reports = run_all_retroanalyze(
+                args.db_root, args.output, project=args.project, run_tag=run_tag,
+            )
+        except ValueError as exc:
+            print(f"[!] {exc}")
+            sys.exit(1)
         if not all_reports:
             print("[!] No projects with crash data found.")
             sys.exit(1)
         agg = aggregate_summary(all_reports)
         print_aggregate(agg)
-        export_ablation_csv(all_reports, args.output)
+        export_ablation_csv(all_reports, args.output, run_tag=run_tag)
 
 
 if __name__ == "__main__":

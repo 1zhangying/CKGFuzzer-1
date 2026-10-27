@@ -26,10 +26,10 @@ LEGACY_DESCRIPTIONS = {
 }
 
 CONTROLLED_DESCRIPTIONS = {
-    "V1": "Rule-guided LLM",
-    "V2": "Rule-guided LLM with representative selection",
-    "V3": "Static + runtime context",
-    "V4": "Static + runtime + clean direct prompt",
+    "V1": "Rule-guided filtering + direct prompt",
+    "V2": "Filtering + representative selection + direct prompt",
+    "V3": "Representatives + static/runtime context + direct prompt",
+    "V4": "Representatives + context + differential prompt",
 }
 
 

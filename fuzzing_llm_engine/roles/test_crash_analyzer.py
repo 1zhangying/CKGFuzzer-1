@@ -5,6 +5,9 @@ import unittest
 
 from roles.crash_analyzer import (
     _DIFFERENTIAL_ANALYSIS_INSTRUCTIONS,
+    _DIFFERENTIAL_V3_ANALYSIS_INSTRUCTIONS,
+    _DIFFERENTIAL_V4_ANALYSIS_INSTRUCTIONS,
+    _DIFFERENTIAL_V5_ANALYSIS_INSTRUCTIONS,
     _DIRECT_V1_ANALYSIS_INSTRUCTIONS,
     _parse_enhanced_json_response,
 )
@@ -56,6 +59,67 @@ class CrashAnalyzerStructuredResponseTest(unittest.TestCase):
         self.assertNotIn("hypothesis", direct)
         self.assertNotIn("checklist", direct)
         self.assertIn("explicitly compare", differential)
+
+    def test_v3_differential_distinguishes_hard_and_soft_misuse(self) -> None:
+        prompt = _DIFFERENTIAL_V3_ANALYSIS_INSTRUCTIONS
+
+        self.assertIn("Hard misuse requires exact evidence", prompt)
+        self.assertIn("soft concerns, not hard misuse", prompt)
+        self.assertIn("Do not return false merely because", prompt)
+
+    def test_v3_differential_contains_no_project_specific_case(self) -> None:
+        prompt = _DIFFERENTIAL_V3_ANALYSIS_INSTRUCTIONS.lower()
+
+        for forbidden in (
+            "c-ares",
+            "cjson",
+            "expat",
+            "faad2",
+            "jansson",
+            "json-c",
+            "libpcap",
+            "libsndfile",
+            "libmad",
+            "libmspack",
+            "tinyxml2",
+            "zlib",
+            "cve-",
+        ):
+            self.assertNotIn(forbidden, prompt)
+
+    def test_v4_preserves_positive_boundary_arbitration(self) -> None:
+        prompt = _DIFFERENTIAL_V4_ANALYSIS_INSTRUCTIONS
+
+        self.assertIn("target-produced", prompt)
+        self.assertIn("target-created state", prompt)
+        self.assertIn('decision_basis="target_evidence"', prompt)
+
+    def test_v4_differential_contains_no_project_specific_case(self) -> None:
+        prompt = _DIFFERENTIAL_V4_ANALYSIS_INSTRUCTIONS.lower()
+
+        for forbidden in (
+            "c-ares",
+            "cjson",
+            "expat",
+            "faad2",
+            "jansson",
+            "json-c",
+            "libpcap",
+            "libsndfile",
+            "libmad",
+            "libmspack",
+            "tinyxml2",
+            "zlib",
+            "cve-",
+        ):
+            self.assertNotIn(forbidden, prompt)
+
+    def test_v5_starts_from_direct_prompt_with_compact_counterfactual(self) -> None:
+        prompt = _DIFFERENTIAL_V5_ANALYSIS_INSTRUCTIONS
+
+        self.assertIn("state the final attribution directly", prompt.lower())
+        self.assertIn("compare the target-defect and driver-misuse", prompt)
+        self.assertLess(len(prompt), len(_DIFFERENTIAL_V4_ANALYSIS_INSTRUCTIONS))
 
 
 if __name__ == "__main__":

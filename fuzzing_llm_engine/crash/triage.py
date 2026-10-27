@@ -10,6 +10,7 @@ Performs deterministic pre-filtering before LLM analysis to:
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass, asdict, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -36,12 +37,6 @@ class TriageResult:
     signature_source: str
     fuzzy_signature: str
     stack_signature: str
-
-
-# Helpers
-
-def _sha256_short(s: str, length: int = 16) -> str:
-    return hashlib.sha256(s.encode("utf-8", errors="ignore")).hexdigest()[:length]
 
 
 def _is_driver_frame(frame: Dict[str, Any], driver_basename: Optional[str]) -> bool:
@@ -521,6 +516,67 @@ def _rule_shallow_api_call(parsed: Dict, driver_basename: Optional[str] = None, 
     return None
 
 
+def _rule_oversized_stack_copy_from_caller_length(
+    parsed: Dict,
+    driver_basename: Optional[str] = None,
+    **_kw,
+) -> Optional[Evidence]:
+    """Filter extremely large caller-controlled copies into stack objects.
+
+    This is deliberately project- and API-agnostic.  It recognizes the crash
+    shape, not a known function name:
+
+      sanitizer interceptor -> shallow target frame -> fuzz-driver frame
+
+    An 8 KiB-or-larger write into a stack object is treated as an
+    unconstrained, fuzz-derived length argument.  Smaller fixed-buffer
+    overflows remain eligible for analysis because they are more likely to
+    expose a legitimate target-side boundary bug.
+    """
+    bug = (parsed.get("bug_type") or "").lower()
+    if "stack-buffer-overflow" not in bug:
+        return None
+
+    access_size = parsed.get("access_size")
+    if (
+        (parsed.get("access_type") or "").lower() != "write"
+        or not isinstance(access_size, int)
+        or access_size < 8192
+    ):
+        return None
+
+    frames = parsed.get("frames") or []
+    non_runtime = [f for f in frames if not _is_runtime_frame(f)]
+    if len(non_runtime) < 2:
+        return None
+    target_frame, driver_frame = non_runtime[:2]
+    if not _is_project_frame(target_frame):
+        return None
+    if not _is_driver_frame(driver_frame, driver_basename):
+        return None
+
+    interceptor_seen = any(
+        "memcpy" in (f.get("func") or "").lower()
+        or "_interceptor_" in (f.get("func") or "").lower()
+        for f in frames
+        if f.get("idx", 10**9) < target_frame.get("idx", 10**9)
+    )
+    if not interceptor_seen:
+        return None
+
+    return Evidence(
+        rule_name="oversized_stack_copy_from_caller_length",
+        evidence_type="driver_quality",
+        description=(
+            f"A shallow target API performs an {access_size}-byte copy into a "
+            "fixed stack object directly from the fuzz driver. This indicates "
+            "an unconstrained fuzz-derived length argument rather than a "
+            "small boundary error in the target."
+        ),
+        confidence=0.96,
+    )
+
+
 def _rule_leak_only(parsed: Dict, **_kw) -> Optional[Evidence]:
     """R13: Memory leak detected — low priority for crash analysis."""
     bug = (parsed.get("bug_type") or "").lower()
@@ -553,6 +609,7 @@ _DEFAULT_RULES: List[Callable] = [
     _rule_driver_only_crash,
     _rule_stack_overflow_in_driver,
     _rule_shallow_api_call,
+    _rule_oversized_stack_copy_from_caller_length,
     _rule_memcpy_raw_struct,
     _rule_api_memory_error,
     _rule_null_deref_high_scariness,
@@ -560,44 +617,94 @@ _DEFAULT_RULES: List[Callable] = [
 ]
 
 
-# Signature computation (multi-level)
+# Signature computation (paper-aligned matching keys)
+
+STACK_SIGNATURE_PREFIX_LEN = 5
+
+
+def _stable_signature_hash(label: str, payload: Any, length: int = 16) -> str:
+    """Hash a canonical payload without delimiter ambiguity."""
+    encoded = json.dumps(
+        {"kind": label, "payload": payload},
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:length]
+
+
+def _non_runtime_function_names(
+    frames: List[Dict[str, Any]],
+    limit: Optional[int] = None,
+) -> List[str]:
+    """Return ordered, known function names after removing runtime frames."""
+    names: List[str] = []
+    for frame in frames:
+        if _is_runtime_frame(frame):
+            continue
+        function = str(frame.get("func") or "").strip()
+        if not function or function in {"?", "??", "unknown"}:
+            continue
+        names.append(function)
+        if limit is not None and len(names) >= limit:
+            break
+    return names
+
 
 def compute_signatures(parsed: Dict[str, Any]) -> Tuple[str, str, str, str]:
-    """Return (primary_signature, signature_source, stack_signature, fuzzy_signature)."""
-    # Level 1: DEDUP_TOKEN (most precise, from libFuzzer)
-    if parsed.get("dedup_token"):
-        token = str(parsed["dedup_token"])
-        primary = f"dedup:{token}"
-        source = "dedup_token"
-    else:
-        # Level 2: stack-based signature
-        san = parsed.get("sanitizer_type") or "unknown"
-        bug = parsed.get("bug_type") or "unknown"
-        loc = parsed.get("first_in_project_frame") or "unknown"
-        frames = parsed.get("frames") or []
-        top_funcs = []
-        for fr in frames:
-            if _is_project_frame(fr) and fr.get("func"):
-                top_funcs.append(fr["func"])
-            if len(top_funcs) >= 3:
-                break
-        func_chain = "->".join(top_funcs) if top_funcs else "unknown"
-        raw = f"{san}|{bug}|{loc}|{func_chain}"
-        primary = f"sig:{_sha256_short(raw)}"
-        source = "computed_stack"
+    """Return paper-aligned matching signatures.
 
-    # Stack signature: error_type + top-N project function names
+    The returned tuple is:
+      (exact_signature, exact_basis, stack_signature, fuzzy_signature)
+
+    Exact matching uses the sanitizer dedup token when present. Otherwise it
+    uses bug type, crash-site location, and the first non-runtime frame. Stack
+    matching uses the bug type and a fixed prefix of the ordered non-runtime
+    project/driver/unclassified frames. Fuzzy matching is advisory only.
+    """
     frames = parsed.get("frames") or []
-    api_funcs = [fr.get("func", "?") for fr in frames if _is_project_frame(fr)][:5]
-    stack_raw = f"{parsed.get('bug_type', 'unknown')}|{'->'.join(api_funcs)}"
-    stack_sig = f"stack:{_sha256_short(stack_raw)}"
+    non_runtime_names = _non_runtime_function_names(frames)
+    bug_type = parsed.get("bug_type") or "unknown"
 
-    # Fuzzy signature: error_type + crash function only (ignore line numbers)
+    token = str(parsed.get("dedup_token") or "").strip()
+    if token:
+        # Keep the readable, stable token representation for compatibility with
+        # existing crash reports. Its equality is exactly H(d(c)) for matching.
+        exact_signature = f"dedup:{token}"
+        exact_basis = "dedup_token"
+    else:
+        location = parsed.get("first_in_project_frame")
+        if location and non_runtime_names:
+            exact_signature = "exact:" + _stable_signature_hash(
+                "exact",
+                [bug_type, str(location), non_runtime_names[0]],
+            )
+            exact_basis = "normalized_crash_site"
+        else:
+            exact_signature = ""
+            exact_basis = "unavailable"
+
+    if non_runtime_names and parsed.get("bug_type"):
+        stack_signature = "stack:v2:" + _stable_signature_hash(
+            "stack",
+            [
+                bug_type,
+                non_runtime_names[:STACK_SIGNATURE_PREFIX_LEN],
+            ],
+        )
+    else:
+        # An empty prefix cannot establish duplicate evidence and would merge
+        # every frameless report of the same class.
+        stack_signature = ""
+
     crash_func = parsed.get("first_in_project_function") or "unknown"
-    fuzzy_raw = f"{parsed.get('bug_type', 'unknown')}|{crash_func}"
-    fuzzy_sig = f"fuzzy:{_sha256_short(fuzzy_raw, 12)}"
+    fuzzy_signature = "fuzzy:" + _stable_signature_hash(
+        "fuzzy",
+        [bug_type, crash_func],
+        length=12,
+    )
 
-    return primary, source, stack_sig, fuzzy_sig
+    return exact_signature, exact_basis, stack_signature, fuzzy_signature
 
 
 # Main triage function

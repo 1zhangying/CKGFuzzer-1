@@ -27,6 +27,10 @@ _CRASH_ADDR_RE = re.compile(
 _SIGNAL_RE = re.compile(
     r"The signal is caused by a (?P<access_type>\w+) memory access", re.MULTILINE
 )
+_MEMORY_ACCESS_RE = re.compile(
+    r"^\s*(?:\x1b\[[0-9;]*m)*(?P<access_type>READ|WRITE) of size (?P<size>\d+)\b",
+    re.MULTILINE,
+)
 _SCARINESS_RE = re.compile(
     r"SCARINESS:\s*(?P<score>\d+)\s*\((?P<desc>[^)]+)\)", re.MULTILINE
 )
@@ -94,6 +98,7 @@ class SanitizerParseResult:
     crash_address: Optional[str] = None
     pc: Optional[str] = None
     access_type: Optional[str] = None
+    access_size: Optional[int] = None
     signal_hint: Optional[str] = None
     scariness_score: Optional[int] = None
     scariness_desc: Optional[str] = None
@@ -184,6 +189,14 @@ def parse_sanitizer_output(crash_info: str) -> Dict[str, Any]:
     m = _SIGNAL_RE.search(crash_info)
     if m:
         result.access_type = m.group("access_type")
+
+    m = _MEMORY_ACCESS_RE.search(crash_info)
+    if m:
+        result.access_type = m.group("access_type").lower()
+        try:
+            result.access_size = int(m.group("size"))
+        except (ValueError, TypeError):
+            result.access_size = None
 
     m = _HINT_RE.search(crash_info)
     if m:

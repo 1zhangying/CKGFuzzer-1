@@ -15,7 +15,7 @@ DB_ROOT = Path("external_database")
 RUN_VARIANT = os.environ.get("RUN_VARIANT", "V3").strip().upper()
 PROMPT_VARIANT = os.environ.get(
     "PROMPT_VARIANT",
-    "direct_v1" if RUN_VARIANT in {"V0", "V4"} else "differential",
+    "direct_v1" if RUN_VARIANT in {"V0", "V1", "V2", "V3"} else "differential",
 ).strip().lower()
 INCLUDE_TRIAGE = RUN_VARIANT != "V0"
 INCLUDE_STATIC_CONTEXT = RUN_VARIANT in {"V3", "V4"}
@@ -256,6 +256,9 @@ for i, row in enumerate(rows, 1):
             config = load_project_config(project)
             analyzer_config = dict(config["llm_analyzer"])
             analyzer_config["temperature"] = ANALYZER_TEMPERATURE
+            model_override = os.environ.get("LLM_MODEL_OVERRIDE", "").strip()
+            if model_override:
+                analyzer_config["model"] = model_override
             current_model = str(analyzer_config.get("model", ""))
             llm = get_model(analyzer_config)
             emb = get_embedding_model(config.get("llm_embedding"), device="cpu")

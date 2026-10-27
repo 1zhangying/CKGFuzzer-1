@@ -7,10 +7,10 @@ SUPPORTED_PROMPT_VARIANTS = frozenset({"differential", "direct_v1"})
 
 _ALLOWED_PROMPTS = {
     "V0": frozenset({"direct_v1"}),
-    "V1": frozenset({"differential"}),
-    "V2": frozenset({"differential", "direct_v1"}),
-    "V3": frozenset({"differential"}),
-    "V4": frozenset({"direct_v1"}),
+    "V1": frozenset({"direct_v1"}),
+    "V2": frozenset({"direct_v1"}),
+    "V3": frozenset({"direct_v1"}),
+    "V4": frozenset({"differential"}),
 }
 
 

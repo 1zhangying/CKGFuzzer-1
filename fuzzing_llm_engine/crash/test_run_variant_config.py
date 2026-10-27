@@ -16,17 +16,17 @@ class RunVariantConfigTest(unittest.TestCase):
     def test_existing_controlled_pairs_remain_valid(self) -> None:
         for run_variant, prompt_variant in (
             ("V0", "direct_v1"),
-            ("V1", "differential"),
-            ("V2", "differential"),
-            ("V3", "differential"),
-            ("V4", "direct_v1"),
+            ("V1", "direct_v1"),
+            ("V2", "direct_v1"),
+            ("V3", "direct_v1"),
+            ("V4", "differential"),
         ):
             with self.subTest(run_variant=run_variant, prompt_variant=prompt_variant):
                 validate_run_prompt_variant(run_variant, prompt_variant)
 
     def test_invalid_pair_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "V4 requires"):
-            validate_run_prompt_variant("V4", "differential")
+            validate_run_prompt_variant("V4", "direct_v1")
 
         with self.assertRaisesRegex(ValueError, "V0 requires"):
             validate_run_prompt_variant("V0", "differential")

@@ -23,6 +23,7 @@ import json
 import time
 import csv
 import shutil
+from threading import Lock
 
 import time as _time
 
@@ -76,16 +77,21 @@ def _get_binary_path(project_name: str, fuzzer_name: str) -> Optional[str]:
     return None
 
 
-# Module-level dedup engine (shared across all crash analyses in a session)
-_dedup_engine: Optional[DeduplicationEngine] = None
+# Each crash database has independent state. Sharing one global engine across
+# projects can incorrectly compare crashes from different target libraries.
+_dedup_engines: dict[str, DeduplicationEngine] = {}
+_dedup_engines_lock = Lock()
 
 def _get_dedup_engine(db_path: Optional[str] = None) -> DeduplicationEngine:
-    global _dedup_engine
-    if _dedup_engine is None:
-        _dedup_engine = DeduplicationEngine()
-        if db_path and os.path.isfile(db_path):
-            _dedup_engine.load_from_file(db_path)
-    return _dedup_engine
+    key = os.path.abspath(db_path) if db_path else "__in_memory__"
+    with _dedup_engines_lock:
+        engine = _dedup_engines.get(key)
+        if engine is None:
+            engine = DeduplicationEngine()
+            if db_path and os.path.isfile(db_path):
+                engine.load_from_file(db_path)
+            _dedup_engines[key] = engine
+        return engine
 
 
 def _extract_crash_entry(crash: dict):
@@ -236,7 +242,7 @@ def run_enhanced_crash_pipeline(
     binary_path: Optional[str] = None,
     fuzz_project_dir: Optional[str] = None,
     run_baseline: bool = False,
-    ablation_mode: str = "V3",
+    ablation_mode: str = "V4",
 ) -> dict:
     """Run the full 6-stage enhanced crash analysis pipeline.
 
@@ -252,14 +258,14 @@ def run_enhanced_crash_pipeline(
     """
     fuzz_driver_basename = os.path.basename(fuzz_driver_path) if fuzz_driver_path else None
     _timings = {}  # collect per-stage wall-clock time for experiment metrics
-    mode = (ablation_mode or "V3").upper()
+    mode = (ablation_mode or "V4").upper()
     if mode not in {"V0", "V1", "V2", "V3", "V4"}:
-        logger.warning(f"[Pipeline] Unknown ablation_mode={ablation_mode}; falling back to V3")
-        mode = "V3"
+        logger.warning(f"[Pipeline] Unknown ablation_mode={ablation_mode}; falling back to V4")
+        mode = "V4"
     include_triage = mode in {"V1", "V2", "V3", "V4"}
     include_static_context = mode in {"V3", "V4"}
     include_runtime_context = mode in {"V3", "V4"}
-    prompt_variant = "direct_v1" if mode == "V4" else "differential"
+    prompt_variant = "differential" if mode == "V4" else "direct_v1"
     _timings["ablation_mode"] = mode
 
     # Stage 1: Deterministic sanitizer parse
@@ -290,7 +296,10 @@ def run_enhanced_crash_pipeline(
     runtime_ctx = None
     repro_info = {"enabled": False}
     dedup_info = None
-    crash_id_for_dedup = f"{fuzzer_name or 'unknown'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    crash_id_for_dedup = (
+        f"{fuzzer_name or 'unknown'}_"
+        f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+    )
 
     if triage_blocks_followup:
         skip_reason = f"triage:{triage.get('label')}"
@@ -778,6 +787,7 @@ class Fuzzer():
         self.api_usage_count = api_usage_count
         self.failed_builds = []
         self.completed_drivers = []  # 记录已完成的驱动
+        self.driver_filter = None
         self.checkpoint_file = os.path.join(fuzz_project_dir, "fuzzing_checkpoint.json")
         self.individual_reports_dir = os.path.join(report_dir, "individual_reports")
         os.makedirs(self.individual_reports_dir, exist_ok=True)
@@ -793,6 +803,9 @@ class Fuzzer():
 
     def set_api_summary(self, api_summary):
         self.api_summary = api_summary
+
+    def set_driver_filter(self, driver_filter):
+        self.driver_filter = driver_filter
     
     def set_fuzz_gen_code_output_dir(self, fuzz_gen_code_output_dir):
         self.fuzz_gen_code_output_dir = fuzz_gen_code_output_dir
@@ -1362,7 +1375,24 @@ class Fuzzer():
                 shutil.rmtree(merge_report_path)
         
         # build_fuzzer_file
-        all_drivers = os.listdir(fix_fuzz_driver_dir)
+        all_drivers = sorted(os.listdir(fix_fuzz_driver_dir))
+        if self.driver_filter:
+            target = os.path.basename(self.driver_filter.strip())
+            if not target.endswith(".cc"):
+                target += ".cc"
+            all_drivers = [f for f in all_drivers if f == target]
+            if not all_drivers:
+                logger.error(
+                    f"No fuzz driver matched --driver-file={self.driver_filter!r}"
+                )
+                return
+            if all_drivers[0] in self.completed_drivers:
+                self.completed_drivers.remove(all_drivers[0])
+            if all_drivers[0] in self.failed_builds:
+                self.failed_builds.remove(all_drivers[0])
+            logger.info(
+                f"Explicit driver selection: rerunning {all_drivers[0]}"
+            )
         logger.info(f"Total drivers: {len(all_drivers)}, Already completed: {len(self.completed_drivers)}, Already failed: {len(self.failed_builds)}")
         
         for fuzz_driver_file in all_drivers:

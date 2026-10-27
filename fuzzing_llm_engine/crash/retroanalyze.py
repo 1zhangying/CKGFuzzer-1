@@ -43,7 +43,7 @@ from crash.triage import triage_crash, compute_signatures
 from crash.locator import locate_crash_site, format_call_chain_for_llm
 from crash.dedup import DeduplicationEngine
 
-ABLATION_VARIANTS = ("V0", "V1", "V2", "V3")
+ABLATION_VARIANTS = ("V0", "V1", "V2", "V3", "V4")
 
 
 def _clean_crash_info(raw: str) -> str:
@@ -94,7 +94,7 @@ def _load_saved_ablation_variants(entry: Dict[str, Any]) -> Dict[str, Dict[str, 
     return variants
 
 
-def _default_v3_result(entry: Dict[str, Any], triage_label: Optional[str]) -> Optional[Dict[str, Any]]:
+def _default_v4_result(entry: Dict[str, Any], triage_label: Optional[str]) -> Optional[Dict[str, Any]]:
     if _triage_filters_llm(triage_label):
         return {
             "sent_to_llm": False,
@@ -136,13 +136,29 @@ def _overlay_saved_pipeline_fields(result: Dict[str, Any], entry: Dict[str, Any]
         result["is_deadly_signal_only"] = parsed.get("is_deadly_signal_only", False)
 
     variants = _load_saved_ablation_variants(entry)
-    if "V3" not in variants:
-        v3 = _default_v3_result(entry, result.get("triage_label"))
-        if v3 is not None:
-            variants["V3"] = v3
+    raw_ablation = entry.get("ablation_results")
+    raw_v3 = raw_ablation.get("V3") if isinstance(raw_ablation, dict) else None
+    raw_v3_is_paper_v3 = (
+        isinstance(raw_v3, dict) and raw_v3.get("prompt_variant") == "direct_v1"
+    )
+    if "V4" not in variants:
+        # Compatibility with old data where the full CrashSage result was
+        # incorrectly stored under V3.
+        variants["V4"] = None if raw_v3_is_paper_v3 else variants.get("V3")
+        if variants["V4"] is None:
+            v4 = _default_v4_result(entry, result.get("triage_label"))
+            if v4 is not None:
+                variants["V4"] = v4
+        else:
+            variants["V4"] = dict(variants["V4"])
+    variants.pop("V3", None)
+    if raw_v3_is_paper_v3:
+        normalized = _normalize_ablation_result(raw_v3)
+        if normalized is not None:
+            variants["V3"] = normalized
     if _triage_filters_llm(result.get("triage_label")):
         skip_reason = f"triage:{result.get('triage_label')}"
-        for vname in ("V1", "V2", "V3"):
+        for vname in ("V1", "V2", "V3", "V4"):
             variants[vname] = {
                 "sent_to_llm": False,
                 "is_api_bug": False,
@@ -160,6 +176,12 @@ def _overlay_saved_pipeline_fields(result: Dict[str, Any], entry: Dict[str, Any]
         if "V3" in variants:
             variants["V3"] = {
                 **variants["V3"],
+                "sent_to_llm": not duplicate,
+                "skip_reason": "duplicate" if duplicate else "none",
+            }
+        if "V4" in variants:
+            variants["V4"] = {
+                **variants["V4"],
                 "sent_to_llm": not duplicate,
                 "skip_reason": "duplicate" if duplicate else "none",
             }
@@ -200,7 +222,6 @@ def retroanalyze_one(
             crash_id,
             triage,
             parsed,
-            scope=driver_basename,
         )
 
     # Compare old vs new judgment

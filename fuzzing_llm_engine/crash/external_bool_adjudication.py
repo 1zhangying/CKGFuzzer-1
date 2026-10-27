@@ -1064,7 +1064,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--prompt-variant",
         choices=["differential", "direct_v1"],
         default="differential",
-        help="differential compares attribution hypotheses; direct_v1 is the clean direct prompt for V4.",
+        help="direct_v1 is used by V0-V3; differential is used by full CrashSage V4.",
     )
     parser.add_argument("--save-prompts", action="store_true", help="Force prompt saving")
     parser.add_argument("--no-save-prompts", action="store_true", help="Disable prompt saving")
