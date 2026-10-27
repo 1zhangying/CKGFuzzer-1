@@ -63,7 +63,9 @@ EXPERIMENT_FINGERPRINT = experiment_fingerprint()
 
 def input_fingerprint() -> str:
     digest = hashlib.sha256()
-    for path in INPUT_FILES:
+    # V0/V1 and V2-V4 use different default manifests. Hash the canonical set
+    # of unique input files so all variants receive the same fingerprint.
+    for path in sorted(set(INPUT_FILES), key=lambda item: str(item)):
         if not path.is_file():
             raise RuntimeError(f"required experiment input is missing: {path}")
         digest.update(str(path).encode("utf-8"))
