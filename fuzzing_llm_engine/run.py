@@ -3,6 +3,7 @@ import re
 import csv
 import hashlib
 import json
+import traceback
 import yaml
 import time
 from pathlib import Path
@@ -466,6 +467,7 @@ for i, row in enumerate(rows, 1):
         }
 
     except Exception as e:
+        traceback.print_exc()
         out = {
             "Project": project,
             "CrashID": crash_id,
