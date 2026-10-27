@@ -19,7 +19,7 @@ def replay_match_count(repro_info: Dict[str, Any] | None) -> int:
     if not repro_info:
         return 0
     runs = repro_info.get("runs") or []
-    return sum(1 for run in runs if run.get("same_signature"))
+    return sum(1 for run in runs if run.get("replay_consistent"))
 
 
 def replay_consistency_passed(

@@ -138,11 +138,11 @@ def test_triage():
     print(f"  worth_llm  = {triage['is_worth_llm_analysis']}")
     print("  PASS\n")
 
-    _sep("TEST: triage — ASan SEGV → likely_api_bug or needs_review")
+    _sep("TEST: triage — shallow init API boundary follows driver-priority rules")
     parsed = parse_sanitizer_output(CRASH_ASAN_SEGV)
     triage = triage_crash(parsed, fuzz_driver_basename=DRIVER_BASENAME)
-    # This crash has API frames at top + SCARINESS=10 + driver as caller
-    # The triage should recognize it as worth analyzing
+    # R7/R10 match the shallow init boundary, and paper rule priority gives
+    # likely_driver_bug precedence over target-crash evidence.
     print(f"  label      = {triage['label']}")
     print(f"  confidence = {triage['confidence']}")
     print(f"  rules      = {triage['matched_rules']}")
@@ -152,7 +152,8 @@ def test_triage():
     print(f"  evidences:")
     for ev in triage.get("evidences", []):
         print(f"    [{ev['evidence_type']}] {ev['rule_name']}: {ev['description'][:80]}...")
-    assert triage["is_worth_llm_analysis"] is True
+    assert triage["label"] == "likely_driver_bug"
+    assert triage["is_worth_llm_analysis"] is False
     assert triage["signature"] is not None
     print("  PASS")
 
@@ -283,7 +284,7 @@ def test_report():
     )
 
     assert report["crash_id"] == "test_crash_001"
-    assert report["verdict"] == "CONFIRMED_VULNERABILITY"
+    assert report["verdict"] == "DRIVER_BUG"
     assert report["sanitizer"]["bug_type"] is not None
     assert report["location"]["crash_function"] == "init_by_options"
     assert report["analysis"]["severity"] == "medium"

@@ -13,7 +13,11 @@ import yaml
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from crash.dedup import CrashRecord, DEDUP_SCHEMA_VERSION, DeduplicationEngine
-from crash.triage import compute_signatures
+from crash.triage import (
+    compute_replay_key,
+    compute_signatures,
+    replay_keys_compatible,
+)
 
 
 def _parsed(
@@ -314,6 +318,29 @@ class DedupContractTests(unittest.TestCase):
         self.assertTrue(stack.startswith("stack:v2:"))
         self.assertTrue(fuzzy.startswith("fuzzy:"))
         self.assertEqual(DEDUP_SCHEMA_VERSION, 2)
+
+    def test_replay_key_uses_bug_location_and_ordered_non_runtime_stack(self):
+        parsed = {
+            "bug_type": "heap-buffer-overflow",
+            "first_in_project_frame": "/src/project/a.c:10",
+            "frames": [
+                {"func": "__asan_memcpy", "file": "/src/llvm-project/runtime.c"},
+                {"func": "project_fn", "file": "/src/project/a.c"},
+                {"func": "LLVMFuzzerTestOneInput", "file": "/src/project/fuzz.cc"},
+            ],
+        }
+        key = compute_replay_key(parsed)
+
+        self.assertEqual(key["bug_type"], "heap-buffer-overflow")
+        self.assertEqual(key["location"], "/src/project/a.c:10")
+        self.assertEqual(
+            key["non_runtime_frames"],
+            ["project_fn", "LLVMFuzzerTestOneInput"],
+        )
+        self.assertTrue(replay_keys_compatible(key, dict(key)))
+        changed = dict(key)
+        changed["non_runtime_frames"] = ["project_fn"]
+        self.assertFalse(replay_keys_compatible(key, changed))
 
 
 if __name__ == "__main__":

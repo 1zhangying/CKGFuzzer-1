@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Assemble V0-V4 metrics using the rebuilt dedup mapping."""
+"""Deprecated legacy assembler that allowed mixed historical predictions.
+
+Use ``python -m crash.assemble_final_1217_metrics`` for paper results.
+"""
 from __future__ import annotations
 
 import argparse
@@ -159,6 +162,10 @@ def assemble(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    raise SystemExit(
+        "assemble_variant_metrics is deprecated because it silently falls back "
+        "to historical predictions; use crash.assemble_final_1217_metrics"
+    )
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--baseline",

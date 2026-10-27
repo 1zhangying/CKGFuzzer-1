@@ -707,6 +707,33 @@ def compute_signatures(parsed: Dict[str, Any]) -> Tuple[str, str, str, str]:
     return exact_signature, exact_basis, stack_signature, fuzzy_signature
 
 
+def compute_replay_key(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the paper-defined replay key: bug type, location, and stack."""
+    return {
+        "bug_type": parsed.get("bug_type"),
+        "location": parsed.get("first_in_project_frame"),
+        "non_runtime_frames": _non_runtime_function_names(
+            parsed.get("frames") or []
+        ),
+    }
+
+
+def replay_keys_compatible(
+    original: Dict[str, Any],
+    replay: Dict[str, Any],
+) -> bool:
+    """Check the paper's kappa(c_r) ~= kappa(c_0) relation."""
+    if original.get("bug_type") != replay.get("bug_type"):
+        return False
+    if original.get("non_runtime_frames") != replay.get("non_runtime_frames"):
+        return False
+    original_location = original.get("location")
+    return (
+        original_location is None
+        or replay.get("location") == original_location
+    )
+
+
 # Main triage function
 
 def triage_crash(

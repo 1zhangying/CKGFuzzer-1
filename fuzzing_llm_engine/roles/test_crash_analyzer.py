@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
+from pathlib import Path
 
 from roles.crash_analyzer import (
+    CrashAnalyzer,
     _DIFFERENTIAL_ANALYSIS_INSTRUCTIONS,
     _DIFFERENTIAL_V3_ANALYSIS_INSTRUCTIONS,
     _DIFFERENTIAL_V4_ANALYSIS_INSTRUCTIONS,
@@ -43,6 +46,80 @@ class CrashAnalyzerStructuredResponseTest(unittest.TestCase):
     def test_primary_json_rejects_incomplete_response(self) -> None:
         with self.assertRaises(ValueError):
             _parse_enhanced_json_response('{"is_api_bug": true}')
+
+    def test_v0_uses_ckgfuzzer_evidence_without_crashsage_context(self) -> None:
+        response_text = self._response(True)
+
+        class _Completion:
+            text = response_text
+
+        class _LLM:
+            def complete(self, _prompt: str) -> _Completion:
+                return _Completion()
+
+        analyzer = object.__new__(CrashAnalyzer)
+        analyzer.api_src = {}
+        analyzer.llm = _LLM()
+        analyzer.extract_potential_error_patterns = lambda _code: ["pattern"]
+        analyzer.query_cwe_vulnerabilities = lambda _crash: "CWE-120"
+
+        with tempfile.TemporaryDirectory() as directory:
+            driver = Path(directory) / "driver.cc"
+            driver.write_text("int LLVMFuzzerTestOneInput() { return 0; }")
+            result, category, _text, enhanced = analyzer.analyze_crash_ckgfuzzer(
+                "ERROR: AddressSanitizer: heap-buffer-overflow",
+                str(driver),
+                [],
+                capture_prompt=True,
+            )
+
+        self.assertTrue(result)
+        self.assertEqual(category, "Stack Overflow")
+        metadata = enhanced["_experiment_metadata"]
+        self.assertEqual(metadata["analysis_engine"], "ckgfuzzer")
+        self.assertFalse(metadata["include_triage"])
+        self.assertFalse(metadata["include_reconstruction_context"])
+        self.assertIn("Potential error patterns in API", metadata["prompt"])
+        self.assertNotIn("SECTION 1: STATIC ANALYSIS", metadata["prompt"])
+
+    def test_v1_disables_reconstruction_context_even_with_driver_oracle_source(self) -> None:
+        response_text = self._response(False)
+
+        class _Completion:
+            text = response_text
+
+        class _LLM:
+            def complete(self, _prompt: str) -> _Completion:
+                return _Completion()
+
+        analyzer = object.__new__(CrashAnalyzer)
+        analyzer.api_src = {}
+        analyzer.llm = _LLM()
+        analyzer.use_memory = False
+        analyzer.init_crash = list(CrashAnalyzer.init_crash)
+        analyzer.extract_potential_error_patterns = lambda _code: ["pattern"]
+        analyzer.query_cwe_vulnerabilities = lambda _crash: "CWE-120"
+
+        with tempfile.TemporaryDirectory() as directory:
+            driver = Path(directory) / "driver.cc"
+            driver.write_text(
+                "int LLVMFuzzerTestOneInput() { if (1) __builtin_trap(); return 0; }"
+            )
+            _result, _category, _text, enhanced = analyzer.analyze_crash_enhanced(
+                "ERROR: AddressSanitizer: heap-buffer-overflow",
+                str(driver),
+                [],
+                include_triage=False,
+                include_static_context=False,
+                include_runtime_context=False,
+                include_reconstruction_context=False,
+                prompt_variant="direct_v1",
+                capture_prompt=True,
+            )
+
+        prompt = enhanced["_experiment_metadata"]["prompt"]
+        self.assertIn("Reconstruction context is disabled for this variant", prompt)
+        self.assertNotIn("POST-CALL ORACLE DETECTED", prompt)
 
     def test_direct_v1_instruction_is_not_a_differential_checklist(self) -> None:
         direct = _DIRECT_V1_ANALYSIS_INSTRUCTIONS.format(

@@ -1,36 +1,48 @@
 import os
 import re
 import csv
+import hashlib
 import json
 import yaml
 import time
 from pathlib import Path
 
-from crash.run_variant_config import validate_run_prompt_variant
+from crash.run_variant_config import (
+    experiment_fingerprint,
+    get_variant_config,
+    validate_run_prompt_variant,
+)
 
-DEFAULT_MANIFEST = Path("results/revision_20260722/representatives_v1.csv")
-MANIFEST = Path(os.environ.get("MANIFEST", str(DEFAULT_MANIFEST)))
-CUSTOM_MANIFEST = "MANIFEST" in os.environ
 DB_ROOT = Path("external_database")
 RUN_VARIANT = os.environ.get("RUN_VARIANT", "V3").strip().upper()
+VARIANT_CONFIG = get_variant_config(RUN_VARIANT)
+BASELINE_MANIFEST = Path("results/all_crashes_v0_v4_groundtruth.csv")
+REPRESENTATIVE_MANIFEST = Path(
+    "results/dedup_schema2_14projects_20261027/"
+    "representatives_all_14projects.csv"
+)
+DEFAULT_MANIFEST = (
+    BASELINE_MANIFEST
+    if RUN_VARIANT in {"V0", "V1"}
+    else REPRESENTATIVE_MANIFEST
+)
+MANIFEST = Path(os.environ.get("MANIFEST", str(DEFAULT_MANIFEST)))
+CUSTOM_MANIFEST = "MANIFEST" in os.environ
+INPUT_FILES = (
+    MANIFEST,
+    BASELINE_MANIFEST,
+    REPRESENTATIVE_MANIFEST,
+    Path("results/dedup_schema2_14projects_20261027/dedup_mapping_14projects.csv"),
+)
 PROMPT_VARIANT = os.environ.get(
     "PROMPT_VARIANT",
-    "direct_v1" if RUN_VARIANT in {"V0", "V1", "V2", "V3"} else "differential",
+    VARIANT_CONFIG.prompt_variant,
 ).strip().lower()
-INCLUDE_TRIAGE = RUN_VARIANT != "V0"
-INCLUDE_STATIC_CONTEXT = RUN_VARIANT in {"V3", "V4"}
-INCLUDE_RUNTIME_CONTEXT = RUN_VARIANT in {"V3", "V4"}
-STRICT_NO_CONTEXT_ABLATION = RUN_VARIANT == "V1" and os.environ.get(
-    "STRICT_NO_CONTEXT_ABLATION",
-    "1",
-).strip().lower() in {"1", "true", "yes"}
-EVIDENCE_VARIANT = {
-    "V0": "raw_no_context",
-    "V1": "triage_no_context",
-    "V2": "triage_dedup_no_context",
-    "V3": "full",
-    "V4": "full",
-}[RUN_VARIANT]
+INCLUDE_TRIAGE = VARIANT_CONFIG.use_triage
+INCLUDE_STATIC_CONTEXT = VARIANT_CONFIG.include_static_context
+INCLUDE_RUNTIME_CONTEXT = VARIANT_CONFIG.include_runtime_context
+INCLUDE_RECONSTRUCTION_CONTEXT = VARIANT_CONFIG.include_reconstruction_context
+EVIDENCE_VARIANT = VARIANT_CONFIG.evidence_variant
 DEFAULT_OUT_DIR = f"results/revision_20260725/llm_{RUN_VARIANT.lower()}_{EVIDENCE_VARIANT}_{PROMPT_VARIANT}"
 OUT_DIR = Path(os.environ.get("OUT_DIR", DEFAULT_OUT_DIR))
 OUT_CSV = OUT_DIR / "llm_bool_results.csv"
@@ -45,16 +57,38 @@ RERUN_GDB = os.environ.get(f"{RUN_VARIANT}_RERUN_GDB", "0").strip().lower() in {
 ANALYZER_TEMPERATURE = float(os.environ.get(f"{RUN_VARIANT}_TEMPERATURE", "0"))
 CAPTURE_ARTIFACTS = os.environ.get(f"{RUN_VARIANT}_CAPTURE_ARTIFACTS", "1").strip().lower() not in {"0", "false", "no"}
 
+
+EXPERIMENT_FINGERPRINT = experiment_fingerprint()
+
+
+def input_fingerprint() -> str:
+    digest = hashlib.sha256()
+    for path in INPUT_FILES:
+        if not path.is_file():
+            raise RuntimeError(f"required experiment input is missing: {path}")
+        digest.update(str(path).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+INPUT_FINGERPRINT = input_fingerprint()
+
 validate_run_prompt_variant(RUN_VARIANT, PROMPT_VARIANT)
+if ANALYZER_TEMPERATURE != 0:
+    raise RuntimeError("paper ablation requires temperature=0")
+if FAST_MODE:
+    raise RuntimeError("fast mode changes the CKGFuzzer baseline and is disabled")
 
 from llama_index.core import Settings
 from models.get_model import get_model, get_embedding_model
-import roles.crash_analyzer as crash_analyzer_module
 from roles.crash_analyzer import CrashAnalyzer
 from crash.sanitizer_parser import parse_sanitizer_output
 from crash.triage import triage_crash
 from crash.locator import locate_crash_site
-from crash.debugger import reproduce_with_gdb
+from crash.debugger import collect_runtime_context
+from crash.pipeline_gate import replay_consistency_passed
 
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -82,6 +116,15 @@ def load_project_config(project):
     path = DB_ROOT / project / "config.yaml"
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def configured_model(project):
+    config = load_project_config(project)
+    analyzer_config = config.get("llm_analyzer") or {}
+    return str(
+        os.environ.get("LLM_MODEL_OVERRIDE", "").strip()
+        or analyzer_config.get("model", "")
+    )
 
 def load_api_combine(project, driver):
     p = DB_ROOT / project / "agents_results" / "api_combine.json"
@@ -129,18 +172,33 @@ def resolve_binary(project, driver, entry):
 
 def get_runtime_context(project, driver, entry):
     ctx = entry.get("gdb_runtime_context")
-    if ctx and ctx.get("reproduced"):
+    if (
+        ctx
+        and ctx.get("reproduced")
+        and (
+            ctx.get("stable") is True
+            or replay_consistency_passed(entry.get("repro"))
+        )
+    ):
         return ctx
     if not RERUN_GDB:
-        return ctx or {}
+        return {}
+    if not replay_consistency_passed(entry.get("repro")):
+        return {}
     binary = resolve_binary(project, driver, entry)
     poc = (entry.get("poc_paths") or {}).get("poc")
     if binary and poc and Path(poc).exists():
         try:
-            return reproduce_with_gdb(binary, poc, timeout=15)
+            return collect_runtime_context(
+                binary,
+                poc,
+                attempts=3,
+                timeout=15,
+                prefer_docker=True,
+            )
         except Exception:
-            return ctx or {}
-    return ctx or {}
+            return {}
+    return {}
 
 
 def save_analysis_artifact(project, crash_id, driver, analysis_text, enhanced):
@@ -169,16 +227,63 @@ def save_analysis_artifact(project, crash_id, driver, analysis_text, enhanced):
     with (artifact_dir / f"{safe_name}.json").open("w", encoding="utf-8") as f:
         json.dump(artifact, f, ensure_ascii=False, indent=2)
 
+def row_has_matching_artifact(row):
+    if row.get("Status") != "ok":
+        return False
+    expected_fields = {
+        "EvidenceVariant": EVIDENCE_VARIANT,
+        "PromptVariant": PROMPT_VARIANT,
+        "RunVariant": RUN_VARIANT,
+        "AnalysisEngine": VARIANT_CONFIG.analysis_engine,
+        "InputFingerprint": INPUT_FINGERPRINT,
+    }
+    if any(row.get(key) != value for key, value in expected_fields.items()):
+        return False
+    try:
+        if row.get("LLMModel") != configured_model(row["Project"]):
+            return False
+    except Exception:
+        return False
+
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", row["CrashID"])
+    artifact_path = OUT_DIR / "analysis_artifacts" / f"{safe_name}.json"
+    if not artifact_path.is_file():
+        return False
+    try:
+        metadata = (
+            json.loads(artifact_path.read_text(encoding="utf-8")).get(
+                "experiment_metadata"
+            )
+            or {}
+        )
+    except (OSError, json.JSONDecodeError):
+        return False
+    return (
+        metadata.get("run_variant") == RUN_VARIANT
+        and metadata.get("analysis_engine") == VARIANT_CONFIG.analysis_engine
+        and metadata.get("prompt_variant") == PROMPT_VARIANT
+        and metadata.get("experiment_fingerprint") == EXPERIMENT_FINGERPRINT
+        and metadata.get("input_fingerprint") == INPUT_FINGERPRINT
+    )
+
+
 done = set()
 if OUT_CSV.exists():
     for r in read_csv(OUT_CSV):
-        if r.get("Status") == "ok":
+        if row_has_matching_artifact(r):
             done.add((r["Project"], r["CrashID"]))
 
 rows = read_csv(MANIFEST)
 if not CUSTOM_MANIFEST:
-    sent_to_llm_field = "V2_SentToLLM" if RUN_VARIANT in {"V2", "V3", "V4"} else f"{RUN_VARIANT}_SentToLLM"
-    rows = [r for r in rows if truth(r.get(sent_to_llm_field))]
+    if RUN_VARIANT == "V1":
+        rows = [
+            row
+            for row in rows
+            if row.get("TriageLabel") not in {"noise", "likely_driver_bug"}
+        ]
+for row in rows:
+    if not row.get("Driver") and row.get("CrashID"):
+        row["Driver"] = re.sub(r"_crash_\d+$", "", row["CrashID"])
 if PROJECT_FILTER:
     rows = [r for r in rows if r.get("Project") == PROJECT_FILTER]
 if CRASH_ID_FILTER:
@@ -192,10 +297,19 @@ if (PROJECT_FILTER or CRASH_ID_FILTER) and not rows:
 
 fieldnames = [
     "Project", "CrashID", "Driver", "LLMName", "LLMModel", "Result", "Reason",
-    "Status", "LatencyMs", "PromptChars", "EvidenceVariant", "PromptVariant"
+    "Status", "LatencyMs", "PromptChars", "PromptSHA256", "EvidenceVariant",
+    "PromptVariant", "RunVariant", "AnalysisEngine", "ExperimentFingerprint",
+    "InputFingerprint",
 ]
 
 write_header = not OUT_CSV.exists()
+if OUT_CSV.exists():
+    with OUT_CSV.open("r", encoding="utf-8-sig", newline="") as existing_file:
+        existing_fields = next(csv.reader(existing_file), [])
+    if existing_fields != fieldnames:
+        raise RuntimeError(
+            f"{OUT_CSV} uses an obsolete result schema; choose a fresh OUT_DIR"
+        )
 csv_f = OUT_CSV.open("a", encoding="utf-8", newline="")
 writer = csv.DictWriter(csv_f, fieldnames=fieldnames)
 if write_header:
@@ -213,31 +327,7 @@ def patch_fast_analyzer(analyzer):
     return analyzer
 
 def analyze_for_current_variant(analyzer, *args, **kwargs):
-    if not STRICT_NO_CONTEXT_ABLATION:
-        return analyzer.analyze_crash_enhanced(*args, **kwargs)
-
-    saved_extract_patterns = analyzer.extract_potential_error_patterns
-    saved_helpers = {
-        "_extract_driver_oracle_context": crash_analyzer_module._extract_driver_oracle_context,
-        "_extract_precondition_risk_context": crash_analyzer_module._extract_precondition_risk_context,
-        "_extract_decisive_evidence_context": crash_analyzer_module._extract_decisive_evidence_context,
-    }
-    try:
-        analyzer.extract_potential_error_patterns = lambda code: []
-        crash_analyzer_module._extract_driver_oracle_context = (
-            lambda *a, **k: "[ORACLE] Disabled by strict V1 no-context ablation."
-        )
-        crash_analyzer_module._extract_precondition_risk_context = (
-            lambda *a, **k: "[PRECONDITION] Disabled by strict V1 no-context ablation."
-        )
-        crash_analyzer_module._extract_decisive_evidence_context = (
-            lambda *a, **k: "[DECISIVE-EVIDENCE] Disabled by strict V1 no-context ablation."
-        )
-        return analyzer.analyze_crash_enhanced(*args, **kwargs)
-    finally:
-        analyzer.extract_potential_error_patterns = saved_extract_patterns
-        for name, func in saved_helpers.items():
-            setattr(crash_analyzer_module, name, func)
+    return analyzer.analyze_crash_enhanced(*args, **kwargs)
 
 for i, row in enumerate(rows, 1):
     project = row["Project"]
@@ -291,30 +381,47 @@ for i, row in enumerate(rows, 1):
             parsed = entry.get("sanitizer_parsed") or parse_sanitizer_output(crash_info)
         if INCLUDE_TRIAGE:
             triage = entry.get("triage") or triage_crash(parsed, fuzz_driver_basename=f"{driver}.cc")
-        location = (
-            entry.get("location") or locate_crash_site(parsed, driver_basename=f"{driver}.cc")
-            if INCLUDE_STATIC_CONTEXT
-            else None
-        )
+        if INCLUDE_STATIC_CONTEXT:
+            stored_location = entry.get("location") or {}
+            location = (
+                stored_location
+                if stored_location.get("call_chain_context")
+                and stored_location.get("crash_code_snippet")
+                else locate_crash_site(parsed, driver_basename=f"{driver}.cc")
+            )
+        else:
+            location = None
         runtime_ctx = get_runtime_context(project, driver, entry) if INCLUDE_RUNTIME_CONTEXT else {}
         fuzz_driver_path = find_driver_path(project, driver)
         api_combine = load_api_combine(project, driver)
 
         t0 = time.time()
-        is_api_bug, category, analysis_text, enhanced = analyze_for_current_variant(
-            analyzers[project],
-            crash_info,
-            fuzz_driver_path,
-            api_combine,
-            triage_result=triage,
-            location_result=location,
-            runtime_context=runtime_ctx,
-            include_triage=INCLUDE_TRIAGE,
-            include_static_context=INCLUDE_STATIC_CONTEXT,
-            include_runtime_context=INCLUDE_RUNTIME_CONTEXT,
-            prompt_variant=PROMPT_VARIANT,
-            capture_prompt=CAPTURE_ARTIFACTS,
-        )
+        if VARIANT_CONFIG.analysis_engine == "ckgfuzzer":
+            is_api_bug, category, analysis_text, enhanced = (
+                analyzers[project].analyze_crash_ckgfuzzer(
+                    crash_info,
+                    fuzz_driver_path,
+                    api_combine,
+                    capture_prompt=CAPTURE_ARTIFACTS,
+                )
+            )
+        else:
+            is_api_bug, category, analysis_text, enhanced = analyze_for_current_variant(
+                analyzers[project],
+                crash_info,
+                fuzz_driver_path,
+                api_combine,
+                triage_result=triage,
+                location_result=location,
+                runtime_context=runtime_ctx,
+                include_triage=INCLUDE_TRIAGE,
+                include_static_context=INCLUDE_STATIC_CONTEXT,
+                include_runtime_context=INCLUDE_RUNTIME_CONTEXT,
+                include_reconstruction_context=INCLUDE_RECONSTRUCTION_CONTEXT,
+                prompt_variant=PROMPT_VARIANT,
+                capture_prompt=CAPTURE_ARTIFACTS,
+                run_decision_repairs=False,
+            )
         experiment_metadata = (enhanced or {}).get("_experiment_metadata")
         if experiment_metadata is not None:
             experiment_metadata.update({
@@ -322,10 +429,13 @@ for i, row in enumerate(rows, 1):
                 "fast_mode": FAST_MODE,
                 "rerun_gdb": RERUN_GDB,
                 "run_variant": RUN_VARIANT,
+                "analysis_engine": VARIANT_CONFIG.analysis_engine,
+                "experiment_fingerprint": EXPERIMENT_FINGERPRINT,
+                "input_fingerprint": INPUT_FINGERPRINT,
                 "include_triage": INCLUDE_TRIAGE,
                 "include_static_context": INCLUDE_STATIC_CONTEXT,
                 "include_runtime_context": INCLUDE_RUNTIME_CONTEXT,
-                "strict_no_context_ablation": STRICT_NO_CONTEXT_ABLATION,
+                "include_reconstruction_context": INCLUDE_RECONSTRUCTION_CONTEXT,
             })
         save_analysis_artifact(project, crash_id, driver, analysis_text, enhanced)
         latency_ms = int((time.time() - t0) * 1000)
@@ -342,8 +452,15 @@ for i, row in enumerate(rows, 1):
             "Status": "ok",
             "LatencyMs": latency_ms,
             "PromptChars": prompt_chars,
+            "PromptSHA256": ((enhanced or {}).get("_experiment_metadata") or {}).get(
+                "prompt_sha256", ""
+            ),
             "EvidenceVariant": EVIDENCE_VARIANT,
             "PromptVariant": PROMPT_VARIANT,
+            "RunVariant": RUN_VARIANT,
+            "AnalysisEngine": VARIANT_CONFIG.analysis_engine,
+            "ExperimentFingerprint": EXPERIMENT_FINGERPRINT,
+            "InputFingerprint": INPUT_FINGERPRINT,
         }
 
     except Exception as e:
@@ -358,8 +475,13 @@ for i, row in enumerate(rows, 1):
             "Status": "error",
             "LatencyMs": "",
             "PromptChars": "",
+            "PromptSHA256": "",
             "EvidenceVariant": EVIDENCE_VARIANT,
             "PromptVariant": PROMPT_VARIANT,
+            "RunVariant": RUN_VARIANT,
+            "AnalysisEngine": VARIANT_CONFIG.analysis_engine,
+            "ExperimentFingerprint": EXPERIMENT_FINGERPRINT,
+            "InputFingerprint": INPUT_FINGERPRINT,
         }
 
     writer.writerow(out)

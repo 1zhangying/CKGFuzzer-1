@@ -28,10 +28,11 @@ from threading import Lock
 import time as _time
 
 from crash.sanitizer_parser import parse_sanitizer_output, format_crash_summary
-from crash.triage import triage_crash
+from crash.triage import compute_replay_key, replay_keys_compatible, triage_crash
 from crash.locator import locate_crash_site, format_call_chain_for_llm
 from crash.debugger import collect_runtime_context, format_runtime_context_for_llm
 from crash.dedup import DeduplicationEngine
+from crash.run_variant_config import get_variant_config
 from crash.pipeline_gate import (
     replay_consistency_passed,
     triage_blocks_context_reconstruction,
@@ -127,36 +128,6 @@ def _load_crash_report_by_id(fuzz_project_dir: Optional[str], crash_id: Optional
             logger.warning(f"[Pipeline] Failed to load duplicate report {path}: {e}")
             return None
     return None
-
-
-def _same_exact_crash_for_inheritance(
-    original_report: Optional[dict],
-    parsed: dict,
-    triage: dict,
-    location: Optional[dict],
-    dedup_info: Optional[dict],
-) -> bool:
-    if not original_report or not dedup_info:
-        return False
-    if dedup_info.get("match_level") != "exact":
-        return False
-
-    original_sanitizer = original_report.get("sanitizer") or {}
-    original_location = original_report.get("location") or {}
-    original_signatures = original_report.get("signatures") or {}
-    location = location or {}
-
-    checks = [
-        (original_signatures.get("primary"), triage.get("signature")),
-        (original_sanitizer.get("dedup_token"), parsed.get("dedup_token")),
-        (original_sanitizer.get("bug_type"), parsed.get("bug_type")),
-        (original_sanitizer.get("access_type"), parsed.get("access_type")),
-        (original_sanitizer.get("crash_address"), parsed.get("crash_address")),
-        (original_location.get("crash_file"), location.get("crash_file")),
-        (original_location.get("crash_function"), location.get("crash_function")),
-        (str(original_location.get("crash_line")), str(location.get("crash_line"))),
-    ]
-    return all(left is not None and right is not None and left == right for left, right in checks)
 
 
 def _run_repro_once(project_name: str, fuzz_driver_file: str, fuzzer_name: str, fuzzing_llm_dir: str, corpus_dir: str, poc_name_in_corpus: str, timeout: str) -> str:
@@ -259,14 +230,19 @@ def run_enhanced_crash_pipeline(
     fuzz_driver_basename = os.path.basename(fuzz_driver_path) if fuzz_driver_path else None
     _timings = {}  # collect per-stage wall-clock time for experiment metrics
     mode = (ablation_mode or "V4").upper()
-    if mode not in {"V0", "V1", "V2", "V3", "V4"}:
+    try:
+        variant_config = get_variant_config(mode)
+    except ValueError:
         logger.warning(f"[Pipeline] Unknown ablation_mode={ablation_mode}; falling back to V4")
         mode = "V4"
-    include_triage = mode in {"V1", "V2", "V3", "V4"}
-    include_static_context = mode in {"V3", "V4"}
-    include_runtime_context = mode in {"V3", "V4"}
-    prompt_variant = "differential" if mode == "V4" else "direct_v1"
+        variant_config = get_variant_config(mode)
+    include_triage = variant_config.use_triage
+    include_static_context = variant_config.include_static_context
+    include_runtime_context = variant_config.include_runtime_context
+    include_reconstruction_context = variant_config.include_reconstruction_context
+    prompt_variant = variant_config.prompt_variant
     _timings["ablation_mode"] = mode
+    _timings["analysis_engine"] = variant_config.analysis_engine
 
     # Stage 1: Deterministic sanitizer parse
     _t0 = _time.monotonic()
@@ -279,13 +255,21 @@ def run_enhanced_crash_pipeline(
 
     # Stage 2: Rule-based triage
     _t0 = _time.monotonic()
-    triage = triage_crash(parsed, fuzz_driver_basename=fuzz_driver_basename)
+    triage = (
+        triage_crash(parsed, fuzz_driver_basename=fuzz_driver_basename)
+        if include_triage
+        else None
+    )
     _timings["stage2_triage_ms"] = round((_time.monotonic() - _t0) * 1000, 1)
-    triage_blocks_followup = triage_blocks_context_reconstruction(triage)
-    logger.info(f"[Pipeline] Stage 2 — Triage: label={triage.get('label')}, "
-                f"confidence={triage.get('confidence')}, "
-                f"rules={triage.get('matched_rules')} "
-                f"({_timings['stage2_triage_ms']}ms)")
+    triage_blocks_followup = (
+        variant_config.filter_reports
+        and triage_blocks_context_reconstruction(triage)
+    )
+    if triage:
+        logger.info(f"[Pipeline] Stage 2 — Triage: label={triage.get('label')}, "
+                    f"confidence={triage.get('confidence')}, "
+                    f"rules={triage.get('matched_rules')} "
+                    f"({_timings['stage2_triage_ms']}ms)")
 
     # Stage 3-5 are skipped entirely once triage determines the crash should not
     # proceed beyond the deterministic screening stage.
@@ -355,19 +339,24 @@ def run_enhanced_crash_pipeline(
                 repro_info["prepared"] = ok
                 if ok:
                     runs = []
+                    original_replay_key = compute_replay_key(parsed)
                     for _ in range(3):
                         fuzz_driver_file = os.path.basename(fuzz_driver_path)
                         out = _run_repro_once(project_name, fuzz_driver_file, fuzzer_name,
                                               fuzzing_llm_dir, corpus_dir, repro_name, timeout="10s")
                         p2 = parse_sanitizer_output(out or "")
-                        t2 = triage_crash(p2, fuzz_driver_basename=fuzz_driver_basename)
+                        replay_key = compute_replay_key(p2)
+                        compatible = replay_keys_compatible(
+                            original_replay_key,
+                            replay_key,
+                        )
                         runs.append({
                             "has_error": ("ERROR" in out) if isinstance(out, str) else False,
-                            "signature": t2.get("signature"),
-                            "same_signature": t2.get("signature") == triage.get("signature"),
+                            "replay_key": replay_key,
+                            "replay_consistent": compatible,
                         })
                     repro_info["runs"] = runs
-                    repro_info["repro_rate"] = f"{sum(1 for r in runs if r.get('same_signature'))}/{len(runs)}"
+                    repro_info["repro_rate"] = f"{sum(1 for r in runs if r.get('replay_consistent'))}/{len(runs)}"
             except (Exception, SystemExit) as e:
                 logger.warning(f"[Pipeline] Reproduction failed: {e}")
                 repro_info["error"] = str(e)
@@ -402,21 +391,26 @@ def run_enhanced_crash_pipeline(
             _timings["stage4_skipped"] = True
             _timings["stage4_skip_reason"] = f"ablation:{mode}"
 
-        # Stage 5: Deduplication
-        _t0 = _time.monotonic()
-        dedup_db_path = os.path.join(fuzz_project_dir, "crash", "dedup_db.yaml") if fuzz_project_dir else None
-        dedup_engine = _get_dedup_engine(dedup_db_path)
-        dedup_info = dedup_engine.add_crash(crash_id_for_dedup, triage, parsed)
-        _timings["stage5_dedup_ms"] = round((_time.monotonic() - _t0) * 1000, 1)
-        logger.info(f"[Pipeline] Stage 5 — Dedup: is_duplicate={dedup_info.get('is_duplicate')}, "
-                    f"cluster={dedup_info.get('cluster_id')} "
-                    f"({_timings['stage5_dedup_ms']}ms)")
+        # Stage 5: Representative selection is enabled from V2 onward.
+        if variant_config.use_representatives:
+            _t0 = _time.monotonic()
+            dedup_db_path = os.path.join(fuzz_project_dir, "crash", "dedup_db.yaml") if fuzz_project_dir else None
+            dedup_engine = _get_dedup_engine(dedup_db_path)
+            dedup_info = dedup_engine.add_crash(crash_id_for_dedup, triage, parsed)
+            _timings["stage5_dedup_ms"] = round((_time.monotonic() - _t0) * 1000, 1)
+            logger.info(f"[Pipeline] Stage 5 — Dedup: is_duplicate={dedup_info.get('is_duplicate')}, "
+                        f"cluster={dedup_info.get('cluster_id')} "
+                        f"({_timings['stage5_dedup_ms']}ms)")
 
-        if dedup_db_path:
-            try:
-                dedup_engine.save_to_file(dedup_db_path)
-            except Exception as e:
-                logger.warning(f"[Pipeline] Failed to save dedup DB: {e}")
+            if dedup_db_path:
+                try:
+                    dedup_engine.save_to_file(dedup_db_path)
+                except Exception as e:
+                    logger.warning(f"[Pipeline] Failed to save dedup DB: {e}")
+        else:
+            _timings["stage5_dedup_ms"] = 0.0
+            _timings["stage5_skipped"] = True
+            _timings["stage5_skip_reason"] = f"variant:{mode}"
 
     # Stage 6: LLM analysis (only if worth it and not duplicate)
     is_api_bug = False
@@ -429,34 +423,52 @@ def run_enhanced_crash_pipeline(
     def _run_stage6_llm(reason_prefix: Optional[str] = None):
         logger.info(f"[Pipeline] Stage 6 — Running enhanced LLM analysis (mode={mode})...")
         try:
-            api_bug, category, text, enhanced = crash_analyzer.analyze_crash_enhanced(
-                crash_info, fuzz_driver_path, api_combine,
-                triage_result=triage if include_triage else None,
-                location_result=location if include_static_context else None,
-                runtime_context=runtime_ctx if include_runtime_context else None,
-                include_triage=include_triage,
-                include_static_context=include_static_context,
-                include_runtime_context=include_runtime_context,
-                prompt_variant=prompt_variant,
-            )
+            if variant_config.analysis_engine == "ckgfuzzer":
+                api_bug, category, text, enhanced = (
+                    crash_analyzer.analyze_crash_ckgfuzzer(
+                        crash_info,
+                        fuzz_driver_path,
+                        api_combine,
+                    )
+                )
+            else:
+                api_bug, category, text, enhanced = (
+                    crash_analyzer.analyze_crash_enhanced(
+                        crash_info,
+                        fuzz_driver_path,
+                        api_combine,
+                        triage_result=triage if include_triage else None,
+                        location_result=location if include_static_context else None,
+                        runtime_context=runtime_ctx if include_runtime_context else None,
+                        include_triage=include_triage,
+                        include_static_context=include_static_context,
+                        include_runtime_context=include_runtime_context,
+                        include_reconstruction_context=include_reconstruction_context,
+                        prompt_variant=prompt_variant,
+                        run_decision_repairs=False,
+                    )
+                )
         except Exception as e:
-            logger.error(f"[Pipeline] Enhanced LLM analysis failed, falling back: {e}")
-            try:
-                api_bug, category, text = crash_analyzer.analyze_crash(
-                    crash_info, fuzz_driver_path, api_combine)
-                enhanced = {"is_api_bug": api_bug, "crash_category": category}
-            except Exception as e2:
-                logger.error(f"[Pipeline] Fallback analysis also failed: {e2}")
-                api_bug = False
-                category = parsed.get("bug_type") or "Unknown"
-                text = f"Analysis failed: {e2}"
-                enhanced = {}
+            logger.error(f"[Pipeline] LLM analysis failed; diagnosis incomplete: {e}")
+            api_bug = None
+            category = parsed.get("bug_type") or "Unknown"
+            text = f"Analysis incomplete: {e}"
+            enhanced = {
+                "is_api_bug": None,
+                "crash_category": category,
+                "analysis_status": "incomplete",
+                "error": str(e),
+            }
         if reason_prefix:
             text = f"{reason_prefix}\n\n{text}" if text else reason_prefix
         return api_bug, category, text, enhanced
 
     _t0 = _time.monotonic()
-    if triage.get("is_worth_llm_analysis") and not is_duplicate:
+    triage_allows_llm = (
+        not triage_blocks_followup
+        and (not triage or bool(triage.get("is_worth_llm_analysis")))
+    )
+    if triage_allows_llm and not is_duplicate:
         llm_executed = True
         is_api_bug, crash_category, analysis_text, enhanced_result = _run_stage6_llm()
     elif is_duplicate:
@@ -464,7 +476,7 @@ def run_enhanced_crash_pipeline(
         duplicate_of = dedup_info.get("duplicate_of")
         original_report = _load_crash_report_by_id(fuzz_project_dir, duplicate_of)
         duplicate_fallback_reason = None
-        if _same_exact_crash_for_inheritance(original_report, parsed, triage, location, dedup_info):
+        if original_report:
             original_analysis = original_report.get("analysis") or {}
             if "is_api_bug" in original_analysis:
                 is_api_bug = original_analysis.get("is_api_bug")
@@ -479,10 +491,10 @@ def run_enhanced_crash_pipeline(
                 )
         else:
             duplicate_fallback_reason = (
-                f"Duplicate crash — same as {duplicate_of}, but exact-label inheritance did not match"
+                f"Duplicate crash — same as {duplicate_of}, but representative report is unavailable"
             )
         if duplicate_fallback_reason:
-            if triage.get("is_worth_llm_analysis"):
+            if triage_allows_llm:
                 logger.info("[Pipeline] Duplicate label inheritance failed; falling back to LLM analysis")
                 llm_executed = True
                 is_api_bug, crash_category, analysis_text, enhanced_result = _run_stage6_llm(
@@ -491,16 +503,17 @@ def run_enhanced_crash_pipeline(
             else:
                 analysis_text = duplicate_fallback_reason
     else:
-        logger.info(f"[Pipeline] Stage 6 — Skipping LLM (triage: {triage.get('label')})")
+        triage_label = (triage or {}).get("label", "unavailable")
+        logger.info(f"[Pipeline] Stage 6 — Skipping LLM (triage: {triage_label})")
         is_api_bug = False
-        analysis_text = f"Skipped LLM analysis — triage label: {triage.get('label')}"
+        analysis_text = f"Skipped LLM analysis — triage label: {triage_label}"
     _timings["stage6_llm_ms"] = round((_time.monotonic() - _t0) * 1000, 1)
     _timings["llm_skipped"] = not llm_executed
     _timings["llm_skip_reason"] = (
         "none" if llm_executed else
         "duplicate_inherited" if is_duplicate and enhanced_result else
         "duplicate" if is_duplicate else
-        f"triage:{triage.get('label')}" if not triage.get("is_worth_llm_analysis") else
+        f"triage:{(triage or {}).get('label', 'unavailable')}" if not triage_allows_llm else
         "none"
     )
     logger.info(f"[Pipeline] Stage 6 done ({_timings['stage6_llm_ms']}ms, skipped={_timings['llm_skipped']})")
@@ -615,18 +628,24 @@ def save_crash_analysis(
     formatted_crash_info = textwrap.indent(crash_info.strip(), '      ')
 
     fuzz_driver_basename = os.path.basename(fuzz_driver_path) if fuzz_driver_path else None
-    sanitizer_parsed = parse_sanitizer_output(crash_info or "")
-    triage = triage_crash(sanitizer_parsed, fuzz_driver_basename=fuzz_driver_basename)
-    signature = triage.get("signature")
+    pipeline_result = pipeline_result or {}
+    crashsage_stages = (
+        pipeline_result.get("timings", {}).get("analysis_engine") != "ckgfuzzer"
+    )
+    sanitizer_parsed = pipeline_result.get("parsed") or parse_sanitizer_output(crash_info or "")
+    triage = pipeline_result.get("triage")
+    if triage is None and crashsage_stages:
+        triage = triage_crash(sanitizer_parsed, fuzz_driver_basename=fuzz_driver_basename)
+    signature = triage.get("signature") if triage else ""
 
-    duplicate_of = _find_duplicate_of(crash_data, signature)
+    duplicate_of = _find_duplicate_of(crash_data, signature) if signature else None
     group_id = signature
 
     poc = None
     poc_copy = {"copied": False}
     poc_paths = {}
 
-    if project_name:
+    if project_name and crashsage_stages:
         poc = locate_poc_on_host(sanitizer_parsed, project_name=project_name, corpus_dir=corpus_dir)
         if poc.get("exists") and poc.get("host_path"):
             pocs_dir = os.path.join(fuzz_driver_crash_dir, "pocs")
@@ -638,7 +657,15 @@ def save_crash_analysis(
 
     repro = {"enabled": False}
     minimize = {"enabled": False}
-    if enable_repro and project_name and fuzzer_name and corpus_dir and fuzzing_llm_dir and poc_copy.get("copied"):
+    if (
+        crashsage_stages
+        and enable_repro
+        and project_name
+        and fuzzer_name
+        and corpus_dir
+        and fuzzing_llm_dir
+        and poc_copy.get("copied")
+    ):
         repro["enabled"] = True
         repro_name = f"repro_{crash_id}"
         ok, err = safe_copy_poc(poc_copy["dst"], os.path.join(corpus_dir, repro_name))
@@ -646,19 +673,23 @@ def save_crash_analysis(
         repro["prepare_error"] = err
         if ok:
             runs = []
+            original_replay_key = compute_replay_key(sanitizer_parsed)
             for _ in range(3):
                 out = _run_repro_once(project_name, fuzz_driver_file, fuzzer_name, fuzzing_llm_dir, corpus_dir, repro_name, timeout="10s")
                 parsed2 = parse_sanitizer_output(out or "")
-                triage2 = triage_crash(parsed2, fuzz_driver_basename=fuzz_driver_basename)
+                replay_key = compute_replay_key(parsed2)
                 runs.append(
                     {
                         "has_error": ("ERROR" in out) if isinstance(out, str) else False,
-                        "signature": triage2.get("signature"),
-                        "same_signature": triage2.get("signature") == signature,
+                        "replay_key": replay_key,
+                        "replay_consistent": replay_keys_compatible(
+                            original_replay_key,
+                            replay_key,
+                        ),
                     }
                 )
             repro["runs"] = runs
-            repro["repro_rate"] = f"{sum(1 for r in runs if r.get('same_signature'))}/{len(runs)}"
+            repro["repro_rate"] = f"{sum(1 for r in runs if r.get('replay_consistent'))}/{len(runs)}"
 
             if enable_minimize:
                 minimize["enabled"] = True
@@ -706,6 +737,8 @@ def save_crash_analysis(
                 "crash_line": pr["location"].get("crash_line"),
                 "crash_function": pr["location"].get("crash_function"),
                 "symbolized": pr["location"].get("symbolized"),
+                "crash_code_snippet": pr["location"].get("crash_code_snippet"),
+                "call_chain_context": pr["location"].get("call_chain_context"),
             }
         if pr.get("enhanced_result"):
             entry["enhanced_analysis"] = pr["enhanced_result"]

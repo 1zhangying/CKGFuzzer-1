@@ -88,6 +88,24 @@ def _find_source_file(file_path: str) -> Optional[str]:
             if os.path.isfile(candidate):
                 return candidate
 
+    # Sanitizer paths are container-internal. Resolve them against the host
+    # source checkout without requiring a separate global initialization call.
+    normalized = file_path.replace("\\", "/")
+    if normalized.startswith("/src/"):
+        relative = Path(normalized[len("/src/"):])
+        engine_root = Path(__file__).resolve().parents[1]
+        repo_root = engine_root.parent
+        project = relative.parts[0] if relative.parts else ""
+        candidates = [
+            repo_root / "code" / relative,
+            repo_root / relative,
+            engine_root / "build" / "out" / project / "src" / relative,
+            repo_root / "build" / "out" / project / "src" / relative,
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                return str(candidate)
+
     return None
 
 

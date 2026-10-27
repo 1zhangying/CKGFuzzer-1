@@ -62,6 +62,12 @@ def build_crash_report(
                 verdict = "CONFIRMED_VULNERABILITY"
             elif enhanced_result.get("is_api_bug") is False:
                 verdict = "DRIVER_BUG"
+    elif enhanced_result:
+        if enhanced_result.get("is_api_bug") is True:
+            verdict = "CONFIRMED_VULNERABILITY"
+        elif enhanced_result.get("is_api_bug") is False:
+            verdict = "DRIVER_BUG"
+        confidence = float(enhanced_result.get("confidence") or 0.0)
 
     report["verdict"] = verdict
     report["confidence"] = round(confidence, 3)

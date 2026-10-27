@@ -48,6 +48,7 @@ _OSS_FUZZ_BASE_RUNNER_IMAGE = "gcr.io/oss-fuzz-base/base-runner"
 _GDB_SCRIPT_TEMPLATE = """\
 set pagination off
 set confirm off
+set disable-randomization on
 set print elements 200
 set print repeats 5
 set print pretty on
@@ -475,9 +476,6 @@ def reproduce_with_gdb(
         run_env = dict(os.environ)
         if env:
             run_env.update(env)
-        # Disable ASLR for reproducibility
-        run_env["ASLR"] = "0"
-
         cmd = ["gdb", "--batch", "-x", script_path, binary_path]
         logger.info(f"Running GDB: {' '.join(cmd)}")
 

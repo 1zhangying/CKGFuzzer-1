@@ -10,6 +10,8 @@ logger.info(f"Current workding dir: {current_work_dir}")
 logger.info(f"Project Root and Append to the system path: {project_root}")
 sys.path.append(project_root)
 from llama_index.core import Settings
+from crash.run_variant_config import experiment_fingerprint, get_variant_config
+from crash.pipeline_gate import replay_consistency_passed
 import shutil
 import yaml
 import subprocess
@@ -340,8 +342,8 @@ def reanalyze_ablation_all_variants(
 
     fix_fuzz_driver_dir = os.path.join(shared_dir, f"fuzz_driver/{project_name}/compilation_pass_rag/")
 
-    CACHE_PROMPT_VERSION = "paper_v0_v4_clean_direct_2026_10"
-    ABLATION_FLOW_VERSION = "paper_v0_v4_2026_10"
+    CACHE_PROMPT_VERSION = experiment_fingerprint()
+    ABLATION_FLOW_VERSION = "paper_v0_v4_incremental_variants_2026_10_27"
 
     def _first_present_attr(obj, names):
         for name in names:
@@ -415,13 +417,6 @@ def reanalyze_ablation_all_variants(
             and "error" not in result
             and "is_api_bug" in result
             and "crash_category" in result
-        )
-
-    def _has_cached_judgment(result):
-        return (
-            isinstance(result, dict)
-            and "error" not in result
-            and "is_api_bug" in result
         )
 
     def _make_cache_key(vname, crash_info, driver_source_hash, api_combine, inc_triage, inc_context, triage):
@@ -536,10 +531,7 @@ def reanalyze_ablation_all_variants(
                 }
                 location = entry.get("location")
                 if not isinstance(location, dict) or not location.get("call_chain_context"):
-                    location = locate_crash_site(
-                        parsed,
-                        driver_basename=fuzz_driver_basename,
-                    )
+                    location = None
 
                 record = {
                     "project": project_name,
@@ -611,9 +603,22 @@ def reanalyze_ablation_all_variants(
         else:
             representative_ids.append(record["crash_id"])
     representatives = [records_by_id[cid] for cid in representative_ids]
+    for representative in representatives:
+        if representative["location"] is None:
+            representative["location"] = locate_crash_site(
+                representative["parsed"],
+                driver_basename=representative["driver_basename"],
+            )
 
     def _make_cache_key(
-        vname, record, include_triage, include_static, include_runtime, prompt_variant
+        vname,
+        record,
+        include_triage,
+        include_static,
+        include_runtime,
+        include_reconstruction,
+        prompt_variant,
+        analysis_engine,
     ):
         payload = {
             "variant": vname,
@@ -624,7 +629,9 @@ def reanalyze_ablation_all_variants(
             "include_triage": include_triage,
             "include_static_context": include_static,
             "include_runtime_context": include_runtime,
+            "include_reconstruction_context": include_reconstruction,
             "prompt_variant": prompt_variant,
+            "analysis_engine": analysis_engine,
             "triage_result": record["triage"] if include_triage else None,
             "prompt_version": CACHE_PROMPT_VERSION,
             "model_id": CACHE_MODEL_ID,
@@ -638,8 +645,17 @@ def reanalyze_ablation_all_variants(
                 return record["_runtime_ctx"]
             record["_runtime_checked"] = True
             ctx = record["_runtime_ctx"]
-            if isinstance(ctx, dict) and ctx.get("reproduced"):
+            if (
+                isinstance(ctx, dict)
+                and ctx.get("reproduced")
+                and (
+                    ctx.get("stable") is True
+                    or replay_consistency_passed(record["entry"].get("repro"))
+                )
+            ):
                 return ctx
+            if not replay_consistency_passed(record["entry"].get("repro")):
+                return {}
             poc = (record["entry"].get("poc_paths") or {}).get("poc")
             if record["driver_path"] and poc:
                 binary_path, _ = _resolve_binary_path_for_entry(
@@ -657,8 +673,14 @@ def reanalyze_ablation_all_variants(
             return record["_runtime_ctx"] or {}
 
     def _run_llm(
-        vname, record, include_triage, include_static, include_runtime,
+        vname,
+        record,
+        include_triage,
+        include_static,
+        include_runtime,
+        include_reconstruction,
         prompt_variant,
+        analysis_engine,
     ):
         nonlocal cache_dirty, actual_llm_calls, cache_hits, errors
         if include_triage and record["triage_filtered"]:
@@ -679,8 +701,14 @@ def reanalyze_ablation_all_variants(
             }
 
         cache_key = _make_cache_key(
-            vname, record, include_triage, include_static, include_runtime,
+            vname,
+            record,
+            include_triage,
+            include_static,
+            include_runtime,
+            include_reconstruction,
             prompt_variant,
+            analysis_engine,
         )
         with cache_lock:
             cached = llm_cache.get(cache_key)
@@ -693,20 +721,31 @@ def reanalyze_ablation_all_variants(
         runtime_ctx = _prepare_runtime(record) if include_runtime else None
         started = _time.monotonic()
         try:
-            is_api_bug, category, _text, enhanced = (
-                crash_analyzer.analyze_crash_enhanced(
-                    record["crash_info"],
-                    record["driver_path"],
-                    record["api_combine"],
-                    triage_result=record["triage"] if include_triage else None,
-                    location_result=record["location"] if include_static else None,
-                    runtime_context=runtime_ctx if include_runtime else None,
-                    include_triage=include_triage,
-                    include_static_context=include_static,
-                    include_runtime_context=include_runtime,
-                    prompt_variant=prompt_variant,
+            if analysis_engine == "ckgfuzzer":
+                is_api_bug, category, _text, enhanced = (
+                    crash_analyzer.analyze_crash_ckgfuzzer(
+                        record["crash_info"],
+                        record["driver_path"],
+                        record["api_combine"],
+                    )
                 )
-            )
+            else:
+                is_api_bug, category, _text, enhanced = (
+                    crash_analyzer.analyze_crash_enhanced(
+                        record["crash_info"],
+                        record["driver_path"],
+                        record["api_combine"],
+                        triage_result=record["triage"] if include_triage else None,
+                        location_result=record["location"] if include_static else None,
+                        runtime_context=runtime_ctx if include_runtime else None,
+                        include_triage=include_triage,
+                        include_static_context=include_static,
+                        include_runtime_context=include_runtime,
+                        include_reconstruction_context=include_reconstruction,
+                        prompt_variant=prompt_variant,
+                        run_decision_repairs=False,
+                    )
+                )
             elapsed = round((_time.monotonic() - started) * 1000, 1)
             result = {
                 "is_api_bug": is_api_bug,
@@ -717,6 +756,13 @@ def reanalyze_ablation_all_variants(
                 "prompt_variant": prompt_variant,
                 "enhanced_result": enhanced,
             }
+            if isinstance(result["enhanced_result"], dict):
+                metadata = result["enhanced_result"].setdefault(
+                    "_experiment_metadata", {}
+                )
+                metadata["experiment_fingerprint"] = CACHE_PROMPT_VERSION
+                metadata["analysis_engine"] = analysis_engine
+                metadata["run_variant"] = vname
             actual_llm_calls += 1
             with cache_lock:
                 llm_cache[cache_key] = _copy_llm_result(result)
@@ -738,45 +784,28 @@ def reanalyze_ablation_all_variants(
                 "error": str(exc),
             }
 
-    def _existing_v4(record):
-        entry = record["entry"]
-        existing = entry.get("ablation_results")
-        source = None
-        if isinstance(existing, dict):
-            source = existing.get("V4")
-            # Compatibility migration: the old controller called paper V4 "V3".
-            if not _has_cached_judgment(source):
-                source = existing.get("V3")
-        if _has_cached_judgment(source):
-            result = _copy_llm_result(source)
-            result["reused_existing"] = True
-            result["prompt_variant"] = "differential"
-            return result
-        timings = entry.get("timings") or {}
-        skip_reason = timings.get("llm_skip_reason")
-        sent = not bool(timings.get("llm_skipped")) and skip_reason in (None, "none")
-        return {
-            "is_api_bug": entry.get("is_api_bug"),
-            "crash_category": entry.get(
-                "crash_category", record["parsed"].get("bug_type", "Unknown")
-            ),
-            "sent_to_llm": sent,
-            "skip_reason": skip_reason or ("skipped" if not sent else "none"),
-            "prompt_variant": "differential",
-            "reused_existing": True,
-            "enhanced_result": entry.get("enhanced_analysis"),
-        }
-
     actual_llm_calls = 0
     cache_hits = 0
     errors = 0
     tasks = []
+    v0_config = get_variant_config("V0")
+    v1_config = get_variant_config("V1")
+    v3_config = get_variant_config("V3")
+    v4_config = get_variant_config("V4")
     with ThreadPoolExecutor(max_workers=4) as executor:
         for record in records:
             tasks.append((
                 record, "V0",
                 executor.submit(
-                    _run_llm, "V0", record, False, False, False, "direct_v1"
+                    _run_llm,
+                    "V0",
+                    record,
+                    v0_config.use_triage,
+                    v0_config.include_static_context,
+                    v0_config.include_runtime_context,
+                    v0_config.include_reconstruction_context,
+                    v0_config.prompt_variant,
+                    v0_config.analysis_engine,
                 ),
             ))
         for record in records:
@@ -784,14 +813,44 @@ def reanalyze_ablation_all_variants(
                 tasks.append((
                     record, "V1",
                     executor.submit(
-                        _run_llm, "V1", record, True, False, False, "direct_v1"
+                        _run_llm,
+                        "V1",
+                        record,
+                        v1_config.use_triage,
+                        v1_config.include_static_context,
+                        v1_config.include_runtime_context,
+                        v1_config.include_reconstruction_context,
+                        v1_config.prompt_variant,
+                        v1_config.analysis_engine,
                     ),
                 ))
         for record in representatives:
             tasks.append((
                 record, "V3",
                 executor.submit(
-                    _run_llm, "V3", record, True, True, True, "direct_v1"
+                    _run_llm,
+                    "V3",
+                    record,
+                    v3_config.use_triage,
+                    v3_config.include_static_context,
+                    v3_config.include_runtime_context,
+                    v3_config.include_reconstruction_context,
+                    v3_config.prompt_variant,
+                    v3_config.analysis_engine,
+                ),
+            ))
+            tasks.append((
+                record, "V4",
+                executor.submit(
+                    _run_llm,
+                    "V4",
+                    record,
+                    v4_config.use_triage,
+                    v4_config.include_static_context,
+                    v4_config.include_runtime_context,
+                    v4_config.include_reconstruction_context,
+                    v4_config.prompt_variant,
+                    v4_config.analysis_engine,
                 ),
             ))
         for record, vname, future in tasks:
@@ -826,9 +885,7 @@ def reanalyze_ablation_all_variants(
                 "prompt_variant": "direct_v1",
             }
 
-    # V4 is the already-produced full CrashSage result, inherited by duplicates.
-    for record in representatives:
-        record["results"]["V4"] = _existing_v4(record)
+    # V4 was invoked above so prompt and evidence provenance are both current.
     for record in records:
         if record["triage_filtered"]:
             record["results"]["V4"] = {

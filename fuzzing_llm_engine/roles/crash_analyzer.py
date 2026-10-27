@@ -1409,6 +1409,9 @@ _DIFFERENTIAL_V2_DECISION_OUTPUT_CONTRACT = """
 Return exactly one valid JSON object and no markdown or surrounding text. Use this schema:
 {
   "caller_precondition_verdict": "valid|violated|unclear",
+  "driver_misuse_evidence_strength": "hard|soft|none",
+  "driver_misuse_location": "exact driver file:line and violated contract, or empty string",
+  "target_surface_evidence": "the public target input/object/state that reaches the failing operation, or empty string",
   "precondition_violations": ["concrete caller-side violation, or empty list"],
   "tolerance_contract_evidence": "visible target API contract relevant to the exact behavior under review, or empty string",
   "is_api_bug": true,
@@ -1693,6 +1696,9 @@ _DIRECT_V1_OUTPUT_CONTRACT = """
 Return exactly one valid JSON object and no markdown or surrounding text. Use this schema:
 {
   "caller_precondition_verdict": "valid|violated|unclear",
+  "driver_misuse_evidence_strength": "hard|soft|none",
+  "driver_misuse_location": "exact driver file:line and violated contract, or empty string",
+  "target_surface_evidence": "the public target input/object/state that reaches the failing operation, or empty string",
   "precondition_violations": ["concrete caller-side violation, or empty list"],
   "tolerance_contract_evidence": "visible target API contract, or empty string",
   "is_api_bug": true,
@@ -1715,6 +1721,39 @@ facts, contracts, or runtime state. Set driver_misuse_evidence_strength to
 "hard" only when a concrete driver-side misuse is the decisive cause; use
 "soft" for avoidability or defensive-check concerns that do not establish
 caller-contract misuse.
+"""
+
+
+_CKGFUZZER_CLEAN_DIRECT_INSTRUCTIONS = """You are a software analysis expert tasked with
+analyzing the root cause of a crash during fuzzing. Determine whether the
+crash is caused by the fuzz driver or by the target project API.
+
+Use the original CKGFuzzer evidence below. Do not use rule-guided triage,
+representative selection, reconstructed source location context, or runtime
+context.
+
+Crash information:
+{crash_info}
+
+Fuzz driver source code:
+{fuzz_driver}
+
+Fuzzed API source code:
+{api_info}
+
+Potential error patterns in fuzz driver:
+{fuzz_driver_error_patterns}
+
+Potential error patterns in API:
+{api_error_patterns}
+
+Related CWE vulnerabilities:
+{related_cwe_vulnerabilities}
+
+State the final target-component attribution directly. If the crash is caused
+by the driver, explain the concrete driver misuse. If it is caused by the
+target component, identify the target-side failing operation or invariant.
+
 """
 
 
@@ -2296,15 +2335,8 @@ class CrashAnalyzer:
         api_error_patterns = self.extract_potential_error_patterns(api_info)
         related_cwe_vulnerabilities = self.query_cwe_vulnerabilities(crash_info)
 
-        try:
-            parsed = parse_sanitizer_output(crash_info or "")
-            structured_summary = format_crash_summary(parsed)
-        except Exception as e:
-            structured_summary = f"[CRASH] parse_failed: {e}"
-        crash_info_with_summary = f"{structured_summary}\n\n--- RAW SANITIZER OUTPUT ---\n{crash_info}"
-
         question = self.crash_analyze_prompt.format(
-            crash_info=crash_info_with_summary,
+            crash_info=crash_info,
             fuzz_driver=fuzz_driver,
             api_info=api_info,
             fuzz_driver_error_patterns="\n".join(fuzz_driver_error_patterns),
@@ -2347,6 +2379,98 @@ class CrashAnalyzer:
 
         return is_api_bug, crash_category, response
 
+    def analyze_crash_ckgfuzzer(
+        self,
+        crash_info: str,
+        fuzz_driver_path: str,
+        api_combine: list,
+        *,
+        capture_prompt: bool = False,
+    ):
+        """Run the V0 CKGFuzzer baseline with the paper's clean direct prompt.
+
+        Evidence construction mirrors the original CKGFuzzer ``analyze_crash``
+        path. CrashSage-only preprocessing and reconstructed evidence are not
+        added here.
+        """
+        with open(fuzz_driver_path, "r", encoding="utf-8") as handle:
+            fuzz_driver = handle.read()
+
+        api_info = ""
+        for api in api_combine:
+            if api in self.api_src:
+                api_info += f"{api}:\n{self.api_src[api]}\n\n"
+            else:
+                api_info += f"{api}: Source code not available\n\n"
+
+        fuzz_driver_error_patterns = self.extract_potential_error_patterns(fuzz_driver)
+        api_error_patterns = self.extract_potential_error_patterns(api_info)
+        related_cwe_vulnerabilities = self.query_cwe_vulnerabilities(crash_info)
+
+        question = _CKGFUZZER_CLEAN_DIRECT_INSTRUCTIONS.format(
+            crash_info=crash_info,
+            fuzz_driver=fuzz_driver,
+            api_info=api_info,
+            fuzz_driver_error_patterns="\n".join(fuzz_driver_error_patterns),
+            api_error_patterns="\n".join(api_error_patterns),
+            related_cwe_vulnerabilities=related_cwe_vulnerabilities,
+        ) + _DIRECT_V1_OUTPUT_CONTRACT
+
+        response = self.llm.complete(question).text
+        decision_parse_mode = "primary_json"
+        decision_parse_error = ""
+        try:
+            enhanced_result = _parse_enhanced_json_response(response)
+        except Exception as exc:
+            decision_parse_mode = "basic_second_pass"
+            decision_parse_error = str(exc)
+            program = LLMTextCompletionProgram.from_defaults(
+                output_cls=CrashAnalysis,
+                prompt_template_str=(
+                    "The input answer is:\n {raw_answer}\n. "
+                    "Extract is_api_bug (bool) and crash_category (str)."
+                ),
+                llm=self.llm,
+            )
+            basic = program(raw_answer=response)
+            enhanced_result = EnhancedCrashAnalysis(
+                is_api_bug=basic.is_api_bug,
+                crash_category=basic.crash_category,
+                root_cause_type="unknown",
+                root_cause_location="unknown",
+                root_cause_trigger="unknown",
+                severity="unknown",
+                data_flow=[],
+                fix_suggestion="",
+                decision_basis="insufficient_evidence",
+                evidence_summary="Structured primary response was unavailable.",
+            )
+
+        enhanced = enhanced_result.dict()
+        enhanced["_experiment_metadata"] = {
+            "prompt_variant": "direct_v1",
+            "analysis_engine": "ckgfuzzer",
+            "run_variant": "V0",
+            "include_triage": False,
+            "include_static_context": False,
+            "include_runtime_context": False,
+            "include_reconstruction_context": False,
+            "prompt_chars": len(question),
+            "prompt_sha256": hashlib.sha256(
+                question.encode("utf-8", errors="replace")
+            ).hexdigest(),
+            "decision_parse_mode": decision_parse_mode,
+            "decision_parse_error": decision_parse_error,
+        }
+        if capture_prompt:
+            enhanced["_experiment_metadata"]["prompt"] = question
+        return (
+            enhanced_result.is_api_bug,
+            enhanced_result.crash_category,
+            response,
+            enhanced,
+        )
+
     # ------------------------------------------------------------------
     # Enhanced analyze_crash — uses full pipeline context
     # Supports ablation modes for controlled experiments:
@@ -2368,8 +2492,10 @@ class CrashAnalyzer:
         include_context: Optional[bool] = None,
         include_static_context: Optional[bool] = None,
         include_runtime_context: Optional[bool] = None,
+        include_reconstruction_context: bool = True,
         prompt_variant: str = "differential",
         capture_prompt: bool = False,
+        run_decision_repairs: bool = False,
     ):
         """Enhanced crash analysis with triage, locator, and debugger context.
 
@@ -2488,14 +2614,25 @@ class CrashAnalyzer:
         analysis_instructions += output_contract
 
         # Truncate long sections to prevent token overflow
-        driver_oracle_context = _extract_driver_oracle_context(fuzz_driver)
-        precondition_risk_context = _extract_precondition_risk_context(fuzz_driver)
-        decisive_evidence_context = _extract_decisive_evidence_context(
-            structured_summary=structured_summary,
-            call_chain_context=call_chain_str,
-            driver_oracle_context=driver_oracle_context,
-            precondition_risk_context=precondition_risk_context,
-        )
+        if include_reconstruction_context:
+            driver_oracle_context = _extract_driver_oracle_context(fuzz_driver)
+            precondition_risk_context = _extract_precondition_risk_context(fuzz_driver)
+            decisive_evidence_context = _extract_decisive_evidence_context(
+                structured_summary=structured_summary,
+                call_chain_context=call_chain_str,
+                driver_oracle_context=driver_oracle_context,
+                precondition_risk_context=precondition_risk_context,
+            )
+        else:
+            driver_oracle_context = (
+                "[ORACLE] Reconstruction context is disabled for this variant."
+            )
+            precondition_risk_context = (
+                "[PRECONDITION] Reconstruction context is disabled for this variant."
+            )
+            decisive_evidence_context = (
+                "[DECISIVE-EVIDENCE] Reconstruction context is disabled for this variant."
+            )
         fuzz_driver_error_patterns = _filter_error_patterns_for_prompt(
             fuzz_driver_error_patterns,
             precondition_risk_context=precondition_risk_context,
@@ -2589,7 +2726,7 @@ class CrashAnalyzer:
                 decision_parse_error = f"{decision_parse_error}; enhanced fallback: {extract_error}"
                 logger.warning(f"Failed to extract enhanced structured output: {extract_error}")
 
-        if enhanced_result is not None:
+        if run_decision_repairs and enhanced_result is not None:
             try:
                 repaired_result, repair_response, violation = _repair_archive_metadata_consistency_with_llm(
                     self.llm,
@@ -2620,7 +2757,7 @@ class CrashAnalyzer:
                     else f"archive metadata repair failed: {repair_error}"
                 )
 
-        if enhanced_result is not None:
+        if run_decision_repairs and enhanced_result is not None:
             try:
                 repaired_result, repair_response, violation = _repair_negative_boundary_consistency_with_llm(
                     self.llm,
@@ -2666,10 +2803,11 @@ class CrashAnalyzer:
                 is_api_bug = basic_result.is_api_bug
                 crash_category = basic_result.crash_category
             except Exception as basic_error:
-                decision_parse_mode = "triage_fallback"
                 decision_parse_error = f"{decision_parse_error}; basic fallback: {basic_error}"
-                is_api_bug = (triage_result or {}).get("label") == "likely_api_bug"
-                crash_category = parsed.get("bug_type") or "Unknown"
+                raise ValueError(
+                    "LLM diagnosis is incomplete after response validation: "
+                    f"{decision_parse_error}"
+                ) from basic_error
         else:
             is_api_bug = enhanced_result.is_api_bug
             crash_category = enhanced_result.crash_category
@@ -2699,6 +2837,7 @@ class CrashAnalyzer:
             "include_triage": include_triage,
             "include_static_context": include_static_context,
             "include_runtime_context": include_runtime_context,
+            "include_reconstruction_context": include_reconstruction_context,
             "prompt_chars": len(question),
             "prompt_sha256": hashlib.sha256(question.encode("utf-8", errors="replace")).hexdigest(),
             "decision_parse_mode": decision_parse_mode,

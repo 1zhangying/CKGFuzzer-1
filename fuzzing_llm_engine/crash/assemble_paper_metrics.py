@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-"""Assemble the paper's V0-V4 metrics on the binary-evaluable population.
+"""Deprecated legacy assembler for the obsolete binary-evaluable population.
 
-V0/V1 are frozen from the controlled baseline. V2 represents V1 with
-representative selection and therefore preserves V1 predictions in the paper
-evaluation. V3/V4 reuse their frozen final predictions and replace only the
-new representative groups validated by the current dedup run.
+Use ``python -m crash.assemble_final_1217_metrics`` for paper results.
 """
 from __future__ import annotations
 
@@ -169,6 +166,10 @@ def assemble(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    raise SystemExit(
+        "assemble_paper_metrics is deprecated because it uses obsolete mixed "
+        "and historical predictions; use crash.assemble_final_1217_metrics"
+    )
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--baseline",
