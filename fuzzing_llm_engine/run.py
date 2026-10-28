@@ -62,6 +62,9 @@ FAST_MODE = os.environ.get(
 RERUN_GDB = os.environ.get(f"{RUN_VARIANT}_RERUN_GDB", "0").strip().lower() in {"1", "true", "yes"}
 ANALYZER_TEMPERATURE = float(os.environ.get(f"{RUN_VARIANT}_TEMPERATURE", "0"))
 CAPTURE_ARTIFACTS = os.environ.get(f"{RUN_VARIANT}_CAPTURE_ARTIFACTS", "1").strip().lower() not in {"0", "false", "no"}
+ERROR_COOLDOWN_SECONDS = float(
+    os.environ.get("LLM_ERROR_COOLDOWN_SECONDS", "0")
+)
 
 
 EXPERIMENT_FINGERPRINT = experiment_fingerprint()
@@ -643,6 +646,9 @@ for i, row in enumerate(rows, 1):
 
     with OUT_JSONL.open("a", encoding="utf-8") as jf:
         jf.write(json.dumps(out, ensure_ascii=False) + "\n")
+    if out["Status"] != "ok" and ERROR_COOLDOWN_SECONDS > 0:
+        print(f"error cooldown: {ERROR_COOLDOWN_SECONDS:.0f}s")
+        time.sleep(ERROR_COOLDOWN_SECONDS)
 
 csv_f.close()
 print(f"done: {OUT_CSV}")
