@@ -437,9 +437,18 @@ for i, row in enumerate(rows, 1):
             config = load_project_config(project)
             analyzer_config = dict(config["llm_analyzer"])
             analyzer_config["temperature"] = ANALYZER_TEMPERATURE
-            model_override = os.environ.get("LLM_MODEL_OVERRIDE", "").strip()
-            if model_override:
-                analyzer_config["model"] = model_override
+            overrides = {
+                "model": "LLM_MODEL_OVERRIDE",
+                "base_url": "LLM_BASE_URL_OVERRIDE",
+                "api_key": "LLM_API_KEY_OVERRIDE",
+            }
+            for config_key, env_name in overrides.items():
+                override = os.environ.get(env_name, "").strip()
+                if override:
+                    analyzer_config[config_key] = override
+            extra_body = os.environ.get("LLM_EXTRA_BODY_JSON", "").strip()
+            if extra_body:
+                analyzer_config["additional_kwargs"] = json.loads(extra_body)
             current_model = str(analyzer_config.get("model", ""))
             llm = get_model(analyzer_config)
             emb = get_embedding_model(config.get("llm_embedding"), device="cpu")
