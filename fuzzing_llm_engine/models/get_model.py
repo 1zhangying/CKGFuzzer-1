@@ -21,6 +21,9 @@ def get_model(llm_config=None):
             is_chat_model=True,
             temperature=llm_config["temperature"],
             additional_kwargs=llm_config.get("additional_kwargs"),
+            timeout=llm_config.get("timeout", 60.0),
+            max_retries=llm_config.get("max_retries", 0),
+            max_tokens=llm_config.get("max_tokens"),
         )
     if model_name.startswith(("qwen", "glm")):
         return OpenAILike(
@@ -29,8 +32,9 @@ def get_model(llm_config=None):
               api_key=llm_config["api_key"], 
               is_chat_model=True, 
               temperature=llm_config["temperature"],
-              timeout=300.0,
-              max_retries=3,
+              timeout=llm_config.get("timeout", 300.0),
+              max_retries=llm_config.get("max_retries", 0),
+              max_tokens=llm_config.get("max_tokens"),
               context_window=llm_config.get("context_window", 1000000),
               additional_kwargs=llm_config.get("additional_kwargs")
         )

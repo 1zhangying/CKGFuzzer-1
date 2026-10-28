@@ -376,8 +376,14 @@ for row in rows:
 if PROJECT_FILTER:
     rows = [r for r in rows if r.get("Project") == PROJECT_FILTER]
 if CRASH_ID_FILTER:
-    crash_id_filters = {item.strip() for item in CRASH_ID_FILTER.split(",") if item.strip()}
+    crash_id_filters = [
+        item.strip() for item in CRASH_ID_FILTER.split(",") if item.strip()
+    ]
+    filter_order = {
+        crash_id: index for index, crash_id in enumerate(crash_id_filters)
+    }
     rows = [r for r in rows if r.get("CrashID") in crash_id_filters]
+    rows.sort(key=lambda row: filter_order[row["CrashID"]])
 if (PROJECT_FILTER or CRASH_ID_FILTER) and not rows:
     raise RuntimeError(
         f"No manifest rows matched PROJECT_FILTER={PROJECT_FILTER!r} "
@@ -446,6 +452,15 @@ for i, row in enumerate(rows, 1):
                 override = os.environ.get(env_name, "").strip()
                 if override:
                     analyzer_config[config_key] = override
+            numeric_overrides = {
+                "timeout": ("LLM_TIMEOUT_OVERRIDE", float),
+                "max_retries": ("LLM_MAX_RETRIES_OVERRIDE", int),
+                "max_tokens": ("LLM_MAX_TOKENS_OVERRIDE", int),
+            }
+            for config_key, (env_name, convert) in numeric_overrides.items():
+                override = os.environ.get(env_name, "").strip()
+                if override:
+                    analyzer_config[config_key] = convert(override)
             extra_body = os.environ.get("LLM_EXTRA_BODY_JSON", "").strip()
             if extra_body:
                 analyzer_config["additional_kwargs"] = json.loads(extra_body)
