@@ -14,6 +14,8 @@ import json
 from dataclasses import dataclass, asdict, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .context_validation import runtime_context_matches_parsed
+
 
 # Data models
 
@@ -732,6 +734,28 @@ def replay_keys_compatible(
         original_location is None
         or replay.get("location") == original_location
     )
+
+
+def historical_runtime_context_is_compatible(
+    runtime_context: Dict[str, Any],
+    parsed: Dict[str, Any],
+    driver_basename: Optional[str] = None,
+) -> bool:
+    """Validate a legacy GDB snapshot against the original crash record.
+
+    Older enrichment runs did not persist ``stable`` or ``replay_consistent``,
+    even though they captured a GDB session from the original PoC and binary
+    snapshot.  Accept the snapshot only when its first target-library frame
+    matches the original crash function and source location.  Merely finding
+    the function somewhere lower in the stack is insufficient because
+    unrelated crashes can pass through the same target and fuzzer frames.
+    """
+    matched, _reason = runtime_context_matches_parsed(
+        runtime_context,
+        parsed,
+        driver_basename,
+    )
+    return matched
 
 
 # Main triage function

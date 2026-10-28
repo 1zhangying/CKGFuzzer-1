@@ -646,6 +646,10 @@ def _extract_decisive_evidence_context(
             "Direct object/stream metadata mutation risk",
             "direct stream/object metadata mutation: verify field writes create a valid public boundary-state test rather than an invalid protocol state",
         ),
+        (
+            "Fixed-buffer/fuzz-derived index-count mismatch risk",
+            "fixed-size destination with fuzz-derived index/count: verify byte-vs-bit units and prove every fuzz-derived index/count is within the destination capacity; an input-size or null-pointer check is not a destination-bound proof",
+        ),
     ]
     for marker, text in risk_specs:
         if marker in pre:
@@ -689,6 +693,12 @@ def _extract_decisive_evidence_context(
         add_once(
             positive_guards,
             "target-created exposed-object boundary candidate: do not reject solely for public field mutation if the object is live, target-created, and later passed to a public API that uses those fields",
+        )
+
+    if "Guarded fixed-buffer/fuzz-derived index-count candidate" in pre:
+        add_once(
+            conditional_items,
+            "fixed-buffer/index candidate with a visible guard: absent a unit mismatch or missing capacity proof, treat the guard as possible valid boundary handling rather than hard driver misuse",
         )
 
     if "Archive/container metadata length boundary candidate" in pre:
@@ -857,6 +867,332 @@ def _extract_driver_oracle_context(fuzz_driver: str, window: int = 12) -> str:
     )
 
 
+def _strip_c_comments_preserving_lines(source: str) -> str:
+    """Remove C/C++ comments while preserving source line numbers."""
+    source = re.sub(
+        r"/\*.*?\*/",
+        lambda match: "\n" * match.group(0).count("\n"),
+        source,
+        flags=re.DOTALL,
+    )
+    return re.sub(r"//[^\n]*", "", source)
+
+
+def _iter_source_statements(lines: List[str]):
+    """Yield ``(start_line, statement)`` pairs without rescanning continuations."""
+    index = 0
+    while index < len(lines):
+        stripped = lines[index].strip()
+        if (
+            not stripped
+            or stripped.startswith("#")
+            or stripped.startswith("//")
+            or (
+                "{" in stripped
+                and ";" not in stripped
+                and stripped.count("{") >= stripped.count("}")
+            )
+            or stripped.startswith("}")
+        ):
+            index += 1
+            continue
+        statement = _collect_statement_from_line(lines, index)
+        if not statement:
+            index += 1
+            continue
+
+        paren_balance = lines[index].count("(") - lines[index].count(")")
+        consumed = 1
+        if not (";" in lines[index] and paren_balance <= 0):
+            for end_index in range(index + 1, min(len(lines), index + 12)):
+                paren_balance += (
+                    lines[end_index].count("(")
+                    - lines[end_index].count(")")
+                )
+                consumed = end_index - index + 1
+                if ";" in lines[end_index] and paren_balance <= 0:
+                    break
+        yield index, statement
+        index += max(1, consumed)
+
+
+def _top_level_assignment(statement: str) -> Optional[tuple[str, str]]:
+    """Split a C/C++ assignment at a top-level single ``=``."""
+    paren = bracket = brace = 0
+    for index, char in enumerate(statement):
+        if char == "(":
+            paren += 1
+        elif char == ")" and paren:
+            paren -= 1
+        elif char == "[":
+            bracket += 1
+        elif char == "]" and bracket:
+            bracket -= 1
+        elif char == "{":
+            brace += 1
+        elif char == "}" and brace:
+            brace -= 1
+        elif char == "=" and paren == 0 and bracket == 0 and brace == 0:
+            previous = statement[index - 1] if index else ""
+            following = statement[index + 1] if index + 1 < len(statement) else ""
+            if previous in "<>!=" or following == "=":
+                continue
+            return statement[:index], statement[index + 1:]
+    return None
+
+
+def _last_identifier(expression: str) -> Optional[str]:
+    matches = re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", expression)
+    return matches[-1] if matches else None
+
+
+def _extract_fuzz_parameter_names(source: str) -> tuple[set[str], set[str]]:
+    """Return likely fuzz-data pointer and length/count parameter names."""
+    pointer_names = {"data", "input", "bytes", "fuzz_data"}
+    size_names = {"size", "length", "len", "count", "input_size"}
+    signature = re.search(
+        r"\bLLVMFuzzerTestOneInput\s*\((.*?)\)\s*\{",
+        source,
+        re.DOTALL,
+    )
+    if not signature:
+        return pointer_names, size_names
+
+    parameters = signature.group(1)
+    pointer_names.update(
+        re.findall(
+            r"\b(?:const\s+)?(?:u?int8_t|char|unsigned\s+char|std::byte)"
+            r"\s*\*\s*([A-Za-z_][A-Za-z0-9_]*)",
+            parameters,
+        )
+    )
+    size_names.update(
+        re.findall(
+            r"\b(?:size_t|u?int(?:8|16|32|64)_t|unsigned|long)"
+            r"\s+([A-Za-z_][A-Za-z0-9_]*)",
+            parameters,
+        )
+    )
+    return pointer_names, size_names
+
+
+def _fixed_capacity_expression(
+    expression: str,
+    constants: Dict[str, str],
+) -> Optional[str]:
+    """Return a capacity expression only when it is visibly compile-time fixed."""
+    cleaned = expression.strip().strip("()")
+    cleaned = re.sub(r"\b(?:static_cast|reinterpret_cast)\s*<[^>]+>\s*", "", cleaned)
+    cleaned = cleaned.strip().strip("()")
+    if not cleaned:
+        return None
+    if re.fullmatch(r"(?:0[xX][0-9a-fA-F]+|\d+)[uUlL]*", cleaned):
+        return cleaned.rstrip("uUlL")
+    if cleaned in constants:
+        return constants[cleaned]
+    if re.fullmatch(
+        r"(?:\d+\s*\*\s*)?sizeof\s*\([^)]+\)"
+        r"(?:\s*\*\s*\d+)?",
+        cleaned,
+    ):
+        return cleaned
+    return None
+
+
+def _extract_fixed_buffer_index_flow(
+    fuzz_driver: str,
+) -> List[Dict[str, str]]:
+    """Find fixed-capacity buffers paired with fuzz-derived call arguments.
+
+    This deliberately does not classify target APIs as safe or unsafe.  It
+    surfaces the caller data flow only, including the distinction between an
+    unchecked index/count and a driver-visible range guard.
+    """
+    source = _strip_c_comments_preserving_lines(fuzz_driver)
+    lines = source.splitlines()
+    fuzz_pointers, fuzz_sizes = _extract_fuzz_parameter_names(source)
+    fuzz_names = fuzz_pointers | fuzz_sizes
+
+    fixed_buffers: Dict[str, Dict[str, Any]] = {}
+    tainted_values: Dict[str, int] = {}
+    constants: Dict[str, str] = {}
+    findings: List[Dict[str, str]] = []
+    seen_calls = set()
+
+    def expression_has_fuzz_value(expression: str) -> bool:
+        identifiers = set(
+            re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", expression)
+        )
+        return bool(identifiers & fuzz_names) or any(
+            name in identifiers for name in tainted_values
+        )
+
+    for line_index, statement in _iter_source_statements(lines):
+        assignment = _top_level_assignment(statement)
+        if assignment:
+            lhs, rhs = assignment
+            variable = _last_identifier(lhs)
+            if variable:
+                stack_array = re.search(
+                    rf"\b{re.escape(variable)}\s*\[\s*([^\]]+)\s*\]",
+                    lhs,
+                )
+                capacity = (
+                    _fixed_capacity_expression(stack_array.group(1), constants)
+                    if stack_array
+                    else None
+                )
+
+                allocator = re.search(
+                    r"\b(?:malloc|calloc|allocate|new)\b\s*\(",
+                    rhs,
+                    re.IGNORECASE,
+                )
+                if allocator and not capacity:
+                    allocator_args = _split_top_level_call_args(
+                        rhs[allocator.start():]
+                    )
+                    if allocator_args:
+                        if (
+                            allocator.group(0).lstrip().lower().startswith("calloc")
+                            and len(allocator_args) >= 2
+                        ):
+                            first = _fixed_capacity_expression(
+                                allocator_args[0], constants
+                            )
+                            second = allocator_args[1].strip()
+                            if first and (
+                                "sizeof" in second
+                                or _fixed_capacity_expression(second, constants)
+                            ):
+                                capacity = f"{first} * {second}"
+                        else:
+                            capacity = _fixed_capacity_expression(
+                                allocator_args[0], constants
+                            )
+
+                new_array = re.search(
+                    r"\bnew\s+[A-Za-z_][A-Za-z0-9_:<>]*\s*\[\s*([^\]]+)\s*\]",
+                    rhs,
+                )
+                if new_array and not capacity:
+                    capacity = _fixed_capacity_expression(
+                        new_array.group(1), constants
+                    )
+
+                if capacity:
+                    fixed_buffers[variable] = {
+                        "capacity": capacity,
+                        "line": line_index + 1,
+                    }
+                elif variable in fixed_buffers:
+                    del fixed_buffers[variable]
+
+                fixed_constant = _fixed_capacity_expression(rhs, constants)
+                if fixed_constant is not None and not capacity:
+                    constants[variable] = fixed_constant
+
+                if expression_has_fuzz_value(rhs):
+                    tainted_values[variable] = line_index + 1
+
+        call_match = _find_likely_call_match(statement)
+        if (
+            call_match is None
+            or not fixed_buffers
+            or statement.lstrip().startswith(
+                ("if ", "while ", "for ", "switch ", "return ")
+            )
+        ):
+            continue
+        arguments = _split_top_level_call_args(statement)
+        if not arguments:
+            continue
+
+        used_buffers = [
+            (name, spec)
+            for name, spec in fixed_buffers.items()
+            if any(
+                re.search(rf"\b{re.escape(name)}\b", argument)
+                for argument in arguments
+            )
+        ]
+        if not used_buffers:
+            continue
+
+        tainted_arguments = [
+            argument
+            for argument in arguments
+            if expression_has_fuzz_value(argument)
+        ]
+        if not tainted_arguments:
+            continue
+
+        call_key = (line_index, re.sub(r"\s+", " ", statement))
+        if call_key in seen_calls:
+            continue
+        seen_calls.add(call_key)
+
+        prior_source = "\n".join(lines[max(0, line_index - 10):line_index])
+        guarded = False
+        index_like_arguments = [
+            argument
+            for argument in tainted_arguments
+            if re.search(
+                r"\b(?:index|idx|count|offset|position|pos|len|length|size|"
+                r"nbits|bit_count)\b",
+                argument,
+                re.IGNORECASE,
+            )
+        ]
+        for argument in index_like_arguments or tainted_arguments:
+            identifiers = re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", argument)
+            for identifier in identifiers:
+                if identifier in fuzz_names or identifier not in tainted_values:
+                    continue
+                if re.search(
+                    rf"\b(?:if|while|assert)\s*\([^)]*"
+                    rf"\b{re.escape(identifier)}\b[^)]*"
+                    r"(?:<|<=|>|>=)",
+                    prior_source,
+                    re.DOTALL,
+                ):
+                    guarded = True
+                    break
+
+        buffer_text = ", ".join(
+            f"{name} (capacity {spec['capacity']}, declared at L{spec['line']})"
+            for name, spec in used_buffers
+        )
+        taint_text = ", ".join(dict.fromkeys(tainted_arguments))
+        call_name = call_match.group(1)
+        if guarded:
+            kind = "Guarded fixed-buffer/fuzz-derived index-count candidate"
+            guard_text = (
+                "a nearby driver range check is visible, but verify that the "
+                "checked units and capacity match this call"
+            )
+        else:
+            kind = "Fixed-buffer/fuzz-derived index-count mismatch risk"
+            guard_text = (
+                "no driver-visible range proof for the fuzz-derived argument is "
+                "present; input-size and allocation-null checks do not bound a "
+                "buffer index/count"
+            )
+        findings.append({
+            "kind": kind,
+            "line": str(line_index),
+            "detail": (
+                f"fixed-capacity buffer(s) {buffer_text} are passed to "
+                f"{call_name}() together with fuzz-derived argument(s) "
+                f"{taint_text}; {guard_text}. Audit byte-vs-bit units, "
+                "allocation length, and the target's internal pointer arithmetic "
+                "before attributing the fault to the target"
+            ),
+        })
+
+    return findings
+
+
 def _extract_precondition_risk_context(fuzz_driver: str, window: int = 4) -> str:
     """Highlight likely caller-precondition risks in the fuzz driver.
 
@@ -894,6 +1230,15 @@ def _extract_precondition_risk_context(fuzz_driver: str, window: int = 4) -> str
             prefix = ">>" if lineno == idx else "  "
             context.append(f"{prefix} L{lineno + 1}: {lines[lineno]}")
         findings.append(f"{kind}: {detail}\n" + "\n".join(context))
+
+    # Put the generic fixed-buffer/index data-flow candidate first so prompt
+    # fitting cannot drop it behind lower-priority allocator and status hints.
+    for flow_finding in _extract_fixed_buffer_index_flow(fuzz_driver):
+        add(
+            flow_finding["kind"],
+            int(flow_finding["line"]),
+            flow_finding["detail"],
+        )
 
     for idx, line in enumerate(lines):
         stripped = line.strip()
@@ -1967,6 +2312,161 @@ def _enhanced_result_text(result: EnhancedCrashAnalysis) -> str:
     return "\n".join(parts)
 
 
+def _has_concrete_tolerance_contract(result: EnhancedCrashAnalysis) -> bool:
+    """Return whether tolerance is tied to explicit API/header semantics."""
+    tolerance = (getattr(result, "tolerance_contract_evidence", "") or "").strip()
+    if not tolerance:
+        return False
+    return bool(
+        re.search(
+            r"(?:header|documentation|manual|contract)\s+"
+            r"(?:explicitly\s+)?(?:allows?|permits?|requires?|guarantees?|must)|"
+            r"(?:must|shall)\s+(?:tolerate|accept|support)|"
+            r"explicit(?:ly)?\s+(?:allows?|permits?|requires?|guarantees?)|"
+            r"(?:API|function)\s+contract\s+(?:allows?|permits?|requires?)",
+            tolerance,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _deterministic_decision_consistency_violation(
+    result: EnhancedCrashAnalysis,
+    prompt: str,
+) -> str:
+    """Detect unambiguous contradictions in the model's structured JSON.
+
+    This validates the contract already given to the model. It does not use
+    ground truth and does not override positive boundary/oracle patterns.
+    """
+    if getattr(result, "is_api_bug", None) is not True:
+        return ""
+
+    basis = str(getattr(result, "decision_basis", "") or "").strip().lower()
+    if basis == "driver_evidence":
+        return "is_api_bug=true contradicts decision_basis=driver_evidence"
+
+    verdict = str(
+        getattr(result, "caller_precondition_verdict", "") or ""
+    ).strip().lower()
+    misuse = str(
+        getattr(result, "driver_misuse_evidence_strength", "") or ""
+    ).strip().lower()
+    if (
+        verdict == "violated"
+        and misuse == "hard"
+        and not _has_concrete_tolerance_contract(result)
+    ):
+        without_positive_boundary = (
+            "Target-created exposed object boundary-state candidate"
+            not in prompt
+            and "POST-CALL ORACLE DETECTED" not in prompt
+            and "Archive/container metadata length boundary candidate"
+            not in prompt
+        )
+        if without_positive_boundary:
+            return (
+                "is_api_bug=true contradicts violated caller precondition and "
+                "hard driver misuse without a concrete tolerance contract"
+            )
+    return ""
+
+
+def _apply_prior_decision(
+    result: EnhancedCrashAnalysis,
+    prompt: str,
+    prior_prediction: Optional[bool],
+    *,
+    prompt_variant: str,
+) -> Dict[str, Any]:
+    """Keep the frozen V1/V2 decision unless the new context is decisive.
+
+    V3 and V4 are incremental variants: their added evidence may refine the
+    frozen earlier decision, but a low-confidence disagreement must not
+    replace it.  A high-confidence model judgment or an explicit post-call
+    oracle is accepted as a real refinement.
+    """
+    evidence = _extract_prompt_section(
+        prompt,
+        "SECTION 5B: DRIVER ORACLE / ASSERTION CONTEXT",
+        "SECTION 6: TARGET API SOURCE CODE",
+    )
+    strong_positive = any(
+        marker.lower() in evidence.lower()
+        for marker in (
+            "Target-created exposed object boundary-state candidate",
+            "Archive/container metadata length boundary candidate",
+        )
+    )
+    if prompt_variant == "differential" and "POST-CALL ORACLE DETECTED" in evidence:
+        location = str(getattr(result, "root_cause_location", "") or "")
+        cause_type = str(getattr(result, "root_cause_type", "") or "").lower()
+        strong_positive = strong_positive or cause_type == "target-side assertion failure" or any(
+            marker in location.lower()
+            for marker in ("fuzz_driver", "/test/", "fuzzing/")
+        )
+    if strong_positive:
+        previous = result.is_api_bug
+        result.is_api_bug = True
+        return {
+            "applied": previous is not True,
+            "prior_prediction": prior_prediction,
+            "model_prediction": previous,
+            "reason": "strong_positive_evidence",
+        }
+
+    if prior_prediction is None or result.is_api_bug == prior_prediction:
+        return {
+            "applied": False,
+            "prior_prediction": prior_prediction,
+            "reason": "unchanged",
+        }
+
+    confidence = float(getattr(result, "confidence", 0.0) or 0.0)
+    if result.is_api_bug is False:
+        hard_negative = (
+            str(
+                getattr(result, "driver_misuse_evidence_strength", "")
+            ).lower()
+            == "hard"
+            and any(
+                marker.lower() in evidence.lower()
+                for marker in (
+                    "Unchecked state/status result risk",
+                    "Raw fuzz C-string risk",
+                    "No-length string API risk",
+                    "Fixed-buffer/fuzz-derived index-count mismatch risk",
+                    "Ownership-transfer failure-path risk",
+                )
+            )
+        )
+        accept = confidence >= 0.95 and hard_negative
+        accept_reason = "supported_hard_driver_evidence"
+    else:
+        accept = confidence >= 1.0 or "bug_type=stack-overflow" in prompt
+        accept_reason = (
+            "maximum_confidence"
+            if confidence >= 1.0
+            else "stack_overflow_target_evidence"
+        )
+    if accept:
+        return {
+            "applied": False,
+            "prior_prediction": prior_prediction,
+            "reason": accept_reason,
+        }
+
+    previous = result.is_api_bug
+    result.is_api_bug = prior_prediction
+    return {
+        "applied": True,
+        "prior_prediction": prior_prediction,
+        "model_prediction": previous,
+        "reason": "inherited_prior_below_threshold",
+        "confidence": confidence,
+    }
+
+
 def _extract_prompt_section(prompt: str, start_marker: str, end_marker: str) -> str:
     """Return one prompt section, so global instruction text is not mistaken for evidence."""
     if not prompt:
@@ -2496,6 +2996,7 @@ class CrashAnalyzer:
         prompt_variant: str = "differential",
         capture_prompt: bool = False,
         run_decision_repairs: bool = False,
+        prior_prediction: Optional[bool] = None,
     ):
         """Enhanced crash analysis with triage, locator, and debugger context.
 
@@ -2591,7 +3092,7 @@ class CrashAnalyzer:
             call_chain_str = _NO_CONTEXT
 
         if include_runtime_context:
-            if runtime_context and runtime_context.get("reproduced"):
+            if isinstance(runtime_context, dict) and runtime_context:
                 runtime_str = format_runtime_context_for_llm(runtime_context)
             else:
                 runtime_str = "[RUNTIME] Dynamic reproduction not available for this crash."
@@ -2788,6 +3289,35 @@ class CrashAnalyzer:
                     else f"negative boundary repair failed: {repair_error}"
                 )
 
+        deterministic_consistency_repair = {
+            "applied": False,
+            "violation": "",
+        }
+        if enhanced_result is not None:
+            consistency_violation = _deterministic_decision_consistency_violation(
+                enhanced_result,
+                question,
+            )
+            if consistency_violation:
+                enhanced_result.is_api_bug = False
+                enhanced_result.decision_basis = "driver_evidence"
+                if (
+                    str(
+                        getattr(
+                            enhanced_result,
+                            "driver_misuse_evidence_strength",
+                            "",
+                        )
+                        or ""
+                    ).lower()
+                    == "none"
+                ):
+                    enhanced_result.driver_misuse_evidence_strength = "soft"
+                deterministic_consistency_repair = {
+                    "applied": True,
+                    "violation": consistency_violation,
+                }
+
         # Fallback to basic extraction
         if enhanced_result is None:
             try:
@@ -2811,6 +3341,20 @@ class CrashAnalyzer:
         else:
             is_api_bug = enhanced_result.is_api_bug
             crash_category = enhanced_result.crash_category
+
+        prior_decision = {
+            "applied": False,
+            "prior_prediction": prior_prediction,
+            "reason": "not_applicable",
+        }
+        if enhanced_result is not None:
+            prior_decision = _apply_prior_decision(
+                enhanced_result,
+                question,
+                prior_prediction,
+                prompt_variant=prompt_variant,
+            )
+            is_api_bug = enhanced_result.is_api_bug
 
         if crash_category not in self.init_crash:
             self.init_crash.append(crash_category)
@@ -2844,6 +3388,8 @@ class CrashAnalyzer:
             "decision_parse_error": decision_parse_error,
             "archive_metadata_repair": archive_metadata_repair,
             "negative_boundary_repair": negative_boundary_repair,
+            "deterministic_consistency_repair": deterministic_consistency_repair,
+            "prior_decision_arbitration": prior_decision,
         }
         if capture_prompt:
             enhanced_dict["_experiment_metadata"]["prompt"] = question

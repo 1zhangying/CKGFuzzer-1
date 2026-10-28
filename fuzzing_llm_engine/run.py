@@ -50,6 +50,11 @@ OUT_CSV = OUT_DIR / "llm_bool_results.csv"
 OUT_JSONL = OUT_DIR / "llm_bool_results.jsonl"
 PROJECT_FILTER = os.environ.get("PROJECT_FILTER", "").strip()
 CRASH_ID_FILTER = os.environ.get("CRASH_ID_FILTER", "").strip()
+PRIOR_RESULTS = [
+    Path(path)
+    for path in os.environ.get("PRIOR_RESULTS", "").split(os.pathsep)
+    if path.strip()
+]
 FAST_MODE = os.environ.get(
     f"{RUN_VARIANT}_FAST",
     "0",
@@ -83,14 +88,36 @@ if ANALYZER_TEMPERATURE != 0:
     raise RuntimeError("paper ablation requires temperature=0")
 if FAST_MODE:
     raise RuntimeError("fast mode changes the CKGFuzzer baseline and is disabled")
+if RUN_VARIANT in {"V0", "V1"}:
+    raise RuntimeError(
+        f"{RUN_VARIANT} predictions are frozen in "
+        "results/frozen_baseline_1217; do not rerun this variant"
+    )
+if RUN_VARIANT == "V2":
+    raise RuntimeError(
+        "V2 is derived from the V1 result by "
+        "crash.assemble_final_1217_metrics; do not run it as an independent LLM variant"
+    )
+if RUN_VARIANT in {"V3", "V4"} and not PRIOR_RESULTS:
+    raise RuntimeError(
+        f"{RUN_VARIANT} requires PRIOR_RESULTS pointing to the frozen "
+        f"{'V1' if RUN_VARIANT == 'V3' else 'V3'} predictions"
+    )
 
 from llama_index.core import Settings
 from models.get_model import get_model, get_embedding_model
 from roles.crash_analyzer import CrashAnalyzer
 from crash.sanitizer_parser import parse_sanitizer_output
-from crash.triage import triage_crash
+from crash.triage import historical_runtime_context_is_compatible, triage_crash
 from crash.locator import locate_crash_site
-from crash.debugger import collect_runtime_context
+from crash.debugger import collect_runtime_context, gdb_runtime_image
+from crash.context_sources import filter_api_names, find_driver_source
+from crash.context_validation import (
+    runtime_context_matches_parsed,
+    runtime_context_summary,
+    static_context_is_complete,
+    static_context_summary,
+)
 from crash.pipeline_gate import replay_consistency_passed
 
 OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -101,6 +128,17 @@ def truth(v):
 def read_csv(path):
     with path.open("r", encoding="utf-8-sig", newline="") as f:
         return list(csv.DictReader(f))
+
+
+def load_prior_predictions(paths):
+    predictions = {}
+    for path in paths:
+        for row in read_csv(path):
+            result = row.get("Result", row.get("Prediction", ""))
+            if result:
+                predictions[(row["Project"], row["CrashID"])] = truth(result)
+    return predictions
+
 
 def load_yaml_entry(project, driver, crash_id):
     yaml_path = DB_ROOT / project / "crash" / driver / "crash_analysis.yaml"
@@ -129,16 +167,23 @@ def configured_model(project):
         or analyzer_config.get("model", "")
     )
 
-def load_api_combine(project, driver):
+def load_api_combine(project, driver, driver_path=None, crash_functions=()):
     p = DB_ROOT / project / "agents_results" / "api_combine.json"
     if not p.exists():
         return []
     api_all = json.load(open(p, "r", encoding="utf-8"))
     m = re.search(r"_(\d+)$", driver)
     n = int(m.group(1)) if m else None
-    if n and n <= len(api_all):
-        return api_all[n - 1]
-    return []
+    selected = api_all[n - 1] if n and n <= len(api_all) else []
+    if driver_path and Path(driver_path).is_file():
+        api_src = load_api_src(project)
+        candidates = [*selected, *api_src.keys()]
+        return filter_api_names(
+            Path(driver_path).read_text(encoding="utf-8", errors="replace"),
+            candidates,
+            required_apis=crash_functions,
+        )
+    return selected
 
 def load_api_src(project):
     p1 = DB_ROOT / project / "src" / "src_api_code.json"
@@ -146,15 +191,10 @@ def load_api_src(project):
     p = p1 if p1.exists() else p2
     return json.load(open(p, "r", encoding="utf-8"))
 
-def find_driver_path(project, driver):
-    candidates = [
-        DB_ROOT / project / "fuzz_driver" / f"{driver}.cc",
-        DB_ROOT / project / "crash" / driver / f"{driver}.cc",
-        Path("/home/cc/CKGFuzzer-1/docker_shared/fuzz_driver") / project / "compilation_pass_rag" / f"{driver}.cc",
-    ]
-    for p in candidates:
-        if p.exists():
-            return str(p)
+def find_driver_path(project, driver, entry=None):
+    path = find_driver_source(DB_ROOT, project, driver, entry)
+    if path:
+        return path
     raise RuntimeError(f"Missing fuzz driver source: {project}/{driver}")
 
 def resolve_binary(project, driver, entry):
@@ -162,49 +202,94 @@ def resolve_binary(project, driver, entry):
     if snap:
         p = Path(snap)
         if not p.is_absolute():
-            p = Path.cwd() / p
+            p = Path(__file__).resolve().parent / p
         if p.exists():
             return str(p)
     legacy = entry.get("binary_path_for_repro")
+    if legacy and not Path(legacy).is_absolute():
+        legacy = str(Path(__file__).resolve().parent / legacy)
     if legacy and Path(legacy).exists():
         return legacy
-    live = Path("build/out") / project / driver
+    live = Path(__file__).resolve().parent / "build" / "out" / project / driver
     if live.exists():
         return str(live)
     return None
 
 def get_runtime_context(project, driver, entry):
-    ctx = entry.get("gdb_runtime_context")
-    if (
-        ctx
-        and ctx.get("reproduced")
-        and (
-            ctx.get("stable") is True
-            or replay_consistency_passed(entry.get("repro"))
+    ctx = entry.get("gdb_runtime_context") or {}
+    parsed = entry.get("sanitizer_parsed") or {}
+    driver_basename = entry.get("fuzz_driver_file") or f"{driver}.cc"
+    matched, match_reason = runtime_context_matches_parsed(
+        ctx,
+        parsed,
+        driver_basename,
+    )
+    replay_ok = replay_consistency_passed(entry.get("repro"))
+    legacy_context = bool(ctx) and "stable" not in ctx
+    if matched and (
+        ctx.get("stable") is True
+        or replay_ok
+        or (
+            legacy_context
+            and historical_runtime_context_is_compatible(
+                ctx,
+                parsed,
+                driver_basename,
+            )
         )
     ):
         return ctx
     if not RERUN_GDB:
-        return {}
-    if not replay_consistency_passed(entry.get("repro")):
-        return {}
+        return {
+            "reproduced": False,
+            "error_message": (
+                "stored runtime context unavailable or incompatible: "
+                f"{match_reason}; set {RUN_VARIANT}_RERUN_GDB=1 to recollect"
+            ),
+            "collection_method": "stored",
+            "validation_reason": match_reason,
+        }
     binary = resolve_binary(project, driver, entry)
     poc = (entry.get("poc_paths") or {}).get("poc")
+    if poc and not Path(poc).is_absolute():
+        poc = str(Path(__file__).resolve().parent / poc)
     if binary and poc and Path(poc).exists():
         try:
+            # Host replay is only supporting evidence. The OSS-Fuzz runtime
+            # may have different libraries from the host, so Docker/GDB must
+            # still be attempted and validate the reconstructed crash against
+            # the retained sanitizer report.
             return collect_runtime_context(
                 binary,
                 poc,
                 attempts=3,
                 timeout=15,
                 prefer_docker=True,
+                expected_crash=parsed,
+                driver_basename=driver_basename,
+                docker_image=gdb_runtime_image(project),
             )
-        except Exception:
-            return {}
-    return {}
+        except Exception as exc:
+            return {
+                "reproduced": False,
+                "error_message": f"runtime recollection failed: {exc}",
+                "collection_method": "error",
+            }
+    return {
+        "reproduced": False,
+        "error_message": "runtime recollection skipped: binary or PoC missing",
+        "collection_method": "not_attempted",
+    }
 
 
-def save_analysis_artifact(project, crash_id, driver, analysis_text, enhanced):
+def save_analysis_artifact(
+    project,
+    crash_id,
+    driver,
+    analysis_text,
+    enhanced,
+    context_evidence=None,
+):
     """Persist the exact evidence and decision used by one experimental run."""
     if not CAPTURE_ARTIFACTS:
         return
@@ -221,6 +306,7 @@ def save_analysis_artifact(project, crash_id, driver, analysis_text, enhanced):
         "prompt_sha256": metadata.get("prompt_sha256", ""),
         "raw_model_response": analysis_text,
         "structured_decision": decision,
+        "context_evidence": context_evidence or {},
         "decision_parse_mode": metadata.get("decision_parse_mode", ""),
         "decision_parse_error": metadata.get("decision_parse_error", ""),
         "experiment_metadata": {
@@ -297,6 +383,8 @@ if (PROJECT_FILTER or CRASH_ID_FILTER) and not rows:
         f"No manifest rows matched PROJECT_FILTER={PROJECT_FILTER!r} "
         f"CRASH_ID_FILTER={CRASH_ID_FILTER!r}"
     )
+
+prior_predictions = load_prior_predictions(PRIOR_RESULTS)
 
 fieldnames = [
     "Project", "CrashID", "Driver", "LLMName", "LLMModel", "Result", "Reason",
@@ -377,26 +465,48 @@ for i, row in enumerate(rows, 1):
         crash_info = str(entry.get("crash_info") or "")
         if crash_info.startswith("|"):
             crash_info = crash_info[1:].lstrip("\n")
+        driver_basename = entry.get("fuzz_driver_file") or f"{driver}.cc"
 
-        parsed = None
+        # Sanitizer parsing is also needed to filter the target API evidence
+        # for V0, which does not otherwise enable triage or context.
+        parsed = entry.get("sanitizer_parsed") or parse_sanitizer_output(crash_info)
         triage = None
-        if INCLUDE_TRIAGE or INCLUDE_STATIC_CONTEXT:
-            parsed = entry.get("sanitizer_parsed") or parse_sanitizer_output(crash_info)
         if INCLUDE_TRIAGE:
-            triage = entry.get("triage") or triage_crash(parsed, fuzz_driver_basename=f"{driver}.cc")
+            triage = entry.get("triage") or triage_crash(
+                parsed,
+                fuzz_driver_basename=driver_basename,
+            )
         if INCLUDE_STATIC_CONTEXT:
             stored_location = entry.get("location") or {}
             location = (
                 stored_location
-                if stored_location.get("call_chain_context")
-                and stored_location.get("crash_code_snippet")
-                else locate_crash_site(parsed, driver_basename=f"{driver}.cc")
+                if static_context_is_complete(stored_location)
+                else locate_crash_site(
+                    parsed,
+                    driver_basename=driver_basename,
+                )
             )
         else:
             location = None
         runtime_ctx = get_runtime_context(project, driver, entry) if INCLUDE_RUNTIME_CONTEXT else {}
-        fuzz_driver_path = find_driver_path(project, driver)
-        api_combine = load_api_combine(project, driver)
+        runtime_status = runtime_context_summary(
+            runtime_ctx,
+            parsed if INCLUDE_RUNTIME_CONTEXT else None,
+            entry.get("fuzz_driver_file") or f"{driver}.cc",
+        )
+        static_status = static_context_summary(location)
+        fuzz_driver_path = find_driver_path(project, driver, entry)
+        crash_functions = [parsed.get("first_in_project_function") or ""]
+        crash_functions.extend(
+            frame.get("func") or ""
+            for frame in (parsed.get("frames") or [])
+        )
+        api_combine = load_api_combine(
+            project,
+            driver,
+            fuzz_driver_path,
+            crash_functions=crash_functions,
+        )
 
         t0 = time.time()
         if VARIANT_CONFIG.analysis_engine == "ckgfuzzer":
@@ -424,6 +534,7 @@ for i, row in enumerate(rows, 1):
                 prompt_variant=PROMPT_VARIANT,
                 capture_prompt=CAPTURE_ARTIFACTS,
                 run_decision_repairs=False,
+                prior_prediction=prior_predictions.get((project, crash_id)),
             )
         experiment_metadata = (enhanced or {}).get("_experiment_metadata")
         if experiment_metadata is not None:
@@ -439,8 +550,23 @@ for i, row in enumerate(rows, 1):
                 "include_static_context": INCLUDE_STATIC_CONTEXT,
                 "include_runtime_context": INCLUDE_RUNTIME_CONTEXT,
                 "include_reconstruction_context": INCLUDE_RECONSTRUCTION_CONTEXT,
+                "static_context_status": static_status,
+                "runtime_context_status": runtime_status,
+                "prior_results": [str(path) for path in PRIOR_RESULTS],
             })
-        save_analysis_artifact(project, crash_id, driver, analysis_text, enhanced)
+        save_analysis_artifact(
+            project,
+            crash_id,
+            driver,
+            analysis_text,
+            enhanced,
+            context_evidence={
+                "static": location if INCLUDE_STATIC_CONTEXT else None,
+                "runtime": runtime_ctx if INCLUDE_RUNTIME_CONTEXT else None,
+                "static_status": static_status,
+                "runtime_status": runtime_status,
+            },
+        )
         latency_ms = int((time.time() - t0) * 1000)
         prompt_chars = ((enhanced or {}).get("_experiment_metadata") or {}).get("prompt_chars", "")
 

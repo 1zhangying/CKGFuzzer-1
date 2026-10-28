@@ -30,7 +30,11 @@ import time as _time
 from crash.sanitizer_parser import parse_sanitizer_output, format_crash_summary
 from crash.triage import compute_replay_key, replay_keys_compatible, triage_crash
 from crash.locator import locate_crash_site, format_call_chain_for_llm
-from crash.debugger import collect_runtime_context, format_runtime_context_for_llm
+from crash.debugger import (
+    collect_runtime_context,
+    format_runtime_context_for_llm,
+    gdb_runtime_image,
+)
 from crash.dedup import DeduplicationEngine
 from crash.run_variant_config import get_variant_config
 from crash.pipeline_gate import (
@@ -362,26 +366,28 @@ def run_enhanced_crash_pipeline(
                 repro_info["error"] = str(e)
 
         if include_runtime_context and binary_path and poc_paths.get("poc") and os.path.isfile(binary_path):
-            if replay_consistency_passed(repro_info):
-                try:
-                    runtime_ctx = collect_runtime_context(
-                        binary_path,
-                        poc_paths["poc"],
-                        attempts=3,
-                        timeout=15,
-                        prefer_docker=True,
-                    )
-                    logger.info(
-                        f"[Pipeline] Stage 4 — GDB: reproduced={runtime_ctx.get('reproduced')}, "
-                        f"method={runtime_ctx.get('collection_method')}, "
-                        f"quality={runtime_ctx.get('evidence_quality')}"
-                    )
-                except Exception as e:
-                    logger.warning(f"[Pipeline] GDB failed: {e}")
-                    repro_info["runtime_unavailable_reason"] = f"gdb_failed:{e}"
-            else:
-                repro_info["runtime_unavailable_reason"] = "replay_consistency_failed"
-                logger.info("[Pipeline] Stage 4 — Skipping GDB (replay consistency failed)")
+            try:
+                # Direct host replay can fail because the host lacks the
+                # OSS-Fuzz runtime libraries. Docker/GDB is still authoritative
+                # when its reconstructed stack matches the original crash.
+                runtime_ctx = collect_runtime_context(
+                    binary_path,
+                    poc_paths["poc"],
+                    attempts=3,
+                    timeout=15,
+                    prefer_docker=True,
+                    expected_crash=parsed,
+                    driver_basename=fuzz_driver_basename,
+                    docker_image=gdb_runtime_image(project_name),
+                )
+                logger.info(
+                    f"[Pipeline] Stage 4 — GDB: reproduced={runtime_ctx.get('reproduced')}, "
+                    f"method={runtime_ctx.get('collection_method')}, "
+                    f"quality={runtime_ctx.get('evidence_quality')}"
+                )
+            except Exception as e:
+                logger.warning(f"[Pipeline] GDB failed: {e}")
+                repro_info["runtime_unavailable_reason"] = f"gdb_failed:{e}"
         elif include_runtime_context and repro_info.get("enabled"):
             repro_info["runtime_unavailable_reason"] = "binary_or_poc_unavailable"
         if include_runtime_context:

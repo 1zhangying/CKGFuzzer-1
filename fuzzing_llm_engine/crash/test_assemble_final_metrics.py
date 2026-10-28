@@ -45,7 +45,7 @@ def _result(
 
 
 class AssembleFinalMetricsTest(unittest.TestCase):
-    def test_representative_ground_truth_is_propagated_and_missing_results_fail(self) -> None:
+    def test_member_ground_truth_is_used_and_missing_results_fail(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             baseline = root / "baseline.csv"
@@ -104,8 +104,26 @@ class AssembleFinalMetricsTest(unittest.TestCase):
                 encoding="utf-8"
             ) as handle:
                 v2_rows = list(csv.DictReader(handle))
-            self.assertEqual({row["GroundTruth"] for row in v2_rows}, {"true"})
-            self.assertEqual({row["Prediction"] for row in v2_rows}, {"true"})
+            self.assertEqual(
+                [row["GroundTruth"] for row in v2_rows],
+                ["true", "false", "true"],
+            )
+            self.assertEqual(
+                {row["RepresentativeGroundTruth"] for row in v2_rows},
+                {"true"},
+            )
+            self.assertEqual(
+                [row["Prediction"] for row in v2_rows],
+                ["true", "false", "true"],
+            )
+
+            with (output / "final_overall_metrics_v0_v4_1217.csv").open(
+                encoding="utf-8"
+            ) as handle:
+                metrics = {row["Variant"]: row for row in csv.DictReader(handle)}
+            self.assertEqual(metrics["V2"]["TP"], "2")
+            self.assertEqual(metrics["V2"]["FP"], "0")
+            self.assertEqual(metrics["V2"]["TN"], "1")
 
             _write_csv(v3, [
                 _result("b", True, prompt="direct_v1", evidence="full", run_variant="V3", engine="crashsage"),

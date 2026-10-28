@@ -14,7 +14,15 @@ Modules:
 from .sanitizer_parser import parse_sanitizer_output, format_crash_summary
 from .triage import triage_crash, compute_signatures
 from .locator import locate_crash_site, format_call_chain_for_llm
-from .debugger import reproduce_with_gdb, format_runtime_context_for_llm
+from .debugger import (
+    collect_runtime_context,
+    reproduce_with_gdb,
+    format_runtime_context_for_llm,
+)
+from .context_validation import (
+    runtime_context_matches_parsed,
+    runtime_context_summary,
+)
 from .dedup import DeduplicationEngine
 from .minimizer import minimize_testcase
 from .poc import locate_poc_on_host, safe_copy_poc
@@ -28,7 +36,10 @@ __all__ = [
     "locate_crash_site",
     "format_call_chain_for_llm",
     "reproduce_with_gdb",
+    "collect_runtime_context",
     "format_runtime_context_for_llm",
+    "runtime_context_matches_parsed",
+    "runtime_context_summary",
     "DeduplicationEngine",
     "minimize_testcase",
     "locate_poc_on_host",

@@ -402,7 +402,7 @@ def record_llm_cost(args: argparse.Namespace) -> int:
             "Status": status, "RetryCount": record.get("RetryCount", "0"),
             "PromptChars": record.get("PromptChars", "0"), "PromptTokens": record.get("PromptTokens", "0"),
             "CompletionTokens": record.get("CompletionTokens", "0"), "TotalTokens": record.get("TotalTokens", "0"),
-            "ApiCost": "", "RuntimeContextStatus": record.get("EvidenceVariant", ""),
+            "ApiCost": "", "RuntimeContextStatus": "",
             "RuntimeEvidenceQuality": "",
         })
     _write_csv(path, COST_FIELDS, [*existing, *additions])
@@ -453,12 +453,20 @@ def extract_legacy_cost(args: argparse.Namespace) -> int:
                         if key in existing_keys or elapsed_field not in timings:
                             continue
                         skipped = bool(timings.get(skipped_field))
+                        if stage == "runtime_reconstruction" and not skipped:
+                            status = (
+                                "success"
+                                if runtime.get("reproduced")
+                                else "failed"
+                            )
+                        else:
+                            status = "skipped" if skipped else "success"
                         additions.append({
                             "Project": project_dir.name, "CrashID": crash_id,
                             "RepresentativeCrashID": entry.get("duplicate_of") or crash_id,
                             "Variant": "legacy_V3", "Stage": stage, "StartTimestamp": "",
                             "ElapsedMs": timings.get(elapsed_field, ""),
-                            "Status": "skipped" if skipped else "success",
+                            "Status": status,
                             "RetryCount": "", "PromptChars": "", "PromptTokens": "",
                             "CompletionTokens": "", "TotalTokens": "", "ApiCost": "",
                             "RuntimeContextStatus": (

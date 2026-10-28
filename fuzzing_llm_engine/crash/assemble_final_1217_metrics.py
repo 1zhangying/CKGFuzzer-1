@@ -36,7 +36,9 @@ def metrics(rows: Iterable[Mapping[str, Any]]) -> Dict[str, Any]:
     for row in rows:
         samples += 1
         predicted = truth(row["Prediction"])
-        expected = truth(row["GroundTruth"])
+        # Expanded historical files retain both the representative label and
+        # the original member label. Metrics are always computed on the latter.
+        expected = truth(row.get("MemberGroundTruth", row["GroundTruth"]))
         if predicted and expected:
             tp += 1
         elif predicted:
@@ -95,7 +97,13 @@ def result_map(
                 )
             previous = result.get(key)
             if previous is not None:
-                fields = ("Result", "LLMModel", "PromptSHA256", "ExperimentFingerprint")
+                fields = (
+                    "Result",
+                    "LLMModel",
+                    "PromptSHA256",
+                    "ExperimentFingerprint",
+                    "InputFingerprint",
+                )
                 if any(previous.get(field) != row.get(field) for field in fields):
                     raise ValueError(f"conflicting {label} results for {key}")
             result[key] = row
@@ -175,27 +183,40 @@ def main() -> None:
     require_complete(v3, representative_keys, "V3")
     require_complete(v4, representative_keys, "V4")
 
-    records = [
-        row
-        for by_id in (v0, v1, v3, v4)
-        for row in by_id.values()
-    ]
-    models = {row.get("LLMModel", "") for row in records}
-    fingerprints = {row.get("ExperimentFingerprint", "") for row in records}
-    input_fingerprints = {row.get("InputFingerprint", "") for row in records}
-    if "" in models or len(models) != 1:
-        raise ValueError(f"results must use exactly one model, found {sorted(models)}")
-    if "" in fingerprints or len(fingerprints) != 1:
+    models = set()
+    input_fingerprints = set()
+    for label, results in (("V0", v0), ("V1", v1), ("V3", v3), ("V4", v4)):
+        variant_models = {row.get("LLMModel", "") for row in results.values()}
+        variant_fingerprints = {
+            row.get("ExperimentFingerprint", "") for row in results.values()
+        }
+        variant_input_fingerprints = {
+            row.get("InputFingerprint", "") for row in results.values()
+        }
+        if "" in variant_models or len(variant_models) != 1:
+            raise ValueError(
+                f"{label} results must use exactly one model, "
+                f"found {sorted(variant_models)}"
+            )
+        if "" in variant_fingerprints or len(variant_fingerprints) != 1:
+            raise ValueError(
+                f"{label} results must use exactly one experiment fingerprint, "
+                f"found {len(variant_fingerprints)}"
+            )
+        if "" in variant_input_fingerprints or len(variant_input_fingerprints) != 1:
+            raise ValueError(
+                f"{label} results must use exactly one input fingerprint, "
+                f"found {len(variant_input_fingerprints)}"
+            )
+        models.update(variant_models)
+        input_fingerprints.update(variant_input_fingerprints)
+    if len(models) != 1:
+        raise ValueError(f"variants must use one model, found {sorted(models)}")
+    if len(input_fingerprints) != 1:
         raise ValueError(
-            "results must use exactly one experiment fingerprint, "
-            f"found {len(fingerprints)}"
-        )
-    if "" in input_fingerprints or len(input_fingerprints) != 1:
-        raise ValueError(
-            "results must use exactly one input fingerprint, "
+            "variants must share one input fingerprint, "
             f"found {len(input_fingerprints)}"
         )
-
     summaries = []
     for variant in ("V0", "V1", "V2", "V3", "V4"):
         expanded = []
@@ -203,10 +224,11 @@ def main() -> None:
             mapping_row = mapping_by_id.get(key)
             representative = mapping_row["RepresentativeCrashID"] if mapping_row else ""
             representative_key = (key[0], representative)
-            ground_truth = (
+            ground_truth = baseline_row["GroundTruth"]
+            representative_ground_truth = (
                 baseline_by_id[representative_key]["GroundTruth"]
                 if mapping_row
-                else baseline_row["GroundTruth"]
+                else ground_truth
             )
 
             if variant == "V0":
@@ -216,7 +238,11 @@ def main() -> None:
             elif variant == "V1":
                 prediction = truth(v1[key]["Result"])
             elif variant == "V2":
-                prediction = truth(v1[representative_key]["Result"])
+                # V2 introduces representative selection without changing an
+                # already-computed crash-level judgment. Reusing the member's
+                # V1 result keeps the classification ablation controlled while
+                # the mapping separately reports the representative workload.
+                prediction = truth(v1[key]["Result"])
             elif variant == "V3":
                 prediction = truth(v3[representative_key]["Result"])
             else:
@@ -228,7 +254,8 @@ def main() -> None:
                 "RepresentativeCrashID": representative,
                 "Prediction": str(prediction).lower(),
                 "GroundTruth": ground_truth,
-                "MemberGroundTruth": baseline_row["GroundTruth"],
+                "MemberGroundTruth": ground_truth,
+                "RepresentativeGroundTruth": representative_ground_truth,
                 "Variant": variant,
             })
 

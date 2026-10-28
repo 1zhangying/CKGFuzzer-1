@@ -41,15 +41,21 @@ from crash.sanitizer_parser import parse_sanitizer_output
 from crash.triage import triage_crash, compute_signatures
 from crash.debugger import (
     _generate_gdb_script,
-    _extract_section,
-    _parse_registers,
-    _parse_frame_vars,
-    _parse_backtrace,
+    _parse_gdb_marked_output,
+    gdb_runtime_image,
 )
 
 
 _ENGINE_DIR = Path(__file__).resolve().parents[1]
-_BASE_RUNNER_IMAGE = "gcr.io/oss-fuzz-base/base-runner"
+
+
+def _engine_path(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    path = Path(value)
+    if not path.is_absolute():
+        path = _ENGINE_DIR / path
+    return str(path)
 
 
 def _sha256_file(path: str) -> str:
@@ -75,8 +81,9 @@ def _ensure_entry_binary_snapshot(
     """Persist binary snapshot metadata in entry if missing or stale."""
     meta = entry.get("binary_snapshot") or {}
     snap = meta.get("snapshot_path")
-    if not force_refresh and snap and os.path.isfile(snap):
-        entry["binary_path_for_repro"] = snap
+    resolved_snap = _engine_path(snap)
+    if not force_refresh and resolved_snap and os.path.isfile(resolved_snap):
+        entry["binary_path_for_repro"] = resolved_snap
         return meta
 
     sha = _sha256_file(binary_path)
@@ -102,7 +109,7 @@ def _ensure_entry_binary_snapshot(
         "error": None,
     }
     entry["binary_snapshot"] = new_meta
-    entry["binary_path_for_repro"] = snap_path
+    entry["binary_path_for_repro"] = _engine_path(snap_path)
     return new_meta
 
 
@@ -280,9 +287,16 @@ def rebuild_asan_binaries(
 class DockerGDBSession:
     """Persistent Docker container for in-container GDB reproduction."""
 
-    def __init__(self, out_dir: str, *, install_timeout: int = 60):
+    def __init__(
+        self,
+        out_dir: str,
+        *,
+        install_timeout: int = 60,
+        docker_image: Optional[str] = None,
+    ):
         self.out_dir = os.path.realpath(out_dir)
         self.container_id: Optional[str] = None
+        self.docker_image = docker_image or gdb_runtime_image()
         self._start(install_timeout)
 
     def _start(self, install_timeout: int):
@@ -290,7 +304,7 @@ class DockerGDBSession:
             "docker", "run", "-d", "--rm", "--privileged", "--shm-size=2g",
             "--platform", "linux/amd64",
             "-v", f"{self.out_dir}:/out",
-            _BASE_RUNNER_IMAGE,
+            self.docker_image,
             "/bin/bash", "-c",
             "apt-get update -qq >/dev/null 2>&1 && "
             "apt-get install -y -qq gdb >/dev/null 2>&1 && "
@@ -434,49 +448,23 @@ class DockerGDBSession:
 # Parse GDB output into runtime context dict (reuse debugger.py parsers)
 # ---------------------------------------------------------------------------
 
-def _parse_gdb_output(output: str, max_frames: int = 8) -> Dict[str, Any]:
+def _parse_gdb_output(
+    output: str,
+    max_frames: int = 8,
+    *,
+    expected_crash: Optional[Dict[str, Any]] = None,
+    driver_basename: Optional[str] = None,
+) -> Dict[str, Any]:
     """Parse GDB output into a RuntimeContext-compatible dict."""
-    bt_text = _extract_section(
-        output, "===GDB_BACKTRACE_START===", "===GDB_BACKTRACE_END==="
+    result = _parse_gdb_marked_output(
+        output,
+        max_frames=max_frames,
+        expected_crash=expected_crash,
+        driver_basename=driver_basename,
     )
-    reg_text = _extract_section(
-        output, "===GDB_REGISTERS_START===", "===GDB_REGISTERS_END==="
-    )
-
-    registers = _parse_registers(reg_text)
-    call_stack = _parse_backtrace(bt_text) if bt_text else []
-
-    for i in range(max_frames):
-        frame_text = _extract_section(
-            output, f"===GDB_FRAME_{i}_START===", f"===GDB_FRAME_{i}_END==="
-        )
-        if frame_text:
-            args, locals_ = _parse_frame_vars(frame_text)
-            for fs in call_stack:
-                if fs.frame_id == i:
-                    fs.arguments.update(args)
-                    fs.locals.update(locals_)
-                    break
-
-    reproduced = bt_text is not None and len(call_stack) > 0
-
-    exit_signal = None
-    sig_match = re.search(r"Program received signal (\w+)", output)
-    if sig_match:
-        exit_signal = sig_match.group(1)
-
-    from dataclasses import asdict
-    crash_frame = call_stack[0] if call_stack else None
-
-    result = {
-        "reproduced": reproduced,
-        "exit_signal": exit_signal,
-        "registers": registers,
-        "crash_frame": asdict(crash_frame) if crash_frame else None,
-        "call_stack": [asdict(fs) for fs in call_stack],
-        "backtrace_text": bt_text,
-        "error_message": None if reproduced else "Could not reproduce crash in Docker",
-    }
+    result["collection_method"] = "docker_gdb"
+    if not result.get("reproduced"):
+        result["gdb_output_excerpt"] = output[-8000:]
     return result
 
 
@@ -549,7 +537,16 @@ def enrich_one_crash(
     gdb_context = None
     if session.is_alive():
         gdb_out = session.run_gdb(binary_path, poc_path, max_frames=8, timeout=30)
-        gdb_context = _parse_gdb_output(gdb_out)
+        expected_crash = entry.get("sanitizer_parsed")
+        if not isinstance(expected_crash, dict):
+            expected_crash = parse_sanitizer_output(
+                str(entry.get("crash_info") or "")
+            )
+        gdb_context = _parse_gdb_output(
+            gdb_out,
+            expected_crash=expected_crash,
+            driver_basename=fuzz_driver_basename,
+        )
 
         if gdb_context.get("reproduced"):
             cf = gdb_context.get("crash_frame", {})
@@ -624,7 +621,11 @@ def enrich_project(
     session = None
     if not dry_run:
         mount_dir = out_dir if out_dir_exists else crash_dir
-        session = DockerGDBSession(mount_dir, install_timeout=90)
+        session = DockerGDBSession(
+            mount_dir,
+            install_timeout=90,
+            docker_image=gdb_runtime_image(project_name),
+        )
         if not session.is_alive():
             logger.error(f"[{project_name}] Docker session failed to start")
             return {"project": project_name, "status": "docker_failed"}
@@ -664,7 +665,9 @@ def enrich_project(
 
                     build_out_path = os.path.join(out_dir, dname)
                     binary_snapshot = entry.get("binary_snapshot") or {}
-                    snapshot_path = binary_snapshot.get("snapshot_path")
+                    snapshot_path = _engine_path(
+                        binary_snapshot.get("snapshot_path")
+                    )
 
                     if prefer_build_out:
                         binary_path = build_out_path
