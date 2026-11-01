@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -66,6 +67,10 @@ class CrashSelection:
 
 def _engine_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def _elapsed_ms(start_ns: int) -> float:
+    return round((time.perf_counter_ns() - start_ns) / 1_000_000, 6)
 
 
 def _driver_dir_name(driver: str) -> str:
@@ -398,6 +403,10 @@ def replay_context(
     force_runtime: bool = False,
 ) -> Tuple[Dict[str, Any], Dict[str, Any], str]:
     """Collect and validate static/runtime context for one crash record."""
+    total_started = time.perf_counter_ns()
+    timings_ms: Dict[str, float] = {}
+
+    stage_started = time.perf_counter_ns()
     driver_dir = _driver_dir_name(selection.driver)
     yaml_path, driver_dir = _resolve_record_path(
         db_root,
@@ -406,25 +415,35 @@ def replay_context(
     )
     data = _load_yaml(yaml_path)
     entry, local_id = _find_entry(data, driver_dir, selection.crash_id)
+    timings_ms["record_lookup"] = _elapsed_ms(stage_started)
 
+    stage_started = time.perf_counter_ns()
     crash_info = str(entry.get("crash_info") or "")
     if crash_info.startswith("|"):
         crash_info = crash_info[1:].lstrip("\n")
     parsed = entry.get("sanitizer_parsed")
     if not isinstance(parsed, dict):
         parsed = parse_sanitizer_output(crash_info)
+    timings_ms["sanitizer_parse"] = _elapsed_ms(stage_started)
 
+    stage_started = time.perf_counter_ns()
     static = _static_context(parsed, driver_dir) if parsed.get("frames") else {
         "status": "unavailable",
         "location": None,
         "reason": "sanitizer_frames_missing",
     }
+    timings_ms["static_context"] = _elapsed_ms(stage_started)
+
+    stage_started = time.perf_counter_ns()
     binary, binary_source = _resolve_binary(
         selection.project,
         driver_dir,
         entry,
     )
     poc = _resolve_poc(entry, selection.project)
+    timings_ms["seed_and_binary_resolution"] = _elapsed_ms(stage_started)
+
+    stage_started = time.perf_counter_ns()
     direct_runs: List[Dict[str, Any]] = []
     if binary and poc and replay_attempts > 0:
         env = _sanitizer_environment(
@@ -444,10 +463,12 @@ def replay_context(
                     env,
                 )
             )
+    timings_ms["direct_replay"] = _elapsed_ms(stage_started)
     replay_count = sum(
         1 for run in direct_runs if run.get("replay_consistent")
     )
 
+    stage_started = time.perf_counter_ns()
     runtime: Dict[str, Any]
     if binary and poc:
         # Direct replay is useful evidence, but it is not a gate: the host
@@ -473,6 +494,9 @@ def replay_context(
             ),
             "collection_method": "not_attempted",
         }
+    timings_ms["gdb_runtime_collection"] = _elapsed_ms(stage_started)
+
+    stage_started = time.perf_counter_ns()
     fresh_runtime = _compact_runtime_context(runtime)
 
     runtime_status = runtime_context_summary(
@@ -495,6 +519,8 @@ def replay_context(
             runtime = historical
             runtime_status = historical_status
             runtime_source = "historical"
+    timings_ms["runtime_validation"] = _elapsed_ms(stage_started)
+    timings_ms["total_context_replay"] = _elapsed_ms(total_started)
     result = {
         "project": selection.project,
         "driver": driver_dir,
@@ -515,6 +541,7 @@ def replay_context(
         "runtime_context_attempt": fresh_runtime,
         "runtime_status": runtime_status,
         "runtime_source": runtime_source,
+        "measurement_timings_ms": timings_ms,
         "status": (
             "ok"
             if static.get("status") == "available"

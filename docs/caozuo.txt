@@ -1,0 +1,247 @@
+================================================================================
+  CrashSage 实验操作流程（完整版）
+================================================================================
+
+前置环境配置（每次终端启动时执行一次）:
+  export no_proxy=localhost,127.0.0.1,::1
+  unset all_proxy ALL_PROXY
+  cd /home/cc/CKGFuzzer-1/fuzzing_llm_engine
+
+先判断你属于哪种场景（非常重要）：
+  场景 A：从零开始做新实验（还没有该项目 crash 数据）
+    → 按步骤 1 → 2 → 3 → 4 → 5 → 6
+  场景 B：已有历史数据（你现在的 c-ares / cJSON 就是这个场景）
+    → 不需要重跑步骤 1（不用重新 fuzz 数小时）
+    → 直接按步骤 1.5 → 2 → 3 → 4 → 5 → 6
+
+
+================================================================================
+步骤 1：对每个项目跑完整 fuzz
+================================================================================
+
+对 c-ares, cJSON, curl 分别执行：
+
+python fuzzing.py \
+  --yaml /home/cc/CKGFuzzer-1/fuzzing_llm_engine/external_database/dlt-daemon/config.yaml \
+  --skip_gen_driver --skip_summary_api --skip_check_compilation --skip_gen_input
+
+python fuzzing.py \
+  --yaml /home/cc/CKGFuzzer-1/fuzzing_llm_engine/external_database/isotp-c/config.yaml \
+  --skip_gen_driver --skip_summary_api --skip_check_compilation --skip_gen_input
+
+python fuzzing.py \
+  --yaml /home/cc/CKGFuzzer-1/fuzzing_llm_engine/external_database/tinyxml2/config.yaml \
+  --skip_gen_driver --skip_summary_api --skip_check_compilation --skip_gen_input
+
+tinyxml2
+
+
+python fuzzing.py \
+  --yaml /home/cc/CKGFuzzer-1/fuzzing_llm_engine/external_database/zlib/config.yaml \
+  --skip_gen_driver --skip_summary_api --skip_check_compilation --skip_gen_input
+
+说明：
+  - 此步骤执行 fuzzing + crash 分析的完整流程
+  - 每个 driver 的 crash 结果保存在 external_database/{project}/crash/ 下
+  - LLM 分析结果（最昂贵的部分）在此步骤完成
+  - 已有历史数据时可跳过此步骤，用后续“增量重分析”更新
+
+
+================================================================================
+步骤 1.5：重跑增强分析（推荐，尤其代码改动后）
+================================================================================
+
+  这个步骤会用当前最新代码重跑 crash pipeline（不重新 fuzz），
+  更新 crash_analysis.yaml 中的 triage / location / dedup / timings 等字段
+  你已经修改过 `debugger.py` 和 `run_fuzzer.py`，建议执行此步骤
+
+对每个项目执行：
+
+python fuzzing.py \
+  --yaml /home/cc/CKGFuzzer-1/fuzzing_llm_engine/external_database/c-ares/config.yaml \
+  --reanalyze \
+  --skip_gen_driver --skip_summary_api --skip_check_compilation --skip_gen_input
+
+  （cJSON、curl 同理，替换对应 config.yaml 路径）
+
+说明：
+  - 不重跑 fuzz，只重跑已有 crash 的增强分析流程
+  - 会刷新 Stage4/Stage6 相关实验字段（例如 timings）
+  - 比完整 fuzz 快很多，但会有一定 LLM 调用开销
+
+================================================================================
+步骤 2：追溯修复 — 修复 repro_rate 和 GDB 运行时上下文（历史数据强烈建议）
+================================================================================
+
+  *** 对历史数据：强烈建议在消融实验之前执行！***
+  *** 对新跑数据：可选（用于补齐/校正运行时上下文）***
+  消融实验的 V3/V4 需要 GDB 运行时上下文作为 LLM prompt 输入。
+  如果不先修复 GDB 数据，V3/V4 的 LLM 分析中将没有运行时上下文，
+  导致无法验证 "runtime context breaks LLM hallucination" 的论点。
+
+所有项目 fuzz 完成后，统一执行追溯修复脚本：
+
+  # 先预览（不修改文件）
+python -m crash.retro_enrich --db-root external_database --dry-run
+ （或者对单个项目预览）
+python -m crash.retro_enrich --db-root external_database --project libpcap --dry-run
+
+  # 【推荐】带 ASan 重编译 + 追溯修复（一条命令搞定）
+  # 由于 fuzz 流程最后一步是 coverage 编译，/out/ 里的 binary 没有 ASan，
+  # 导致 PoC 无法复现。--rebuild-asan 会自动重编译后再做 GDB 追溯。
+python -m crash.retro_enrich --db-root external_database --rebuild-asan
+
+  # 或只处理单个项目####################################################################################
+python -m crash.retro_enrich --db-root external_database --project zlib --rebuild-asan
+
+  # 如果已确认 /out/ 里是 ASan binary（不需要重编译），可省略 --rebuild-asan：
+python -m crash.retro_enrich --db-root external_database
+
+说明：
+  此脚本修复两个已知问题（不重跑 LLM，保留所有已有分析结果）：
+  (a) repro_rate 0/3 → 在 Docker 容器内重新复现 PoC，使用多级签名比较
+      原 bug：签名比较只用 primary signature（dedup:xxx vs sig:xxx 格式不同）
+      修复：依次比较 exact → stack → fuzzy 三级签名
+  (b) GDB crash_frame 为空 → 在 Docker 容器内运行 GDB（而非 host 上）
+      原 bug：host 环境与容器不同，ASan 行为不一致，GDB 无法解析符号
+      修复：在 Docker 容器内安装 GDB 并运行，确保环境一致
+  (c) /out/ 中 binary 是 coverage 版本 → --rebuild-asan 自动用 ASan 重编译
+      原因：fuzz 流程最后一步 build_fuzzers --sanitizer coverage 覆盖了 binary
+      修复：在追溯前用 build_fuzzer_file 重编译 ASan 版本
+  修复后的 GDB 数据写入 crash_analysis.yaml 的 gdb_runtime_context 字段
+  备份文件保存为 crash_analysis.yaml.bak.{timestamp}
+
+
+================================================================================
+步骤 3：对已有 crash 数据跑消融实验（不重跑 fuzz，只重跑 LLM 分析）
+================================================================================
+
+
+对每个项目执行：
+python fuzzing.py \
+    --yaml /home/cc/CKGFuzzer-1/fuzzing_llm_engine/external_database/libpcap/config.yaml \
+    --reanalyze_ablation \
+    --skip_gen_driver --skip_summary_api --skip_check_compilation --skip_gen_input
+
+  （cJSON、curl 同理，替换对应 config.yaml 路径）
+
+说明：
+  - 对每个 crash 执行 V0/V1/V2/V3/V4 五种消融配置的 LLM 分析
+  - V3/V4 会自动读取步骤 2 写入的 gdb_runtime_context（如果存在）
+  - 结果写入 crash_analysis.yaml 的 ablation_results 字段
+
+
+================================================================================
+步骤 4：生成消融实验数据、CSV 和论文表格
+
+# 注意先把你原来的数据保存一下！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
+================================================================================
+
+  # 【推荐】完整分析 + 自动导出所有项目分析的 CSV（第一次跑用这条）
+python -m crash.experiment --db-root external_database --output results/ --mode retroanalyze
+
+  # 下面两条是备用，正常流程不需要：
+  # --mode csv       仅重新导出 CSV（retroanalyze 已跑过、只改了格式时用）
+  # --mode ablation  仅重跑分析 + 导出消融 CSV（消融数据更新后用）
+
+输出文件说明：
+  results/per_project_summary.csv        → 论文 Table 1（每项目汇总）
+  results/per_crash_detail.csv           → 每个 crash 的详细对比
+  results/triage_distribution.csv        → 论文 RQ2 图表数据
+  results/ablation_per_project.csv       → 论文 Table 5 / Fig 9
+  results/ablation_per_crash.csv         → 消融逐 crash 明细
+
+
+================================================================================
+步骤 5：人工标注 Groundtruth
+================================================================================
+
+  1. 打开 results/per_crash_detail.csv
+  2. 在 Groundtruth 列填入 True（真实 API 漏洞）或 False（driver bug / noise）
+  3. 保存
+
+  同样标注 results/ablation_per_crash.csv 的 LLMLabel 列
+
+
+================================================================================
+步骤 6：计算 Precision/Recall/F1 指标
+================================================================================
+
+  # 以下两步都需要执行
+  # 基础评估（Baseline vs Triage vs Enhanced）
+python -m crash.experiment --evaluate results/per_crash_detail.csv
+
+  # 消融评估（V0-V4 逐 variant 对比 → 论文 RQ5 表格）
+python -m crash.experiment --evaluate-ablation results/ablation_per_crash.csv
+
+输出：
+  - 终端打印 Precision / Recall / F1 / Accuracy
+  - 自动生成 results/ablation_per_crash_results.csv
+
+
+================================================================================
+实验总体流程图：
+================================================================================
+
+  场景A（新项目）:
+  步骤1: Fuzzing 运行（所有项目）
+    → 发现 crash → 解析 sanitizer → 规则 triage → 定位 → 去重
+    → PoC 复现 → LLM 分析 → 保存 crash_analysis.yaml
+    → 覆盖率插桩编译 → 跑 corpus 收集覆盖率 → 进入下一轮迭代
+
+  场景B（已有历史数据，例如现有 c-ares/cJSON）:
+  跳过步骤1（不重跑 fuzz）
+
+  步骤2: 追溯修复（历史数据强烈建议）
+    → 修复 PoC 复现率（Docker 内复现 + 多级签名比较）
+    → 修复 GDB 运行时上下文（Docker 内运行 GDB）
+    → 写入 gdb_runtime_context 到 crash_analysis.yaml
+
+  步骤2.5: 重跑增强分析
+    → 使用最新代码重跑已有 crash 的增强 pipeline
+    → 更新 triage/location/dedup/timings 等字段
+
+  步骤3: 消融实验（读取步骤2修复的 GDB 数据）
+    → 对已有 crash 重跑 V0-V4 五种 LLM 配置
+    → V3/V4 的 LLM prompt 中包含真实的运行时上下文
+
+  步骤4-6: 数据分析
+    → 生成 CSV → 人工标注 → 计算指标 → 填入论文
+
+
+================================================================================
+论文数据对应关系：
+================================================================================
+
+  RQ1 (False Positive Reduction)   ← per_crash_detail.csv + evaluate
+  RQ2 (Triage Distribution)        ← triage_distribution.csv
+  RQ3 (Deduplication)              ← per_project_summary.csv (Dedup 列)
+  RQ4 (Analysis Quality)           ← crash_analysis.yaml 中的 Case Study
+  RQ5 (Ablation Study)             ← ablation_per_crash.csv + evaluate-ablation
+  RQ6 (Efficiency)                 ← crash_analysis.yaml 中的 timings 字段
+ 
+
+
+
+
+/tmp/current_logic_ablation_diff_d0yf093r.csv这个文件记录了，如果对我当前结果执行
+/tmp/current_logic_ablation_diff_d0yf093r.csv这个文件记录了，如果对我当前结果执行
+crash.retroanalyze.retroanalyze_dir(crash_dir)，会有这么多crash条目的结果不与/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/ablation_per_crash.csv文件一致；
+现在要求你合理修改这272个crash.yaml条目中的某些字段（不能新增），要求执行crash.retroanalyze.retroanalyze_dir(crash_dir)之后与现有的/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/ablation_per_crash.csv结果完全一致；
+注意你还需保证单独从所有的crash_analysis.yaml分析得到的数据与一致；
+
+
+注意，步骤4和步骤6都是重新生成覆盖写入的，不是追加的
+具体来说：
+步骤 4（python -m crash.experiment --db-root external_database --output results/ --mode retroanalyze）：
+会扫描 external_database/ 下所有项目
+重新生成 results/ 下的所有 CSV 文件（覆盖旧文件）
+所以等你目标项目都跑完（场景A: 步骤1-3；场景B: 步骤2-3）后，
+执行一次步骤 4 就行，已有项目数据会自动包含进去
+步骤 5（标注 LLMLabel）：
+
+这一步需要注意——步骤 4 重新生成 CSV 后，之前标注的 c-ares LLMLabel 会被清空
+所以需要在步骤 4 之后重新标注所有项目的 LLMLabel
+
+步骤 6（计算指标）：
+读取 CSV 中的 LLMLabel 列计算，也是覆盖写入，不需要删除

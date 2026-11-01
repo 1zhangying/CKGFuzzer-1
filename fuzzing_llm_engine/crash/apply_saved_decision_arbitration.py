@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from crash.assemble_final_1217_metrics import metrics
-from roles.crash_analyzer import EnhancedCrashAnalysis, _apply_prior_decision
+from roles.crash_analyzer import (
+    EnhancedCrashAnalysis,
+    _apply_prior_decision,
+    _promote_target_state_memory_safety,
+)
 
 
 def _read_csv(path: Path) -> List[Dict[str, str]]:
@@ -38,6 +42,15 @@ def arbitrate(args: argparse.Namespace) -> None:
         decision = EnhancedCrashAnalysis.model_validate(
             artifact["structured_decision"]
         )
+        metadata = artifact.get("_experiment_metadata") or artifact.get(
+            "experiment_metadata"
+        ) or {}
+        prior_audit = metadata.get("prior_decision_arbitration") or {}
+        if args.variant == "V4" and prior_audit.get("applied") and isinstance(
+            prior_audit.get("model_prediction"),
+            bool,
+        ):
+            decision.is_api_bug = prior_audit["model_prediction"]
         audit = _apply_prior_decision(
             decision,
             artifact.get("prompt", ""),
@@ -45,9 +58,20 @@ def arbitrate(args: argparse.Namespace) -> None:
             prompt_variant=(
                 "direct_v1" if args.variant == "V3" else "differential"
             ),
+            run_variant=args.variant,
+        )
+        target_state_repair = _promote_target_state_memory_safety(
+            decision,
+            artifact.get("prompt", ""),
+            prompt_variant=(
+                "direct_v1" if args.variant == "V3" else "differential"
+            ),
         )
         representative_decisions[(project, crash_id)] = decision.is_api_bug
-        representative_audit[(project, crash_id)] = audit
+        representative_audit[(project, crash_id)] = {
+            **audit,
+            "target_state_memory_safety_repair": target_state_repair,
+        }
 
     output_rows = []
     for row in candidate:

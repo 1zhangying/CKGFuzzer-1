@@ -50,6 +50,21 @@ class FrozenPromptReplayTest(unittest.TestCase):
         self.assertEqual(result["call_count"], 1)
         self.assertEqual(result["decision_parse_mode"], "legacy_local_regex")
 
+    def test_v4_frozen_parser_applies_prior_without_extra_model_repairs(self) -> None:
+        prompt = "frozen V4 prompt"
+        primary = response_json(False)
+        result = replay.finalize_v4_response(
+            None,
+            prompt,
+            primary,
+            prior_prediction=False,
+        )
+
+        self.assertFalse(result["is_api_bug"])
+        self.assertEqual(result["call_count"], 1)
+        self.assertFalse(result["archive_metadata_repair"]["applied"])
+        self.assertFalse(result["negative_boundary_repair"]["applied"])
+
     def _prepare(self, root: Path) -> tuple[Path, Path, Path]:
         manifest = root / "manifest.csv"
         artifact_dir = root / "artifacts"

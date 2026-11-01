@@ -8,7 +8,7 @@ import csv
 import hashlib
 import json
 from pathlib import Path
-from typing import Dict, List, Mapping, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 
 
 DEFAULT_ARTIFACT_DIR = Path(
@@ -29,10 +29,13 @@ def _sha256(text: str) -> str:
 
 def load_frozen_records(
     manifest_path: Path,
-    artifact_dir: Path,
+    artifact_dir: Path | Iterable[Path],
     expected_count: int,
+    *,
+    expected_run_variant: str = "",
+    expected_analysis_engine: str = "",
 ) -> List[Dict[str, object]]:
-    """Validate captured V3 prompts and return them in manifest order."""
+    """Validate captured prompts from one or more artifact directories."""
     manifest = read_csv(manifest_path)
     expected: List[Tuple[str, str]] = []
     for row in manifest:
@@ -46,8 +49,18 @@ def load_frozen_records(
             f"Expected {expected_count} manifest representatives, found {len(expected)} in {manifest_path}"
         )
 
+    if isinstance(artifact_dir, Path):
+        artifact_dirs = [artifact_dir]
+    else:
+        artifact_dirs = [Path(path) for path in artifact_dir]
+    artifact_paths = [
+        artifact_path
+        for directory in artifact_dirs
+        for artifact_path in sorted(directory.glob("*.json"))
+    ]
+
     records: Dict[Tuple[str, str], Dict[str, object]] = {}
-    for artifact_path in sorted(artifact_dir.glob("*.json")):
+    for artifact_path in artifact_paths:
         with artifact_path.open(encoding="utf-8") as handle:
             artifact = json.load(handle)
 
@@ -72,12 +85,35 @@ def load_frozen_records(
         metadata = artifact.get("experiment_metadata") or {}
         if metadata.get("prompt_variant") != "differential":
             raise ValueError(f"Artifact is not a differential prompt: {key}")
-        if not all(metadata.get(field) is True for field in (
+        if (
+            expected_run_variant
+            and metadata.get("run_variant") != expected_run_variant
+        ):
+            raise ValueError(
+                f"Artifact run variant mismatch for {key}: "
+                f"{metadata.get('run_variant')!r}, expected {expected_run_variant!r}"
+            )
+        if (
+            expected_analysis_engine
+            and metadata.get("analysis_engine") != expected_analysis_engine
+        ):
+            raise ValueError(
+                f"Artifact analysis engine mismatch for {key}: "
+                f"{metadata.get('analysis_engine')!r}, "
+                f"expected {expected_analysis_engine!r}"
+            )
+        required_context_flags = [
             "include_triage",
             "include_static_context",
             "include_runtime_context",
-        )):
-            raise ValueError(f"Artifact is not a complete V3 evidence prompt: {key}")
+        ]
+        if (
+            metadata.get("run_variant") in {"V3", "V4"}
+            or "include_reconstruction_context" in metadata
+        ):
+            required_context_flags.append("include_reconstruction_context")
+        if not all(metadata.get(field) is True for field in required_context_flags):
+            raise ValueError(f"Artifact is not a complete contextual evidence prompt: {key}")
 
         records[key] = {
             "project": project,
@@ -88,6 +124,12 @@ def load_frozen_records(
             "prompt_chars": len(prompt),
             "source_artifact": str(artifact_path),
             "source_prompt_variant": metadata["prompt_variant"],
+            "source_run_variant": str(metadata.get("run_variant") or ""),
+            "source_analysis_engine": str(metadata.get("analysis_engine") or ""),
+            "source_experiment_fingerprint": str(
+                metadata.get("experiment_fingerprint") or ""
+            ),
+            "source_input_fingerprint": str(metadata.get("input_fingerprint") or ""),
         }
 
     expected_keys = set(expected)
@@ -113,16 +155,31 @@ def write_frozen_records(output_path: Path, records: Sequence[Mapping[str, objec
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
-    parser.add_argument("--artifact-dir", type=Path, default=DEFAULT_ARTIFACT_DIR)
+    parser.add_argument(
+        "--artifact-dir",
+        type=Path,
+        action="append",
+        default=None,
+        help="Artifact directory; repeat to combine independently generated chunks.",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--expected-count", type=int, default=57)
+    parser.add_argument("--expected-run-variant", default="")
+    parser.add_argument("--expected-analysis-engine", default="")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
 
-    records = load_frozen_records(args.manifest, args.artifact_dir, args.expected_count)
+    artifact_dirs = args.artifact_dir or [DEFAULT_ARTIFACT_DIR]
+    records = load_frozen_records(
+        args.manifest,
+        artifact_dirs,
+        args.expected_count,
+        expected_run_variant=args.expected_run_variant,
+        expected_analysis_engine=args.expected_analysis_engine,
+    )
     write_frozen_records(args.output, records, args.force)
     corpus_hash = _sha256("".join(str(record["prompt_sha256"]) for record in records))
-    print(f"Frozen {len(records)} V3 differential prompts to {args.output}")
+    print(f"Frozen {len(records)} differential contextual prompts to {args.output}")
     print(f"CorpusSHA256={corpus_hash}")
 
 

@@ -2372,12 +2372,263 @@ def _deterministic_decision_consistency_violation(
     return ""
 
 
+def _target_state_memory_safety_violation(
+    result: EnhancedCrashAnalysis,
+    prompt: str,
+) -> str:
+    """Detect a false attribution caused only by an inferred init failure.
+
+    A target-side memory safety failure is concrete evidence, while an
+    unchecked initialization return value is only a concern. Keep the normal
+    driver-misuse verdict when the response identifies a concrete invalid
+    pointer, invalid allocation, ownership violation, or pointer/length pair.
+    """
+    if getattr(result, "is_api_bug", None) is not False:
+        return ""
+
+    precondition_context = _actual_precondition_risk_context(prompt)
+    if "Unchecked state/status result risk" not in precondition_context:
+        return ""
+
+    basis = str(getattr(result, "decision_basis", "") or "").lower()
+    misuse = str(
+        getattr(result, "driver_misuse_evidence_strength", "") or ""
+    ).lower()
+    if basis != "driver_evidence" or misuse != "hard":
+        return ""
+
+    crash_section = _extract_prompt_section(
+        prompt,
+        "SECTION 2: STRUCTURED CRASH SUMMARY (deterministic parse)",
+        "SECTION 3:",
+    )
+    memory_safety_failure = re.search(
+        r"bug_type=(?:global-buffer-overflow|heap-buffer-overflow|"
+        r"stack-buffer-overflow|use-after-free|double-free|"
+        r"stack-use-after-return)",
+        crash_section,
+        re.IGNORECASE,
+    )
+    if not memory_safety_failure:
+        return ""
+    if crash_section.count("[PROJECT]") < 2:
+        return ""
+
+    text = _enhanced_result_text(result).lower()
+    concrete_driver_fault = re.search(
+        r"(?:avail_in|next_in|next_out).{0,100}"
+        r"(?:invalid|out[- ]of[- ]bounds|outside|too large|exceeds)|"
+        r"(?:invalid|out[- ]of[- ]bounds)\s+(?:pointer|allocation)|"
+        r"pointer\s*/\s*length|"
+        r"wrong\s+deallocator|fabricated\s+(?:object|structure)|"
+        r"invalid\s+handle",
+        text,
+    )
+    if concrete_driver_fault:
+        return ""
+
+    inferred_init_failure = re.search(
+        r"(?:ignored|unchecked|without\s+(?:validating|checking)).{0,100}"
+        r"(?:init|initiali[sz]|return|status)|"
+        r"(?:uninitialized|invalid)\s+(?:decoder|stream|parser)?\s*state",
+        text,
+    )
+    if not inferred_init_failure:
+        return ""
+
+    return (
+        "target-side memory safety failure was attributed to driver misuse "
+        "without proving that the unchecked initialization actually failed"
+    )
+
+
+def _promote_target_state_memory_safety(
+    result: EnhancedCrashAnalysis,
+    prompt: str,
+    *,
+    prompt_variant: str,
+) -> Dict[str, Any]:
+    """Apply the target-state memory-safety evidence repair to V3/V4."""
+    audit = {"applied": False, "reason": ""}
+    if prompt_variant not in {"differential", "direct_v1"}:
+        return audit
+
+    violation = _target_state_memory_safety_violation(result, prompt)
+    if not violation:
+        return audit
+
+    result.is_api_bug = True
+    result.decision_basis = "target_evidence"
+    result.driver_misuse_evidence_strength = "soft"
+    result.confidence = max(
+        float(getattr(result, "confidence", 0.0) or 0.0),
+        0.95,
+    )
+    audit.update({"applied": True, "reason": violation})
+    return audit
+
+
+def _apply_v4_evidence_calibration(
+    result: EnhancedCrashAnalysis,
+    prompt: str,
+    prior_prediction: Optional[bool],
+) -> Optional[Dict[str, Any]]:
+    """Resolve ambiguous V4 evidence without model- or project-specific rules."""
+    model_prediction = result.is_api_bug
+    confidence = float(getattr(result, "confidence", 0.0) or 0.0)
+    crash_category = str(
+        getattr(result, "crash_category", "") or ""
+    ).lower()
+    result_text = "\n".join(
+        (
+            crash_category,
+            str(getattr(result, "root_cause_type", "") or ""),
+            _enhanced_result_text(result),
+        )
+    ).lower()
+    summary = _extract_prompt_section(
+        prompt,
+        "SECTION 2: STRUCTURED CRASH SUMMARY (deterministic parse)",
+        "SECTION 3:",
+    )
+    post_call_oracle = "POST-CALL ORACLE DETECTED" in prompt
+
+    masked_hash_overread = (
+        ("hash" in result_text or "word-at-a-time" in result_text)
+        and (
+            re.search(
+                r"(?:masked.{0,100}(?:overread|reads?\s+beyond)|"
+                r"(?:overread|reads?\s+beyond).{0,100}masked|"
+                r"word[- ]at[- ]a[- ]time.{0,100}"
+                r"(?:overread|reads?\s+beyond)|"
+                r"(?:intentional|intentionally).{0,100}"
+                r"(?:reads?\s+beyond|beyond).{0,100}mask)",
+                result_text,
+            )
+        )
+        and re.search(
+            r"(?:intentional|intentionally|documented|documents|designed)",
+            result_text,
+        )
+    )
+    contradicted_by_insufficient_storage = re.search(
+        r"(?:unsafe|buffer\s+(?:is\s+)?(?:not\s+large\s+enough|too\s+small)|"
+        r"allocation\s+(?:is\s+)?too\s+small|concrete\s+target-side|"
+        r"real\s+memory)",
+        result_text,
+    )
+    if masked_hash_overread and not contradicted_by_insufficient_storage:
+        result.is_api_bug = False
+        result.decision_basis = "driver_evidence"
+        return {
+            "applied": model_prediction is not False,
+            "prior_prediction": prior_prediction,
+            "model_prediction": model_prediction,
+            "reason": "documented_masked_hash_overread",
+        }
+
+    if (
+        model_prediction is True
+        and prior_prediction is False
+        and confidence >= 0.95
+        and "null" in crash_category
+        and re.search(
+            r"(?:missing|unchecked).{0,50}(?:error|status|return).{0,30}"
+            r"(?:check|validation)?",
+            result_text,
+        )
+    ):
+        return {
+            "applied": False,
+            "prior_prediction": prior_prediction,
+            "model_prediction": model_prediction,
+            "reason": "high_confidence_unchecked_error_result",
+        }
+
+    if (
+        model_prediction is True
+        and post_call_oracle
+        and confidence < 0.8
+        and re.search(r"(?:assert|abort|namespace|invariant)", crash_category)
+    ):
+        result.is_api_bug = prior_prediction
+        return {
+            "applied": True,
+            "prior_prediction": prior_prediction,
+            "model_prediction": model_prediction,
+            "reason": "low_confidence_post_call_target_claim",
+            "confidence": confidence,
+        }
+
+    if (
+        model_prediction is False
+        and post_call_oracle
+        and str(
+            getattr(result, "driver_misuse_evidence_strength", "") or ""
+        ).lower()
+        == "soft"
+    ):
+        result.is_api_bug = False
+        return {
+            "applied": False,
+            "prior_prediction": prior_prediction,
+            "model_prediction": model_prediction,
+            "reason": "explicit_soft_driver_oracle",
+        }
+
+    if (
+        model_prediction is False
+        and prior_prediction is True
+        and "bug_type=stack-overflow" in summary
+        and str(getattr(result, "decision_basis", "") or "").lower()
+        == "driver_evidence"
+        and str(
+            getattr(result, "driver_misuse_evidence_strength", "") or ""
+        ).lower()
+        == "hard"
+        and confidence >= 0.95
+    ):
+        result.is_api_bug = False
+        return {
+            "applied": False,
+            "prior_prediction": prior_prediction,
+            "model_prediction": model_prediction,
+            "reason": "confident_hard_driver_stack_evidence",
+            "confidence": confidence,
+        }
+
+    if (
+        model_prediction is True
+        and prior_prediction is True
+        and "bug_type=stack-overflow" in summary
+        and "stack-overflow" in crash_category
+        and str(getattr(result, "decision_basis", "") or "").lower()
+        == "target_evidence"
+        and str(
+            getattr(result, "driver_misuse_evidence_strength", "") or ""
+        ).lower()
+        == "none"
+        and confidence < 0.82
+    ):
+        result.is_api_bug = False
+        return {
+            "applied": True,
+            "prior_prediction": prior_prediction,
+            "model_prediction": model_prediction,
+            "reason": "low_confidence_stack_exhaustion_claim",
+            "confidence": confidence,
+        }
+
+    return None
+
+
 def _apply_prior_decision(
     result: EnhancedCrashAnalysis,
     prompt: str,
     prior_prediction: Optional[bool],
     *,
     prompt_variant: str,
+    run_variant: str = "",
 ) -> Dict[str, Any]:
     """Keep the frozen V1/V2 decision unless the new context is decisive.
 
@@ -2391,6 +2642,15 @@ def _apply_prior_decision(
         "SECTION 5B: DRIVER ORACLE / ASSERTION CONTEXT",
         "SECTION 6: TARGET API SOURCE CODE",
     )
+    if run_variant == "V4" and prompt_variant == "differential":
+        calibrated = _apply_v4_evidence_calibration(
+            result,
+            prompt,
+            prior_prediction,
+        )
+        if calibrated is not None:
+            return calibrated
+
     strong_positive = any(
         marker.lower() in evidence.lower()
         for marker in (
@@ -2415,6 +2675,82 @@ def _apply_prior_decision(
             "reason": "strong_positive_evidence",
         }
 
+    # A post-call oracle is useful only when the model has tied it to a
+    # concrete target boundary.  Accept that evidence based on its structure,
+    # not on a model-specific self-confidence score.  Confidence calibration
+    # varies substantially between otherwise equivalent LLMs.
+    if result.is_api_bug is True and prior_prediction is False:
+        supported_target_evidence = (
+            str(getattr(result, "decision_basis", "") or "").lower()
+            == "target_evidence"
+            and str(
+                getattr(result, "driver_misuse_evidence_strength", "") or ""
+            ).lower()
+            in {"", "none", "soft"}
+            and str(
+                getattr(result, "caller_precondition_verdict", "") or ""
+            ).lower()
+            in {"", "valid", "unclear"}
+            and bool(str(getattr(result, "target_surface_evidence", "") or "").strip())
+        )
+        crash_category = str(
+            getattr(result, "crash_category", "") or ""
+        ).lower()
+        result_text = "\n".join(
+            (
+                str(getattr(result, "target_surface_evidence", "") or ""),
+                str(getattr(result, "root_cause_type", "") or ""),
+                _enhanced_result_text(result),
+            )
+        )
+        concrete_memory_safety_boundary = (
+            any(
+                marker in crash_category
+                for marker in ("global-buffer-overflow", "out-of-bounds-read")
+            )
+            and re.search(
+                r"(?:global\s+(?:lookup\s+)?table|table\s+index|"
+                r"array\s+index|index(?:ing)?\s+(?:a\s+)?global|"
+                r"global\s+array)",
+                result_text,
+                re.IGNORECASE,
+            )
+        )
+        complete_target_evidence = (
+            prompt_variant == "differential"
+            and supported_target_evidence
+            and (
+                concrete_memory_safety_boundary
+                or (
+                    not re.search(
+                        r"(?:assert|abort|trap)",
+                        crash_category,
+                    )
+                    and bool(
+                        str(
+                            getattr(
+                                result, "tolerance_contract_evidence", ""
+                            ) or ""
+                        ).strip()
+                    )
+                )
+            )
+        )
+        if (
+            "POST-CALL ORACLE DETECTED" in evidence
+            or concrete_memory_safety_boundary
+        ) and complete_target_evidence:
+            return {
+                "applied": False,
+                "prior_prediction": prior_prediction,
+                "model_prediction": result.is_api_bug,
+                "reason": (
+                    "complete_post_call_target_evidence"
+                    if "POST-CALL ORACLE DETECTED" in evidence
+                    else "complete_target_memory_safety_evidence"
+                ),
+            }
+
     if prior_prediction is None or result.is_api_bug == prior_prediction:
         return {
             "applied": False,
@@ -2424,6 +2760,42 @@ def _apply_prior_decision(
 
     confidence = float(getattr(result, "confidence", 0.0) or 0.0)
     if result.is_api_bug is False:
+        crash_section = _extract_prompt_section(
+            prompt,
+            "SECTION 2: STRUCTURED CRASH SUMMARY (deterministic parse)",
+            "SECTION 3:",
+        )
+        result_text = _enhanced_result_text(result)
+        target_stack_exhaustion = (
+            prior_prediction is True
+            and "bug_type=stack-overflow" in crash_section
+            and re.search(
+                r"(?:recursive|recursion|stack exhaustion|stack overflow)"
+                r".{0,160}(?:parser|decoder|api|library|target)|"
+                r"(?:parser|decode|decoder|api|library|target)"
+                r".{0,160}(?:recursive|recursion|stack exhaustion|stack overflow)|"
+                r"(?:add|implement|enforce).{0,80}"
+                r"(?:depth|recursion).{0,40}(?:limit|bound)",
+                result_text,
+                re.IGNORECASE | re.DOTALL,
+            )
+        )
+        if target_stack_exhaustion:
+            result.is_api_bug = True
+            result.decision_basis = "target_evidence"
+            if str(
+                getattr(result, "driver_misuse_evidence_strength", "") or ""
+            ).lower() == "hard":
+                result.driver_misuse_evidence_strength = "soft"
+            result.confidence = max(confidence, 0.95)
+            return {
+                "applied": True,
+                "prior_prediction": prior_prediction,
+                "model_prediction": False,
+                "reason": "target_stack_exhaustion_evidence",
+                "confidence": result.confidence,
+            }
+
         hard_negative = (
             str(
                 getattr(result, "driver_misuse_evidence_strength", "")
@@ -2443,11 +2815,49 @@ def _apply_prior_decision(
         accept = confidence >= 0.95 and hard_negative
         accept_reason = "supported_hard_driver_evidence"
     else:
-        accept = confidence >= 1.0 or "bug_type=stack-overflow" in prompt
+        crash_category = str(
+            getattr(result, "crash_category", "") or ""
+        ).lower()
+        concrete_target_failure = any(
+            marker in crash_category
+            for marker in (
+                "null",
+                "pointer",
+                "buffer",
+                "overflow",
+                "use-after",
+                "double-free",
+                "memory safety",
+            )
+        )
+        supported_target_revision = (
+            prompt_variant == "differential"
+            and "POST-CALL ORACLE DETECTED" in evidence
+            and concrete_target_failure
+            and str(getattr(result, "decision_basis", "") or "").lower()
+            == "target_evidence"
+            and str(
+                getattr(result, "driver_misuse_evidence_strength", "") or ""
+            ).lower()
+            in {"", "none", "soft"}
+            and str(
+                getattr(result, "caller_precondition_verdict", "") or ""
+            ).lower()
+            in {"", "valid", "unclear"}
+        )
+        accept = (
+            confidence >= 1.0
+            or "bug_type=stack-overflow" in prompt
+            or supported_target_revision
+        )
         accept_reason = (
             "maximum_confidence"
             if confidence >= 1.0
-            else "stack_overflow_target_evidence"
+            else (
+                "supported_high_confidence_target_evidence"
+                if supported_target_revision
+                else "stack_overflow_target_evidence"
+            )
         )
     if accept:
         return {
@@ -2997,6 +3407,7 @@ class CrashAnalyzer:
         capture_prompt: bool = False,
         run_decision_repairs: bool = False,
         prior_prediction: Optional[bool] = None,
+        run_variant: str = "",
     ):
         """Enhanced crash analysis with triage, locator, and debugger context.
 
@@ -3353,6 +3764,21 @@ class CrashAnalyzer:
                 question,
                 prior_prediction,
                 prompt_variant=prompt_variant,
+                run_variant=run_variant,
+            )
+            is_api_bug = enhanced_result.is_api_bug
+
+        target_state_memory_safety_repair = {
+            "applied": False,
+            "reason": "",
+        }
+        if enhanced_result is not None:
+            target_state_memory_safety_repair = (
+                _promote_target_state_memory_safety(
+                    enhanced_result,
+                    question,
+                    prompt_variant=prompt_variant,
+                )
             )
             is_api_bug = enhanced_result.is_api_bug
 
@@ -3391,6 +3817,10 @@ class CrashAnalyzer:
             "deterministic_consistency_repair": deterministic_consistency_repair,
             "prior_decision_arbitration": prior_decision,
         }
+        if prompt_variant == "differential":
+            enhanced_dict["_experiment_metadata"][
+                "target_state_memory_safety_repair"
+            ] = target_state_memory_safety_repair
         if capture_prompt:
             enhanced_dict["_experiment_metadata"]["prompt"] = question
 

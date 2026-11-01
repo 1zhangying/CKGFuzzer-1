@@ -28,7 +28,9 @@ def representative_metrics(
                 "Project": key[0],
                 "CrashID": key[1],
                 "Prediction": truth(result["Result"]),
-                "GroundTruth": truth(baseline[key]["GroundTruth"]),
+                "GroundTruth": truth(
+                    baseline[key].get("MemberGroundTruth", baseline[key]["GroundTruth"])
+                ),
             }
         )
     return rows
@@ -54,7 +56,9 @@ def expanded_metrics(
                 "CrashID": key[1],
                 "RepresentativeCrashID": representative,
                 "Prediction": prediction,
-                "GroundTruth": truth(baseline_row["GroundTruth"]),
+                "GroundTruth": truth(
+                    baseline_row.get("MemberGroundTruth", baseline_row["GroundTruth"])
+                ),
             }
         )
     return rows

@@ -25,7 +25,7 @@ def get_model(llm_config=None):
             max_retries=llm_config.get("max_retries", 0),
             max_tokens=llm_config.get("max_tokens"),
         )
-    if model_name.startswith(("qwen", "glm")):
+    if model_name.startswith(("qwen", "glm", "gpt", "claude")):
         return OpenAILike(
             model=model_name,
               api_base=llm_config["base_url"], 

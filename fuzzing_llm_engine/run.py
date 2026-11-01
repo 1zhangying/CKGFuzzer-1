@@ -562,6 +562,7 @@ for i, row in enumerate(rows, 1):
                 capture_prompt=CAPTURE_ARTIFACTS,
                 run_decision_repairs=False,
                 prior_prediction=prior_predictions.get((project, crash_id)),
+                run_variant=RUN_VARIANT,
             )
         experiment_metadata = (enhanced or {}).get("_experiment_metadata")
         if experiment_metadata is not None:

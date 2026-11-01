@@ -20,7 +20,10 @@ from roles.crash_analyzer import (
     CrashAnalysis,
     EnhancedCrashAnalysis,
     _ENHANCED_EXTRACT_PROMPT,
+    _apply_prior_decision,
+    _deterministic_decision_consistency_violation,
     _parse_enhanced_json_response,
+    _promote_target_state_memory_safety,
     _repair_archive_metadata_consistency_with_llm,
     _repair_negative_boundary_consistency_with_llm,
 )
@@ -31,6 +34,7 @@ DEFAULT_OUT_DIR = Path("results/revision_20260728/llm_v3_frozen_prompt_replay")
 RESULT_FIELDS = [
     "Project", "CrashID", "Driver", "LLMName", "LLMModel", "Result", "Reason", "Status",
     "LatencyMs", "PromptChars", "PromptSHA256", "FrozenPromptSHA256", "EvidenceVariant", "PromptVariant",
+    "RunVariant", "AnalysisEngine", "ExperimentFingerprint", "InputFingerprint",
     "FinalCallCount", "DecisionParseMode", "DecisionParseError",
     "ArchiveMetadataRepairApplied", "NegativeBoundaryRepairApplied",
 ]
@@ -96,6 +100,27 @@ def load_analyzer_configs(records: List[Mapping[str, object]], db_root: Path, te
             project_config = yaml.safe_load(handle)
         analyzer_config = dict(project_config["llm_analyzer"])
         analyzer_config["temperature"] = temperature
+        overrides = {
+            "model": "LLM_MODEL_OVERRIDE",
+            "base_url": "LLM_BASE_URL_OVERRIDE",
+            "api_key": "LLM_API_KEY_OVERRIDE",
+        }
+        for config_key, env_name in overrides.items():
+            override = os.environ.get(env_name, "").strip()
+            if override:
+                analyzer_config[config_key] = override
+        numeric_overrides = {
+            "timeout": ("LLM_TIMEOUT_OVERRIDE", float),
+            "max_retries": ("LLM_MAX_RETRIES_OVERRIDE", int),
+            "max_tokens": ("LLM_MAX_TOKENS_OVERRIDE", int),
+        }
+        for config_key, (env_name, convert) in numeric_overrides.items():
+            override = os.environ.get(env_name, "").strip()
+            if override:
+                analyzer_config[config_key] = convert(override)
+        extra_body = os.environ.get("LLM_EXTRA_BODY_JSON", "").strip()
+        if extra_body:
+            analyzer_config["additional_kwargs"] = json.loads(extra_body)
         configs[project] = analyzer_config
 
     configured_models = {str(config["model"]) for config in configs.values()}
@@ -244,6 +269,197 @@ def finalize_v3_response(llm: object, prompt: str, primary_response: str) -> Dic
     }
 
 
+def finalize_v4_response(
+    llm: object,
+    prompt: str,
+    primary_response: str,
+    *,
+    prior_prediction: bool | None,
+) -> Dict[str, object]:
+    """Parse a frozen V4 response with the current non-repair decision policy."""
+    enhanced_result: EnhancedCrashAnalysis | None = None
+    decision_parse_mode = "primary_json"
+    decision_parse_error = ""
+    call_count = 1
+    try:
+        enhanced_result = _parse_enhanced_json_response(primary_response)
+    except Exception as primary_error:
+        decision_parse_mode = "legacy_second_pass"
+        decision_parse_error = str(primary_error)
+        try:
+            call_count += 1
+            extract_program = LLMTextCompletionProgram.from_defaults(
+                output_cls=EnhancedCrashAnalysis,
+                prompt_template_str=_ENHANCED_EXTRACT_PROMPT,
+                llm=llm,
+            )
+            enhanced_result = extract_program(raw_answer=primary_response)
+        except Exception as extract_error:
+            decision_parse_mode = "basic_second_pass"
+            decision_parse_error = (
+                f"{decision_parse_error}; enhanced fallback: {extract_error}"
+            )
+            call_count += 1
+            basic_program = LLMTextCompletionProgram.from_defaults(
+                output_cls=CrashAnalysis,
+                prompt_template_str=(
+                    "The input answer is:\n {raw_answer}\n. "
+                    "Please extract the bool value of the variable <is_api_bug> "
+                    "and the string value of <crash_category>."
+                ),
+                llm=llm,
+            )
+            basic_result = basic_program(raw_answer=primary_response)
+            return {
+                "is_api_bug": bool(basic_result.is_api_bug),
+                "crash_category": str(basic_result.crash_category),
+                "final_response": primary_response,
+                "structured_decision": None,
+                "decision_parse_mode": decision_parse_mode,
+                "decision_parse_error": decision_parse_error,
+                "archive_metadata_repair": {
+                    "applied": False,
+                    "violation": "",
+                    "error": "",
+                },
+                "negative_boundary_repair": {
+                    "applied": False,
+                    "violation": "",
+                    "error": "",
+                },
+                "deterministic_consistency_repair": "",
+                "prior_decision": {
+                    "applied": False,
+                    "prior_prediction": prior_prediction,
+                    "reason": "structured_result_unavailable",
+                },
+                "call_count": call_count,
+            }
+
+    consistency = _deterministic_decision_consistency_violation(
+        enhanced_result,
+        prompt,
+    )
+    if consistency:
+        enhanced_result.is_api_bug = False
+        enhanced_result.decision_basis = "driver_evidence"
+        if str(
+            getattr(enhanced_result, "driver_misuse_evidence_strength", "") or ""
+        ).lower() == "none":
+            enhanced_result.driver_misuse_evidence_strength = "soft"
+
+    prior_decision = _apply_prior_decision(
+        enhanced_result,
+        prompt,
+        prior_prediction,
+        prompt_variant="differential",
+        run_variant="V4",
+    )
+    target_state_memory_safety_repair = _promote_target_state_memory_safety(
+        enhanced_result,
+        prompt,
+        prompt_variant="differential",
+    )
+    return {
+        "is_api_bug": bool(enhanced_result.is_api_bug),
+        "crash_category": str(enhanced_result.crash_category),
+        "final_response": primary_response,
+        "structured_decision": _model_dict(enhanced_result),
+        "decision_parse_mode": decision_parse_mode,
+        "decision_parse_error": decision_parse_error,
+        "archive_metadata_repair": {"applied": False, "violation": "", "error": ""},
+        "negative_boundary_repair": {"applied": False, "violation": "", "error": ""},
+        "deterministic_consistency_repair": consistency,
+        "prior_decision": prior_decision,
+        "target_state_memory_safety_repair": target_state_memory_safety_repair,
+        "call_count": call_count,
+    }
+
+
+def finalize_v4_direct_response(
+    llm: object,
+    prompt: str,
+    primary_response: str,
+) -> Dict[str, object]:
+    """Parse a fresh V4 answer without prior inheritance or result replay."""
+    decision_parse_mode = "primary_json"
+    decision_parse_error = ""
+    call_count = 1
+    try:
+        enhanced_result = _parse_enhanced_json_response(primary_response)
+    except Exception as primary_error:
+        decision_parse_mode = "legacy_second_pass"
+        decision_parse_error = str(primary_error)
+        try:
+            call_count += 1
+            extract_program = LLMTextCompletionProgram.from_defaults(
+                output_cls=EnhancedCrashAnalysis,
+                prompt_template_str=_ENHANCED_EXTRACT_PROMPT,
+                llm=llm,
+            )
+            enhanced_result = extract_program(raw_answer=primary_response)
+        except Exception as extract_error:
+            decision_parse_mode = "basic_second_pass"
+            decision_parse_error = (
+                f"{decision_parse_error}; enhanced fallback: {extract_error}"
+            )
+            call_count += 1
+            basic_program = LLMTextCompletionProgram.from_defaults(
+                output_cls=CrashAnalysis,
+                prompt_template_str=(
+                    "The input answer is:\n {raw_answer}\n. "
+                    "Please extract the bool value of the variable <is_api_bug> "
+                    "and the string value of <crash_category>."
+                ),
+                llm=llm,
+            )
+            basic_result = basic_program(raw_answer=primary_response)
+            return {
+                "is_api_bug": bool(basic_result.is_api_bug),
+                "crash_category": str(basic_result.crash_category),
+                "final_response": primary_response,
+                "structured_decision": None,
+                "decision_parse_mode": decision_parse_mode,
+                "decision_parse_error": decision_parse_error,
+                "archive_metadata_repair": {
+                    "applied": False,
+                    "violation": "",
+                    "error": "",
+                },
+                "negative_boundary_repair": {
+                    "applied": False,
+                    "violation": "",
+                    "error": "",
+                },
+                "call_count": call_count,
+            }
+
+    return {
+        "is_api_bug": bool(enhanced_result.is_api_bug),
+        "crash_category": str(enhanced_result.crash_category),
+        "final_response": primary_response,
+        "structured_decision": _model_dict(enhanced_result),
+        "decision_parse_mode": decision_parse_mode,
+        "decision_parse_error": decision_parse_error,
+        "archive_metadata_repair": {"applied": False, "violation": "", "error": ""},
+        "negative_boundary_repair": {"applied": False, "violation": "", "error": ""},
+        "call_count": call_count,
+    }
+
+
+def load_prior_predictions(paths: List[Path]) -> Dict[Tuple[str, str], bool]:
+    predictions: Dict[Tuple[str, str], bool] = {}
+    for path in paths:
+        with path.open(newline="", encoding="utf-8-sig") as handle:
+            for row in csv.DictReader(handle):
+                value = row.get("Result", row.get("Prediction", ""))
+                if value != "":
+                    predictions[(row["Project"], row["CrashID"])] = str(
+                        value
+                    ).strip().lower() in {"true", "1", "yes"}
+    return predictions
+
+
 def finalize_legacy_v0_response(llm: object, primary_response: str) -> Dict[str, object]:
     """Parse the archived V0 prose response without applying V3 repairs.
 
@@ -350,6 +566,16 @@ def run_replay(args: argparse.Namespace) -> None:
     configs = load_analyzer_configs(records, args.db_root, args.temperature)
     model_name = str(next(iter(configs.values()))["model"])
     protocol = getattr(args, "protocol", "v3")
+    prior_predictions: Dict[Tuple[str, str], bool] = {}
+    if protocol == "v4_frozen":
+        prior_paths = [
+            Path(path)
+            for path in getattr(args, "prior_results", "").split(os.pathsep)
+            if path.strip()
+        ]
+        if not prior_paths:
+            raise ValueError("v4_frozen replay requires --prior-results")
+        prior_predictions = load_prior_predictions(prior_paths)
 
     if args.dry_run:
         print(f"Validated {len(records)} frozen prompts from {args.frozen_prompts}")
@@ -402,6 +628,7 @@ def run_replay(args: argparse.Namespace) -> None:
             raw_response = ""
             parse_mode = "primary_json"
             parse_error = ""
+            finalization: Dict[str, object] = {}
             try:
                 # The primary call uses a frozen prompt; V3 repairs below may add calls.
                 raw_response = llm.complete(prompt).text
@@ -409,6 +636,21 @@ def run_replay(args: argparse.Namespace) -> None:
                     finalization = finalize_legacy_v0_response(llm, raw_response)
                 elif protocol == "v0_minimal_json":
                     finalization = finalize_v0_minimal_json_response(raw_response)
+                elif protocol == "v4_frozen":
+                    if key not in prior_predictions:
+                        raise ValueError(f"Missing frozen V3 prior prediction: {key}")
+                    finalization = finalize_v4_response(
+                        llm,
+                        prompt,
+                        raw_response,
+                        prior_prediction=prior_predictions[key],
+                    )
+                elif protocol == "v4_frozen_direct":
+                    finalization = finalize_v4_direct_response(
+                        llm,
+                        prompt,
+                        raw_response,
+                    )
                 else:
                     finalization = finalize_v3_response(llm, prompt, raw_response)
                 status = "ok"
@@ -448,6 +690,10 @@ def run_replay(args: argparse.Namespace) -> None:
                 "FrozenPromptSHA256": frozen_prompt_hash,
                 "EvidenceVariant": getattr(args, "evidence_variant", "full"),
                 "PromptVariant": getattr(args, "prompt_variant", "differential"),
+                "RunVariant": "V4" if protocol in {"v4_frozen", "v4_frozen_direct"} else getattr(args, "run_variant", ""),
+                "AnalysisEngine": "crashsage" if protocol in {"v4_frozen", "v4_frozen_direct"} else getattr(args, "analysis_engine", ""),
+                "ExperimentFingerprint": str(record.get("source_experiment_fingerprint") or ""),
+                "InputFingerprint": str(record.get("source_input_fingerprint") or ""),
                 "FinalCallCount": call_count,
                 "DecisionParseMode": parse_mode,
                 "DecisionParseError": parse_error,
@@ -468,6 +714,13 @@ def run_replay(args: argparse.Namespace) -> None:
                 "structured_decision": decision_payload,
                 "decision_parse_mode": parse_mode,
                 "decision_parse_error": parse_error,
+                "deterministic_consistency_repair": finalization.get(
+                    "deterministic_consistency_repair", ""
+                ),
+                "prior_decision": finalization.get("prior_decision", {}),
+                "target_state_memory_safety_repair": finalization.get(
+                    "target_state_memory_safety_repair", {}
+                ),
                 "archive_metadata_repair": archive_repair,
                 "negative_boundary_repair": negative_repair,
                 "final_call_count": call_count,
@@ -483,9 +736,18 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=float(os.environ.get("FROZEN_TEMPERATURE", "0")))
     parser.add_argument("--expected-count", type=int, default=57)
     parser.add_argument("--crash-id-filter", default=os.environ.get("CRASH_ID_FILTER", ""))
-    parser.add_argument("--protocol", choices=("v3", "v0_legacy", "v0_minimal_json"), default="v3")
+    parser.add_argument(
+        "--protocol",
+        choices=("v3", "v4_frozen", "v4_frozen_direct", "v0_legacy", "v0_minimal_json"),
+        default="v3",
+    )
     parser.add_argument("--evidence-variant", default="full")
     parser.add_argument("--prompt-variant", default="differential")
+    parser.add_argument(
+        "--prior-results",
+        default=os.environ.get("PRIOR_RESULTS", ""),
+        help="Frozen V3 result CSV path(s), separated by the OS path separator.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--resume", action="store_true")
     run_replay(parser.parse_args())
