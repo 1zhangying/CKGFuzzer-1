@@ -314,13 +314,19 @@ The accompanying mapping \(\mathcal{L}\) records each duplicate--representative 
 
 > **【修改框 I｜签名匹配与代表误判传播口径】**
 >
-> **怎么改：** 在 Representative Selection 小节末尾补充一段“matching and label propagation”说明。这里不需要新增 LLM 实验，但要把去重关系写成“报告到代表的确定性签名匹配”，不要暗示任意两条相似报告之间会自动形成传递闭包。随后用现有冻结映射和已有 V4 结果做代表标签翻转敏感性分析，直接回答 R1.3 的 group-level misjudgment。
+> **怎么改：** 在 Representative Selection 小节末尾补充一段说明，把代表选择写成“报告到代表的确定性签名匹配”，不要暗示它是等价类或会计算传递闭包。结果分析中明确只有代表预测被传播，每条报告保留自己的真值，并用现有冻结映射和 V4 结果完成代表预测翻转分析。回复信单独解释传递性，正文不展开 A、B、C 的传递关系。
 >
 > **修改后的内容：**
 >
-> "Exact and stack signatures are deterministic matching keys rather than transitive similarity scores. A retained report is assigned to a representative only when it matches one of these keys; a report is not assigned to an additional group merely because it is individually similar to another duplicate. This prevents similarity chaining from merging crashes that do not share a matching key. The resulting map assigns each retained report to at most one representative. The representative decision and ground-truth label are then propagated only to the reports assigned to that representative. To quantify propagation risk, we audit every representative group for signature consistency and flip each representative prediction one at a time while holding all other predictions fixed. On the final 1,217-report evaluation, the maximum absolute F1 change caused by a single representative flip is 0.0174. The worst flip changes F1 from 0.8379 to 0.8205 and affects seven assigned reports."
+> "Exact and stack signatures are deterministic matching keys. For each report, CrashSage compares its keys with those of existing representatives and assigns the report to the first matching representative. If no key matches, the report becomes a new representative. No transitive closure is applied, and each report is mapped to at most one representative."
 >
 > **结果文件：** 去重映射为 `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/dedup_schema2_14projects_20261027/dedup_mapping_14projects.csv`；组级审计为 `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/current_dedup_audit/dedup_group_audit.csv`；逐代表翻转结果为 `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/current_dedup_audit/dedup_flip_sensitivity.csv`；汇总为 `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/current_dedup_audit/dedup_audit_summary.json`。
+>
+> **回复信口径：**
+>
+> "We agree that 'equivalence class' was inaccurate. CrashSage does not construct equivalence classes or apply a transitive closure: a report is mapped directly to the first representative with a matching exact or stack signature, or becomes a new representative itself. Therefore, matching between A and B and between B and C does not imply that A and C belong to the same representative. We have clarified this construction in Section 4.3."
+>
+> "We also corrected the evaluation statement: only representative predictions are propagated, while every report retains its own ground-truth label. We further flip each representative prediction individually and recompute the report-level metrics. The maximum absolute F1 change is 0.0174, confirming that the observed propagation risk is localized. The complete analysis is reported in Section 5.3."
 >
 > **对应审稿意见：** R1.3（signature matching、transitivity 与代表误判传播）；R1.9（重复报告与根因级去重一致性的分析口径）。
 
@@ -779,11 +785,11 @@ Figure [ref:fig:representative-counts] shows that V1 submits all 258 reports ret
 
 > **【修改框 J｜最终数据口径下的代表选择结果与传播敏感性】**
 >
-> **怎么改：** 将上面一段中的旧口径 876/258/57 替换为当前最终口径 1,217/534/96。保留“代表预测展开到映射成员后再计算指标”的说明，并增加一句代表翻转敏感性结果。不要展开签名键构造或分组实现的代码细节。
+> **怎么改：** 将上面一段中的旧口径 876/258/57 替换为当前最终口径 1,217/534/96。明确只传播代表预测，每条重复报告保留自己的真值，并增加代表翻转敏感性结果。不要展开签名键构造或分组实现的代码细节。
 >
 > **修改后的内容：**
 >
-> "On the final 1,217-report dataset, rule-guided attribution retains 534 reports, and representative selection reduces this set to 96 representatives, a reduction of 82.02% relative to the retained workload. Each representative prediction and its ground-truth label are expanded through the saved duplicate mapping before computing TP, FP, TN, and FN. To evaluate error propagation, we flip each representative prediction individually and recompute the expanded metrics. The maximum absolute F1 change is 0.0174; the worst-case flip decreases F1 from 0.8379 to 0.8205 and changes the decisions of seven reports. Thus, representative errors are bounded by the explicit member mapping rather than being applied to unrelated crash reports."
+> "On the final 1,217-report dataset, rule-guided attribution retains 534 reports, and representative selection reduces this set to 96 representatives, a reduction of 82.02% relative to the retained workload. Only the prediction of each representative is propagated through the saved mapping. Every report retains its own ground-truth label, and TP, FP, TN, and FN are computed against that label. To evaluate group-level error propagation, we flip each representative prediction individually and recompute the report-level metrics. The maximum absolute F1 change is 0.0174; the worst-case flip reduces F1 from 0.8379 to 0.8205 and affects less than 1% of report-level decisions."
 >
 > **结果文件：** `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/dedup_schema2_14projects_20261027/dedup_mapping_14projects.csv`；`/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/current_dedup_audit/dedup_flip_sensitivity.csv`；`/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/current_dedup_audit/dedup_audit_summary.json`；最终 V4 指标为 `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/v3v4_optimized_20261101/current_gt_eval_v4/overall_metrics.csv`。
 >
