@@ -324,7 +324,7 @@ The accompanying mapping \(\mathcal{L}\) records each duplicate--representative 
 >
 > **回复信口径：**
 >
-> "We agree that 'equivalence class' was inaccurate. CrashSage does not construct equivalence classes or apply a transitive closure: a report is mapped directly to the first representative with a matching exact or stack signature, or becomes a new representative itself. Therefore, matching between A and B and between B and C does not imply that A and C belong to the same representative. We have clarified this construction in Section 4.3."
+> "We agree that 'equivalence class' was inaccurate. CrashSage does not construct equivalence classes or apply a transitive closure. Each report is matched independently to the first representative with a compatible signature. For example, if report A matches representative B and report C also matches B, this does not mean A and C are transitively equivalent—they are simply two independent reports that both match the same representative B. We have clarified this construction by adding a supplementary paragraph in Section 4.3 of the revised manuscript."
 >
 > "We also corrected the evaluation statement: only representative predictions are propagated, while every report retains its own ground-truth label. We further flip each representative prediction individually and recompute the report-level metrics. The maximum absolute F1 change is 0.0174, confirming that the observed propagation risk is localized. The complete analysis is reported in Section 5.3."
 >
