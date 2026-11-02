@@ -537,13 +537,17 @@ Table [ref:tab:evaluation-configurations] summarizes the evaluated variants. Rel
 
 > **【修改框 B｜V0 基线定义】**
 >
-> **怎么改：** 将配置表中的 `V0 (CKGFuzzer baseline)` 改成 `V0 (complete CKGFuzzer)`，并把正文中的 V0 定义写清楚：V0 就是完整 CKGFuzzer crash-cause classification 方法；Filtering、representative selection、context reconstruction 和 differential prompt 是本研究新增的增强模块，在 V0 中不启用。不要继续把 V0 描述成“raw LLM baseline”或“no-adjudication reference”。
+> **怎么改：** 将配置表中的 `V0 (CKGFuzzer baseline)` 改成 `V0 (complete CKGFuzzer)`，并把正文中的 V0 定义写清楚：V0 就是完整 CKGFuzzer crash-cause classification 方法；Filtering、representative selection、context reconstruction 和 differential prompt 是本研究新增的增强模块，在 V0 中不启用。不要继续把 V0 描述成“raw LLM baseline”或“no-adjudication reference”。为什么没有选择 PromptFuzz、Fuzz4All 等上游 driver 生成工具，只在回复信中解释，不写入正文。
 >
 > **修改后的内容：**
 >
-> "V0 is the complete CKGFuzzer crash-cause classification method. The rule-guided filtering, representative selection, crash-context reconstruction, and differential prompt evaluated in V1–V4 are CrashSage enhancements and are disabled in V0; therefore, the V0–V4 comparison measures the incremental effect of these added stages on the complete CKGFuzzer workflow."
+> "V0 is the complete CKGFuzzer crash-cause analysis pipeline. The rule-guided filtering, representative selection, crash-context reconstruction, and differential prompt evaluated in V1–V4 are CrashSage enhancements and are disabled in V0. The V0–V4 comparison therefore measures the incremental effect of these added stages while holding the complete CKGFuzzer workflow fixed."
 >
 > **结果文件：** `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/overall_metrics_current_1217.csv`
+>
+> **回复信口径：**
+>
+> "V0 represents the complete CKGFuzzer crash-cause analysis pipeline; the four disabled components are the additional CrashSage mechanisms evaluated in V1–V4. We also report a raw-report LLM baseline and a comparison with ReBucket on the same retained reports in the corresponding evaluation sections. PromptFuzz and Fuzz4All target input or driver generation and do not expose the same API-knowledge, driver-generation, and crash-analysis interface as CKGFuzzer. Replacing CKGFuzzer with either system would change the crash corpus, build and sanitizer settings, and labeling conditions, so the comparison would conflate upstream fuzzing effectiveness with downstream adjudication quality. A controlled comparison of those systems would require separate end-to-end pipelines and ground truth for each generated corpus and would answer a different research question."
 >
 > **对应审稿意见：** R1.5、R2.5（CKGFuzzer 基线定义与公平比较）。
 
@@ -590,11 +594,11 @@ Table [ref:tab:ground-truth-accounting] summarizes the ground-truth categories a
 >
 > "Each crash report receives a binary evaluation label: target or non-target. A target label requires both target-component causality and publicly verifiable confirmation of the corresponding root cause, such as an upstream fix, developer-confirmed issue, or CVE record. Reports that lack sufficient support for target-component causality after repeated local reproduction are assigned to the non-target class. This negative label reflects the binary adjudication protocol and is not interpreted as proof that the target component is free of defects. The final ground truth contains 215 targets and 1,002 non-targets over all 1,217 reports."
 >
-> "The 145 reports that had not received a final binary label in the original submission were fully re-audited rather than excluded. The frozen mapping covers all 145 reports through 32 representative groups and was used to organize the evidence review and guarantee complete report-level coverage. The reviewers first checked the member IDs of each group to confirm that the members shared the same causal path, and then classified the group using the raw sanitizer trace, generated driver, and target source around the crash site. For a target decision, the reviewers additionally required root-cause alignment with public developer-fix or CVE evidence. The audit identified 26 positive reports in eight root-cause groups and 119 negative reports in the remaining 24 groups. All 26 positive reports were then checked individually; the group-level correspondence was used for evaluation and reporting, not as a substitute for the individual positive decisions."
+> "The 145 reports without a final binary label were fully audited. The frozen mapping covers all 145 reports through 32 representative groups and was used to organize the evidence review and guarantee complete report-level coverage. The annotators first checked the member IDs of each group to confirm that the members shared the same causal path, and then classified the group using the raw sanitizer trace, generated driver, and target source around the crash site. For a target decision, the annotators additionally required root-cause alignment with public developer-fix or CVE evidence. The audit identified 26 positive reports in eight root-cause groups and 119 negative reports in the remaining 24 groups. All 26 positive reports were then checked individually; the group-level correspondence was used for evaluation and reporting, not as a substitute for the individual positive decisions."
 >
 > "Two team members with C/C++ memory-safety analysis experience independently reviewed separate blinded copies of the 32 representative-group audit set, covering all 145 reports. Both reviewers were blinded to CrashSage predictions, variant labels, previous adjudications, and each other's responses. One reviewer did not reach a binary conclusion for one group, whereas the other supplied labels for all 32 groups. On the 31 groups with two binary labels, the reviewers agreed on 22 and disagreed on nine, corresponding to 70.97% raw agreement and Cohen's kappa = 0.413. The nine disagreements and the unpaired group were referred to a third adjudicator. The adjudicator re-examined all available raw evidence and repeated local reproductions. Groups whose reproduction remained unstable or occurred at low frequency did not satisfy the predefined target-confirmation criterion and were assigned non-target under the binary protocol. The final audit outcome is 26 targets and 119 non-targets; among the latter, 62 came from unanimous non-target groups and 57 came from the 10 non-unanimous groups."
 >
-> "After incorporating these labels and recomputing all variants over the full 1,217-report set, the V0–V4 results are summarized in Table X. The corrected labels intentionally lower the apparent recall of the original `potential target` exclusion setting while preserving the relative ordering of the variants."
+> "Table X reports the final V0–V4 results over all 1,217 reports."
 >
 > **Table: Final V0–V4 results after incorporating the 145-report audit.**
 >
@@ -605,6 +609,10 @@ Table [ref:tab:ground-truth-accounting] summarizes the ground-truth categories a
 > | V2 | 155 | 108 | 894 | 60 | 0.5894 | 0.7209 | 0.6485 |
 > | V3 | 186 | 75 | 927 | 29 | 0.7126 | 0.8651 | 0.7815 |
 > | V4 | 199 | 61 | 941 | 16 | 0.7654 | 0.9256 | 0.8379 |
+>
+> **回复信口径：**
+>
+> "The previous submission excluded 145 potential-target reports from the binary evaluation. We fully audited all 145 reports and included them in the final evaluation. The audit resolves to 26 targets and 119 non-targets. We then recomputed all V0–V4 results over the complete 1,217-report set. The corrected labels reduce the apparent recall obtained under the previous exclusion setting while preserving the relative ordering of the variants."
 >
 > **结果文件：**
 >
@@ -718,7 +726,7 @@ The experimental results are shown in Figure [ref:fig:rule-guided-filtering], Ta
 >
 > **修改后的内容：**
 >
-> "The V0–V1 comparison is not a filtering-only ablation. V0 consumes the raw crash report, whereas V1 consumes the normalized report together with triage labels and matched-rule evidence. Rule filtering retains all 215 targets. We therefore separate the population effect from the input-evidence effect. Applying the unchanged V0 predictions to the 534 reports retained by V1 isolates the effect of evaluating only the retained population. Changing to the V1 evidence configuration on the same population then captures the combined effect of input normalization and triage metadata. Table [ref:tab:v0-v1-decomposition] reports the resulting decision changes."
+> "V0 and V1 differ in both the evaluated population and the input evidence. V0 consumes the raw crash report, whereas V1 consumes the normalized report together with triage labels and matched-rule evidence. Rule filtering retains all 215 targets. We separate the population effect from the input-evidence effect. Applying the unchanged V0 predictions to the 534 reports retained by V1 isolates the effect of evaluating only the retained population. Changing to the V1 evidence configuration on the same population then captures the combined effect of input normalization and triage metadata. Table [ref:tab:v0-v1-decomposition] reports the separate population and input-evidence effects."
 >
 > **Table: V0–V1 population and evidence decomposition.** (`tab:v0-v1-decomposition`)
 >
@@ -728,7 +736,11 @@ The experimental results are shown in Figure [ref:fig:rule-guided-filtering], Ta
 > | V0 on V1-retained reports | 534 | 151 | 80 | 239 | 64 | 0.6537 | 0.7023 | 0.6771 |
 > | V1 on V1-retained reports | 534 | 155 | 108 | 211 | 60 | 0.5894 | 0.7209 | 0.6485 |
 >
-> "The V1 evidence configuration changes 172 report decisions, including 52 targets. It increases recall but also introduces additional false positives. We therefore report V0–V1 as a component-configuration comparison and do not attribute their aggregate difference solely to rule filtering."
+> "The V1 evidence configuration changes 172 report decisions, including 52 targets. This change increases recall but also introduces additional false positives."
+>
+> **回复信口径：**
+>
+> "We agree that V0–V1 should not be interpreted as a filtering-only ablation. We therefore separate the retained-population effect from the input-evidence effect and report both configurations on the same 534 reports. We no longer attribute their aggregate difference solely to rule-based filtering."
 >
 > **结果文件：** `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/r2_3_v0_v1_decomposition.csv`；逐报告变化见 `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/r2_3_v0_v1_flips.csv`。
 >
@@ -992,9 +1004,9 @@ The project-level results in Table [ref:tab:per-library-final-prompt] provide a 
 >
 > Furthermore, to evaluate whether the effectiveness of CrashSage-V4 depends on the final LLM backend, we repeat the V4 experiment with five additional LLMs. The representative crashes, reconstructed contexts, V4 prompt configuration, representative mapping, and ground-truth labels are held fixed; only the final LLM is replaced. All models are evaluated at temperature 0 on the same 96 representatives, and the decisions are expanded to the same 1,217 crash reports.
 >
-> The primary CrashSage-V4 model is `qwen3-coder-flash`, accessed on 1 November 2026 through the OpenAI-compatible endpoint `https://llm-1aqn2a1i6uz9t6gu.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`. At the time of the experiments, this model was selected as a balanced choice considering its overall general and code-analysis performance, long-context capability, service stability, response latency, and API cost. The model choice was made independently of the evaluation results and was not tuned using the ground-truth labels.
+> The primary CrashSage-V4 model is `qwen3-coder-flash`, accessed on 1 November 2026 through the OpenAI-compatible endpoint `https://llm-1aqn2a1i6uz9t6gu.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`. This model was selected as a balanced choice considering its overall general and code-analysis performance, long-context capability, service stability, response latency, and API cost.
 >
-> The alternative backends are `qwen-flash`, `qwen3.8-flash`, `deepseek-flash`, `gpt-5.6-sol`, and `glm-5.3-flash`, accessed between 30 October and 1 November 2026. Each backend was accessed through the OpenAI-compatible endpoint documented by its API provider for the corresponding model identifier; the provider-documented access endpoints are therefore not repeated here. Because these hosted services expose provider-managed model aliases rather than immutable weight revision identifiers, we report the exact API model identifiers and access dates and retain the corresponding model responses in the experiment archive to characterize the evaluated systems reproducibly. All calls used `temperature=0`. No explicit `top_p`, random seed, `max_tokens`, or forced JSON response format was specified. The request timeout was 300 seconds, except for the official DeepSeek client, which used 60 seconds. Automatic application-level re-sampling was disabled. Requests that failed or returned no processable response were recorded as failed attempts and explicitly resubmitted; these attempts were excluded from all model judgments. When structured-output extraction was required, it was performed on the original model response rather than by requesting an alternative decision.
+> The alternative backends are `qwen-flash`, `qwen3.8-flash`, `deepseek-flash`, `gpt-5.6-sol`, and `glm-5.3-flash`, accessed between 30 October and 1 November 2026. Each backend was accessed through the API provider under its exact model identifier. We report the model identifiers and access dates and retain the corresponding model responses in the experiment archive. All calls used `temperature=0`. No explicit `top_p`, random seed, `max_tokens`, or forced JSON response format was specified. The request timeout was 300 seconds, except for the official DeepSeek client, which used 60 seconds. Automatic application-level re-sampling was disabled. Requests that failed or returned no processable response were recorded as failed attempts and explicitly resubmitted; these attempts were excluded from all model judgments. When structured-output extraction was required, it was performed on the original model response rather than by requesting an alternative decision.
 >
 > **Table: Effect of the final LLM backend under V4.** All configurations use the same V4 setting and are evaluated on 1,217 crash reports; only the final LLM is changed.
 >
@@ -1010,6 +1022,10 @@ The project-level results in Table [ref:tab:per-library-final-prompt] provide a 
 > The evaluated backends achieve closely matched overall performance. Model choice shifts individual attribution decisions and the precision--recall balance, but does not change the main conclusion that CrashSage-V4 remains effective when the final LLM backend is replaced.
 >
 > The results do not imply a strict monotonic relationship between model capability and aggregate performance. The backend should therefore be selected according to deployment constraints and the acceptable balance between missed target crashes and false alerts.
+>
+> **回复信口径：**
+>
+> "The model choice was made independently of the evaluation results and was not tuned using ground-truth labels. Because hosted services expose provider-managed aliases rather than immutable weight revisions, we report the exact API model identifiers and access dates and retain the corresponding model responses to characterize the evaluated systems reproducibly."
 >
 > **结果文件：**
 >
