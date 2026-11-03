@@ -512,7 +512,7 @@ Table [ref:tab:subjects] summarizes the functions, API scales, and representativ
 
 > **【表格替换｜实验项目表】**
 >
-> **怎么改：** 保留上方 `tab:subjects` 的列结构和原有项目说明，补充 dlt-daemon、isotp-c 两行，将报告总数更新为 1,217。
+> **怎么改：** 保留上方 `tab:subjects` 的列结构和原有项目说明，补充 dlt-daemon、isotp-c 两行，将报告总数更新为 1,217，并根据各项目的 `api_list.json` 填写目标 API 数量。
 >
 > **Table: Third-party open-source libraries used in the evaluation.** (`tab:subjects`)
 >
@@ -520,10 +520,10 @@ Table [ref:tab:subjects] summarizes the functions, API scales, and representativ
 > |---|---|---:|---:|---|
 > | c-ares | Asynchronous DNS resolution | 27 | 103 | Gateway DNS |
 > | cJSON | JSON parsing and generation | 60 | 78 | Config/telemetry parsing |
-> | dlt-daemon | Diagnostic logging | 待核实 | 92 | Diagnostic logging and fault-record storage |
+> | dlt-daemon | Diagnostic logging | 13 | 92 | Diagnostic logging and fault-record storage |
 > | expat | XML parsing | 12 | 36 | Configuration parsing |
 > | faad2 | AAC audio decoding | 12 | 151 | Media decoding |
-> | isotp-c | ISO-TP multi-frame transport | 待核实 | 104 | Transport between ECUs and vehicle modules |
+> | isotp-c | ISO-TP multi-frame transport | 13 | 104 | Transport between ECUs and vehicle modules |
 > | jansson | JSON parsing and generation | 12 | 128 | Config/telemetry parsing |
 > | json-c | JSON parsing and generation | 12 | 40 | Config/telemetry parsing |
 > | libmad | MPEG audio decoding | 12 | 112 | Media decoding |
@@ -532,9 +532,9 @@ Table [ref:tab:subjects] summarizes the functions, API scales, and representativ
 > | libsndfile | Audio file processing | 12 | 76 | Media/log processing |
 > | tinyxml2 | XML parsing | 13 | 63 | Configuration parsing |
 > | zlib | Compression and decompression | 29 | 65 | OTA/log compression |
-> | **Combined** | -- | **待核实** | **1,217** | -- |
+> | **Combined** | -- | **269** | **1,217** | -- |
 >
-> **数据依据：** 各项目报告数量来自 `per_project_metrics_current_1217.csv`；原有 12 个项目的 API 数量沿用上方原表，合计为 243。当前修改稿及该 CSV 未提供新增两个项目的 API 数量，因此这两项及新的 API 合计暂标“待核实”，不以 driver 数量代替 API 数量。
+> **数据依据：** 各项目报告数量来自 `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/per_project_metrics_current_1217.csv`。原有 12 个项目的 API 数量合计为 243；dlt-daemon 和 isotp-c 的目标 API 数量分别由 `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/external_database/dlt-daemon/api_list.json` 和 `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/external_database/isotp-c/api_list.json` 核定为 13 和 13，因此 14 个项目合计 269 个目标 API。
 
 > **【修改框 O｜目标选择标准、状态型覆盖与车联网影响】**
 >
@@ -682,19 +682,19 @@ To evaluate rule-guided crash attribution, we compare V1 with V0 on the 876 cras
 
 > **【表格替换｜规则过滤真值审计】**
 >
-> **怎么改：** 保留上方 `tab:filter-safety-audit` 的行列结构，将总体更新为 1,217 条报告。按修改框 D、J、P，215 个 target 全部保留；保留集共 534 条，其中 non-target 为 319 条；过滤集为 683 条，均为 non-target。
+> **怎么改：** 保留上方 `tab:filter-safety-audit` 的行列结构，将总体更新为 1,217 条报告。按修改框 D、J、P，215 个 target 全部保留；保留集共 534 条，其中 non-target 为 319 条；过滤集为 683 条，均为 non-target。最终分项为 `noise=103` 和 `likely_driver_bug=580`。
 >
 > **Table: Ground-truth audit of rule-guided filtering.** (`tab:filter-safety-audit`)
 >
 > | **Triage Outcome** | **Ground-truth True** | **Ground-truth False** | **Total** |
 > |---|---:|---:|---:|
-> | `noise` | 0 | 待核实 | 待核实 |
-> | `likely_driver_bug` | 0 | 待核实 | 待核实 |
+> | `noise` | 0 | 103 | 103 |
+> | `likely_driver_bug` | 0 | 580 | 580 |
 > | **Filtered** | **0** | **683** | **683** |
 > | Retained | 215 | 319 | 534 |
 > | **Combined** | **215** | **1,002** | **1,217** |
 >
-> **待补数据：** 当前修改稿及获准读取的逐项目指标 CSV 未提供 `noise` 与 `likely_driver_bug` 在最终数据集中的分项数量；两项之和必须为 683。原表的 103 和 515 属于旧口径，不能直接沿用。
+> **数据依据：** 分项数量由 `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/all_crashes_v0_v4_groundtruth.csv` 的 `TriageLabel` 字段按 1,217 条报告统计得到；`noise=103` 与 `likely_driver_bug=580` 合计 683，且两项均不含 target。
 
 **Table: Effect of rule-guided crash attribution.** (`tab:rule-attribution-effect`)
 
