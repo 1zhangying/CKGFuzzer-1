@@ -7,8 +7,10 @@ import numpy as np
 PROJECTS = [
     "c-ares",
     "cjson",
+    "dlt-daemon",
     "expat",
     "faad2",
+    "isotp-c",
     "jansson",
     "json-c",
     "libmad",
@@ -24,8 +26,10 @@ DISPLAY_NAMES = {
 V0_COLOR = "#BFBFBF"
 V3_COLOR = "#4F81BD"
 
-RETAINED_COUNTS = np.array([18, 11, 19, 30, 26, 14, 13, 13, 20, 30, 49, 15])
-REPRESENTATIVE_COUNTS = np.array([5, 4, 3, 6, 6, 3, 2, 2, 5, 7, 11, 3])
+# Fixed final 534-retained / 96-representative counts, in PROJECTS order.
+# Source: dedup_project_summary_14projects.csv (2026-10-27 frozen mapping).
+RETAINED_COUNTS = np.array([27, 14, 35, 19, 46, 96, 68, 20, 27, 41, 25, 30, 49, 37])
+REPRESENTATIVE_COUNTS = np.array([8, 4, 5, 3, 9, 17, 12, 3, 4, 7, 4, 6, 7, 7])
 
 
 def load_counts() -> tuple[np.ndarray, np.ndarray]:
@@ -39,9 +43,10 @@ def configure_style() -> None:
             "font.serif": ["Times New Roman", "DejaVu Serif", "STIXGeneral"],
             "mathtext.fontset": "stix",
             "axes.linewidth": 0.85,
-            "axes.labelsize": 12.5,
-            "xtick.labelsize": 10.5,
-            "ytick.labelsize": 10.5,
+            "axes.labelsize": 13.5,
+            "xtick.labelsize": 12.5,
+            "ytick.labelsize": 13,
+            "legend.fontsize": 12.5,
             "xtick.direction": "in",
             "ytick.direction": "in",
             "xtick.major.width": 0.8,
@@ -52,37 +57,39 @@ def configure_style() -> None:
             "figure.facecolor": "white",
             "axes.facecolor": "white",
             "savefig.facecolor": "white",
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
         }
     )
 
 
-def annotate_bars(ax: plt.Axes, bars, values, dy: float = 0.75) -> None:
-    for bar, value in zip(bars, values):
-        ax.text(
-            bar.get_x() + bar.get_width() / 2.0,
-            bar.get_height() + dy,
-            f"{int(value)}",
-            ha="center",
-            va="bottom",
-            fontsize=9.5,
-            color="#222222",
-        )
+def annotate_bars(ax: plt.Axes, bars, values) -> None:
+    ax.bar_label(
+        bars,
+        labels=[str(int(value)) for value in values],
+        padding=3,
+        fontsize=12.5,
+        color="#222222",
+    )
 
 
-def annotate_saved_calls(ax: plt.Axes, x_positions, before, after) -> None:
-    for xpos, baseline, selected in zip(x_positions, before, after):
+def annotate_saved_calls(ax: plt.Axes, y_positions, before, after) -> None:
+    ax.text(
+        1.04, 1.015, "Saved calls", transform=ax.transAxes,
+        ha="left", va="bottom", fontsize=12.5,
+    )
+    for ypos, baseline, selected in zip(y_positions, before, after):
         saved = int(baseline - selected)
         ratio = saved / baseline * 100.0 if baseline else 0.0
-        top = max(baseline, selected)
         ax.text(
-            xpos,
-            top + 9.0,
-            f"Saved {saved}\n({ratio:.1f}%)",
-            ha="center",
-            va="bottom",
-            fontsize=9.0,
+            1.04,
+            ypos,
+            f"{saved} ({ratio:.1f}%)",
+            transform=ax.get_yaxis_transform(),
+            ha="left",
+            va="center",
+            fontsize=12.5,
             color="#444444",
-            linespacing=0.9,
         )
 
 
@@ -90,25 +97,26 @@ def build_plot() -> tuple[plt.Figure, plt.Axes]:
     configure_style()
 
     retained_counts, representative_counts = load_counts()
-    x = np.arange(len(PROJECTS))
-    width = 0.34
+    y = np.arange(len(PROJECTS))
+    height = 0.34
+    offset = 0.21
 
-    fig, ax = plt.subplots(figsize=(10.8, 5.2), dpi=300)
+    fig, ax = plt.subplots(figsize=(6.9, 7.4), dpi=300)
 
-    bars_before = ax.bar(
-        x - width / 2,
+    bars_before = ax.barh(
+        y - offset,
         retained_counts,
-        width=width,
+        height=height,
         color=V0_COLOR,
         edgecolor="#6E6E6E",
         linewidth=0.75,
         label="Retained after Filtering",
         zorder=3,
     )
-    bars_after = ax.bar(
-        x + width / 2,
+    bars_after = ax.barh(
+        y + offset,
         representative_counts,
-        width=width,
+        height=height,
         color=V3_COLOR,
         edgecolor="#315A8A",
         linewidth=0.75,
@@ -118,24 +126,34 @@ def build_plot() -> tuple[plt.Figure, plt.Axes]:
 
     annotate_bars(ax, bars_before, retained_counts)
     annotate_bars(ax, bars_after, representative_counts)
-    annotate_saved_calls(ax, x, retained_counts, representative_counts)
+    annotate_saved_calls(ax, y, retained_counts, representative_counts)
 
-    ax.set_ylabel("Crash Reports")
-    ax.set_xticks(x)
-    ax.set_xticklabels([DISPLAY_NAMES.get(p, p) for p in PROJECTS], rotation=35, ha="right")
-    ax.set_ylim(0, max(retained_counts.max(), representative_counts.max()) * 1.30)
-    ax.grid(axis="y", linestyle="--", zorder=0)
+    ax.set_xlabel("Crash reports (n)")
+    ax.set_yticks(y)
+    ax.set_yticklabels([DISPLAY_NAMES.get(p, p) for p in PROJECTS])
+    ax.set_ylim(len(PROJECTS) - 0.35, -0.65)
+    ax.set_xlim(0, max(retained_counts.max(), representative_counts.max()) * 1.14)
+    ax.tick_params(axis="y", length=0, pad=7)
+    ax.grid(axis="x", linestyle="--", zorder=0)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.legend(
         loc="upper center",
-        bbox_to_anchor=(0.5, 1.10),
+        bbox_to_anchor=(0.5, 1.095),
         ncol=2,
         handlelength=1.4,
-        columnspacing=1.6,
+        columnspacing=1.2,
     )
 
-    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.94])
+    before_total = int(retained_counts.sum())
+    after_total = int(representative_counts.sum())
+    reduction = (before_total - after_total) / before_total * 100.0
+    fig.text(
+        0.5, 0.975,
+        f"Total: {before_total:,} reports to {after_total:,} representatives ({reduction:.2f}% fewer)",
+        ha="center", va="top", fontsize=13,
+    )
+    fig.subplots_adjust(left=0.20, right=0.77, bottom=0.09, top=0.87)
     return fig, ax
 
 

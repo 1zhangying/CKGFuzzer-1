@@ -510,6 +510,32 @@ Table [ref:tab:subjects] summarizes the functions, API scales, and representativ
 | zlib | Compression and decompression | 29 | 65 | OTA/log compression |
 | **Combined** | -- | **243** | **1021** | -- |
 
+> **【表格替换｜实验项目表】**
+>
+> **怎么改：** 保留上方 `tab:subjects` 的列结构和原有项目说明，补充 dlt-daemon、isotp-c 两行，将报告总数更新为 1,217。
+>
+> **Table: Third-party open-source libraries used in the evaluation.** (`tab:subjects`)
+>
+> | **Library** | **Function** | **APIs** | **Crash Reports** | **Deployment Role** |
+> |---|---|---:|---:|---|
+> | c-ares | Asynchronous DNS resolution | 27 | 103 | Gateway DNS |
+> | cJSON | JSON parsing and generation | 60 | 78 | Config/telemetry parsing |
+> | dlt-daemon | Diagnostic logging | 待核实 | 92 | Diagnostic logging and fault-record storage |
+> | expat | XML parsing | 12 | 36 | Configuration parsing |
+> | faad2 | AAC audio decoding | 12 | 151 | Media decoding |
+> | isotp-c | ISO-TP multi-frame transport | 待核实 | 104 | Transport between ECUs and vehicle modules |
+> | jansson | JSON parsing and generation | 12 | 128 | Config/telemetry parsing |
+> | json-c | JSON parsing and generation | 12 | 40 | Config/telemetry parsing |
+> | libmad | MPEG audio decoding | 12 | 112 | Media decoding |
+> | libmspack | Archive extraction | 12 | 54 | Package/archive processing |
+> | libpcap | Packet capture and filtering | 30 | 115 | Network monitoring |
+> | libsndfile | Audio file processing | 12 | 76 | Media/log processing |
+> | tinyxml2 | XML parsing | 13 | 63 | Configuration parsing |
+> | zlib | Compression and decompression | 29 | 65 | OTA/log compression |
+> | **Combined** | -- | **待核实** | **1,217** | -- |
+>
+> **数据依据：** 各项目报告数量来自 `per_project_metrics_current_1217.csv`；原有 12 个项目的 API 数量沿用上方原表，合计为 243。当前修改稿及该 CSV 未提供新增两个项目的 API 数量，因此这两项及新的 API 合计暂标“待核实”，不以 driver 数量代替 API 数量。
+
 > **【修改框 O｜目标选择标准、状态型覆盖与车联网影响】**
 >
 > **修改后的内容：**
@@ -542,6 +568,18 @@ Table [ref:tab:evaluation-configurations] summarizes the evaluated variants. Rel
 > **修改后的内容：**
 >
 > "V0 is the complete CKGFuzzer crash-cause analysis pipeline. The rule-guided filtering, representative selection, crash-context reconstruction, and differential prompt evaluated in V1–V4 are CrashSage enhancements and are disabled in V0. The V0–V4 comparison therefore measures the incremental effect of these added stages while holding the complete CKGFuzzer workflow fixed."
+>
+> **替换上方配置表（保留原有列结构）：**
+>
+> **Table: Evaluation configurations.** (`tab:evaluation-configurations`)
+>
+> | **Variant** | **Rule-guided filtering** | **Representative selection** | **Reconstruction context** | **Final prompt** |
+> |---|---|---|---|---|
+> | V0 (complete CKGFuzzer) | No | No | No | Clean direct prompt |
+> | V1 | Yes | No | No | Clean direct prompt |
+> | V2 | Yes | Yes | No | Clean direct prompt |
+> | V3 | Yes | Yes | Yes | Clean direct prompt |
+> | V4 (CrashSage) | Yes | Yes | Yes | Differential prompt |
 >
 > **结果文件：** `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/overall_metrics_current_1217.csv`
 >
@@ -642,12 +680,41 @@ To evaluate rule-guided crash attribution, we compare V1 with V0 on the 876 cras
 | Retained | 146 | 112 | 258 |
 | **Combined** | **146** | **730** | **876** |
 
+> **【表格替换｜规则过滤真值审计】**
+>
+> **怎么改：** 保留上方 `tab:filter-safety-audit` 的行列结构，将总体更新为 1,217 条报告。按修改框 D、J、P，215 个 target 全部保留；保留集共 534 条，其中 non-target 为 319 条；过滤集为 683 条，均为 non-target。
+>
+> **Table: Ground-truth audit of rule-guided filtering.** (`tab:filter-safety-audit`)
+>
+> | **Triage Outcome** | **Ground-truth True** | **Ground-truth False** | **Total** |
+> |---|---:|---:|---:|
+> | `noise` | 0 | 待核实 | 待核实 |
+> | `likely_driver_bug` | 0 | 待核实 | 待核实 |
+> | **Filtered** | **0** | **683** | **683** |
+> | Retained | 215 | 319 | 534 |
+> | **Combined** | **215** | **1,002** | **1,217** |
+>
+> **待补数据：** 当前修改稿及获准读取的逐项目指标 CSV 未提供 `noise` 与 `likely_driver_bug` 在最终数据集中的分项数量；两项之和必须为 683。原表的 103 和 515 属于旧口径，不能直接沿用。
+
 **Table: Effect of rule-guided crash attribution.** (`tab:rule-attribution-effect`)
 
 | **Variant** | **LLM** **Calls** | **TP** | **FP** | **TN** | **FN** | **Precision** | **Recall** | **F1** |
 |---|---|---|---|---|---|---|---|---|
 | V0 | 876 | 125 | 215 | 515 | 21 | 0.368 | 0.856 | 0.514 |
 | V1 | 258 | 118 | 29 | 701 | 28 | 0.803 | 0.808 | 0.806 |
+
+> **【表格替换｜规则引导归因效果】**
+>
+> **怎么改：** 保留上方 `tab:rule-attribution-effect` 的结构，只更新为最终 1,217 条报告的指标及 LLM 提交数量；V0–V1 的差异解释采用修改框 P。
+>
+> **Table: Effect of rule-guided crash attribution.** (`tab:rule-attribution-effect`)
+>
+> | **Variant** | **LLM Calls** | **TP** | **FP** | **TN** | **FN** | **Precision** | **Recall** | **F1** |
+> |---|---:|---:|---:|---:|---:|---:|---:|---:|
+> | V0 | 1,217 | 151 | 385 | 617 | 64 | 0.2817 | 0.7023 | 0.4021 |
+> | V1 | 534 | 155 | 108 | 894 | 60 | 0.5894 | 0.7209 | 0.6485 |
+>
+> **数据依据：** TP、FP、TN、FN 为 `per_project_metrics_current_1217.csv` 对应列的逐项目加总；Precision、Recall、F1 由加总后的计数计算，不对各库指标取算术平均。LLM 提交数量沿用修改框 J 的最终口径。
 
 The experimental results are shown in Figure [ref:fig:rule-guided-filtering], Tables [ref:tab:filter-safety-audit], [ref:tab:rule-attribution-effect], and [ref:tab:per-library-rule-attribution]. Rule-guided crash attribution filters 618 reports from 876 crash reports and retains 258 reports for subsequent analysis. Table [ref:tab:filter-safety-audit] shows that all filtered reports are labeled false, whereas all 146 reports labeled true are retained. Thus, rule-guided filtering introduces no ground-truth false negatives at the filtering stage. V1 improves precision and F1 over V0 from 0.368 and 0.514 to 0.803 and 0.806. Its 28 false negatives are retained reports misclassified by the subsequent LLM rather than reports removed by the filtering rules.
 
@@ -668,55 +735,34 @@ The experimental results are shown in Figure [ref:fig:rule-guided-filtering], Ta
 | tinyxml2 | 0.2500 | 1.0000 | 0.4000 | 0.5417 | 1.0000 | 0.7027 |
 | zlib | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
 
-> **【修改框 N｜按项目的 V0–V4 最终结果呈现方式】**
+> **【修改框 N｜逐项目结果表更新：保留原有三张表】**
 >
-> **怎么改：** 原论文分别在 V0–V1、V2–V3 和 V3–V4 小节放置了三张逐项目表。它们使用的是旧的 876 条口径，不能继续与最终的 1,217 条主结果并存。建议删除 `tab:per-library-rule-attribution`、`tab:per-library-context-reconstruction` 和 `tab:per-library-final-prompt`，在正文中只保留一张按项目比较 V0–V4 F1 的紧凑表；将完整的 Precision、Recall 和 F1 放入补充材料或附录。这样既保留项目级证据，也避免正文出现三张宽表。
+> **怎么改：** 保留 `tab:per-library-rule-attribution`、`tab:per-library-context-reconstruction` 和 `tab:per-library-final-prompt` 三张表的原有位置、列结构和比较对象，分别展示 V0–V1、V2–V3、V3–V4。只更新为最终 1,217 条报告的指标，并补充 dlt-daemon、isotp-c 两行；不合并成 V0–V4 F1 汇总表，也不另设完整指标附表。下面给出上方 V0–V1 表的完整替换数据，另两张表的完整替换数据分别列在各自原表下方的修改框 N2、N3。
 >
-> **正文表题：** **Table: Per-library F1 of the complete ablation pipeline on 1,217 crash reports.**
+> **Table: Per-library effect of rule-guided crash attribution.** (`tab:per-library-rule-attribution`)
 >
-> | **Library** | **Reports** | **V0** | **V1** | **V2** | **V3** | **V4** |
+> | **Library** | **V0 Prec.** | **V0 Recall** | **V0 F1** | **V1 Prec.** | **V1 Recall** | **V1 F1** |
 > |---|---:|---:|---:|---:|---:|---:|
-> | c-ares | 103 | 0.2286 | 0.6667 | 0.6667 | 0.6667 | 0.6667 |
-> | cJSON | 78 | 0.0833 | 0.0000 | 0.0000 | 0.0000 | 1.0000 |
-> | dlt-daemon | 92 | 0.8205 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-> | expat | 36 | 0.4762 | 0.2500 | 0.2500 | 0.0000 | 0.0000 |
-> | faad2 | 151 | 0.3238 | 0.6939 | 0.6939 | 1.0000 | 1.0000 |
-> | isotp-c | 104 | 0.4138 | 0.3265 | 0.3265 | 0.6957 | 0.6957 |
-> | jansson | 128 | 0.3429 | 0.5581 | 0.5581 | 0.5532 | 0.7879 |
-> | json-c | 40 | 0.0000 | 0.0000 | 0.0000 | 0.7879 | 0.7879 |
-> | libmad | 112 | 0.2989 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-> | libmspack | 54 | 0.7083 | 0.9091 | 0.9091 | 1.0000 | 1.0000 |
-> | libpcap | 115 | 0.5185 | 0.8421 | 0.8421 | 0.6486 | 0.6486 |
-> | libsndfile | 76 | 0.4167 | 0.6842 | 0.6842 | 0.9286 | 0.9286 |
-> | tinyxml2 | 63 | 0.5652 | 0.6667 | 0.6667 | 0.4878 | 0.4878 |
-> | zlib | 65 | 0.4516 | 0.2222 | 0.2222 | 0.8125 | 0.8125 |
+> | c-ares | 0.1290 | 1.0000 | 0.2286 | 0.5000 | 1.0000 | 0.6667 |
+> | cJSON | 0.0476 | 0.3333 | 0.0833 | 0.0000 | 0.0000 | 0.0000 |
+> | dlt-daemon | 0.7442 | 0.9143 | 0.8205 | 1.0000 | 1.0000 | 1.0000 |
+> | expat | 0.6250 | 0.3846 | 0.4762 | 0.6667 | 0.1538 | 0.2500 |
+> | faad2 | 0.2267 | 0.5667 | 0.3238 | 0.8947 | 0.5667 | 0.6939 |
+> | isotp-c | 0.2857 | 0.7500 | 0.4138 | 0.1951 | 1.0000 | 0.3265 |
+> | jansson | 0.2105 | 0.9231 | 0.3429 | 0.4000 | 0.9231 | 0.5581 |
+> | json-c | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 |
+> | libmad | 0.1757 | 1.0000 | 0.2989 | 1.0000 | 1.0000 | 1.0000 |
+> | libmspack | 0.5667 | 0.9444 | 0.7083 | 1.0000 | 0.8333 | 0.9091 |
+> | libpcap | 0.4000 | 0.7368 | 0.5185 | 0.8421 | 0.8421 | 0.8421 |
+> | libsndfile | 0.4545 | 0.3846 | 0.4167 | 0.5200 | 1.0000 | 0.6842 |
+> | tinyxml2 | 0.3939 | 1.0000 | 0.5652 | 0.5000 | 1.0000 | 0.6667 |
+> | zlib | 0.3889 | 0.5385 | 0.4516 | 0.2143 | 0.2308 | 0.2222 |
 >
-> **正文表数据来源：** `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/per_project_metrics_current_1217.csv`
+> **统计口径：** 三张逐库表中的每行均为单个库的指标；全体 1,217 条报告的 V4 汇总指标另为 Precision 0.7654、Recall 0.9256、F1 0.8379，不与任一单库行混用。
 >
-> **建议正文说明：** "Table X reports project-level F1 on the final 1,217 reports. The overall improvements do not imply monotonic gains for every individual library; several libraries exhibit small or negative changes because their confirmed-target samples are limited and different pipeline components can alter borderline decisions. We therefore use the project-level results to expose variability and reporting behavior, while the aggregate metrics remain the primary evidence for the overall effectiveness of each variant. The complete project-level Precision, Recall, and F1 results are provided in Supplementary Table SX."
+> **建议正文说明：** "The per-library tables report Precision, Recall, and F1 on the final 1,217 reports. Aggregate improvements do not imply monotonic gains for every library. We retain the project-level results to expose this variability, while the aggregate metrics summarize performance over the full report population."
 >
-> **补充材料表题：** **Table SX: Per-library Precision, Recall, and F1 for V0–V4 on 1,217 crash reports.**
->
-> | **Library** | **V0 P** | **V0 R** | **V0 F1** | **V1 P** | **V1 R** | **V1 F1** | **V2 P** | **V2 R** | **V2 F1** | **V3 P** | **V3 R** | **V3 F1** | **V4 P** | **V4 R** | **V4 F1** |
-> |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-> | c-ares | 0.1290 | 1.0000 | 0.2286 | 0.5000 | 1.0000 | 0.6667 | 0.5000 | 1.0000 | 0.6667 | 0.5000 | 1.0000 | 0.6667 | 0.5000 | 1.0000 | 0.6667 |
-> | cJSON | 0.0476 | 0.3333 | 0.0833 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 1.0000 | 1.0000 | 1.0000 |
-> | dlt-daemon | 0.7442 | 0.9143 | 0.8205 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-> | expat | 0.6250 | 0.3846 | 0.4762 | 0.6667 | 0.1538 | 0.2500 | 0.6667 | 0.1538 | 0.2500 | 0.0000 | 0.0000 | 0.0000 | 1.0000 | 0.5385 | 0.7000 |
-> | faad2 | 0.2267 | 0.5667 | 0.3238 | 0.8947 | 0.5667 | 0.6939 | 0.8947 | 0.5667 | 0.6939 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-> | isotp-c | 0.2857 | 0.7500 | 0.4138 | 0.1951 | 1.0000 | 0.3265 | 0.1951 | 1.0000 | 0.3265 | 0.5333 | 1.0000 | 0.6957 | 0.5333 | 1.0000 | 0.6957 |
-> | jansson | 0.2105 | 0.9231 | 0.3429 | 0.4000 | 0.9231 | 0.5581 | 0.4000 | 0.9231 | 0.5581 | 0.3824 | 1.0000 | 0.5532 | 0.6500 | 1.0000 | 0.7879 |
-> | json-c | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.6500 | 1.0000 | 0.7879 | 0.6500 | 1.0000 | 0.7879 |
-> | libmad | 0.1757 | 1.0000 | 0.2989 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-> | libmspack | 0.5667 | 0.9444 | 0.7083 | 1.0000 | 0.8333 | 0.9091 | 1.0000 | 0.8333 | 0.9091 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-> | libpcap | 0.4000 | 0.7368 | 0.5185 | 0.8421 | 0.8421 | 0.8421 | 0.8421 | 0.8421 | 0.8421 | 0.6667 | 0.6316 | 0.6486 | 0.6667 | 0.6316 | 0.6486 |
-> | libsndfile | 0.4545 | 0.3846 | 0.4167 | 0.5200 | 1.0000 | 0.6842 | 0.5200 | 1.0000 | 0.6842 | 0.8667 | 1.0000 | 0.9286 | 0.8667 | 1.0000 | 0.9286 |
-> | tinyxml2 | 0.3939 | 1.0000 | 0.5652 | 0.5000 | 1.0000 | 0.6667 | 0.5000 | 1.0000 | 0.6667 | 0.3571 | 0.7692 | 0.4878 | 0.3571 | 0.7692 | 0.4878 |
-> | zlib | 0.3889 | 0.5385 | 0.4516 | 0.2143 | 0.2308 | 0.2222 | 0.2143 | 0.2308 | 0.2222 | 0.6842 | 1.0000 | 0.8125 | 0.6842 | 1.0000 | 0.8125 |
->
-> **结果文件：** `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/per_project_metrics_current_1217.csv`
->
-> **原始展开结果：** `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/frozen_baseline_1217/final_v0_expanded_1217.csv`、`final_v1_expanded_1217.csv`、`final_v2_expanded_1217.csv`；`/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/v3v4_optimized_20261101/current_gt_eval_v3/final_v4_expanded_current_gt.csv`、`/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/v3v4_optimized_20261101/current_gt_eval_v4/final_v4_expanded_current_gt.csv`。
+> **数据来源：** `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/per_project_metrics_current_1217.csv`
 >
 > **对应审稿意见：** R1.3、R1.9（去重后报告级结果仍需保留项目级证据）；同时用于统一最终 1,217 条口径。
 
@@ -781,7 +827,7 @@ As shown in Table [ref:tab:stage-latency], both stages relevant to the V1--V2 co
 > | LLM analysis | Processed representatives | 6.7 s | 6.6 s | 8.3 s |
 > | End-to-end analysis | Processed representatives | 38.9 s | 39.5 s | 63.0 s |
 >
-> "For successfully processed representatives, the average end-to-end time is about 38.9 s, with a median of 39.5 s and a P95 of 63.0 s. Runtime cost is therefore dominated by replay/GDB collection and LLM analysis rather than by report parsing, filtering, or signature matching. Representative selection reduces the number of LLM submissions by 92.11%; however, the replay and GDB cost is incurred for each retained representative. Consequently, the total cost grows primarily with the number of representatives and their runtime-context complexity rather than with the raw report count alone."
+> "For successfully processed representatives, the average end-to-end time is about 38.9 s, with a median of 39.5 s and a P95 of 63.0 s. Runtime cost is therefore dominated by replay/GDB collection and LLM analysis rather than by report parsing, filtering, or signature matching. Rule-guided filtering and representative selection jointly reduce LLM submissions from 1,217 to 96, an overall reduction of 92.11%. Replay and GDB costs are nevertheless incurred for each selected representative. Consequently, the total cost grows primarily with the number of representatives and their runtime-context complexity rather than with the raw report count alone."
 >
 > **实施位置：** `fuzzing_llm_engine/crash/context_replay.py` 的 `replay_context()` 已按阶段记录 `perf_counter_ns()` 时间；`fuzzing_llm_engine/crash/measure_runtime.py` 负责汇总报告级、代表级和 prompt 构造时间。
 >
@@ -869,6 +915,19 @@ To evaluate crash-context reconstruction, we compare V2 and V3 on the same 876 c
 | V2 | 57 | 118 | 29 | 701 | 28 | 0.803 | 0.808 | 0.806 |
 | V3 | 57 | 121 | 29 | 701 | 25 | 0.807 | 0.829 | 0.818 |
 
+> **【表格替换｜上下文重建效果】**
+>
+> **怎么改：** 保留上方 `tab:context-effect-v2-v3` 的结构，更新最终 1,217 条报告的汇总指标及 96 个代表的工作量。
+>
+> **Table: Effect of crash-context reconstruction.** (`tab:context-effect-v2-v3`)
+>
+> | **Variant** | **LLM Calls** | **TP** | **FP** | **TN** | **FN** | **Precision** | **Recall** | **F1** |
+> |---|---:|---:|---:|---:|---:|---:|---:|---:|
+> | V2 | 96 | 155 | 108 | 894 | 60 | 0.5894 | 0.7209 | 0.6485 |
+> | V3 | 96 | 186 | 75 | 927 | 29 | 0.7126 | 0.8651 | 0.7815 |
+>
+> **数据依据：** 计数及指标由 `per_project_metrics_current_1217.csv` 汇总；代表数量采用修改框 J。这里准备替换数字，不以相同的 V1/V2 指标额外推导代表预测传播无损。
+
 The experimental results are shown in Table [ref:tab:context-effect-v2-v3] and Table [ref:tab:per-library-context-reconstruction]. Compared with V2, V3 achieves precision 0.807, recall 0.829, and F1 0.818 under the ground-truth labels. This improvement is associated with the localization evidence added by crash-context reconstruction. A crash may become visible inside a target-component API even when the faulty state originates from the generated driver. Static code context links the visible crash site to the driver-to-component call path, while runtime context records the state observed during execution. In response to RQ3, these static and runtime evidence sources retain the 29 false positives observed in V2, remove 3 of its 28 false negatives, and help distinguish the visible crash location from the origin of the faulty state under the ground-truth labels.
 
 **Table: Per-library effect of crash-context reconstruction.** (`tab:per-library-context-reconstruction`)
@@ -888,6 +947,31 @@ The experimental results are shown in Table [ref:tab:context-effect-v2-v3] and T
 | tinyxml2 | 0.5417 | 1.0000 | 0.7027 | 0.4062 | 1.0000 | 0.5778 |
 | zlib | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
 
+> **【修改框 N2｜逐库 V2–V3 表的替换数据】**
+>
+> **怎么改：** 保留上方 `tab:per-library-context-reconstruction` 的位置和列结构，只更新数字并补充两个项目；与修改框 N 使用同一份最终逐项目结果。
+>
+> **Table: Per-library effect of crash-context reconstruction.** (`tab:per-library-context-reconstruction`)
+>
+> | **Library** | **V2 Prec.** | **V2 Recall** | **V2 F1** | **V3 Prec.** | **V3 Recall** | **V3 F1** |
+> |---|---:|---:|---:|---:|---:|---:|
+> | c-ares | 0.5000 | 1.0000 | 0.6667 | 0.5000 | 1.0000 | 0.6667 |
+> | cJSON | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 |
+> | dlt-daemon | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+> | expat | 0.6667 | 0.1538 | 0.2500 | 0.0000 | 0.0000 | 0.0000 |
+> | faad2 | 0.8947 | 0.5667 | 0.6939 | 1.0000 | 1.0000 | 1.0000 |
+> | isotp-c | 0.1951 | 1.0000 | 0.3265 | 0.5333 | 1.0000 | 0.6957 |
+> | jansson | 0.4000 | 0.9231 | 0.5581 | 0.3824 | 1.0000 | 0.5532 |
+> | json-c | 0.0000 | 0.0000 | 0.0000 | 0.6500 | 1.0000 | 0.7879 |
+> | libmad | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+> | libmspack | 1.0000 | 0.8333 | 0.9091 | 1.0000 | 1.0000 | 1.0000 |
+> | libpcap | 0.8421 | 0.8421 | 0.8421 | 0.6667 | 0.6316 | 0.6486 |
+> | libsndfile | 0.5200 | 1.0000 | 0.6842 | 0.8667 | 1.0000 | 0.9286 |
+> | tinyxml2 | 0.5000 | 1.0000 | 0.6667 | 0.3571 | 0.7692 | 0.4878 |
+> | zlib | 0.2143 | 0.2308 | 0.2222 | 0.6842 | 1.0000 | 0.8125 |
+>
+> **数据来源：** `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/per_project_metrics_current_1217.csv`
+
 At the project level, V3 does not improve cJSON or json-c, for which precision, recall, and F1 remain zero under both V2 and V3. This result indicates that crash-context reconstruction alone does not resolve all project-specific attribution failures. Nevertheless, the subsequent V4 results show that the final prompt design can further affect how the LLM uses the same evidence package. We examine this interaction in the next subsection.
 
 ### Evaluation of Final-Prompt Sensitivity and LLM
@@ -900,14 +984,7 @@ At the project level, V3 does not improve cJSON or json-c, for which precision, 
 >
 > **Prompt-component ablation.** To isolate the contribution of each prompt component, we perform a nested prompt ablation using the same 96 representatives, evidence package, `qwen3-coder-flash` model, temperature 0, and post-processing protocol. P1 adds a symmetric target/driver hypothesis comparison to P0. P2 further adds hard/soft misuse classification, caller-precondition auditing, and structured evidence requirements. P3 further adds the V4 boundary-arbitration and final-consistency constraints. The P1 and P2 results correspond to their median-F1 runs. All decisions are expanded through the frozen representative mapping to 1,217 crash reports.
 >
-> **Table: Nested prompt-component ablation on 1,217 crash reports.**
->
-> | Prompt | Cumulative Prompt Component | Precision | Recall | F1 |
-> |---|---|---:|---:|---:|
-> | P0 | Direct prompt | 0.7126 | 0.8651 | 0.7815 |
-> | P1 | P0 + target/driver hypothesis comparison | 0.7263 | 0.9256 | 0.8139 |
-> | P2 | P1 + hard/soft misuse and caller-precondition audit | 0.7453 | 0.9256 | 0.8257 |
-> | P3 | P2 + V4 boundary arbitration and consistency constraints | 0.7654 | 0.9256 | 0.8379 |
+> **替换表位置：** 完整的 P0–P3 表已放在下方原 `tab:prompt-form-ablation` 表之后的“表格替换｜Prompt 组件消融”中，便于按原文位置替换；正式正文只保留一份该表。
 >
 > The nested ablation shows successive aggregate gains from P0 to P3. P1 adds a symmetric target/driver comparison, P2 adds structured misuse and precondition auditing, and P3 adds boundary arbitration and final consistency constraints. The repeated-run analysis below shows overlap between P2 and P3, so their difference is reported as observational rather than statistically established.
 >
@@ -975,6 +1052,21 @@ The project-level results in Table [ref:tab:per-library-final-prompt] provide a 
 | V3 (clean direct prompt) | 121 | 29 | 701 | 25 | 0.807 | 0.829 | 0.818 |
 | V4 (differential prompt) | 139 | 35 | 695 | 7 | 0.799 | 0.952 | 0.869 |
 
+> **【表格替换｜Prompt 组件消融】**
+>
+> **怎么改：** 按修改框 F、G，用下方 P0–P3 表替换上方旧 `tab:prompt-form-ablation`，不与旧表并列保留。该表沿用修改框 F 已准备的数据；P0/P3 是正式 V3/V4 端点，P1/P2 是中位 F1 对应运行，不是六次运行的均值。
+>
+> **Table: Nested prompt-component ablation on 1,217 crash reports.** (`tab:prompt-form-ablation`)
+>
+> | **Prompt** | **Cumulative Prompt Component** | **Precision** | **Recall** | **F1** |
+> |---|---|---:|---:|---:|
+> | P0 | Direct prompt | 0.7126 | 0.8651 | 0.7815 |
+> | P1 | P0 + target/driver hypothesis comparison | 0.7263 | 0.9256 | 0.8139 |
+> | P2 | P1 + hard/soft misuse and caller-precondition audit | 0.7453 | 0.9256 | 0.8257 |
+> | P3 | P2 + V4 boundary arbitration and consistency constraints | 0.7654 | 0.9256 | 0.8379 |
+>
+> **数据来源：** 采用本修改稿中修改框 F 已列明的 `prompt_ablation_main.csv` 口径；六次运行均值、标准差与区间继续单独放在修改框 F2，不混入本表。
+
 <!-- END LEGACY PROMPT TEXT/TABLE TO REPLACE -->
 
 **Table: Per-library effect of final prompt design under Qwen3-Coder-Plus.** (`tab:per-library-final-prompt`)
@@ -993,6 +1085,33 @@ The project-level results in Table [ref:tab:per-library-final-prompt] provide a 
 | libsndfile | 0.8667 | 1.0000 | 0.9286 | 0.8667 | 1.0000 | 0.9286 |
 | tinyxml2 | 0.4062 | 1.0000 | 0.5778 | 0.4062 | 1.0000 | 0.5778 |
 | zlib | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+
+> **【修改框 N3｜逐库 V3–V4 表的替换数据】**
+>
+> **怎么改：** 保留上方 `tab:per-library-final-prompt` 的位置和列结构，只更新数字、补充两个项目，并将表题中的模型改为当前主模型 Qwen3-Coder-Flash。
+>
+> **Table: Per-library effect of final prompt design under Qwen3-Coder-Flash.** (`tab:per-library-final-prompt`)
+>
+> | **Library** | **V3 Prec.** | **V3 Recall** | **V3 F1** | **V4 Prec.** | **V4 Recall** | **V4 F1** |
+> |---|---:|---:|---:|---:|---:|---:|
+> | c-ares | 0.5000 | 1.0000 | 0.6667 | 0.5000 | 1.0000 | 0.6667 |
+> | cJSON | 0.0000 | 0.0000 | 0.0000 | 1.0000 | 1.0000 | 1.0000 |
+> | dlt-daemon | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+> | expat | 0.0000 | 0.0000 | 0.0000 | 1.0000 | 0.5385 | 0.7000 |
+> | faad2 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+> | isotp-c | 0.5333 | 1.0000 | 0.6957 | 0.5333 | 1.0000 | 0.6957 |
+> | jansson | 0.3824 | 1.0000 | 0.5532 | 0.6500 | 1.0000 | 0.7879 |
+> | json-c | 0.6500 | 1.0000 | 0.7879 | 0.6500 | 1.0000 | 0.7879 |
+> | libmad | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+> | libmspack | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+> | libpcap | 0.6667 | 0.6316 | 0.6486 | 0.6667 | 0.6316 | 0.6486 |
+> | libsndfile | 0.8667 | 1.0000 | 0.9286 | 0.8667 | 1.0000 | 0.9286 |
+> | tinyxml2 | 0.3571 | 0.7692 | 0.4878 | 0.3571 | 0.7692 | 0.4878 |
+> | zlib | 0.6842 | 1.0000 | 0.8125 | 0.6842 | 1.0000 | 0.8125 |
+>
+> **核对说明：** expat 行的 V4 Precision、Recall、F1 分别为 1.0000、0.5385、0.7000；全体报告的 V4 汇总指标为 0.7654、0.9256、0.8379，二者统计范围不同。
+>
+> **数据来源：** `/home/cc/CKGFuzzer-1/fuzzing_llm_engine/results/review_gap_completion_20261101/per_project_metrics_current_1217.csv`
 
 > **【修改框 H｜RQ4 不同 LLM 后端的完整 V4 实验】**
 >
