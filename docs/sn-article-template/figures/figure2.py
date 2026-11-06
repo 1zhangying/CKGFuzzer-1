@@ -93,10 +93,13 @@ def annotate_saved_calls(ax: plt.Axes, y_positions, before, after) -> None:
         )
 
 
-def build_plot() -> tuple[plt.Figure, plt.Axes]:
+def build_plot(
+    counts: tuple[np.ndarray, np.ndarray] | None = None,
+    representative_label: str = "Representatives",
+) -> tuple[plt.Figure, plt.Axes]:
     configure_style()
 
-    retained_counts, representative_counts = load_counts()
+    retained_counts, representative_counts = load_counts() if counts is None else counts
     y = np.arange(len(PROJECTS))
     height = 0.34
     offset = 0.21
@@ -120,7 +123,7 @@ def build_plot() -> tuple[plt.Figure, plt.Axes]:
         color=V3_COLOR,
         edgecolor="#315A8A",
         linewidth=0.75,
-        label="Representatives",
+        label=representative_label,
         zorder=3,
     )
 
