@@ -797,7 +797,7 @@ Direct raw-report analysis performs poorly on this dataset, with precision 0.201
 \subsection{Evaluation of Rule-Guided Crash Attribution}
 \label{subsec:rule-attribution}
 
-To evaluate rule-guided crash attribution, we compare V1 with V0 on the {\color{yellow}1,217} crash reports included in the main evaluation. Reports labeled \texttt{target\_crash} or \texttt{needs\_review} are forwarded to subsequent analysis after reports labeled \texttt{noise} or \texttt{likely\_driver\_bug} are filtered. Precision measures the proportion of crashes with \texttt{is\_api\_bug=true} that are labeled true, recall measures the proportion of confirmed-target crashes finally identified by the variant, and F1 reflects their balance.
+To evaluate rule-guided crash attribution, we compare V1 with V0 on the 1,217 crash reports included in the main evaluation. Reports labeled \texttt{target\_crash} or \texttt{needs\_review} are forwarded to subsequent analysis after reports labeled \texttt{noise} or \texttt{likely\_driver\_bug} are filtered. Precision measures the proportion of crashes with \texttt{is\_api\_bug=true} that are labeled true, recall measures the proportion of confirmed-target crashes finally identified by the variant, and F1 reflects their balance.
 
 \begin{figure}[H]
 \centering
@@ -810,7 +810,6 @@ To evaluate rule-guided crash attribution, we compare V1 with V0 on the {\color{
 \caption{Ground-truth audit of rule-guided filtering.}
 \label{tab:filter-safety-audit}
 \centering
-\color{yellow}
 \small
 \setlength{\tabcolsep}{3pt}
 \renewcommand{\arraystretch}{1.12}
@@ -826,9 +825,7 @@ Retained & 215 & 319 & 534 \\
 \end{tabular*}
 \end{table}
 
-{\color{yellow}
 The filtered and retained rows together cover all 1,217 reports; the final target/non-target distribution is reported in Table~\ref{tab:ground-truth-accounting}.
-}
 
 \begin{table}[!htbp]
 \caption{Effect of rule-guided crash attribution.}
@@ -838,45 +835,25 @@ The filtered and retained rows together cover all 1,217 reports; the final targe
 \small
 \setlength{\tabcolsep}{3pt}
 \renewcommand{\arraystretch}{1.12}
-\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lcccccccc}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lccccccc}
 \toprule
-Variant & LLM Calls & TP & FP & TN & FN & Precision & Recall & F1 \\
+Variant & TP & FP & TN & FN & Precision & Recall & F1 \\
 \midrule
-V0 & 1,217 & 151 & 385 & 617 & 64 & 0.2817 & 0.7023 & 0.4021 \\
-V1 & 534 & 155 & 108 & 894 & 60 & 0.5894 & 0.7209 & 0.6485 \\
+V0 & 151 & 385 & 617 & 64 & 0.2817 & 0.7023 & 0.4021 \\
+V0$\mid$N & 168 & 424 & 578 & 47 & 0.2838 & 0.7814 & 0.4164 \\
+V1 & 155 & 108 & 894 & 60 & 0.5894 & 0.7209 & 0.6485 \\
 \botrule
 \end{tabular*}
 \end{table}
 
 {\color{yellow}
-The experimental results are shown in Figure~\ref{fig:rule-guided-filtering} and Tables \ref{tab:filter-safety-audit}, \ref{tab:rule-attribution-effect}, and \ref{tab:per-library-rule-attribution}. Rule-guided crash attribution filters 683 of the 1,217 crash reports and retains 534 reports for subsequent analysis. All 215 confirmed target reports remain in the retained set. The number of LLM submissions therefore decreases from 1,217 to 534.
-
-V0 and V1 use different report populations and different inputs. V0 uses the raw crash report. V1 uses the normalized crash report, triage labels, and matched-rule evidence. The full-population comparison captures the combined effect of report filtering and evidence preparation. We also compare both configurations on the same 534 retained reports. As shown in Table~\ref{tab:v0-v1-decomposition}, V1 identifies more confirmed target reports than V0 on this common population. These results show that rule-guided attribution reduces the analysis workload while retaining all confirmed target reports. They also show that V1 prepares structured evidence for the later context-reconstruction and final-prompt stages. The effects of these stages are evaluated separately in the V2--V3 and V3--V4 comparisons.
+The experimental results are shown in Figure~\ref{fig:rule-guided-filtering} and Tables \ref{tab:filter-safety-audit}, \ref{tab:rule-attribution-effect}, and \ref{tab:per-library-rule-attribution}. Rule-guided crash attribution filters 683 of the 1,217 crash reports and retains 534 reports for subsequent analysis. All 215 confirmed target reports remain in the retained set. V1 improves precision from 0.2817 to 0.5894, recall from 0.7023 to 0.7209, and F1 from 0.4021 to 0.6485. This improvement is primarily associated with the removal of reports containing weak crash evidence or evidence that predominantly supports driver misuse. Such reports create additional opportunities for false target attribution in V0. Their removal reduces false alerts while preserving all target reports.
 }
-
-\begin{table}[!htbp]
-\caption{{\color{yellow}V0--V1 comparison on the retained population.}}
-\label{tab:v0-v1-decomposition}
-\centering
-\color{yellow}
-\small
-\setlength{\tabcolsep}{3pt}
-\renewcommand{\arraystretch}{1.12}
-\begin{tabularx}{\linewidth}{Y cccc}
-\toprule
-Configuration & Reports & Precision & Recall & F1 \\
-\midrule
-V0 predictions on V1-retained reports & 534 & 0.6537 & 0.7023 & 0.6771 \\
-V1 on V1-retained reports & 534 & 0.5894 & 0.7209 & 0.6485 \\
-\botrule
-\end{tabularx}
-\end{table}
 
 \begin{table}[!htbp]
 \caption{Per-library effect of rule-guided crash attribution.}
 \label{tab:per-library-rule-attribution}
 \centering
-\color{yellow}
 \small
 \setlength{\tabcolsep}{3pt}
 \renewcommand{\arraystretch}{1.12}
@@ -906,10 +883,16 @@ zlib & 0.3889 & 0.5385 & 0.4516 & 0.2143 & 0.2308 & 0.2222 \\
 \FloatBarrier
 
 {\color{yellow}
-The per-library tables report Precision, Recall, and F1 on the final 1,217 reports. Aggregate improvements do not imply monotonic gains for every library. We retain the project-level results to expose this variability, while the aggregate metrics summarize performance over the full report population.
+The project-level results indicate that the aggregate improvement is not uniform. The affected projects form two distinct patterns. In cJSON, expat, and zlib, the evidence includes a driver-side assertion or an invalid value supplied by the driver. V0 tends to place greater emphasis on the crash site in target code. In V1, the normalized report and rule-derived evidence make the driver-side condition that determines the validity of the operation more apparent. Consequently, several reports classified as target cases in V0 are classified as driver cases in V1. This reduces target recognition and accounts for the lower F1 in these projects. cJSON decreases from 0.0833 to 0, expat from 0.4762 to 0.2500, and zlib from 0.4516 to 0.2222. isotp-c exhibits the opposite pattern. The invalid bit index originates from the driver, whereas the crash occurs in a target-side bitfield operation. V1 places greater emphasis on the target code containing the failing access. This increases recall to 1.0000, but false positives increase from fifteen to thirty-three, resulting in a decrease in F1 from 0.4138 to 0.3265. These paired outcomes show that V1 does not uniformly increase target recognition. The effect of the rule-guided configuration depends on which side provides the more decisive evidence for the origin of the invalid state.
 }
 
-This result is partly attributable to the reports removed by rule-guided crash attribution. Reports with insufficient crash evidence or evidence more consistent with driver-induced failures can introduce misleading information into subsequent analysis. Filtering these reports reduces driver-side cases entering later LLM analysis while preserving target-component candidates that warrant further analysis. In response to RQ1, rule-guided crash attribution distinguishes driver-induced crashes from confirmed-target crashes under the ground-truth labels.
+{\color{yellow}
+To isolate the contribution of crash-report normalization, we further evaluate V0$\mid$N, which retains V0's original input and adds only the normalized crash representation. V0$\mid$N increases recall from 0.7023 to 0.7814 and identifies 17 additional target reports, while precision remains essentially unchanged. In V0, crash type, access behavior, stack order, and project location are embedded in a long and redundant sanitizer report. The model must first distinguish relevant evidence from addresses and repeated runtime messages. V0$\mid$N presents these fields in a consistent structure and preserves their order. This reduces ambiguity in the execution path, allowing the model to connect the driver call to the target operation more reliably and recover target cases that V0 misses.
+}
+
+{\color{yellow}
+The comparison between V0$\mid$N and V1 can be attributed to two distinct stages. Relative to V0$\mid$N, V1 achieves higher precision and F1 but lower recall. The precision difference is primarily a filtering effect. Rule-guided filtering removes 683 non-target reports before the final judgment and thereby eliminates a substantial number of false-positive opportunities. The recall difference arises at the subsequent judgment stage. Since filtering removes only non-target reports, the reduction in recall is associated with decisions on the retained target cases. When the driver contains an explicit assertion or provides an invalid value, V1 assigns greater weight to driver responsibility. This explains the reduced recall in cJSON, expat, and zlib. In target-side memory operations reached through invalid driver inputs, V1 assigns greater weight to the target crash site, which increases target detections but also introduces additional false positives, as observed in isotp-c. These effects jointly explain the overall trade-off. The structured report improves target coverage, filtering provides the principal gain in precision, and the rule-derived evidence changes the final assignment of responsibility between the driver and the target.
+}
 
 \subsection{Evaluation of Representative Selection}
 \label{subsec:representative-evaluation}
