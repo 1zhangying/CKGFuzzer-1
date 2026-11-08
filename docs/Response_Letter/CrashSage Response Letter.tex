@@ -14,6 +14,7 @@
 \usepackage{subcaption}
 \usepackage{booktabs}
 \usepackage{makecell}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 \usepackage{needspace}
 \usepackage{colortbl}
 \usepackage{xr-hyper}
@@ -189,8 +190,6 @@ For the 145 reports that lacked sufficient public vulnerability evidence, we con
 
 The 876 reports of the original submission, the 196 reports added in this revision, and the 145 audited reports therefore account for all 1,217 reports. The revised evaluation includes all of them, comprising 215 target and 1,002 non-target reports, and no report is excluded from the binary metrics. All experimental configurations use this same fixed ground truth, so the previously pending reports are counted rather than set aside. We have added the label definitions, the annotation procedure, and the sample statistics to Section~\ref{paper-subsec:experimental-setup}.
 
-We also report sensitivity to the 57 non-unanimous reports: V4 F1 is 0.8379 under the final labels and 0.7744 if all 57 are instead assigned to target. This analysis explicitly quantifies the effect of their treatment. The manuscript reports the protocol summary and the final accounting, while the detailed audit records and the sensitivity analysis are given here.
-
 \nc{Section~\ref{paper-subsec:experimental-setup}}{Each crash report receives a binary evaluation label: target or non-target. A target report denotes a crash that is locally reproducible, is attributable to target-component API behavior rather than generated-driver misuse, and corresponds to a vulnerability verified through public evidence such as a CVE record, official advisory, or public issue or patch record. A non-target report denotes a crash assigned the negative label under the evaluation protocol because it is not reproducible, lacks sufficient evidence of a target-component defect after inspection, or is manually confirmed as driver-induced. The final evaluation contains 215 target reports and 1,002 non-target reports across all 1,217 reports, as summarized in Table~\ref{paper-tab:ground-truth-accounting}. Labels were assigned by two reviewers with C/C++ memory-safety analysis experience, who examined blinded evidence independently, and disagreements were resolved by a third reviewer. Precision, recall, and F1 are computed over this complete report population.}
 
 \nc{Section~\ref{paper-subsec:experimental-setup}}{The 876 reports of the original submission and the 196 reports added in this revision were verified against CVEs and related public vulnerability material. For each report, the correspondence with the public evidence was established by checking the target version, the crash signature, the stack trace path, and the triggering input. A non-target label was determined from the verification of the relevant code and of the triggering process, and not from the mere absence of a matching CVE.
@@ -204,7 +203,7 @@ The 876 reports of the original submission, the 196 reports added in this revisi
 \small
 \caption{Ground-truth accounting for the final binary evaluation (revised Table~\ref{paper-tab:ground-truth-accounting}).}
 \label{tab:ground-truth-accounting-response}
-\begin{tabular}{lc}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}>{\color{blue}}l>{\color{blue}}c}
 \toprule
 Binary label & Reports \\
 \midrule
@@ -212,7 +211,7 @@ Target & 215 \\
 Non-target & 1,002 \\
 Total evaluated reports & 1,217 \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}}
 
 \secc{Comment 3:}{Section 4.3 performs representative selection via exact and stack signatures, and Section 5.3 states that ``each representative diagnosis and ground-truth label are propagated to its duplicate reports before computing TP, FP, and FN.'' However, the transitivity of signature matching (i.e., whether A matches B and B matches C implies A matches C) and the risk of error propagation (a misjudged representative causing the entire group to be misjudged) are not discussed. The authors are advised to supplement: (1) the equivalence class construction algorithm for signature matching; (2) case analysis or quantitative evaluation of group-level misjudgment caused by representative misjudgment.}
@@ -226,7 +225,7 @@ Third, to quantify the effect of representative misjudgment, we flip the predict
 
 To clarify it, we have improved the paper as follows.
 
-\nc{Section~\ref{paper-subsec:representative-selection}, Representative Selection}{CrashSage processes the retained crashes in discovery order and compares each crash with the representatives selected so far. A matched crash is linked to the corresponding representative, whereas an unmatched crash becomes a new representative. Algorithm~1 summarizes this procedure.
+\nc{Section~\ref{paper-subsec:representative-selection}, Representative Selection}{CrashSage processes the retained crashes in discovery order and compares each crash with the representatives selected so far. A matched crash is linked to the corresponding representative, whereas an unmatched crash becomes a new representative. Algorithm~\ref{paper-alg:representative-selection} summarizes this procedure.
 
 The procedure therefore does not construct equivalence classes through a transitive closure. A crash is associated with the first matching representative, and two crashes that match the same representative are not thereby declared equivalent. Each crash is mapped to at most one representative, and the mapping is stored explicitly rather than inferred from the match relation.}
 
@@ -244,42 +243,38 @@ First, regarding the detailed breakdown of crash-context reconstruction, we now 
 \small
 \caption{Mean runtime of the analysis stages per representative (revised Table~\ref{paper-tab:stage-latency}).}
 \label{tab:stage-latency-response}
-\begin{tabular}{lc}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}>{\color{blue}}l>{\color{blue}}c}
 \toprule
 Stage & Mean time \\
 \midrule
 Sanitizer parsing & 0.67 ms \\
 Rule-guided attribution & 0.10 ms \\
 Representative selection & 0.01 ms \\
-Crash record lookup & 0.32 s \\
-Seed recovery and binary resolution & 0.18 ms \\
-Static context extraction & 1.18 ms \\
-Direct replay & 2.44 s \\
-Docker/GDB context collection & 18.96 s \\
-Context reconstruction (overall) & 21.72 s \\
+\quad Crash record lookup & 0.32 s \\
+\quad Seed recovery and binary resolution & 0.18 ms \\
+\quad Static context extraction & 1.18 ms \\
+\quad Direct replay & 2.44 s \\
+\quad Docker/GDB context collection & 18.96 s \\
+Context reconstruction (subtotal of the five rows above) & 21.72 s \\
 Evidence packaging and prompt construction & 0.34 s \\
 LLM analysis & 6.63 s \\
 End-to-end representative analysis & 28.69 s \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}
 
 Second, regarding end-to-end latency on the representative samples, the expanded evaluation dataset contains 96 representatives, compared with 57 in the original manuscript. We have therefore updated the timing results to cover all 96 representatives. Their mean end-to-end latency is 28.69 s per representative, including context reconstruction, evidence packaging and prompt construction, and LLM analysis. Because the context measurements were collected serially, the 96 representatives require approximately 45.9 minutes of processing in total, which is the sum of the per-representative mean over the evaluated representatives. This result is reported in both the revised table and the accompanying text.
 
-Third, regarding scalability to larger libraries beyond the evaluated targets, we have expanded the discussion using cross-project measurements. The evaluated target API sets range from 12 to 60. cJSON, with 60 target APIs, reduces 78 reports to four LLM submissions, while libpcap, with 30 target APIs, reduces 115 reports to four submissions. Their mean LLM latencies are 6.17 s and 6.23 s per representative, respectively. For comparison, faad2 covers 12 target APIs and reduces 151 reports to nine submissions, with a mean LLM latency of 7.72 s. Across all 14 libraries, project-level mean LLM latency ranges from 5.52 s to 7.72 s. The higher-API examples therefore show that broader tested API coverage can still produce a compact representative workload.
+Third, regarding scalability to larger libraries beyond the evaluated targets, we have expanded the discussion using cross-project measurements. The evaluated target API sets range from 12 to 60. For example, cJSON and libpcap cover 60 and 30 target APIs and each requires only four LLM submissions, so broader tested API coverage can still produce a compact representative workload. CrashSage constructs evidence around selected crash sites and relevant execution paths, so increasing the API set does not require submitting the entire library to the model. When additional API interactions produce new representative groups, further reconstruction and model calls are required, and the overall cost depends mainly on the number of representatives and on the replay, debugger, and LLM cost of each representative. Representative selection reduces the additional analysis caused by repeated reports.
 
-These observations provide an empirical basis for discussing extension to untested libraries with larger API sets. CrashSage constructs evidence around selected crash sites and relevant execution paths, so increasing the API set does not require submitting the entire library to the model. Reports assigned to the same representative group share its diagnosis, avoiding repeated reconstruction and LLM analysis. When additional API interactions produce new representative groups, further reconstruction and model calls are required. The reconstruction cost also depends on the replay and debugger collection needed for each representative. The revised discussion therefore connects the observed cross-project results with the expected workload on larger libraries, while distinguishing representative-level inference latency from reconstruction cost.
-
-\nc{Section~\ref{paper-subsec:representative-evaluation}}{The mean end-to-end latency across the 96 representatives is 28.69 s, covering context reconstruction, evidence packaging and prompt construction, and LLM analysis. Context and prompt times come from the timing measurements, while LLM latency comes from the archived responses for the same representatives. Because the context measurements were collected serially, the 96 representatives require approximately 45.9 minutes of processing in total, which is the sum of the per-representative mean over the evaluated representatives.
-
-The evaluated target API sets range from 12 to 60. cJSON (60 APIs) and libpcap (30 APIs) both reduce their respective sets of 78 and 115 reports to four LLM submissions, with mean LLM latencies of 6.17 s and 6.23 s per representative. In comparison, faad2 (12 APIs) reduces 151 reports to nine submissions, with a mean LLM latency of 7.72 s. Across all 14 libraries, project-level mean LLM latency ranges from 5.52 s to 7.72 s. These results support the potential scalability of representative-based, crash-local analysis to untested libraries with larger API sets. The analysis workload for such libraries would depend on representative count and per-representative replay/debugger cost.}}
+\nc{Section~\ref{paper-subsec:representative-evaluation}}{The mean end-to-end latency across the 96 representatives is 28.69 s, covering context reconstruction, evidence packaging and prompt construction, and LLM analysis. Context and prompt times come from the timing measurements, while LLM latency comes from the archived responses for the same representatives. Because the context measurements were collected serially, the 96 representatives require approximately 45.9 minutes of processing in total, which is the sum of the per-representative mean over the evaluated representatives.}}
 
 \secc{Comment 5:}{Table 7 defines V0 as the ``CKGFuzzer baseline,'' but CKGFuzzer is itself a fuzz driver generation system whose crash adjudication capability is not its design goal. Is it fair to use it as a crash adjudication baseline? The authors are advised to supplement: (1) comparative experiments with dedicated crash deduplication/localization methods (e.g., Igor, ReBucket, CrashLocator); (2) comparison with a baseline that directly uses LLM to classify raw reports; (3) discussion of why CKGFuzzer was chosen over other LLM-assisted fuzzing systems (e.g., PromptFuzz, Fuzz4All) as the baseline.}
 \secr{Response:}{Thank you for this valuable comment. The comment raises three points: whether CKGFuzzer is a fair crash-adjudication baseline, which dedicated methods and which raw-report baseline the comparison should include, and why CKGFuzzer was chosen over other LLM-assisted fuzzing systems. We address them in turn.
 
 On the fairness of the baseline, CKGFuzzer enters the comparison as the complete crash-cause analysis pipeline rather than as a driver generator alone. Its crash-analysis stage is active in V0, so the comparison does not credit CrashSage with adjudication that the baseline already performs. All variants share the same upstream driver generation and fuzzing workflow and the same crash reports, and the revised manuscript identifies which CKGFuzzer components are retained and which components are added. The V0--V4 comparison therefore measures the four added stages on top of that pipeline.
 
-On dedicated methods, we apply ReBucket to the same 534 reports retained after rule-guided crash attribution, as the reference for the selection stage. ReBucket selects 103 cluster representatives and CrashSage selects 96, corresponding to reductions of 80.71\% and 82.02\%, and the pairwise Jaccard agreement is 0.9824. We also examined Igor and CrashLocator. Both operate on a crash corpus format and a debug-information setup that differ from the ASan+UBSan reports used here, so applying them would change the corpus and the attribution target, and the comparison would no longer isolate adjudication quality. ReBucket operates on stack traces and applies to the retained reports without changing the corpus, so it serves as the reproducible reference.
+On dedicated methods, we select ReBucket as the external reference for the selection stage, because it clusters crashes by call-stack similarity, which is directly related to reducing repeated analysis, and it can be applied to the same report set. On the 534 reports retained after rule-guided crash attribution, ReBucket selects 103 cluster representatives and CrashSage selects 96, corresponding to reductions of 80.71\% and 82.02\%, and the pairwise Jaccard agreement is 0.9824.
 
 On the raw-report LLM baseline, we pass each of the 1,217 reports directly to the same model with a minimal direct instruction, without filtering, representative selection, reconstructed context, or the differential prompt. It performs the same binary decision as CrashSage and obtains Precision 0.2010, Recall 0.5488, and F1 0.2943, against 0.7654, 0.9256, and 0.8379 for CrashSage.
 
@@ -287,7 +282,7 @@ On the choice of CKGFuzzer, it provides the driver generation, fuzzing, and cras
 
 To clarify it, we have improved the paper as follows.
 
-\nc{Section~\ref{paper-subsec:experimental-setup}}{All variants share the same base configuration, which is the crash-analysis stage of CKGFuzzer: the crash report, the generated driver and the APIs it calls, the error patterns extracted from their source, and the retrieved CWE entries. V0 uses only this configuration. V1--V4 keep it unchanged and add the stages listed in Table~\ref{paper-tab:evaluation-configurations}. The V0--V4 comparison therefore measures the incremental effect of these added stages while holding the fuzz-driver generation and fuzzing workflow of CKGFuzzer fixed and evaluating all variants on the same crash reports.}
+\nc{Section~\ref{paper-subsec:experimental-setup}}{All variants share the same base configuration, which is the crash-analysis stage of CKGFuzzer: the crash report, the generated driver and the APIs it calls, the error patterns extracted from their source, and the retrieved CWE entries. V0 therefore retains the complete crash-analysis procedure of CKGFuzzer and adds none of the four CrashSage stages. V1--V4 keep this configuration unchanged and add the stages listed in Table~\ref{paper-tab:evaluation-configurations}. The V0--V4 comparison therefore measures the incremental effect of these added stages while holding the fuzz-driver generation and fuzzing workflow of CKGFuzzer fixed and evaluating all variants on the same crash reports.}
 
 \begin{table}[H]
 \centering
@@ -296,7 +291,7 @@ To clarify it, we have improved the paper as follows.
 \renewcommand{\arraystretch}{1.12}
 \caption{Evaluation configurations (revised Table~\ref{paper-tab:evaluation-configurations}).}
 \label{tab:evaluation-configurations-response}
-\begin{tabular}{lccccc}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}>{\color{blue}}l>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c}
 \toprule
 Variant & \makecell{Base\\configuration} & \makecell{Rule-guided\\filtering} & \makecell{Representative\\selection} & \makecell{Reconstruction\\context} & \makecell{Final\\prompt} \\
 \midrule
@@ -306,14 +301,12 @@ V2 & Yes & Yes & Yes & No & Clean direct prompt \\
 V3 & Yes & Yes & Yes & Yes & Clean direct prompt \\
 V4 (CrashSage) & Yes & Yes & Yes & Yes & Differential prompt \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}
 
 \nc{Section~\ref{paper-subsec:baseline-comparison}}{To evaluate raw-report analysis, we compare a raw-only LLM baseline with the complete CrashSage V4 on the 1,217 crash reports included in the main evaluation. The raw-only baseline passes each original sanitizer report to \texttt{qwen3-coder-flash} at temperature 0 with a minimal attribution instruction, without filtering, representative selection, reconstructed context, or the differential prompt.}
 
 \nc{Section~\ref{paper-subsec:experimental-setup}}{This workflow is adopted because CKGFuzzer couples driver generation with a crash-analysis stage, so the adjudication pipeline can be extended without replacing the upstream fuzzing process; systems that target only input or driver generation do not expose a comparable crash-analysis interface.}}
-
-\nc{Section~\ref{paper-subsec:representative-evaluation}}{Igor and CrashLocator are not used as external references because both operate on crash-corpus formats and debug-information settings that differ from the ASan+UBSan reports used here; applying them would change the corpus and the attribution target. ReBucket operates on stack traces and applies to the retained reports without changing the corpus, so it serves as the reproducible external reference for the selection stage.}
 
 \secc{Comment 6:}{Section 5.1 uses Qwen3-Coder-Plus as the primary model, and Section 5.5 compares Qwen3.7-Max and Qwen-Flash. However, it is not explained why the Qwen series was chosen over other commercial models such as GPT-4 or Claude. Additionally, cloud API version updates may render results irreproducible. The authors are advised to supplement: (1) rationale for model selection (cost, availability, code understanding capability, etc.); (2) model version numbers and access dates; (3) whether open-source local models (e.g., CodeLlama, DeepSeek-Coder) were considered to enhance reproducibility.}
 \secr{Response:}{Thank you for this valuable comment. We have supplemented a cross-model evaluation, repeated runs, and a prompt-component ablation, and clarified the differences in effect between projects. We then answer the three specific questions on model choice, version identification, and locally deployed models.
@@ -345,7 +338,7 @@ To clarify it, we have improved the paper as follows.
 \small
 \caption{Validation results of different LLM backends under the same V4 configuration (revised Table~\ref{paper-tab:llm-model-ablation}).}
 \label{tab:llm-model-ablation-response}
-\begin{tabular}{lccc}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}>{\color{blue}}l>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c}
 \toprule
 LLM Backend & Precision & Recall & F1 \\
 \midrule
@@ -356,38 +349,21 @@ DeepSeek-Flash & 0.7645 & 0.9209 & 0.8354 \\
 GPT-5.6-Sol & 0.7645 & 0.9209 & 0.8354 \\
 GLM-5.3-Flash & 0.7606 & 0.9163 & 0.8312 \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}
 
-\nc{Section~\ref{paper-subsec:rq4-sensitivity}}{Run-to-run stability. The four prompt configurations defined in the nested prompt ablation were frozen before evaluation and shared across projects. No project names, expected CVE identifiers, or ground-truth labels were inserted into the templates. We repeated each configuration six times at temperature 0 and report decision variability at both the run and report levels in Table~\ref{paper-tab:prompt-run-stability}. For P1 and P2, the reported values are the median-F1 runs of the six repetitions, whereas P0 and P3 use the formal V3 and V4 endpoints. The P2 and P3 intervals overlap, so their difference is interpreted as an observed effect rather than a statistically significant improvement.}
+\nc{Section~\ref{paper-subsec:rq4-sensitivity}}{Run-to-run stability. The four prompt configurations defined in the nested prompt ablation were frozen before evaluation and shared across projects. No project names, expected CVE identifiers, or ground-truth labels were inserted into the templates. We repeated each configuration six times at temperature 0 and report decision variability at both the run and report levels in Table~\ref{paper-tab:prompt-form-ablation}. For P1 and P2, the reported values are the median-F1 runs of the six repetitions, whereas P0 and P3 use the formal V3 and V4 endpoints. The P2 and P3 intervals overlap, so their difference is interpreted as an observed effect rather than a statistically significant improvement.}
 
-\begin{table}[H]
-\centering
-\small
-\caption{Six-run stability of the nested prompt ablation (revised Table~\ref{paper-tab:prompt-run-stability}).}
-\label{tab:prompt-run-stability-response}
-\begin{tabular}{lcccc}
-\toprule
-Prompt & Mean F1 & SD & \makecell{95\% run-bootstrap\\interval} & \makecell{Reports changed\\across runs} \\
-\midrule
-P0 & 0.7788 & 0.0051 & [0.7741, 0.7815] & 9 / 1,217 \\
-P1 & 0.8095 & 0.0063 & [0.8046, 0.8139] & 13 / 1,217 \\
-P2 & 0.8260 & 0.0100 & [0.8178, 0.8342] & 14 / 1,217 \\
-P3 & 0.8295 & 0.0085 & [0.8220, 0.8355] & 23 / 1,217 \\
-\bottomrule
-\end{tabular}
-\end{table}}
+}
 
 \secc{Comment 7:}{Table 15 shows that differential prompting improves recall from 0.829 to 0.952 but slightly decreases precision. Table 16 shows that the prompt significantly improves cJSON and json-c but not tinyxml2. This indicates that the effect of prompt design is project-dependent. The authors are advised to supplement: (1) stability experiments of differential prompting across different LLM models; (2) whether there is a risk of prompt overfitting (i.e., tuning prompts for specific libraries); (3) ablation experiments on prompt templates to identify key prompt components.}
-\secr{Response:}{Thank you for this valuable comment. We have added cross-backend and repeated-run stability tests, explained the safeguards against library-specific tuning, and conducted a nested prompt ablation. We address the three points below.
+\secr{Response:}{Thank you for this valuable comment. The differential prompt asks the model to compare two explanations, namely driver misuse and a target-library defect, because an in-library crash can be caused either by the driver violating an API contract or by a vulnerability in the target library. We have added experiments that analyse the stability, the project-level differences, and the component roles of this design, and we address the three points below.
 
 First, stability across models. We evaluate the complete V4 pipeline with six backends, including three non-Qwen backends, \texttt{deepseek-flash}, \texttt{gpt-5.6-sol}, and \texttt{glm-5.3-flash}, while keeping the representatives, reconstructed evidence, prompt, mapping, and ground truth fixed. F1 ranges from 0.8240 to 0.8379 and recall from 0.9163 to 0.9256. We also repeat each prompt configuration six times at temperature 0. Mean F1 is 0.7788, 0.8095, 0.8260, and 0.8295 for P0--P3, respectively; standard deviations range from 0.0051 to 0.0100, and decisions vary for 9--23 of the 1,217 reports across runs.
 
 Second, safeguards against overfitting and project-dependent effects. The prompt template was frozen before evaluation and shared across all libraries. It contains no library-specific instructions, CVE identifiers, or ground-truth labels; project evidence is supplied separately. Only cJSON, expat, and jansson change between V3 and V4; the other eleven projects retain the same results.
 
-The large cJSON improvement follows from its representative mapping. Of 78 reports, six are target and 72 non-target. Filtering retains 14 reports, which map to four representatives; all six targets belong to one group comprising the representative and five duplicates. V3 classifies this representative as non-target, V4 as target, using the same evidence and mapping. Propagation therefore changes TP from 0 to 6 and FN from 6 to 0, while FP remains 0 and TN remains 72, raising F1 from 0.0000 to 1.0000. In the selected P1 run, this representative already changes after the two-hypothesis comparison is added. The large gain thus reflects one improved decision covering all six positives, rather than six independent model decisions.
-
-Other projects have different group distributions and starting points. In expat, one changed representative recovers seven of 13 targets; the other six retain their prior predictions, giving precision 1.0000, recall 0.5385, and F1 0.7000. In jansson, V3 recall is already 1.0000. V4 corrects 14 false positives covered by two representatives, reducing FP from 21 to 7 and improving precision from 0.3824 to 0.6500. For unchanged projects, dlt-daemon and faad2 already have F1 1.0000, whereas tinyxml2 and json-c retain the same representative predictions and F1 values of 0.4878 and 0.7879. V4 structures reasoning over unchanged evidence, so gains depend on which representative decisions change and how many reports they cover.
+The large cJSON improvement follows from its representative mapping. Of 78 reports, six are target and 72 non-target. Filtering retains 14 reports, which map to four representatives; all six targets belong to one group comprising the representative and five duplicates. V3 classifies this representative as non-target, V4 as target, using the same evidence and mapping. Propagation therefore changes TP from 0 to 6 and FN from 6 to 0, while FP remains 0 and TN remains 72, raising F1 from 0.0000 to 1.0000. In the selected P1 run, this representative already changes after the two-hypothesis comparison is added. The large gain thus reflects one improved decision covering all six positives, rather than six independent model decisions. Other projects have different group distributions and starting points, so their gains differ as well.
 
 Third, component ablation. We compare four nested variants using the same representatives and evidence. P0 is the V3 Clean direct prompt; P1 adds the two-hypothesis comparison; P2 adds precondition checking and \texttt{evidence\_rationale}; P3 adds boundary rules and corresponds to V4. F1 increases from 0.7815 to 0.8139, 0.8257, and 0.8379 in the reported runs, and the mean F1 over the six repeated runs of these four configurations is 0.7788, 0.8095, 0.8260, and 0.8295, respectively.
 
@@ -395,7 +371,63 @@ The decision counts explain these contributions. P1 increases TP from 186 to 199
 
 We have incorporated these experiments and explanations into the revised manuscript.
 
-Revised manuscript: Section~\ref{paper-subsec:rq4-sensitivity}, Tables~\ref{paper-tab:prompt-form-ablation}, \ref{paper-tab:per-library-final-prompt}, \ref{paper-tab:prompt-run-stability}, and \ref{paper-tab:llm-model-ablation}.}
+Revised manuscript: Section~\ref{paper-subsec:rq4-sensitivity}, Tables~\ref{paper-tab:prompt-form-ablation}, \ref{paper-tab:per-library-final-prompt}, and \ref{paper-tab:llm-model-ablation}.
+
+\nc{Section~\ref{paper-subsec:rq4-sensitivity}}{Table~\ref{paper-tab:prompt-form-ablation} shows that F1 rises at every step, but the three steps do not act on the same error type. The direct prompt yields more conservative positive decisions because it requests a final attribution without requiring the model to compare target-component-defect and driver-misuse hypotheses. P1 is the only step that recovers missed target-component crashes, and recall stops rising after it. P2 and P3 recover no further true positives and remove false positives only, so precision keeps rising while recall stays fixed. The hypothesis comparison is therefore the component that governs recall, and the two later components refine precision. The benefit of the differential prompt comes from this separation rather than from a single template change. The mean F1 of the four configurations over the six repeated runs is 0.7788, 0.8095, 0.8260, and 0.8295, respectively, which preserves the same ordering as the reported runs. The decision counts locate each step in the error space. P1 raises TP from 186 to 199 and reduces FN from 29 to 16 while FP stays at 75, so recall rises from 0.8651 to 0.9256 without adding a false positive. P2 and P3 then reduce FP to 68 and 61 with TP unchanged at 199. The later components therefore refine positive attributions through caller-precondition and supporting-evidence checks after recall has plateaued.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{Nested prompt ablation on 1,217 crash reports and six-run stability of each configuration (revised Table~\ref{paper-tab:prompt-form-ablation}).}
+\label{tab:prompt-form-ablation-response}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}>{\color{blue}}l>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c}
+\toprule
+Prompt & Precision & Recall & F1 & \makecell{Mean F1\\(6 runs)} & SD & \makecell{95\% run-bootstrap\\interval} \\
+\midrule
+P0 (V3) & 0.7126 & 0.8651 & 0.7815 & 0.7788 & 0.0051 & [0.7741, 0.7815] \\
+P1 & 0.7263 & 0.9256 & 0.8139 & 0.8095 & 0.0063 & [0.8046, 0.8139] \\
+P2 & 0.7453 & 0.9256 & 0.8257 & 0.8260 & 0.0100 & [0.8178, 0.8342] \\
+P3 (V4) & 0.7654 & 0.9256 & 0.8379 & 0.8295 & 0.0085 & [0.8220, 0.8355] \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\nc{Section~\ref{paper-subsec:rq4-sensitivity}}{The cJSON result illustrates how representative-level decisions translate into report-level metrics. Its 78 reports contain six target and 72 non-target reports. Filtering retains 14 reports, which map to four representatives; all six target reports share one representative. With the evidence package and mapping fixed, this representative changes from non-target under V3 to target under V4, and its prediction is propagated to the six group members. The remaining 72 reports keep their non-target decisions. Consequently, TP changes from 0 to 6 and FN from 6 to 0, while FP remains 0 and TN remains 72, yielding the F1 change from 0.0000 to 1.0000. In the P1 configuration reported in Table~\ref{paper-tab:prompt-form-ablation}, the same representative already changes to target after the two-hypothesis comparison is added. Thus, the large project-level change reflects a prompt-sensitive representative decision shared by all six positives, rather than six independent model decisions.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{2.6pt}
+\renewcommand{\arraystretch}{1.08}
+\caption{Per-library effect of final prompt design under Qwen3-Coder-Flash (revised Table~\ref{paper-tab:per-library-final-prompt}).}
+\label{tab:per-library-final-prompt-response}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}>{\color{blue}}l>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c}
+\toprule
+Library & \multicolumn{3}{c}{V3} & \multicolumn{3}{c}{V4} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+& Prec. & Recall & F1 & Prec. & Recall & F1 \\
+\midrule
+c-ares & 0.5000 & 1.0000 & 0.6667 & 0.5000 & 1.0000 & 0.6667 \\
+cJSON & 0.0000 & 0.0000 & 0.0000 & 1.0000 & 1.0000 & 1.0000 \\
+dlt-daemon & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+expat & 0.0000 & 0.0000 & 0.0000 & 1.0000 & 0.5385 & 0.7000 \\
+faad2 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+isotp-c & 0.5333 & 1.0000 & 0.6957 & 0.5333 & 1.0000 & 0.6957 \\
+jansson & 0.3824 & 1.0000 & 0.5532 & 0.6500 & 1.0000 & 0.7879 \\
+json-c & 0.6500 & 1.0000 & 0.7879 & 0.6500 & 1.0000 & 0.7879 \\
+libmad & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+libmspack & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+libpcap & 0.6667 & 0.6316 & 0.6486 & 0.6667 & 0.6316 & 0.6486 \\
+libsndfile & 0.8667 & 1.0000 & 0.9286 & 0.8667 & 1.0000 & 0.9286 \\
+tinyxml2 & 0.3571 & 0.7692 & 0.4878 & 0.3571 & 0.7692 & 0.4878 \\
+zlib & 0.6842 & 1.0000 & 0.8125 & 0.6842 & 1.0000 & 0.8125 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\nc{Section~\ref{paper-subsec:rq4-sensitivity}}{Run-to-run stability. The four prompt configurations defined in the nested prompt ablation were frozen before evaluation and shared across projects. No project names, expected CVE identifiers, or ground-truth labels were inserted into the templates. Project evidence reaches the model through the evidence package rather than through the template, so no template carries a library-specific instruction. We repeated each configuration six times at temperature 0 and report decision variability at both the run and report levels in Table~\ref{paper-tab:prompt-form-ablation}. For P1 and P2, the reported values are the median-F1 runs of the six repetitions, whereas P0 and P3 use the formal V3 and V4 endpoints. The P2 and P3 intervals overlap, so their difference is interpreted as an observed effect rather than a statistically significant improvement.}
+
+\nc{Section~\ref{paper-subsec:rq4-sensitivity}}{Table~\ref{paper-tab:llm-model-ablation} shows that, with the V4 evidence package and differential prompt held constant, the evaluated backends achieve closely matched overall performance, with F1 ranging from 0.8240 to 0.8379 and recall from 0.9163 to 0.9256. The three backends from the DeepSeek, GPT, and GLM families reach 0.8354, 0.8354, and 0.8312, which places them inside this range, so the observed V4 behavior is not specific to the Qwen series. Backend selection can therefore follow deployment requirements while preserving the overall method behavior.}}
 
 \secc{Comment 8:}{The title and introduction emphasize connected vehicle scenarios, but the experimental section is conducted only on general third-party open-source libraries, without involving connected-vehicle-specific communication protocols (e.g., CAN, MQTT, DDS), real-time constraints, or security authentication mechanisms. The authors are advised to supplement: (1) specific mapping between the selected libraries and connected vehicle functions, along with security impact analysis; (2) whether connected-vehicle-specific crash patterns (e.g., timing-related crashes, resource contention crashes) were considered; (3) discussion of the method's applicability in the context of automotive-grade certification (e.g., ISO 26262).}
 \secr{Response:}{Thank you for this helpful comment. This study takes the security testing of third-party components in connected-vehicle software as its application setting, and we address the three points as follows.
@@ -404,11 +436,45 @@ The selected libraries are general-purpose components that can be used in connec
 
 First, the subject table maps the evaluated libraries to representative connected-vehicle functions. These include diagnostic logging through dlt-daemon, inter-module transport through isotp-c, and networking, configuration and telemetry processing, compression, media processing, and archive handling through the remaining libraries. The accompanying text explains that defects in these components may affect diagnostic records, communication, configuration handling, update processing, and media services.
 
+\begin{table}[!tbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.12}
+\caption{Third-party open-source libraries used in the evaluation (revised Table~\ref{paper-tab:subjects}).}
+\label{tab:subjects-response}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}>{\color{blue}}l >{\color{blue}}L{0.18\linewidth} >{\color{blue}}c >{\color{blue}}c >{\color{blue}}L{0.28\linewidth}}
+\toprule
+\textbf{Library} & \textbf{Function} & \textbf{APIs} & \makecell{\textbf{Crash}\\\textbf{Reports}} & \textbf{Deployment Role} \\
+\midrule
+c-ares & Asynchronous DNS resolution & 27 & 103 & Gateway DNS \\
+cJSON & JSON parsing and generation & 60 & 78 & Config/telemetry parsing \\
+dlt-daemon & Diagnostic logging & 13 & 92 & In-vehicle diagnostic logging and fault-record storage \\
+expat & XML parsing & 12 & 36 & Vehicle configuration and metadata parsing \\
+faad2 & AAC audio decoding & 12 & 151 & In-vehicle AAC and media decoding \\
+isotp-c & ISO-TP multi-frame transport & 13 & 104 & ISO-TP transport between ECUs and vehicle modules \\
+jansson & JSON parsing and generation & 12 & 128 & ECU configuration and telemetry serialization \\
+json-c & JSON parsing and generation & 12 & 40 & Configuration and telemetry processing in vehicle software \\
+libmad & MPEG audio decoding & 12 & 112 & In-vehicle MPEG audio decoding \\
+libmspack & Archive extraction & 12 & 54 & Vehicle software package and archive processing \\
+libpcap & Packet capture and filtering & 30 & 115 & In-vehicle network monitoring and packet capture \\
+libsndfile & Audio file processing & 12 & 76 & Audio and log-signal processing \\
+tinyxml2 & XML parsing & 13 & 63 & Vehicle configuration and metadata parsing \\
+zlib & Compression and decompression & 29 & 65 & OTA-update and diagnostic-log compression \\
+Combined & -- & 269 & 1,217 & -- \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
 Second, the added transport and logging targets, isotp-c and dlt-daemon, extend the evaluation to component-level state management, call order, and resource lifecycle. This experiment focuses on crash adjudication for individual components: we did not construct timing-related or concurrent resource-contention conditions, so these two crash types are not evaluated. The revised text distinguishes this coverage from vehicle-level timing and concurrent resource-contention validation, which require a system-level execution setting.
 
 Third, CrashSage prepares attribution evidence for further engineering inspection. In vehicle-grade software verification or certification processes, it can assist in screening crash reports, reducing repeated analysis, and providing traceable attribution evidence for developers to verify and repair. We distinguish this supporting role from ISO 26262 compliance assessment and automotive certification. A brief clarification in the experimental setup defines this scope, while the abstract and introduction retain connected vehicles as the application scenario.
 
-\nc{Section~\ref{paper-subsec:experimental-setup}}{Stateful API sequences in isotp-c and dlt-daemon extend the component-level evaluation to transport and logging lifecycles. Vehicle-level timing failures and concurrent resource contention require separate system-level validation. CrashSage provides crash-attribution evidence for further engineering analysis; ISO 26262 compliance assessment and certification remain distinct from the component-level evaluation reported here.}}
+\nc{Section~\ref{paper-subsec:experimental-setup}}{Stateful API sequences in isotp-c and dlt-daemon extend the component-level evaluation to transport and logging lifecycles. This experiment adjudicates crashes of individual components and does not construct timing-related or concurrent resource-contention conditions, so these two crash types are not evaluated here. Vehicle-level timing failures and concurrent resource contention require separate system-level validation. CrashSage provides crash-attribution evidence for further engineering analysis; ISO 26262 compliance assessment and certification remain distinct from the component-level evaluation reported here.}
+
+\nc{Section~\ref{paper-subsec:experimental-setup}}{Faults in these components may affect diagnostic records, ECU-to-module communication, configuration or telemetry processing, update and log handling, and in-vehicle media services.}
+
+}
 
 \secc{Comment 9:}{Representative selection compresses 258 reports into 57 representative samples, reducing LLM submissions by 77.91\%. However, different crash reports may correspond to different vulnerability instances under the same CVE, or different manifestations of the same vulnerability under different inputs. The authors are advised to supplement: (1) analysis of the correspondence between signature matching and CVE uniqueness; (2) whether there is a risk of misclassifying different vulnerabilities as duplicates; (3) discussion of vulnerability diversity lost after deduplication.}
 \secr{Response:}{Thank you for this comment. We have added structural and CVE audits to explain the relationship between report counts, representative groups, and vulnerability identities. We address the three questions in turn.
@@ -421,7 +487,11 @@ On vulnerability diversity after deduplication, representative selection reduces
 
 To clarify it, we have improved the paper as follows.
 
-\nc{Section~\ref{paper-subsec:representative-evaluation}}{We audit whether representative selection merges distinct target reports in two complementary views. The structural audit covers all 215 target reports and groups them by project, sanitizer bug type, first target-project frame, and crash function. These reports form 42 representative groups over 16 structural fingerprints, and no group mixes two fingerprints, so all 16 structural classes remain represented after selection. The CVE audit covers the 80 reports with explicit public CVE identifiers. These reports form 19 groups over 7 CVEs, and no group mixes two CVE identifiers, so all 7 CVEs remain represented.}}
+\nc{Section~\ref{paper-subsec:representative-evaluation}}{The audits use three nested units: a report belongs to one representative group, a group belongs to one crash site, and a crash site is associated with at most one CVE. The two levels below the CVE reduce the report count for different reasons. Reports that share a signature collapse into one group, which is the common case because different drivers often reproduce the same crash in the same way. A single crash site can spread over several groups when its reports reach the same function through different call paths, because the signature carries the call stack and a different path yields a different signature. One CVE in tinyxml2 illustrates the relation: its 13 reports occupy six groups, and all six groups reach the same crash function, so the groups differ in call path rather than in crash site. Signature matching therefore does not reproduce CVE boundaries; it reproduces crash-site boundaries at a finer scale.}
+
+\nc{Section~\ref{paper-subsec:representative-evaluation}}{We audit whether representative selection merges distinct target reports in two complementary views. The structural audit covers all 215 target reports and groups them by project, sanitizer bug type, first target-project frame, and crash function. These reports form 42 representative groups over 16 structural fingerprints, and no group mixes two fingerprints, so all 16 structural classes remain represented after selection. The CVE audit covers the 80 reports with explicit public CVE identifiers. These reports form 19 groups over 7 CVEs, and no group mixes two CVE identifiers, so all 7 CVEs remain represented. Neither audit merges distinct target reports, and pairwise precision against both references is 1.0000. The structural fingerprint is an auditable crash-site proxy rather than an independent manual root-cause label.}
+
+\nc{Section~\ref{paper-subsec:representative-evaluation}}{The 80 CVE-linked reports are a subset of the 215 target reports; the remaining 135 reports comprise 66 author-confirmed public driver+PoC cases without a CVE identifier, 43 targets from dlt-daemon and isotp-c, and 26 targets from the completed audit.}}
 
 \newpage
 
@@ -438,13 +508,13 @@ Manuscript ID: CYSE-D-26-01344 \\
 \secc{Comment 1:}{Clarify the connection between the connected vehicles and the technical contribution. Section 5.1 explicitly focuses on third-party libraries rather than a complete vehicle software stack, and Table 6 lists their representative deployment roles. However, the technical challenges, method design, and evaluation mainly reflect general crash analysis of open-source libraries. It remains unclear what automotive-specific requirements motivate or affect the design of CrashSage. If the connected vehicles is central to the paper, representative software stacks or realistic integration configurations would strengthen the evaluation. Otherwise, the paper could position CrashSage as a general crash-adjudication approach and present automotive software as one application scenario. The corresponding scope and applicability limitations should also be clarified in Section 6.}
 \secr{Response:}{Thank you for this helpful comment. We have clarified the distinction between the application setting and the technical contribution. Connected-vehicle software is the application scenario considered in this study; the technical problem addressed by CrashSage is the uncertain correctness of LLM-generated fuzz drivers. The title is retained to identify this application scenario, while the abstract states this distinction explicitly.
 
-The method uses sanitizer evidence, stack-frame roles, representative matching, and reconstructed execution context. These designs address driver/component attribution and do not depend on a vehicle-specific protocol or an on-vehicle execution environment. The evaluated libraries provide the concrete application workload, and the subject table records their representative roles in connected-vehicle software.
+The method uses sanitizer evidence, stack-frame roles, representative matching, and reconstructed execution context. These designs address driver/component attribution and do not depend on a vehicle-specific protocol or an on-vehicle execution environment. The evaluated libraries provide the concrete application workload, and the subject table records their representative roles in connected-vehicle software, covering diagnostic logging, communication, configuration parsing, and data processing.
 
 Section 6 now specifies component-level crash adjudication as the evaluation scope and distinguishes it from full-stack, ECU-integration, and on-vehicle validation. We appreciate the suggestion and have aligned the abstract and the evaluation scope with this application setting.
 
 \nc{Abstract}{Connected-vehicle software relies on third-party open-source libraries, making it a relevant application setting for studying crash adjudication in LLM-assisted fuzzing.}
 
-\nc{Section~\ref{paper-sec:limitations}}{The evaluation covers third-party-library components of connected-vehicle software. Full vehicle stacks, ECU integration, and on-vehicle deployment are not exercised, so the results describe component-level crash adjudication rather than vehicle-level behavior.}}
+\nc{Section~\ref{paper-sec:limitations}}{The evaluation covers third-party-library components of connected-vehicle software. Full vehicle stacks, ECU integration, and on-vehicle deployment are not exercised, so the results describe component-level crash adjudication rather than vehicle-level behavior. The method uses sanitizer evidence, stack-frame roles, representative matching, and reconstructed execution context; these designs address driver/component attribution and do not depend on a vehicle-specific protocol or an on-vehicle execution environment.}}
 
 \secc{Comment 2:}{Expand the diversity of experimental targets. The current evaluation covers 12 libraries, mainly involving structured-data parsing, media decoding, networking, and compression/archive processing. Although these targets are practically relevant, broader API usage patterns would provide stronger evidence of generalization. In particular, the authors could consider targets involving state management, resource lifecycles, invocation-order constraints, or other complex API contracts. The paper should also clarify the target-selection criteria and deployment limitations.}
 \secr{Response:}{Thank you for this valuable comment. The comment raises four points: the target-selection criteria, the API usage patterns that the current targets exercise, the addition of targets with state and lifecycle contracts, and the deployment limitations. We address them in turn.
@@ -459,7 +529,7 @@ On the deployment scope, Section 6 identifies third-party-library components as 
 
 To clarify it, we have improved the paper as follows.
 
-\nc{Section~\ref{paper-subsec:experimental-setup}}{All 14 libraries are publicly available and can be built under ASan+UBSan within the CKGFuzzer workflow. We characterize exercised API diversity by recording multi-API calls and ordered lifecycle calls involving initialization, creation, opening, allocation, receiving, use, and cleanup.}}
+\nc{Section~\ref{paper-subsec:experimental-setup}}{All 14 libraries are publicly available, are relevant to the connected-vehicle supply chain, build under ASan+UBSan within the CKGFuzzer workflow, and produce crashes that can be reproduced; the final set contains 14 libraries and retains all 12 libraries of the previous version. We characterize exercised API diversity by recording multi-API calls and ordered lifecycle calls involving initialization, creation, opening, allocation, receiving, use, and cleanup. The 14 projects contain 186 generated drivers, between 7 and 22 per project, and the 1,217 reports are distributed over them at 6.50 reports per driver on average. The median number of distinct target APIs per driver ranges from 2 to 8 across projects, 179 of the 186 drivers (96.20\%) call at least two distinct target APIs, and 168 drivers (90.30\%) also include at least one initialization or cleanup call. The recorded drivers therefore exercise ordered calls and resource lifecycles rather than isolated single-API calls. For example, the dlt-daemon driver calls \texttt{dlt\_filter\_init}, \texttt{dlt\_filter\_load}, \texttt{dlt\_filter\_add}, \texttt{dlt\_filter\_find}, \texttt{dlt\_filter\_delete}, and \texttt{dlt\_filter\_free} in order, and the isotp-c driver calls \texttt{isotp\_receive}, \texttt{isotp\_continue\_receive}, \texttt{allocate}, and \texttt{free\_allocated}. Faults in these components may affect diagnostic records, ECU-to-module communication, configuration or telemetry processing, update and log handling, and in-vehicle media services.}}
 
 \secc{Comment 3:}{Clarify the effect of rule-based filtering. Table 9 shows that all 146 ground-truth positive reports are retained after filtering, yet Tables 10 and 11 show noticeable Recall differences between V0 and V1, particularly for expat, json-c, and libpcap. The paper explains that the false negatives in V1 come from subsequent LLM decisions rather than filtering, but it remains unclear why retained positive reports receive different predictions between the two configurations. Please clarify whether normalization, triage information, or other model inputs differ between V0 and V1. If the effective inputs and model settings are otherwise unchanged, repeated runs would help determine whether model variability contributes to these differences.}
 \secr{Response:}{Thank you for this careful reading. The comment raises three questions: which model inputs differ between V0 and V1, why retained target reports receive different predictions, and whether run-to-run variation contributes to these differences.
@@ -481,14 +551,14 @@ We also repeated V1 with the same model, the same temperature, and the same froz
 \small
 \caption{Formal and repeated runs of V1 on the same frozen inputs.}
 \label{tab:v1-repeat}
-\begin{tabular}{lccccccc}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}>{\color{blue}}l>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c}
 \toprule
 Run & TP & FP & TN & FN & Precision & Recall & F1 \\
 \midrule
 Formal V1 & 155 & 108 & 894 & 60 & 0.5894 & 0.7209 & 0.6485 \\
 Repeated V1 & 156 & 111 & 891 & 59 & 0.5843 & 0.7256 & 0.6473 \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}
 
 We have revised the manuscript to separate the effects of normalization, filtering, and rule-derived evidence. The revised discussion no longer attributes the complete V0--V1 improvement solely to the added evidence. It reports that normalization improves target coverage, filtering provides the principal precision gain, and the rule-derived evidence changes the final driver/target judgment.
@@ -496,6 +566,22 @@ We have revised the manuscript to separate the effects of normalization, filteri
 To clarify it, we have improved the paper as follows.
 
 \nc{Section~\ref{paper-subsec:rule-attribution}}{To isolate the contribution of crash-report normalization, we further evaluate V0$\mid$N, which retains V0's original input and adds only the normalized crash representation. V0$\mid$N increases recall from 0.7023 to 0.7814 and identifies 17 additional target reports, while precision remains essentially unchanged. In V0, crash type, access behavior, stack order, and project location are embedded in a long and redundant sanitizer report. The model must first distinguish relevant evidence from addresses and repeated runtime messages. V0$\mid$N presents these fields in a consistent structure and preserves their order. This reduces ambiguity in the execution path, allowing the model to connect the driver call to the target operation more reliably and recover target cases that V0 misses. The comparison between V0$\mid$N and V1 can be attributed to two distinct stages. Relative to V0$\mid$N, V1 achieves higher precision and F1 but lower recall. The precision difference is primarily a filtering effect, because rule-guided crash attribution removes 683 non-target reports before the final judgment and thereby eliminates a substantial number of false-positive opportunities. The recall difference arises at the subsequent judgment stage. Since rule-guided crash attribution removes only non-target reports, the reduction in recall is associated with decisions on the retained target cases. When the driver contains an explicit assertion or provides an invalid value, V1 assigns greater weight to driver responsibility. This explains the reduced recall in cJSON, expat, and zlib. In target-side memory operations reached through invalid driver inputs, V1 assigns greater weight to the target crash site, which increases target detections but also introduces additional false positives, as observed in isotp-c. These effects jointly explain the overall trade-off. The structured report improves target coverage, filtering provides the principal gain in precision, and the rule-derived evidence changes the final assignment of responsibility between the driver and the target.}}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Effect of rule-guided crash attribution (revised Table~\ref{paper-tab:rule-attribution-effect}).}
+\label{tab:rule-attribution-effect-response}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}>{\color{blue}}l>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c}
+\toprule
+Variant & TP & FP & TN & FN & Precision & Recall & F1 \\
+\midrule
+V0 & 151 & 385 & 617 & 64 & 0.2817 & 0.7023 & 0.4021 \\
+V0$\mid$N & 168 & 424 & 578 & 47 & 0.2838 & 0.7814 & 0.4164 \\
+V1 & 155 & 108 & 894 & 60 & 0.5894 & 0.7209 & 0.6485 \\
+\bottomrule
+\end{tabular*}
+\end{table}
 
 \secc{Comment 4:}{Strengthen the evaluation of model stability and generalization. The experiments use temperature 0, but deterministic decoding does not necessarily establish run-to-run stability when using a cloud-hosted LLM. Repeating the main experiments and reporting the variation in key metrics would make the conclusions more robust. In addition, Table 17 evaluates three Qwen models under the same evidence package and prompt, but all belong to the same model family. If feasible, including a representative model from another family would provide stronger evidence that the observed benefits are not specific to Qwen models.}
 \secr{Response:}{Thank you for this valuable comment. The comment asks for two additions: repeated runs that quantify run-to-run variation, and a backend from another model family. We address them in turn.
@@ -506,7 +592,43 @@ On other model families, we repeat the complete V4 experiment with five addition
 
 To clarify it, we have improved the paper as follows.
 
-\nc{Section~\ref{paper-subsec:rq4-sensitivity}}{Run-to-run stability. The four prompt configurations defined in the nested prompt ablation were frozen before evaluation and shared across projects. No project names, expected CVE identifiers, or ground-truth labels were inserted into the templates. We repeated each configuration six times at temperature 0 and report decision variability at both the run and report levels in Table~\ref{paper-tab:prompt-run-stability}. For P1 and P2, the reported values are the median-F1 runs of the six repetitions, whereas P0 and P3 use the formal V3 and V4 endpoints. The P2 and P3 intervals overlap, so their difference is interpreted as an observed effect rather than a statistically significant improvement.}}
+\nc{Section~\ref{paper-subsec:rq4-sensitivity}}{Run-to-run stability. The four prompt configurations defined in the nested prompt ablation were frozen before evaluation and shared across projects. No project names, expected CVE identifiers, or ground-truth labels were inserted into the templates. Project evidence reaches the model through the evidence package rather than through the template, so no template carries a library-specific instruction. We repeated each configuration six times at temperature 0 and report decision variability at both the run and report levels in Table~\ref{paper-tab:prompt-form-ablation}. For P1 and P2, the reported values are the median-F1 runs of the six repetitions, whereas P0 and P3 use the formal V3 and V4 endpoints. The P2 and P3 intervals overlap, so their difference is interpreted as an observed effect rather than a statistically significant improvement.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{Nested prompt ablation on 1,217 crash reports and six-run stability of each configuration (revised Table~\ref{paper-tab:prompt-form-ablation}).}
+\label{tab:prompt-form-ablation-response-r2}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}>{\color{blue}}l>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c}
+\toprule
+Prompt & Precision & Recall & F1 & \makecell{Mean F1\\(6 runs)} & SD & \makecell{95\% run-bootstrap\\interval} \\
+\midrule
+P0 (V3) & 0.7126 & 0.8651 & 0.7815 & 0.7788 & 0.0051 & [0.7741, 0.7815] \\
+P1 & 0.7263 & 0.9256 & 0.8139 & 0.8095 & 0.0063 & [0.8046, 0.8139] \\
+P2 & 0.7453 & 0.9256 & 0.8257 & 0.8260 & 0.0100 & [0.8178, 0.8342] \\
+P3 (V4) & 0.7654 & 0.9256 & 0.8379 & 0.8295 & 0.0085 & [0.8220, 0.8355] \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Validation results of different LLM backends under the same V4 configuration (revised Table~\ref{paper-tab:llm-model-ablation}).}
+\label{tab:llm-model-ablation-response-r2}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}>{\color{blue}}l>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c}
+\toprule
+LLM Backend & Precision & Recall & F1 \\
+\midrule
+Qwen3-Coder-Flash (default V4) & 0.7654 & 0.9256 & 0.8379 \\
+Qwen-Flash & 0.7425 & 0.9256 & 0.8240 \\
+Qwen3.8-Flash & 0.7636 & 0.9163 & 0.8330 \\
+DeepSeek-Flash & 0.7645 & 0.9209 & 0.8354 \\
+GPT-5.6-Sol & 0.7645 & 0.9209 & 0.8354 \\
+GLM-5.3-Flash & 0.7606 & 0.9163 & 0.8312 \\
+\bottomrule
+\end{tabular*}
+\end{table}}
 
 \secc{Comment 5:}{Clarify the CKGFuzzer baseline and comparison with prior work. Section 5.1 states that crash reports are collected following the fuzz-driver generation and fuzzing workflow of CKGFuzzer, while Table 7 labels V0 as the ``CKGFuzzer baseline'' and describes it as having no filtering, selection, or context reconstruction and using a clean direct prompt. It is therefore unclear whether V0 represents the complete crash-analysis procedure of CKGFuzzer or only uses its upstream workflow to generate crash reports. The authors should clearly specify which CKGFuzzer components are retained or modified. If V0 does not include its original crash-analysis procedure, a separate comparison with the complete method would provide a fairer baseline. Comparisons with other representative methods directly related to crash attribution or false-positive identification would also help establish the advantages of CrashSage beyond its internal ablations.}
 \secr{Response:}{Thank you for this valuable comment. The comment raises four points: what V0 contains, which CKGFuzzer components are retained or added, whether a separate comparison with the complete method is needed, and how CrashSage compares with other representative methods. We address them in turn.
@@ -519,18 +641,33 @@ On the comparison with the complete method, V0 retains the complete CKGFuzzer cr
 
 On other representative methods, we add two external references. A raw-report LLM baseline passes each of the 1,217 reports directly to the same model with a minimal direct instruction, without filtering, representative selection, reconstructed context, or the differential prompt. It performs the same binary decision as CrashSage, so it is the direct reference for false-positive identification. It obtains Precision 0.2010, Recall 0.5488, and F1 0.2943, against 0.7654, 0.9256, and 0.8379 for CrashSage. We also apply ReBucket to the same 534 reports retained after rule-guided crash attribution, as the external reference for the selection stage. ReBucket selects 103 cluster representatives and CrashSage selects 96, corresponding to reductions of 80.71\% and 82.02\%. At the pairwise level, ReBucket preserves 1,450 of the 1,476 report pairs that CrashSage groups together, and the pairwise Jaccard agreement is 0.9824.
 
-We also examined Igor and CrashLocator as candidate references. Both operate on a crash corpus format and a debug-information setup that differ from the ASan+UBSan reports used here, so applying them would change the corpus and the attribution target, and the comparison would no longer isolate adjudication quality. ReBucket operates on stack traces and applies to the retained reports without changing the corpus, so it serves as the reproducible external reference for the selection stage.
-
 To clarify it, we have improved the paper as follows.
 
-\nc{Section~\ref{paper-subsec:experimental-setup}}{All variants share the same base configuration, which is the crash-analysis stage of CKGFuzzer: the crash report, the generated driver and the APIs it calls, the error patterns extracted from their source, and the retrieved CWE entries. V0 uses only this configuration. V1--V4 keep it unchanged and add the stages listed in Table~\ref{paper-tab:evaluation-configurations}. The V0--V4 comparison therefore measures the incremental effect of these added stages while holding the fuzz-driver generation and fuzzing workflow of CKGFuzzer fixed and evaluating all variants on the same crash reports.}}
+\nc{Section~\ref{paper-subsec:experimental-setup}}{All variants share the same base configuration, which is the crash-analysis stage of CKGFuzzer: the crash report, the generated driver and the APIs it calls, the error patterns extracted from their source, and the retrieved CWE entries. V0 therefore retains the complete crash-analysis procedure of CKGFuzzer and adds none of the four CrashSage stages. V1--V4 keep this configuration unchanged and add the stages listed in Table~\ref{paper-tab:evaluation-configurations}. The V0--V4 comparison therefore measures the incremental effect of these added stages while holding the fuzz-driver generation and fuzzing workflow of CKGFuzzer fixed and evaluating all variants on the same crash reports.}
+
+\begin{table}[H]
+\centering
+\small
+\caption{End-to-end comparison between raw-only LLM analysis and complete CrashSage V4 (revised Table~\ref{paper-tab:baseline-comparison}).}
+\label{tab:baseline-comparison-response}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}>{\color{blue}}l>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c>{\color{blue}}c}
+\toprule
+Method & LLM submissions & Precision & Recall & F1 \\
+\midrule
+Raw-only LLM & 1,217 & 0.2010 & 0.5488 & 0.2943 \\
+CrashSage V4 & 96 & 0.7654 & 0.9256 & 0.8379 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\nc{Section~\ref{paper-subsec:representative-evaluation}}{To compare representative selection directly, we apply ReBucket to the same 534 reports retained after rule-guided crash attribution. CrashSage selects 96 representatives, whereas ReBucket selects 103 cluster representatives, corresponding to reductions of 82.02\% and 80.71\%, respectively. Thus, ReBucket requires seven additional LLM submissions relative to CrashSage on this workload. At the pairwise level, ReBucket preserves 1,450 of the 1,476 report pairs that CrashSage groups together and splits the remaining 26, whereas no pair is grouped by ReBucket alone. The pairwise Jaccard agreement is 0.9824.}}
 
 \secc{Comment 6:}{Improve figure readability. Some figures, particularly the pipeline diagrams, contain text that is difficult to read at normal viewing scale. Increasing the font size and simplifying the layout would improve readability. Vector graphics should be used where appropriate.}
 \secr{Response:}{Thank you for this valuable comment. The comment raises three points: the label size in the pipeline diagram, the layout of that diagram, and the use of vector graphics. We address them in turn.
 
-On the label size, we enlarged the labels of the pipeline figure (Fig. 2) and set its canvas to the width at which it is inserted. The figure is inserted at 0.75 linewidth, and the previous canvas was 1,086 pt wide, so its 16 pt labels were reduced to about 3.8 pt at print size. The new canvas is set to the insertion width, and the stage titles now appear at about 7.9 pt and the body labels at about 6.7 pt at print size, without further reduction.
+On the label size, the pipeline figure (Fig. 2) is drawn on a canvas of 1,086 pt by 539 pt, with the body labels set at 16 pt and the stage titles at 18 pt. It is inserted at the full text width of 437 pt, so the body labels appear at about 6.4 pt and the stage titles at about 7.2 pt at print size. In the previous version the figure was inserted at 0.60 linewidth, so the same 16 pt labels were reduced to about 3.8 pt at print size.
 
-On the layout, the four stages and their order are unchanged, and the arrows that connect them are kept. The revision enlarges the labels and adjusts the spacing inside each stage so that the larger labels fit without overlap. The pipeline therefore shows the same four stages in the same sequence as before.
+On the layout, the four stages and their order are unchanged. The revision enlarges the labels and widens the panels so that they fit without overlap, and it brings the raw sanitizer output into the first stage so that the panel boundaries match the four processing stages rather than leaving the input outside them. The arrows that connect the stages are kept, and the descriptive text that explains the stages is carried by the caption rather than placed on the canvas. The pipeline therefore shows the same four stages in the same sequence with a simpler layout.
 
 On vector graphics, Fig. 2 now contains no raster element and every label is vector text, so the figure stays sharp at any zoom level and at print resolution. Fig. 1 carries vector text labels on raster icons, and its labels remain legible at the width used in the paper, so the icon set is kept. The result figures are regenerated as vector PDFs. All figures are checked at the width at which they are inserted before submission.
 
